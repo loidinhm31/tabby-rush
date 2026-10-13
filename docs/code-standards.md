@@ -1,8 +1,8 @@
 # Doggo Code Standards & Implementation Guidelines
 
-Last Updated: 2026-10-13  
-Phase: Phase 01 Headless Tooling & Android Environment  
-Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Codebase Summary](./codebase-summary.md)
+Last Updated: 2026-10-14  
+Phase: Phase 03 Strict Server & Legacy Isolation (Implementation Complete; Runtime Acceptance Pending)  
+Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Codebase Summary](./codebase-summary.md) · [Hub Schema Integration](./hub-schema-integration.md)
 
 ---
 
@@ -111,21 +111,71 @@ As application modules are introduced in subsequent phases, code must adhere to 
 - Canonical digest calculation must use explicit length-framed big-endian fields matching the backend Rust implementation.
 - Credentials (`CredentialBundle`, session tokens, passwords) must never be serialized, printed in `toString()`, or included in exception messages.
 ---
+## 4. Node.js Integration Script Standards
 
-## 4. Testing & Quality Assurance Standards
+Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must follow these standards:
 
-### 4.1 Automated Shell Testing
+### 4.1 Module Format & Built-ins
+- Use ECMAScript Modules (ESM) with the `.mjs` file extension.
+- Use explicit `node:` protocol imports for Node.js built-in modules (`node:fs`, `node:path`, `node:process`).
+- Shebang line: `#!/usr/bin/env node`.
+
+### 4.2 CLI Options & Environment Fallbacks
+- Provide consistent CLI flag parsing with documented defaults and environment variable fallbacks:
+  - Origin: `--origin` flag, fallback `process.env.GLEAN_ORIGIN || 'http://127.0.0.1:3000'`.
+  - Admin JWT: `--token` flag, fallback `process.env.GLEAN_ADMIN_TOKEN`.
+  - App ID: `--app-id` flag, fallback `process.env.DOGGO_APP_ID || 'doggo'`.
+  - API Key: `--api-key` flag, fallback `process.env.DOGGO_API_KEY`.
+- Implement a `--help` / `-h` flag printing usage instructions and exit with code 0.
+
+### 4.3 Key Custody & Security
+- Credential output files containing provisioned API keys must be written with restrictive `0600` permissions (`mode: 0o600`).
+- When an output file path (`--out`) is specified, avoid echoing sensitive plaintext keys to console output to prevent credential leakage in automated CI logs.
+
+### 4.4 Exit Codes & Error Verification
+- Exit with non-zero status codes on failure (`process.exit(1)` or `process.exit(2)`).
+- Smoke and health check scripts must not report vacuous success: when credentials are required, missing or rejected credentials must be flagged as failed or skipped, never reported as passing.
+- Validate all scripts using `node --check <script>`.
+
+---
+
+## 5. Rust Backend Integration Standards (Glean Hub Sync Plugin)
+
+Backend service extensions in `glean-hub-sync` must adhere to strict isolation principles:
+
+### 5.1 Legacy Isolation & Compatibility
+- **Non-Destructive Schema Evolution**: App schema fields (`sync_mode`, `strict_epoch`) must be optional (`Option<String>`) with `skip_serializing_if = "Option::is_none"`, ensuring legacy apps serialize identically to prior releases.
+- **Isolated Handlers & Routes**: Strict endpoints (`/api/v1/sync/:app_id/strong/*`) must be housed in dedicated route and service modules (`routes/strong_sync.rs`, `services/strong_sync_service.rs`), never interleaved into legacy sync service code.
+- **Fail-Closed Route Guards**: Legacy routes must be guarded by middleware rejecting strict apps with HTTP 426 (`protocolUnsupported`).
+
+### 5.2 Error Envelopes & Response Consistency
+- Handlers must return `StrictSyncError` emitting a unified JSON envelope: `{ "error": string, "code": string }`.
+- HTTP status codes must map unambiguously:
+  - 400 `invalidRequest`, 401 `unauthorized`, 404 `appNotFound`, 409 `epochMismatch`, 426 `protocolUnsupported`, 500 `internalError`, 503 `notAdmitted`.
+
+### 5.3 Storage & CAS Invariants
+- Strict mutation writes must execute atomic compare-and-swap (CAS) queries matching `expectedRevision` and live record filters.
+- Replay confirmation writes must conditionally match `(opId, digest)` and verify `matched_count == 1`.
+- Strict collection naming must follow the verified prefix formula: `_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>`.
+- Code must compile cleanly with `cargo clippy --locked --all-targets` with zero warnings.
+---
+
+## 6. Testing & Quality Assurance Standards
+
+### 6.1 Automated Shell Testing
 - Test suites must be executable via standard Bash (`bash tests/test-*.sh`).
 - Automated tests must provide explicit assertion tracking (`assert_test "<description>" "<command>"`).
 - Test error handling rigorously: assert that invalid arguments, missing binaries, and unauthorized inputs fail cleanly with expected error codes and standard error messages.
 - Tests must be idempotent and non-destructive: do not modify system device files, kill unrelated developer processes, or leave orphan background services running.
 
-### 4.2 Quality Checks
-- Syntax checking: All shell scripts must validate cleanly under `bash -n <script>`.
+### 6.2 Quality Checks
+- Syntax checking: All shell scripts must validate cleanly under `bash -n <script>`, and all Node.js scripts under `node --check <script>`.
 - Linting: Comply with `shellcheck` recommendations where available.
+- Rust verification: `cargo clippy --locked --all-targets` must pass with 0 warnings.
 
-## 5. Security & Isolation Invariants
+---
 
+## 7. Security & Isolation Invariants
 1. **Zero Secret Leakage**: No API keys, session tokens, passwords, keystores, or private certificates may be committed to Git.
 2. **Ignored Configuration Files**: Local user configurations (`local.properties`, `*.keystore`) must never be committed to source control and must be explicitly listed in `.gitignore`.
 3. **No Unauthenticated Ports**: Never bind development services, Xpra, or ADB to `0.0.0.0` or public network interfaces.

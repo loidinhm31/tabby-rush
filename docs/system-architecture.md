@@ -1,9 +1,8 @@
 # Doggo System Architecture
 
-Last Updated: 2026-10-13  
-Phase: Phase 01 Headless Tooling & Android Environment  
-Related Docs: [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md)
-
+Last Updated: 2026-10-14  
+Phase: Phase 03 Strict Server & Legacy Isolation (Implementation Complete; Runtime Acceptance Pending)  
+Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md)
 ---
 
 ## 1. Architectural Scope & Principles
@@ -100,7 +99,7 @@ Managed via `scripts/start-android-emulator.sh`:
 
 ## 4. Multiplatform Application & Sync Architecture
 
-Phase 02 freezes the foundation for Doggo's Kotlin Multiplatform client and its integration with Glean Hub:
+Phase 02 established the foundation for Doggo's Kotlin Multiplatform client contracts, and Phase 03 implemented the backend strict synchronization server, route mode fences, and storage isolation on Glean Hub:
 
 ```mermaid
 flowchart TD
@@ -117,10 +116,15 @@ flowchart TD
     Vault["Protected Credential Vault\n(Keystore / Secret Service / DPAPI)"]
   end
 
-  subgraph HubBackend["Glean Hub Backend"]
+  subgraph HubBackend["Glean Hub Backend (Axum / Rust)"]
     AuthRoutes["Hub Auth Routes\n(/auth/register, /auth/login, /auth/refresh)"]
-    StrictSync["Strict-v1 Sync Routes\n(/sync/doggo/strong/bootstrap, push, pull)"]
-    MongoDB["MongoDB Storage\n(_strict_v1_5_doggo_<epoch>)"]
+    DualAuth["Dual Auth Layer\n(Bearer JWT + X-API-Key)"]
+    LegacyGuard["Legacy Sync Mode Guard\n(Rejects strict apps with 426)"]
+    ScopeGuard["Strong Route Scope Guard\n(Enforces path/header app_id coherence)"]
+    StrictRoutes["Strict Routes\n(/api/v1/sync/:app_id/strong/{bootstrap,push,pull})"]
+    AdminStrict["Admin Strict Registration\n(POST /api/v1/strict-apps)"]
+    AdmissionHelper["Admission Validator\n(Exact index, topology, uncapped, no TTL)"]
+    MongoDB["MongoDB Dedicated Namespace\n(_strict_v1_5_doggo_<epoch>)"]
   end
 
   AndroidApp --> UI
@@ -130,17 +134,47 @@ flowchart TD
   State --> Coordinator
   Coordinator --> RoomDB
   Coordinator --> Vault
-  Coordinator -->|Bearer + AppKey| StrictSync
+  Coordinator -->|Bearer + AppKey| DualAuth
   Vault -->|Bearer Token| AuthRoutes
-  StrictSync --> MongoDB
+  DualAuth --> ScopeGuard
+  ScopeGuard --> StrictRoutes
+  StrictRoutes --> MongoDB
+  DualAuth --> LegacyGuard
+  AdminStrict --> AdmissionHelper
+  AdmissionHelper --> MongoDB
 ```
 
+### 4.1 Client Layer & Shared Core
 - **Shared Core (`shared/`)**: Pure Kotlin Multiplatform library targeting Android (minSdk 26) and Desktop JVM (bytecode 17).
 - **Local Storage**: Room KMP with `androidx.sqlite:sqlite-bundled` driver. Offline-first: mutations persist to local SQLite and durable outbox immediately.
 - **Vault Abstraction**: OS-level protected credential custody without plaintext storage or fallback.
-- **Strict Synchronization**: Opt-in strict per-record sync against Glean Hub with canonical SHA-256 digest hashing and atomic server revision increments.
 - **Staged Module Assembly**: Root build includes `:shared` immediately, while `:androidApp` and `:desktopApp` are guarded by script existence to prevent broken stub builds.
 
+### 4.2 Storage Namespace Isolation
+Strict sync completely segregates Doggo data from legacy Hub storage:
+- **Naming Pattern**: `_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>` (e.g. `_strict_v1_5_doggo_550e8400e29b41d4a716446655440000`).
+- **Document Key (`_id`)**: Exact composite key `userId:rowId` (where `userId` is 24-character hex string from auth token). Intrinsic unique constraint prevents cross-user collisions.
+- **Scan Index**: Exact compound index `{ userId: 1, tableName: 1, rowId: 1 }` with simple collation.
+- **Publication-Last Registration**: The schema entry in `_schemas` is published only after storage and indexes are provisioned and pass admission.
+
+### 4.3 Route Fencing & Middleware Isolation
+- **Legacy Guard (`legacy_sync_mode_guard`)**: Intercepts legacy sync paths (`/api/v1/sync/:app_id/*`). If the requested app schema has `syncMode` defined (e.g. `strict-v1`), the request is rejected with HTTP 426 (`protocolUnsupported`). Legacy apps with absent `syncMode` proceed unchanged.
+- **Scope Guard (`strong_route_scope_guard`)**: Validates that the `X-App-Id` request header exactly matches the URL path parameter `:app_id`.
+- **Schema Immutability**: `PUT /api/v1/apps/:app_id/schema` updates use the filter `{ appId: app_id, syncMode: { $exists: false } }`, rejecting schema modifications on strict apps with HTTP 400.
+
+### 4.4 Mutation Semantics & Replay Confirmation
+- **Create**: Conditional insert-only write requiring expectedRevision = 0, setting revision = 1 and atomic `lastOp`.
+- **Update**: Conditional write matching current `revision == expectedRevision` and live row filter (`deleted: false`), incrementing revision by 1.
+- **Delete**: Conditional write matching current `revision == expectedRevision`, incrementing revision by 1, replacing data with canonical empty document, and recording permanent tombstone.
+- **Replay Confirmation**: Identical `(opId, digest)` mutations perform a conditional write updating `confirmationNonce` with journaled write concern. Successful confirmation requires `matched_count == 1`.
+
+### 4.5 Durability Policy & Implementation Observations
+- **Replica Set**: `{ w: "majority", j: true }` write concern and `majority` read concern.
+- **Standalone**: `{ w: 1, j: true }` write concern and `local` read concern.
+- **Implementation Observation**: In `services/strong_sync_service.rs`, `get_strict_collection` runs `hello` to inspect topology and falls back to standalone (`w: 1, local`) if `hello` errors. This behavior is flagged for downstream review to ensure fail-closed topology verification rather than transient fail-open on replica sets.
+
+### 4.6 Operator Admission Preflight CLI
+- `strong_sync_admission`: Standalone Rust CLI binary invoking the identical `AppService::validate_strict_admission` validator without modifying database state. Allows operators to verify candidate namespaces prior to epoch activation.
 ---
 
 ## 5. Security & Isolation Invariants
@@ -150,3 +184,5 @@ flowchart TD
 3. **Privilege Separation**: Android Studio, emulator, and build tasks execute as unprivileged user (`loidinh`).
 4. **Credential Safety**: Authentication tokens and keystores are never written to version control; `.gitignore` strictly excludes `local.properties`, keystores, and credentials.
 5. **Memory-Only Unpersisted Secrets**: Passwords and raw credential tokens are excluded from logs, error envelopes, and toString representations.
+6. **Strict Storage Isolation**: Strict-mode collections (`_strict_v1_*`) are strictly unreachable by legacy sync routes, background cleanup jobs, and older Hub binaries.
+7. **Key Custody & Perms**: Provisioning outputs write API keys with strict `0600` file permissions; scripts support protected environment variables (`GLEAN_ADMIN_TOKEN`, `DOGGO_APP_KEY`) to prevent command-line argument exposure.

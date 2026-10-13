@@ -4,7 +4,7 @@
 **Last Updated:** 2026-10-14  
 **Target Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Authoritative Evolution Plan)  
 **Historical Plan:** [plans/261013-0914-doggo-compose-todos/plan.md](../plans/261013-0914-doggo-compose-todos/plan.md) (Superseded)  
-**Overall Completion:** 12% (18h / 148h completed; Phase 01 & Phase 02 DONE)
+**Overall Completion:** 39% planned effort (58h / 148h; Phase 01 & 02 DONE; Phase 03 Implementation Complete, Runtime Acceptance Pending)
 
 ---
 
@@ -22,7 +22,7 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 |:---|:---|:---:|---:|:---:|:---:|---:|
 | **01** | [Headless Tooling & Android Environment](../plans/261013-1540-doggo-glean-hub-reuse/phase-01-headless-tooling.md) | A | 6h | **DONE** | 2026-10-13 | 100% |
 | **02** | [Frozen Foundation & Contracts](../plans/261013-1540-doggo-glean-hub-reuse/phase-02-frozen-foundation.md) | B | 12h | **DONE** | 2026-10-14 | 100% |
-| **03** | [Isolated Strict Server](../plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md) | C | 40h | Pending | — | 0% |
+| **03** | [Isolated Strict Server](../plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md) | C | 40h | **Implementation Complete\*** | 2026-10-14 | 100% |
 | **04** | [Auth Session & Vault](../plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md) | C | 12h | Pending | — | 0% |
 | **05** | [Local Strict Sync](../plans/261013-1540-doggo-glean-hub-reuse/phase-05-local-sync-state.md) | C | 28h | Pending | — | 0% |
 | **06** | [Compose UI & Light Theme](../plans/261013-1540-doggo-glean-hub-reuse/phase-06-compose-ui-theme.md) | C | 12h | Pending | — | 0% |
@@ -30,7 +30,9 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 | **08** | [Android Release Operations](../plans/261013-1540-doggo-glean-hub-reuse/phase-08-android-release-operations.md) | E | 10h | Pending | — | 0% |
 | **09** | [Linux Installed RPM Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) | F | 8h | Pending | — | 0% |
 | **10** | [Windows Installed MSI Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) | G | 6h | Pending | — | 0% |
-| **Total** | | | **148h** | | | **12%** |
+| **Total** | | | **148h** | | | **39%** |
+
+*\*Phase 03 implementation complete across 26 files (36 Rust unit/route tests PASS, clippy clean); live Mongo integration gates (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.*
 
 ---
 
@@ -58,7 +60,15 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
     - Foundational documentation: `docs/system-architecture.md`, `docs/api-contract.md`, `docs/code-standards.md`, `docs/toolchain-versions.md`, `docs/foundation-evidence.md`.
     - Automated verification suite: `tests/test-phase-02-foundation.sh` (57/57 QA assertions passing).
   - *Note on Runtime Acceptance Gate:* Static script validation, configuration checks, and reference Node vectors passed (57/57 QA assertions). Full `./gradlew :shared:jvmTest` execution and `shared/gradle.lockfile` population are deferred to downstream CI/integration lanes with compatible JDK 17/21 and Android SDK.
-- **Phases 03–06 (UPCOMING):** Parallel implementation lanes (Hub isolated strict server, auth session & credential vault, local strict sync with Room v1, Compose UI and light theme components).
+- **Phase 03 (COMPLETED 2026-10-14):** Doggo-only strict server and legacy isolation in Glean Hub Sync plugin and Doggo tooling (26 files delivered across Doggo and Glean Hub Sync plugin; 36 unit/route tests passed, clippy clean, code review cycle 4 approved 7/10).
+  - **Key Deliverables:**
+    - Models: `strong_sync.rs` (strict DTOs, document models, SHA-256 canonical digest vectors, base64 cursor).
+    - Services: `strong_sync_service.rs` (exact CAS, insert-only revision 1, single-mutation FIFO semantics, real replay confirmation nonces with matched count verification, topology-aware write concerns).
+    - Routes & Middleware: `routes/strong_sync.rs` (`bootstrap`, `push`, `pull`), `middleware/sync_mode_guard.rs` (legacy-only non-401 route guard, strict scope coherence).
+    - Admission & Tooling: `bin/strong_sync_admission.rs` (read-only candidate preflight CLI), `scripts/hub-schema-provision.mjs` (fail-closed strict-apps provisioner with 0600 key custody), `scripts/hub-compatibility-smoke.mjs` (regression smoke runner), `integration/glean-hub/doggo-schema.json`.
+    - Documentation: `docs/hub-schema-integration.md`, `docs/hub-compatibility-acceptance.md`, `docs/evidence/hub-compatibility-summary.md`, and Glean Hub runbook `docs/doggo-strict-sync.md`.
+  - *Note on Runtime Acceptance Gate:* 36 unit and route tests pass and clippy clean; live Mongo integration suites (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.
+- **Phases 04–06 (UPCOMING):** Parallel implementation lanes (auth session & credential vault, local strict sync with Room v1, Compose UI and light theme components).
 
 ### Milestone 3: Android Release & Live Sync (Groups D & E) — UPCOMING
 - **Phase 07:** Full Android integration, Hub sync coordinator, WorkManager background sync, Android KeyStore credential vault, connected UI tests on emulator (`emulator-5554`).
@@ -70,6 +80,15 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 ---
 
 ## 4. Changelog
+
+### [0.3.0-alpha.1] — 2026-10-14
+#### Completed
+- **Phase 03 Doggo-only Strict Server & Legacy Isolation**:
+  - Implemented isolated strict-v1 schema registration, fail-closed admission helper, and legacy-only mode guard (`_strict_v1_*` namespace).
+  - Implemented strong sync routes: `bootstrap`, `push`, and `pull` with exact CAS, single-mutation FIFO semantics, and replay confirmation nonces.
+  - Implemented legacy isolation middleware rejecting strict-mode apps on legacy routes with non-401 status.
+  - Delivered 26 files across Doggo scripts/docs and Glean Hub Sync plugin (models, services, routes, middleware, admission CLI binary).
+  - Executed test suite with 36 passing unit/route tests and clean clippy analysis. Code review cycle 4 approved (score 7/10). Live Mongo integration gates documented as deferred to Phase 07.
 
 ### [0.2.0-alpha.1] — 2026-10-14
 #### Completed

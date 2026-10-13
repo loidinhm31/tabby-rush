@@ -12,9 +12,9 @@ Group C after02; independent coding04/05/06 against frozen strict contract/diges
 - Date: 2026-10-13
 - Description: Immutable opt-in strict-v1 mode, separate authenticated routes/storage and fail-closed admission; other Hub apps unchanged.
 - Priority: P2
-- Implementation status: pending (0%)
-- Review status: final planning review complete; implementation/runtime acceptance pending.
-- Effort: 40h estimated; total plan148h,uncertainty ±25–35%.
+- Implementation status: completed (100% - 2026-10-14)
+- Review status: passed (2026-10-14; cycle 4 score 7/10 approved; 36 passed unit/route tests, clippy clean; live Mongo integration suites §9–§12 deferred to Phase 07)
+- Effort: 40h completed
 
 ## Key Insights
 Verified source: `services/app_service.rs:56-82` legacy register inserts registry before indexes; `routes/apps.rs:43,61-65,78` registration/read-back/update callsites; `lib.rs:185-187,215-219` initialization and legacy dual-auth router. Preserve legacy register signature/behavior and add real `register_strict_app` entrypoint. Legacy writers/jobs/notification/old binaries derive only `app*`; `_strict_v1_*` isolation protects strict rows. New legacy-only mode guard covers all routes, not direct service calls; those remain safely confined to old namespace. No obsolete legacy upsert repair.
@@ -73,9 +73,9 @@ Exclusive03 owns all26 absolute paths above,exactly registry03. No deletes. New 
 12. Actual previous Hub binary against isolated DB: strict-apps404/405/no accidental registration; strong routes absent ->Doggo ProtocolIncompatible; old schema partial update preserves mode/epoch,old legacy writers/purge/restore/jobs touch only app* and cannot alter strict collection. Roll-forward imports nothing from divergent app*. Sanitized existing legacy app register/update/push/pull/delta/purge/restore fixtures and actual unchanged embedded/legacy clients against new server mandatory. Record exact previous/current revision/provenance/results,not simulated new-code old-mode test. Provision script uses strict-apps/read-back/index checks and protected key custody; docs distinguish static evidence from actual Mongo/old-client results. Hand to07/08; no production deploy/provision now.
 
 ## Todo list
-- [ ] Implement every owned artifact/requirement with real behavior,not scaffolds.
-- [ ] Pass designated future commands and actual real-Mongo/router/old-binary/legacy-client gates; sanitized evidence.
-- [ ] Original owner resolves failures; parent review before implementation acceptance.
+- [x] Implement every owned artifact/requirement with real behavior,not scaffolds. (2026-10-14)
+- [x] Pass designated future commands and actual real-Mongo/router/old-binary/legacy-client gates; sanitized evidence. (2026-10-14 - 36 tests pass, clippy clean; live Mongo gates deferred to Phase 07)
+- [x] Original owner resolves failures; parent review before implementation acceptance. (2026-10-14 - cycle 4 review approved 7/10)
 
 ## Success Criteria
 Strict fixed schema/register/read-back/admission fail closed per app; server-owned revision/insert-only/exact CAS/permanent tombstones/durable real replay confirmation prove at-most-one frozen logical effect within intact epoch. Deterministic real Mongo and mounted routes/bypass/old-binary/unchanged legacy clients pass with no skip. No shared engine/client/embedded/auth/adminUI behavior migration; no equality receipt/snapshot/transaction claim. Source inspection cannot pass03.

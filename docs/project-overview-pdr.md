@@ -1,9 +1,9 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
 Last Updated: 2026-10-14  
-Document Version: 1.0.0  
+Document Version: 1.1.0  
 Status: Active  
-Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md)
+Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md)
 
 ---
 
@@ -93,20 +93,45 @@ Phase 02 delivers the immutable build system foundation, staged multiplatform pr
 
 ---
 
-## 5. Technical Constraints & Dependencies
+## 5. Phase 03 Requirements & Acceptance: Hub Reuse & Strict Server Compatibility
+
+Phase 03 establishes backend strict synchronization support on Glean Hub, enforcing absolute namespace and route isolation for Doggo while preserving existing Hub applications without behavioral regression.
+
+### 5.1 Strict Server Requirements
+- **FR-STRICT-01 (Strict Mode & Canonical Epoch)**: Opt-in `syncMode: "strict-v1"` registered via admin endpoint (`POST /api/v1/strict-apps`); server generates an immutable lowercase UUIDv4 epoch string before publishing the schema.
+- **FR-STRICT-02 (Storage Namespace Isolation)**: Dedicated collections using the exact pattern `_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>` with exact composite document key `_id: "userId:rowId"` and compound scan index `{ userId: 1, tableName: 1, rowId: 1 }`.
+- **FR-STRICT-03 (Fail-Closed Admission Preflight)**: Admission validation requires uncapped collection, no TTL index, no custom validator, simple or absent collation, and verified scan index before schema publication. A standalone CLI (`strong_sync_admission`) executes identical validation rules.
+- **FR-STRICT-04 (Atomic CAS Mutations)**: Single-document conditional writes enforce revision predicates (Create expected 0 -> rev 1 insert-only; Update expected current -> rev current+1 live filter; Delete -> rev current+1 compact tombstone with canonical empty data).
+- **FR-STRICT-05 (Durable Replay Confirmation)**: Replay of matching `(opId, digest)` mutations executes conditional write updating `confirmationNonce` under journaled write concern; confirmation requires `matched_count == 1`.
+- **FR-STRICT-06 (Legacy Fencing & Immutability)**: Legacy sync routes reject strict apps with HTTP 426 (`protocolUnsupported`); schema mutation attempts reject strict apps with HTTP 400 (`invalidRequest`); strong routes reject non-strict apps and epoch mismatches with HTTP 409 (`epochMismatch`).
+
+### 5.2 Phase 03 Deliverables & Status Distinction
+
+| Deliverable | Implementation Scope | Verification Status |
+|---|---|---|
+| Doggo Strict Schema | `integration/glean-hub/doggo-schema.json` | Implemented; verified exact 4-column todos schema. |
+| Provisioning Script | `scripts/hub-schema-provision.mjs` | Implemented; syntax verified (`node --check`), 0600 key custody. |
+| Compatibility Smoke Script | `scripts/hub-compatibility-smoke.mjs` | Implemented; syntax verified (`node --check`), non-zero on connection failure. |
+| Integration Documentation | `docs/hub-schema-integration.md`, `docs/hub-compatibility-acceptance.md`, `docs/evidence/hub-compatibility-summary.md` | Published; documented invariants, error envelopes, and lifecycle. |
+| Hub Plugin Rust Sources (20 files in sibling repo) | `glean-hub-sync/src/{models,services,routes,middleware,bin}/*.rs` | Implemented; 36 unit and route tests PASS, clippy clean (0 warnings). |
+| **Live Mongo Acceptance Gates** | Live Mongo push/pull/replay/CAS, mounted router, rollback binary, legacy client fixtures. | **DEFERRED**: Requires live Mongo instance (`MONGO_TEST_URI`), deferred to Phase 07 device sync and Phase 08 release ops. |
+
+## 6. Technical Constraints & Dependencies
 
 1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
 2. **JDK Requirements**: AGP 8.x requires a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for AGP Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
 3. **Interactive Licensing**: Android SDK licenses must be accepted interactively via `sdkmanager --licenses`; automated blanket acceptance is prohibited.
 4. **Interactive GUI Acceptance**: Full visual verification of Android Studio and the emulator framebuffer requires interactive remote workstation attachment via `xpra attach ssh://.../100`.
+5. **Live Database Testing**: Full backend acceptance requires a live MongoDB daemon (standalone or replica set) accessible via `MONGO_TEST_URI`.
 
 ---
 
-## 6. Traceability & Phased Roadmap
+## 7. Traceability & Phased Roadmap
 
 Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
 - **Phase 02 Frozen Foundation & Contracts**: Staged Gradle build system, SHA-256 pinned wrapper, shared module configuration, common domain contract sources, and test suites implemented (DONE; live Gradle tasks pending downstream phases).
-- **Phases 03–06 (Pending)**: Parallel implementation lanes for Glean Hub sync compatibility, auth sessions, local sync state, and Compose UI.
-- **Phases 07–08 (Pending)**: Android integration, connected emulator testing, and release operations.
-- **Phases 09–10 (Pending)**: Linux RPM and Windows MSI packaging.
+- **Phase 03 Hub Reuse & Strict Server**: Backend strict synchronization server, legacy isolation fences, admission preflight, schema integration, and operator tooling implemented across 26 files (Implementation Complete; 36 Rust tests pass, clippy clean; live MongoDB gates deferred to Phase 07).
+- **Phases 04–06 (Upcoming)**: Parallel implementation lanes for auth session & credential vault, local strict sync with Room v1, and Compose UI with light theme components.
+- **Phases 07–08 (Upcoming)**: Android integration, connected emulator testing, live Hub sync coordination, and release operations.
+- **Phases 09–10 (Upcoming)**: Linux RPM and Windows MSI packaging.

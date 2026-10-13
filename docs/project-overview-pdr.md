@@ -1,6 +1,6 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
-Last Updated: 2026-10-13  
+Last Updated: 2026-10-14  
 Document Version: 1.0.0  
 Status: Active  
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md)
@@ -68,7 +68,32 @@ Phase 01 delivers the foundational headless virtualization and Android developme
 
 ---
 
-## 4. Technical Constraints & Dependencies
+## 4. Phase 02 Requirements & Acceptance: Frozen Foundation & Contracts
+
+Phase 02 delivers the immutable build system foundation, staged multiplatform project assembly, version catalog, domain contracts, and test suites.
+
+### 4.1 Foundation Requirements
+- **FR-FND-01 (Staged Assembly)**: Root `settings.gradle.kts` unconditionally includes `:shared` and guards `:androidApp` and `:desktopApp` upon presence of build scripts.
+- **FR-FND-02 (Toolchain Pinning)**: Pinned version catalog (`gradle/libs.versions.toml`) aligning Kotlin 2.1.10, Compose 1.7.3, AGP 8.7.3, Room 2.7.0-alpha12.
+- **FR-FND-03 (Wrapper Integrity)**: Gradle 8.11.1 wrapper distribution and jar pinned to verified official SHA-256 checksums.
+- **FR-FND-04 (Contract Isolation)**: Pure Kotlin Multiplatform domain contracts in `shared/src/commonMain/kotlin/` with zero Android (`android.*`) or concrete storage/network dependencies.
+- **FR-FND-05 (Canonical Digest Vectors)**: Big-endian length-framed SHA-256 digest computation (`StrictSyncDigest`) aligns with backend Rust protocol; reference vectors pass via Node.js reference runner.
+- **FR-FND-06 (Credential Redaction)**: Sensitive tokens and API keys redacted in `toString()` across credential entities (`CredentialBundle`, `HubConfig`) to prevent inadvertent string logging.
+
+### 4.2 Phase 02 Deliverables & Status
+
+| Deliverable | Implementation Scope | Verification Status |
+|---|---|---|
+| Root Gradle Configuration | `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `.gitignore`. | Implemented; staged assembly and JVM flags verified. |
+| Pinned Wrapper & Toolchains | `gradle/wrapper/*`, `gradle/libs.versions.toml`, `gradle/verification-metadata.xml`. | Implemented; official SHA-256 hashes verified. |
+| `:shared` Module Configuration | `shared/build.gradle.kts`, `shared/gradle.lockfile` (`dev.doggo.shared`, minSdk 26, JVM 17). | Implemented; dependency locking and Room schema dir configured. |
+| Common Domain Contract Sources (16 files) | `shared/src/commonMain/kotlin/dev/doggo/shared/contract/*.kt`. | Implemented; models, UI state, actions, errors, auth, sync, and policies complete. |
+| Contract Test Suites (4 files) | `shared/src/commonTest/kotlin/dev/doggo/shared/contract/*.kt`. | Implemented; NIST vectors, title policy, account key, and endpoint policy covered. |
+| Automated Foundation Test Suite | `tests/test-phase-02-foundation.sh`. | Implemented; 57/57 shell assertions PASS (live Gradle test runner pending downstream phases). |
+
+---
+
+## 5. Technical Constraints & Dependencies
 
 1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
 2. **JDK Requirements**: AGP 8.x requires a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for AGP Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
@@ -77,11 +102,11 @@ Phase 01 delivers the foundational headless virtualization and Android developme
 
 ---
 
-## 5. Traceability & Phased Roadmap
+## 6. Traceability & Phased Roadmap
 
 Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
-- **Phase 02 (Pending)**: Frozen foundation, Gradle multiplatform configuration, and contract freeze.
-- **Phases 03–06 (Pending)**: Parallel implementation lanes for data models, backend API, local persistence, and Compose UI.
+- **Phase 02 Frozen Foundation & Contracts**: Staged Gradle build system, SHA-256 pinned wrapper, shared module configuration, common domain contract sources, and test suites implemented (DONE; live Gradle tasks pending downstream phases).
+- **Phases 03–06 (Pending)**: Parallel implementation lanes for Glean Hub sync compatibility, auth sessions, local sync state, and Compose UI.
 - **Phases 07–08 (Pending)**: Android integration, connected emulator testing, and release operations.
 - **Phases 09–10 (Pending)**: Linux RPM and Windows MSI packaging.

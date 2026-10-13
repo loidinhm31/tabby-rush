@@ -106,6 +106,10 @@ As application modules are introduced in subsequent phases, code must adhere to 
 - Constants and enum entries: UPPER_SNAKE_CASE or PascalCase for type-safe sealed objects.
 - Source file names: `kebab-case.kt` for Kotlin files, `kebab-case.sh` for shell scripts, `kebab-case.md` for documentation.
 
+### 3.4 Strict Sync & Digest Invariants
+- Common contract interfaces must not leak concrete database (Room) or HTTP (Ktor) dependencies into domain signatures.
+- Canonical digest calculation must use explicit length-framed big-endian fields matching the backend Rust implementation.
+- Credentials (`CredentialBundle`, session tokens, passwords) must never be serialized, printed in `toString()`, or included in exception messages.
 ---
 
 ## 4. Testing & Quality Assurance Standards

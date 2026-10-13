@@ -1,0 +1,31 @@
+# Gradle & Build Output
+.gradle/
+build/
+**/build/
+.kotlin/
+
+# Local Environment & Secrets
+local.properties
+.env
+.env.*
+!.env.example
+
+# IDE & Editor Files
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+captures/
+.externalNativeBuild/
+
+# Android Keystores & Signing
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+
+# OS Artifacts
+.DS_Store
+Thumbs.db

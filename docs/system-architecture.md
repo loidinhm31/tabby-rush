@@ -98,47 +98,55 @@ Managed via `scripts/start-android-emulator.sh`:
 
 ---
 
-## 4. Multiplatform Application Roadmap Architecture
+## 4. Multiplatform Application & Sync Architecture
 
-Beyond Phase 01 tooling, Doggo follows a phased multiplatform application architecture:
+Phase 02 freezes the foundation for Doggo's Kotlin Multiplatform client and its integration with Glean Hub:
 
 ```mermaid
-flowchart LR
-  subgraph Clients["Client Applications"]
-    AndroidApp["Android App\n(dev.doggo.android)"]
-    DesktopApp["Desktop App\n(dev.doggo.desktop)"]
+flowchart TD
+  subgraph ClientApp["Client Layer"]
+    AndroidApp["Android App\n(androidApp / Phase 07)"]
+    DesktopApp["Desktop App\n(desktopApp / Phase 09-10)"]
   end
 
-  subgraph SharedCore["Shared Kotlin Multiplatform Core"]
-    UI["Shared Compose UI & Theme"]
-    State["State & Task Controllers"]
-    Data["Data Layer & Local SQLite"]
-    Sync["Sync Adapter & Network Client"]
+  subgraph SharedKMP["Shared Core (shared/)"]
+    UI["Compose Multiplatform UI\n(Material 3 / Light Theme)"]
+    State["Todo State & Actions\n(TodoUiState / TodoAction)"]
+    Coordinator["Sync Coordinator\n(FIFO Outbox / Reconcile)"]
+    RoomDB["Room KMP Local DB\n(SQLite Bundled / Offline First)"]
+    Vault["Protected Credential Vault\n(Keystore / Secret Service / DPAPI)"]
   end
 
-  subgraph Backend["Backend Services"]
-    SyncEndpoint["Cloud Sync Endpoint"]
-    Database["Persistent Cloud Storage"]
+  subgraph HubBackend["Glean Hub Backend"]
+    AuthRoutes["Hub Auth Routes\n(/auth/register, /auth/login, /auth/refresh)"]
+    StrictSync["Strict-v1 Sync Routes\n(/sync/doggo/strong/bootstrap, push, pull)"]
+    MongoDB["MongoDB Storage\n(_strict_v1_5_doggo_<epoch>)"]
   end
 
   AndroidApp --> UI
   DesktopApp --> UI
   UI --> State
-  State --> Data
-  Data --> Sync
-  Sync -->|Authenticated HTTPS| SyncEndpoint
-  SyncEndpoint --> Database
+  State --> RoomDB
+  State --> Coordinator
+  Coordinator --> RoomDB
+  Coordinator --> Vault
+  Coordinator -->|Bearer + AppKey| StrictSync
+  Vault -->|Bearer Token| AuthRoutes
+  StrictSync --> MongoDB
 ```
 
-- **Shared Core (`shared/`)**: Planned Kotlin Multiplatform library targeting Android and JVM. Contracts and version tuples to be frozen in Phase 02.
-- **Android Target (`androidApp/`)**: Planned Android application module hosting MainActivity and platform integrations (Phase 07).
-- **Desktop Target (`desktopApp/`)**: Planned JVM desktop application module with packaging for native Linux RPM (Phase 09) and Windows MSI (Phase 10).
+- **Shared Core (`shared/`)**: Pure Kotlin Multiplatform library targeting Android (minSdk 26) and Desktop JVM (bytecode 17).
+- **Local Storage**: Room KMP with `androidx.sqlite:sqlite-bundled` driver. Offline-first: mutations persist to local SQLite and durable outbox immediately.
+- **Vault Abstraction**: OS-level protected credential custody without plaintext storage or fallback.
+- **Strict Synchronization**: Opt-in strict per-record sync against Glean Hub with canonical SHA-256 digest hashing and atomic server revision increments.
+- **Staged Module Assembly**: Root build includes `:shared` immediately, while `:androidApp` and `:desktopApp` are guarded by script existence to prevent broken stub builds.
 
 ---
 
 ## 5. Security & Isolation Invariants
 
-1. **Virtual Display Network Policy & Observation**: Script policy omits `--bind-tcp` and specifies `--html=off --mdns=no`. A smoke test on display `:199` documented in review cycle 3 (`plans/reports/code-reviewer-261013-2314-phase-01-headless-tooling-cycle3.md`) observed zero listening TCP sockets associated with the Xpra daemon process via `ss -ltn`. System services (such as Avahi daemon on UDP 5353) are host-level services independent of Xpra.
-2. **Device Nodes**: `/dev/kvm` permissions (`0666` observed on host) are managed by system udev rules; scripts do not run `chmod` or `chown` on system devices.
-3. **Privilege Separation**: Android Studio, the emulator, and all development scripts execute as an unprivileged user (`loidinh`), never as root.
-4. **Credential Safety**: No authentication tokens, keystores, or device identifiers may be committed to version control; `local.properties` must be excluded via `.gitignore`.
+1. **Virtual Display Network Policy**: Script policy omits `--bind-tcp` and specifies `--html=off --mdns=no`. A smoke test on display `:199` observed zero listening TCP sockets associated with Xpra.
+2. **Device Nodes**: `/dev/kvm` permissions (`0666` on host) are managed by system udev rules; scripts do not run `chmod` on system devices.
+3. **Privilege Separation**: Android Studio, emulator, and build tasks execute as unprivileged user (`loidinh`).
+4. **Credential Safety**: Authentication tokens and keystores are never written to version control; `.gitignore` strictly excludes `local.properties`, keystores, and credentials.
+5. **Memory-Only Unpersisted Secrets**: Passwords and raw credential tokens are excluded from logs, error envelopes, and toString representations.

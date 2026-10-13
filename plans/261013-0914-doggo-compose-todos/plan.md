@@ -20,7 +20,7 @@ Android-first CRUD, filters/counts/refresh/pages; shared KMP library/UI, Worker-
 | Phase | Group | Hours | Status / progress |
 |---|---|---:|---|
 | [01 Headless tooling](phase-01-headless-tooling.md) | A | 4 | completed / 100% |
-| [02 Frozen foundation](phase-02-frozen-foundation.md) | B | 6 | pending / 0% |
+| [02 Frozen foundation](phase-02-frozen-foundation.md) | B | 6 | pending / 0% (superseded) |
 | [03 D1 migrations](phase-03-d1-migrations.md) | C | 3 | pending / 0% |
 | [04 Worker API](phase-04-worker-api.md) | C | 8 | pending / 0% |
 | [05 Shared data/state](phase-05-shared-data-state.md) | C | 9 | pending / 0% |

@@ -12,7 +12,7 @@ After01; group B. Blocks03–06 until product/contracts/toolchain/file ownership
 - Date: 2026-10-13
 - Description: Frozen contracts and compatible foundation.
 - Priority: P2
-- Implementation status: pending
+- Implementation status: pending (superseded by Glean Hub reuse plan)
 - Review status: pending
 - Effort: 6h
 

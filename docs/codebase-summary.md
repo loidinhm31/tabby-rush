@@ -1,44 +1,145 @@
 # Codebase Summary
 
-Generated on: 2026-10-13  
-Based on Repomix compaction: `repomix-output.xml` (75 files, 140,983 tokens)
+Generated on: 2026-10-14  
+Based on Repomix compaction: `repomix-output.xml` (119 files, 180,086 tokens, 767,300 chars)
 
 ---
 
 ## 1. Repository Overview
 
-The `doggo` repository contains the implementation and architectural specifications for Doggo, an Android-first shared Compose Multiplatform application. Following the delivery of Phase 01 tooling scripts and technical documentation, the repository comprises host virtualization scripts, environment management scripts, an automated test harness, operational runbooks, host capability evidence, and comprehensive planning documentation.
+The `doggo` repository contains the implementation, build configuration, domain contracts, and architectural specifications for Doggo, an Android-first shared Compose Multiplatform task management application with secure multi-device synchronization against Glean Hub.
+
+Following Phase 01 (Headless Tooling) and Phase 02 (Frozen Foundation & Contracts), the repository contains:
+1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
+2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state and action models, identity/authentication contracts, strict sync canonical framing, validation policies, and unit tests.
+3. **Host Virtualization & Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, and emulator management.
+4. **Automated Verification Harness (`tests/`)**: Automated shell suites validating scripts, Gradle contracts, Kotlin sources, and cryptographic digest vectors.
+5. **Technical Documentation (`docs/`)**: Architecture specifications, API contracts, toolchain evidence, operational runbooks, and coding standards.
+6. **Planning & Roadmap (`plans/`)**: Phased execution plans, architectural decisions, and verification reports.
 
 ### High-Level Directory Structure
 
 ```
 .
-├── docs/                      # Developer documentation and operational runbooks
-│   ├── code-standards.md
-│   ├── codebase-summary.md
-│   ├── development-roadmap.md
-│   ├── headless-android-setup.md
-│   ├── host-tooling-evidence.md
-│   ├── project-overview-pdr.md
-│   ├── project-roadmap.md
-│   └── system-architecture.md
-├── scripts/                   # Host automation and environment scripts
-│   ├── android-sdk-env.sh
-│   ├── start-android-emulator.sh
-│   └── start-xpra.sh
-├── tests/                     # Automated test suites
-│   └── test-phase-01-tooling.sh
-└── plans/                     # Implementation plans, architectural specs & reports
-    ├── 261013-0914-doggo-compose-todos/
-    ├── 261013-1540-doggo-glean-hub-reuse/
-    └── reports/
+├── .gitignore                          # Git ignore rules for Gradle, local environment, and build outputs
+├── build.gradle.kts                    # Root build script with modern plugin declarations
+├── gradle.properties                   # JVM memory, Kotlin daemon, AndroidX, and Compose flags
+├── gradlew / gradlew.bat               # Official Gradle wrapper executables
+├── settings.gradle.kts                 # Staged module assembly (guards :androidApp and :desktopApp)
+├── gradle/
+│   ├── libs.versions.toml              # Version catalog (Kotlin 2.1.10, Compose 1.7.3, AGP 8.7.3, Room 2.7.0-alpha12)
+│   ├── verification-metadata.xml       # Gradle dependency checksum verification
+│   └── wrapper/
+│       ├── gradle-wrapper.jar          # Verified wrapper jar (SHA-256: 2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046)
+│       └── gradle-wrapper.properties   # Official Gradle 8.11.1 distribution with SHA-256 checksum pinning
+├── shared/                             # Shared Kotlin Multiplatform library
+│   ├── build.gradle.kts                # KMP library configuration (dev.doggo.shared, minSdk 26, JVM 17)
+│   ├── gradle.lockfile                 # Dependency locking definition
+│   └── src/
+│       ├── commonMain/kotlin/dev/doggo/shared/contract/
+│       │   ├── account-identity.kt     # AccountIdentity domain model
+│       │   ├── account-key.kt          # AccountKey deterministic SHA-256 key derivation
+│       │   ├── account-store.kt        # AccountStore, AccountStoreFactory interfaces
+│       │   ├── app-factories.kt        # AppFactories dependency wiring interface
+│       │   ├── auth-session.kt         # AuthSession, AuthState, AccessRequestInfo contracts
+│       │   ├── credential-vault.kt     # CredentialVault, CredentialBundle (redacted toString)
+│       │   ├── endpoint-policy.kt      # EndpointPolicy origin, scheme, and port validation
+│       │   ├── hub-config.kt           # HubConfig endpoint configuration (redacted toString)
+│       │   ├── safe-errors.kt          # SafeError sealed taxonomy, ApiResult envelope
+│       │   ├── strict-sync-contract.kt # StrictSyncContract, StrictSyncDigest canonical framing
+│       │   ├── sync-coordinator.kt     # SyncCoordinator, SyncStatus, SyncProgress orchestration
+│       │   ├── sync-scheduler.kt       # SyncScheduler scheduling interface
+│       │   ├── title-policy.kt         # TitlePolicy length and character validation
+│       │   ├── todo-action.kt          # TodoAction sealed UI event taxonomy
+│       │   ├── todo-models.kt          # Todo, TodoCounts, TodoFilter core domain models
+│       │   └── todo-ui-state.kt        # TodoUiState, EditorState, ConflictState view models
+│       └── commonTest/kotlin/dev/doggo/shared/contract/
+│           ├── account-key-test.kt     # Account key derivation and validation tests
+│           ├── endpoint-policy-test.kt # Endpoint policy HTTPS/loopback/port tests
+│           ├── strict-digest-test.kt   # NIST test vectors and field isolation tests
+│           └── title-policy-test.kt    # Title length, trimming, and character tests
+├── scripts/                            # Host automation and environment scripts
+│   ├── android-sdk-env.sh              # SDK/JDK PATH configuration and environment detection
+│   ├── start-android-emulator.sh       # AVD emulator lifecycle with port and KVM validation
+│   └── start-xpra.sh                   # Headless virtual display (:100) runner without TCP listeners
+├── tests/                              # Automated test suites
+│   ├── test-phase-01-tooling.sh        # Phase 01 tooling and host prerequisites test suite
+│   └── test-phase-02-foundation.sh     # Phase 02 foundation, contracts, and digest test suite
+├── docs/                               # Developer documentation and operational runbooks
+│   ├── api-contract.md                 # REST and strict sync wire protocol contract
+│   ├── code-standards.md               # Coding, testing, and security standards
+│   ├── codebase-summary.md             # This document (codebase inventory & metrics)
+│   ├── development-roadmap.md          # Architectural evolution roadmap
+│   ├── foundation-evidence.md          # Phase 02 cryptographic and toolchain evidence
+│   ├── headless-android-setup.md       # Operational runbook for headless Xpra & Android
+│   ├── host-tooling-evidence.md        # Verified host hardware, virtualization, and tool capabilities
+│   ├── project-overview-pdr.md         # Product development requirements and traceability
+│   ├── project-roadmap.md              # Project milestones, phase progress, and changelog
+│   ├── system-architecture.md          # System architecture and multiplatform components
+│   └── toolchain-versions.md           # Pinned toolchain compatibility matrix
+└── plans/                              # Implementation plans, architectural specs & reports
+    ├── 261013-0914-doggo-compose-todos/ # Baseline plan series
+    ├── 261013-1540-doggo-glean-hub-reuse/ # Glean Hub authoritative evolution plan series
+    └── reports/                         # Phase review and verification reports
 ```
 
 ---
 
 ## 2. Core Components & Artifacts
 
-### 2.1 Host Tooling & Virtualization (`scripts/`)
+### 2.1 Gradle Build System & Version Catalog
+
+| File | Purpose | Key Details |
+|---|---|---|
+| `settings.gradle.kts` | Staged assembly & plugin management | Unconditionally includes `:shared`; conditionally guards `:androidApp` and `:desktopApp` based on file existence to prevent broken build references. |
+| `build.gradle.kts` | Root build script | Registers `clean` task; declares plugins with `apply false` across the project hierarchy. |
+| `gradle.properties` | Build engine settings | Configures 4 GB Gradle JVM heap, Kotlin daemon parallel compilation, AndroidX support, and Compose compiler metrics. |
+| `gradle/libs.versions.toml` | Pinned version catalog | Pins Kotlin 2.1.10, Compose Multiplatform 1.7.3, AGP 8.7.3, Coroutines 1.10.1, Serialization 1.8.0, Ktor 3.1.0, Room 2.7.0-alpha12, and SQLite 2.5.0-SNAPSHOT. |
+| `gradle/wrapper/gradle-wrapper.properties` | Wrapper distribution | Specifies Gradle 8.11.1 bin distribution with official checksum `f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6`. |
+| `gradle/wrapper/gradle-wrapper.jar` | Wrapper binary launcher | Checksum verified against known Gradle release hash (`2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046`). |
+| `gradle/verification-metadata.xml` | Dependency verification | Checksum configuration file establishing dependency verification rules during resolution. |
+| `.gitignore` | Repository hygiene | Excludes `.gradle/`, `build/`, `local.properties`, `.env`, IDE files, and Android keystores. |
+
+### 2.2 Shared Module (`shared/`)
+
+The `:shared` module provides the core domain abstractions and business logic, shared across Android and Desktop frontends.
+
+#### Build Configuration
+- `shared/build.gradle.kts`: Applied `com.android.library` plugin (`alias(libs.plugins.android.library)`) alongside `kotlinMultiplatform`, `kotlinxSerialization`, and `androidxRoom`.
+  - Namespace: `dev.doggo.shared`
+  - Targets: `minSdk = 26`, `compileSdk = 35`, JVM toolchain bytecode target 17.
+  - Dependencies: Coroutines (`api`), Serialization, Ktor Client, Room Runtime.
+  - Enforces dependency locking (`lockAllConfigurations()`) and Room schema directory configuration.
+- `shared/gradle.lockfile`: Dependency locking file present on disk (`empty=`); lockfile resolution and entry population remain pending live Gradle build resolution.
+
+#### Contract Interfaces & Domain Policies (`shared/src/commonMain/kotlin/...`)
+| Contract File | Primary Types & Interfaces | Architectural Role |
+|---|---|---|
+| `todo-models.kt` | `Todo`, `TodoCounts`, `TodoFilter` | Pure domain entities representing tasks, metrics, and filter states. |
+| `todo-ui-state.kt` | `TodoUiState`, `EditorState`, `ConflictState`, `LeaveGuardState` | Immutable UI view state and modal interaction models. |
+| `todo-action.kt` | `TodoAction` | Sealed hierarchy representing all UI intents and lifecycle events. |
+| `safe-errors.kt` | `SafeError`, `ApiResult` | Sanitized error taxonomy and result envelope intended to model user-facing errors without exposing internal exceptions or credentials. |
+| `account-identity.kt` | `AccountIdentity` | Entity encapsulating authenticated user identity (id, username, hubUrl). |
+| `account-key.kt` | `AccountKey` | Deterministic SHA-256 derived account key supporting offline data isolation. |
+| `account-store.kt` | `AccountStore`, `AccountStoreFactory` | Persistence contracts for multi-account session management. |
+| `auth-session.kt` | `AuthSession`, `AuthState`, `AccessRequestInfo` | Authentication session lifecycle and access grant state tracking. |
+| `credential-vault.kt` | `CredentialVault`, `CredentialBundle`, `VaultStatus` | Secure token storage contract; `CredentialBundle` overrides `toString()` to redact tokens. |
+| `hub-config.kt` | `HubConfig` | Backend connection configuration; overrides `toString()` to redact `appApiKey`. |
+| `strict-sync-contract.kt` | `StrictSyncContract`, `StrictSyncDigest`, `StrictOperationKind`, `StrictOperationStatus`, `StrictTodoData`, `StrictOperation`, `StrictOperationResult` | Canonical protocol specification matching Glean Hub; implements length-framed big-endian SHA-256 digest computation. |
+| `sync-coordinator.kt` | `SyncCoordinator`, `SyncStatus`, `SyncProgress` | High-level sync coordination contract between local storage and backend. |
+| `sync-scheduler.kt` | `SyncScheduler` | Sync trigger scheduling and execution contract. |
+| `title-policy.kt` | `TitlePolicy` | Pure validation logic: enforces 1–200 character bounds, trims whitespace, rejects ASCII control characters. |
+| `endpoint-policy.kt` | `EndpointPolicy`, `BuildMode` | Validates API endpoint origins; enforces HTTPS in release mode; permits loopback HTTP in debug mode; rejects paths/userinfo/queries. |
+| `app-factories.kt` | `AppFactories` | Common factory interface decoupling component composition from concrete implementations. |
+
+| Test File | Target | Coverage |
+|---|---|---|
+| `strict-digest-test.kt` | `StrictSyncDigest` | Declares test coverage for NIST vectors (empty string, "abc", 56-byte boundary), big-endian field framing, and canonical delete empty data (reference vectors pass via Node.js runner; Kotlin test runner execution pending). |
+| `account-key-test.kt` | `AccountKey` | Validates deterministic lowercase hex hash derivation, input trimming, and empty/blank input rejection. |
+| `title-policy-test.kt` | `TitlePolicy` | Validates valid titles, leading/trailing whitespace trimming, empty/blank rejection, length boundaries, and control character rejection. |
+| `endpoint-policy-test.kt` | `EndpointPolicy` | Validates standard HTTPS URLs, trailing slash stripping, default port normalization, debug HTTP loopback origins, release cleartext rejection, and userinfo/path/query forbidden errors. |
+
+### 2.3 Host Tooling & Virtualization (`scripts/`)
 
 | Script | Purpose | Key Implementation Details |
 |---|---|---|
@@ -46,44 +147,49 @@ The `doggo` repository contains the implementation and architectural specificati
 | `scripts/android-sdk-env.sh` | Android SDK and JDK environment | Preserves user overrides for `ANDROID_HOME` and `JAVA_HOME`; prepends SDK tools (`cmdline-tools`, `platform-tools`, `emulator`) to `PATH`; detects Studio JBR or JDK 21; silences output in non-interactive shells. |
 | `scripts/start-android-emulator.sh` | Android Emulator launch orchestration | Validates decimal even port (`5554-5682`); checks `/dev/kvm` read/write access; checks `emulator` binary on `PATH`; manages headless/GUI flags; passes through safe arguments. |
 
-### 2.2 Test Automation (`tests/`)
+### 2.4 Test Automation (`tests/`)
 
 | Suite | Scope | Status |
 |---|---|---|
 | `tests/test-phase-01-tooling.sh` | Shell syntax (`bash -n`), executable permissions, CLI argument handling, port validation, host prerequisites (`/dev/kvm`, `xpra`, `xterm`, `java`, `node`), and documentation contracts. | 31/31 assertions PASS. |
+| `tests/test-phase-02-foundation.sh` | Wrapper checksums, settings guards, version catalog, shared module config, contract source existence, test suites, contract isolation/redaction, and Node.js reference vector runner for policy and digest logic. (Note: Gradle test runner and Kotlin compiler tasks not yet executed; pending downstream build gates). | 57/57 assertions PASS. |
 
-### 2.3 Documentation (`docs/`)
+### 2.5 Documentation (`docs/`)
 
 | Document | Purpose |
 |---|---|
-| [`docs/headless-android-setup.md`](./headless-android-setup.md) | Operations runbook for running Android Studio and emulator over SSH-tunneled Xpra, SDK installation, wall-clock bounded boot check, and security invariants. |
-| [`docs/host-tooling-evidence.md`](./host-tooling-evidence.md) | Verified specification of host hardware (AMD-V, KVM API 12, Radeon 780M), tooling versions (Xpra 6.5.4, Node v24.16.0 LTS, OpenJDK 25), and pending interactive inventory. |
-| [`docs/project-overview-pdr.md`](./project-overview-pdr.md) | Product development requirements, Phase 01 headless environment scope, acceptance criteria, and constraints. |
-| [`docs/system-architecture.md`](./system-architecture.md) | System architecture documentation covering the headless virtualization layer, Xpra display subsystem, Android SDK/emulator, and phased multiplatform architecture. |
-| [`docs/code-standards.md`](./code-standards.md) | Engineering standards covering Bash scripting, sourced script rules, automated testing conventions, and future Kotlin Multiplatform standards. |
-| [`docs/project-roadmap.md`](./project-roadmap.md) | Living project roadmap tracking phase completion, milestones, and release changelog. |
+| [`docs/api-contract.md`](./api-contract.md) | Authoritative wire protocol specification for Glean Hub authentication and strict sync. |
+| [`docs/code-standards.md`](./code-standards.md) | Engineering standards covering Bash scripting, Kotlin Multiplatform, testing, and credential security. |
 | [`docs/codebase-summary.md`](./codebase-summary.md) | Comprehensive codebase inventory based on Repomix compaction. |
+| [`docs/development-roadmap.md`](./development-roadmap.md) | Architectural roadmap documenting phased evolution toward Glean Hub reuse. |
+| [`docs/foundation-evidence.md`](./foundation-evidence.md) | Verification evidence for Phase 02 toolchains, wrapper checksums, and cryptographic test vectors. |
+| [`docs/headless-android-setup.md`](./headless-android-setup.md) | Operations runbook for running Android Studio and emulator over SSH-tunneled Xpra. |
+| [`docs/host-tooling-evidence.md`](./host-tooling-evidence.md) | Verified specification of host hardware (AMD-V, KVM, GPU) and installed tooling versions. |
+| [`docs/project-overview-pdr.md`](./project-overview-pdr.md) | Product development requirements (PDR), acceptance criteria, and system constraints. |
+| [`docs/project-roadmap.md`](./project-roadmap.md) | Living project roadmap tracking phase completion, milestones, and release changelog. |
+| [`docs/system-architecture.md`](./system-architecture.md) | System architecture covering headless virtualization, Kotlin Multiplatform, and sync subsystem. |
+| [`docs/toolchain-versions.md`](./toolchain-versions.md) | Authoritative toolchain version compatibility matrix (Kotlin, Compose, AGP, Gradle, Java). |
+
 ---
 
 ## 3. Repomix Compaction Metrics
 
-- **Total Files Packed:** 75 files
-- **Total Character Count:** 617,807 characters
-- **Total Token Count:** 140,983 tokens
-- **Security Check:** Clean (0 secret or credential findings detected by Secretlint)
-- **Top Files by Token Footprint:**
-  1. `plans/261013-1540-doggo-glean-hub-reuse/file-ownership.md` (7,367 tokens)
-  2. `plans/261013-1540-doggo-glean-hub-reuse/reports/contract-review.md` (5,471 tokens)
-  3. `plans/261013-1540-doggo-glean-hub-reuse/contracts.md` (5,106 tokens)
-  4. `plans/261013-1540-doggo-glean-hub-reuse/reports/strong-sync-isolation-feasibility.md` (4,054 tokens)
-  5. `plans/261013-0914-doggo-compose-todos/contracts.md` (3,873 tokens)
+- **Total Files Packed:** 119 files (120 processed; 1 test file excluded by security filter due to mock userinfo `user:pass@` test vector)
+- **Total Character Count:** 767,300 characters
+- **Total Token Count:** 180,086 tokens
+- **Security Check:** Secretlint completed with 0 findings across 119 packed files; 1 test file (`endpoint-policy-test.kt`) was excluded by Repomix due to a mock userinfo URL string (`https://user:pass@hub.example.com`).
+- **Top Files by Token Footprint:** `file-ownership.md` (7,367 tokens), `reports/contract-review.md` (5,471 tokens), `contracts.md` (5,106 tokens), `reports/strong-sync-isolation-feasibility.md` (4,054 tokens), `plans/261013-0914-doggo-compose-todos/contracts.md` (3,873 tokens).
 
 ---
 
 ## 4. Current State & Invariants
 
-1. **Deliverable Scope & Status**: Phase 01 automation scripts and technical documentation are completed and verified (31/31 automated tests passing, Xpra smoke test verified on `:199`). Environment and visual runtime acceptance (downloading Studio, installing SDK tools, creating AVD, and capturing visual framebuffer evidence) remains pending interactive operator execution via `xpra attach ssh://.../100`.
-2. **Clean Foundation**: No speculative application source code or stubs exist in the repository prior to Phase 02 tuple freeze.
-3. **Security Compliance**: Virtual display server binds zero public TCP listeners; SSH tunnel is the exclusive external transport.
-4. **Idempotent Tooling**: Scripts can be safely invoked repeatedly without leaving dangling processes or modifying system device state (`/dev/kvm` remains untouched).
-5. **Environment Isolation**: Sourced scripts guard against polluting interactive subshells or breaking non-interactive data transfer tools (`scp`/`sftp`/`rsync`).
+1. **Deliverable Scope & Status**:
+   - **Phase 01 (Headless Tooling)**: Automation scripts, Xpra display isolation, and technical documentation completed and verified via shell suite (31/31 tests PASS). Interactive Studio GUI wizard, SDK license acceptance, and live AVD screenshot remain an interactive operator prerequisite.
+   - **Phase 02 (Frozen Foundation & Contracts)**: Root Gradle configuration, staged assembly guards, version catalog, shared module, domain contract source files, and test suites completed and verified via shell suite (57/57 tests PASS). Live Gradle build execution and Kotlin test runner execution remain pending downstream build phases.
+2. **Zero Fake Stubs & Staged Assembly**: The repository contains zero dummy application entrypoints or fake Room implementations. Root `settings.gradle.kts` conditionally guards `:androidApp` and `:desktopApp` until their modules are created in downstream phases.
+3. **Cryptographic & Wrapper Integrity**: Gradle 8.11.1 wrapper distribution SHA-256 and wrapper jar SHA-256 are pinned and verified. Strict sync digest specification uses explicit big-endian length-framed byte buffers matching backend Rust specifications (reference vectors verified via Node.js runner; native Kotlin execution and live backend parity remain unverified under Gradle).
+4. **Credential Redaction**: `CredentialBundle` and `HubConfig` override `toString()` to redact sensitive tokens and API keys, mitigating accidental logging via default string conversion (property access by callers remains unredacted).
+5. **Contract Modularity**: Shared domain contracts in `shared/src/commonMain/kotlin/` have zero dependencies on Android platform classes (`android.*`) or concrete persistence/HTTP engines.
+6. **Headless Infrastructure Isolation**: The Xpra display server binds zero public TCP listeners; all external GUI access is strictly mediated over encrypted SSH tunnels.
+7. **Dependency Locking Configuration**: Dependency locking is declared via `lockAllConfigurations()` with `shared/gradle.lockfile` present on disk, awaiting live dependency resolution to record locked versions.

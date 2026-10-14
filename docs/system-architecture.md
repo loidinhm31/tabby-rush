@@ -1,8 +1,9 @@
 # Doggo System Architecture
 
 Last Updated: 2026-10-14  
-Phase: Phase 04 Hub Authentication & Protected Session (Implementation Complete; Runtime Acceptance Pending)  
-Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
+Phase: Phase 05 Durable Local State & Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)  
+Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
+
 ---
 
 ## 1. Architectural Scope & Principles
@@ -14,6 +15,7 @@ Doggo is designed as an Android-first shared Compose Multiplatform application d
 2. **Encrypted Transport Only**: All remote graphical interaction transits SSH tunnels with out-of-band host key verification. Zero public TCP listeners are permitted.
 3. **Hardware-Accelerated Emulation**: Android virtual devices leverage host Linux KVM (`/dev/kvm`) acceleration directly without compromising system device permissions.
 4. **Idempotent Tooling**: Host management scripts are deterministic, side-effect free on error, and safe for automated or repetitive execution.
+5. **Durable Local State & Strict Sync**: Local mutations persist immediately in SQLite before network dispatch; outbox enforces FIFO per-row serialization; remote updates promote monotonically.
 
 ---
 
@@ -67,39 +69,27 @@ flowchart TD
 ## 3. Subsystem Breakdown
 
 ### 3.1 Remote Display Subsystem (Xpra)
-
-The remote display architecture decouples graphical application execution from the host operating system's desktop stack:
 - **Display Identifier**: Dedicated display `:100` managed by `scripts/start-xpra.sh`.
-- **Socket Isolation**: UNIX domain socket located in user-specific `/run/user/$(id -u)/xpra/` directory (mode `0700`), inaccessible to other system users.
-- **Security Flags**:
-  - `--bind-tcp` omitted: completely disables direct TCP network socket creation.
-  - `--html=off`: disables internal WebSockets/HTTP server to prevent browser-based unauthenticated access.
-  - `--mdns=no`: disables local network broadcast (Avahi/Bonjour).
-- **Authentication Inheritance**: Xpra launches an authenticated child `xterm` session. Graphical processes spawned from this shell inherit valid `DISPLAY` and `XAUTHORITY` credentials.
+- **Socket Isolation**: UNIX domain socket located in `/run/user/$(id -u)/xpra/` (mode `0700`).
+- **Security Flags**: `--bind-tcp` omitted; `--html=off`; `--mdns=no`.
+- **Authentication**: Spawns an authenticated child `xterm` shell ensuring child processes inherit valid `DISPLAY` and `XAUTHORITY`.
 
 ### 3.2 Android SDK & Tooling Subsystem
-
 Configured through `scripts/android-sdk-env.sh`:
-- **`ANDROID_HOME`**: Points to `$HOME/Android/Sdk`, accommodating command-line tools, platform tools, build tools, platforms, and system images.
-- **Tool Resolution**: Adds `cmdline-tools/latest/bin`, `platform-tools`, and `emulator` to `PATH` without duplicating entries.
-- **Java Runtime Compatibility**:
-  - Respects existing `JAVA_HOME` if defined by the operator.
-  - Automatically identifies compatible Studio JBR (`$HOME/.local/share/android-studio/jbr`) or system JDK 21 LTS (`/usr/lib/jvm/java-21-openjdk`).
-  - Leaves `JAVA_HOME` unset if only host Java 25 is present, providing non-interactive safety and interactive configuration guidance.
+- **`ANDROID_HOME`**: Points to `$HOME/Android/Sdk`.
+- **Tool Resolution**: Adds `cmdline-tools/latest/bin`, `platform-tools`, and `emulator` to `PATH`.
+- **Java Compatibility**: Respects existing `JAVA_HOME`; detects Studio JBR or JDK 21 LTS; leaves `JAVA_HOME` unset if only host Java 25 is present.
 
 ### 3.3 Emulator Subsystem
-
 Managed via `scripts/start-android-emulator.sh`:
-- **Port Allocation**: Strictly bounded to decimal even integers in the range `5554` to `5682`, matching standard ADB console/ADB port pairs (`emulator-5554`). Leading-zero octal numbers and odd ports are rejected.
-- **Hardware Acceleration**: Checks `/dev/kvm` read/write access. Relies on AMD-V CPU virtualization (KVM API 12).
-- **Rendering Fallback**: Defaults to `-gpu auto`, allowing selection of software rasterization (`-gpu swiftshader`) if GLX rendering encounters issues under remote display forwarding.
-- **Headless Mode**: Supports `EMULATOR_HEADLESS=1` (`-no-window -no-audio`) for automated CI runs.
+- **Port Allocation**: Strictly bounded to decimal even integers in `5554` to `5682`.
+- **Hardware Acceleration**: Checks `/dev/kvm` read/write access (AMD-V, KVM API 12).
+- **Rendering Fallback**: Defaults to `-gpu auto`, supporting `-gpu swiftshader` if GLX rendering fails.
+- **Headless Mode**: Supports `EMULATOR_HEADLESS=1` for automated CI runs.
 
 ---
 
 ## 4. Multiplatform Application & Sync Architecture
-
-Phase 02 established the foundation for Doggo's Kotlin Multiplatform client contracts, Phase 03 implemented the backend strict synchronization server, route mode fences, and storage isolation on Glean Hub, and Phase 04 implemented the multiplatform authentication client, session state machine, single-flight refresh, and protected credential vault:
 
 ```mermaid
 flowchart TD
@@ -111,8 +101,16 @@ flowchart TD
   subgraph SharedKMP["Shared Core (shared/)"]
     UI["Compose Multiplatform UI\n(Material 3 / Light Theme)"]
     State["Todo State & Actions\n(TodoUiState / TodoAction)"]
-    Coordinator["Sync Coordinator\n(FIFO Outbox / Reconcile)"]
-    RoomDB["Room KMP Local DB\n(SQLite Bundled / Offline First)"]
+    
+    subgraph LocalPersistence["Local Persistence & Sync (Phase 05)"]
+      Coordinator["AccountSyncCoordinator\n(3-Stage Sync / Mutex)"]
+      Store["RoomAccountStore\n(Store Mutex & Atomic Ops)"]
+      RoomDB[("DoggoDatabase (Room v1)\nserver_base | outbox\neditor_drafts | scan_staging\naccount_sync_meta")]
+      Reconciliation["OutboxReconciliation\n(FIFO Dispatch / CAS Ack)"]
+      Scan["StagedFullScan\n(Pre-Scan Check / Promotion)"]
+      LeaveProtocol["AccountLeaveProtocol\n(Fail-Closed Teardown)"]
+      AccountFiles["Platform Account Files\n(Android / JVM Partitioning)"]
+    end
     
     subgraph AuthSubsystem["Auth & Protected Session Subsystem (Phase 04)"]
       AuthSession["HubAuthSession\n(State Machine & Gen Fencing)"]
@@ -139,10 +137,19 @@ flowchart TD
   AndroidApp --> UI
   DesktopApp --> UI
   UI --> State
-  State --> RoomDB
-  State --> Coordinator
-  Coordinator --> RoomDB
+  State --> Store
+  Store --> RoomDB
+  Store --> AccountFiles
+  Coordinator --> Store
+  Coordinator --> Reconciliation
+  Coordinator --> Scan
+  Coordinator --> LeaveProtocol
   Coordinator --> AuthSession
+  Reconciliation --> RoomDB
+  Scan --> RoomDB
+  LeaveProtocol --> Store
+  LeaveProtocol --> AccountFiles
+  LeaveProtocol --> Vault
   AuthSession --> SingleFlight
   AuthSession --> AuthClient
   AuthSession --> Vault
@@ -159,78 +166,68 @@ flowchart TD
   AdmissionHelper --> MongoDB
 ```
 
-### 4.1 Client Layer & Shared Core
-- **Shared Core (`shared/`)**: Pure Kotlin Multiplatform library targeting Android (minSdk 26) and Desktop JVM (bytecode 17).
-- **Local Storage**: Room KMP with `androidx.sqlite:sqlite-bundled` driver. Offline-first: mutations persist to local SQLite and durable outbox immediately.
-- **Vault Abstraction**: OS-level protected credential custody without plaintext storage or fallback.
-- **Staged Module Assembly**: Root build includes `:shared` immediately, while `:androidApp` and `:desktopApp` are guarded by script existence to prevent broken stub builds.
-
-### 4.2 Storage Namespace Isolation
+### 4.1 Storage Namespace & Backend Isolation
 Strict sync completely segregates Doggo data from legacy Hub storage:
 - **Naming Pattern**: `_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>` (e.g. `_strict_v1_5_doggo_550e8400e29b41d4a716446655440000`).
-- **Document Key (`_id`)**: Exact composite key `userId:rowId` (where `userId` is 24-character hex string from auth token). Intrinsic unique constraint prevents cross-user collisions.
+- **Document Key (`_id`)**: Exact composite key `userId:rowId` preventing cross-user collisions.
 - **Scan Index**: Exact compound index `{ userId: 1, tableName: 1, rowId: 1 }` with simple collation.
-- **Publication-Last Registration**: The schema entry in `_schemas` is published only after storage and indexes are provisioned and pass admission.
+- **Publication-Last Registration**: Schema entry published only after storage and indexes pass admission.
 
-### 4.3 Route Fencing & Middleware Isolation
-- **Legacy Guard (`legacy_sync_mode_guard`)**: Intercepts legacy sync paths (`/api/v1/sync/:app_id/*`). If the requested app schema has `syncMode` defined (e.g. `strict-v1`), the request is rejected with HTTP 426 (`protocolUnsupported`). Legacy apps with absent `syncMode` proceed unchanged.
-- **Scope Guard (`strong_route_scope_guard`)**: Validates that the `X-App-Id` request header exactly matches the URL path parameter `:app_id`.
-- **Schema Immutability**: `PUT /api/v1/apps/:app_id/schema` updates use the filter `{ appId: app_id, syncMode: { $exists: false } }`, rejecting schema modifications on strict apps with HTTP 400.
+### 4.2 Route Fencing & Middleware Isolation
+- **Legacy Guard (`legacy_sync_mode_guard`)**: Rejects strict apps requesting legacy sync routes with HTTP 426 (`protocolUnsupported`).
+- **Scope Guard (`strong_route_scope_guard`)**: Enforces exact match between `X-App-Id` header and URL path parameter `:app_id`.
+- **Schema Immutability**: `PUT /api/v1/apps/:app_id/schema` updates reject strict apps with HTTP 400.
 
-### 4.4 Mutation Semantics & Replay Confirmation
+### 4.3 Mutation Semantics & Replay Confirmation
 - **Create**: Conditional insert-only write requiring expectedRevision = 0, setting revision = 1 and atomic `lastOp`.
 - **Update**: Conditional write matching current `revision == expectedRevision` and live row filter (`deleted: false`), incrementing revision by 1.
 - **Delete**: Conditional write matching current `revision == expectedRevision`, incrementing revision by 1, replacing data with canonical empty document, and recording permanent tombstone.
-- **Replay Confirmation**: Identical `(opId, digest)` mutations perform a conditional write updating `confirmationNonce` with journaled write concern. Successful confirmation requires `matched_count == 1`.
+- **Replay Confirmation**: Identical `(opId, digest)` mutations perform a conditional write updating `confirmationNonce` with journaled write concern, requiring `matched_count == 1`.
 
-### 4.5 Durability Policy & Implementation Observations
+### 4.4 Durability Policy & Backend Topology Observation
 - **Replica Set**: `{ w: "majority", j: true }` write concern and `majority` read concern.
 - **Standalone**: `{ w: 1, j: true }` write concern and `local` read concern.
 - **Implementation Observation**: In `services/strong_sync_service.rs`, `get_strict_collection` runs `hello` to inspect topology and falls back to standalone (`w: 1, local`) if `hello` errors. This behavior is flagged for downstream review to ensure fail-closed topology verification rather than transient fail-open on replica sets.
 
-### 4.6 Operator Admission Preflight CLI
-- `strong_sync_admission`: Standalone Rust CLI binary invoking the identical `AppService::validate_strict_admission` validator without modifying database state. Allows operators to verify candidate namespaces prior to epoch activation.
+### 4.5 Hub Authentication & Protected Session Subsystem (Phase 04)
+- **Session State Machine (`HubAuthSession`)**: `UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`. Evaluates `/me.apps` for `"doggo"` grant.
+- **Single-Flight Refresh (`SingleFlightRefreshCoordinator`)**: Deduplicates simultaneous refresh requests to a single leader network request.
+- **Generation Fencing**: Atomic generation counter fences stale async completions on quiesce/logout/switch.
+- **Prohibited Automatic POST Replays**: `authorizedRequest()` refreshes tokens on HTTP 401 but never replays mutating POST requests.
+- **Android Keystore Vault (`AndroidKeystoreVault`)**: AES-256-GCM encryption per account key (`doggo_vault_key_{accountKey}`), fresh 12-byte random nonces per write, AAD binding (`"doggo_vault_v1:" + accountKey`), atomic file replacement.
 
-### 4.7 Hub Authentication & Protected Session Subsystem (Phase 04)
+### 4.6 Local Storage & Strict Synchronization Subsystem (Phase 05)
 
-Doggo reuses Glean Hub's authentication service for user identity and opt-in strict per-record synchronization, enforcing strict security boundaries across all platforms:
+1. **Room KMP Persistence (`DoggoDatabase`)**:
+   - Backed by `BundledSQLiteDriver`. Destructive migration is strictly forbidden; schema version 1 is validated against exported artifact `shared/schemas/.../1.json`.
+   - Five stores: `server_base` (authoritative base & tombstones), `outbox` (queued/frozen strict mutations), `editor_drafts` (uncommitted local edits), `scan_staging` (cursor pagination staging), `account_sync_meta` (account sync metadata and active epoch).
+2. **Account Directory Partitioning & Filesystem Model**:
+   - Partitioned strictly by canonical `AccountKey` SHA-256 string.
+   - `AndroidAccountFiles` and `JvmAccountFiles` verify `canonicalFile.toPath().startsWith(canonicalBase.toPath())` to reject path traversal outside the base root (intra-tree symlinks and TOCTOU races are outside this check).
+   - Critical metadata writes (`wipe.marker`, `generation.dat`) flush file bytes via `fsync()` before atomic rename (`StandardCopyOption.ATOMIC_MOVE`).
+3. **Local Mutation Lifecycle & FIFO Dispatch**:
+   - Atomic local saves (`saveTodoAtomic`, `deleteTodoAtomic`) persist drafts and outbox entries under the store mutex before returning.
+   - Only never-dispatched `PENDING` outbox operations coalesce; unsent create-delete cancels locally without network traffic.
+   - Per-row FIFO: Outbox operations dispatch at most one operation per `rowId` in FIFO order (`localRevision`). If the head operation on a row is `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED`, all successor operations on that row are blocked.
+   - Dispatch freezing: `prepareAndFreezeBatch` recomputes digest and expectedRevision from current base and executes `freezeOutboxAtomic` CAS transaction. `UNCERTAIN` retries strictly preserve original frozen fields.
+4. **Staged Full Scan & Monotonic Promotion**:
+   - 3-stage sync loop: Initial scan -> Push eligible outbox -> Final scan.
+   - Pagination stages rows in SQLite `scan_staging`; detects loops, batch overflow, non-progressing cursors, and epoch mismatches.
+   - Pre-scan identity check: All confirmed records in `server_base` sharing the `activeEpoch` must appear in staging; missing records trigger `SafeError.ResetRequired("CONSISTENCY_ERROR")`.
+   - Monotonic promotion: Higher revisions promote; equal revisions check logical equivalence (divergent data triggers `SafeError.ProtocolIncompatible("DIVERGENT_REVISION")`); lower revisions retain higher local base. Promoted atomically via `promoteStagingAtomic`.
+5. **Exact CAS-Ack Matching & Draft Preservation**:
+   - Acknowledges an outbox op if and only if `opId`, `rowId`, and `digest` match, status is in `[accepted, replayed]`, and `acceptedRevision == expectedRevision + 1`.
+   - Monotonically advances `server_base`. Retains `editor_drafts` if `draft.localRevision > outbox.localRevision`.
+6. **UnknownSuperseded Disambiguation**:
+   - Conflicts returned for operations with prior uncertain delivery history are classified as `UNKNOWN_SUPERSEDED` (the mutation may have committed remotely before being superseded). User workflows: `discardConflict`, `reapplyConflict`, `copyAsNew`.
+7. **Crash Recovery & Interrupted Dispatches**:
+   - `recoverInterruptedDispatches()` resets leftover `DISPATCHING` operations to `UNCERTAIN` on startup or round start.
+   - Coroutine push cancellation uses `withContext(NonCancellable)` to mark dispatched batches `UNCERTAIN`.
+8. **Fail-Closed Account Leave & Wipe Protocol**:
+   - Teardown checks 5 unresolved work categories (`drafts`, `pending`, `uncertain`, `conflict`, `unknownSuperseded`).
+   - Strict 7-step sequence: freeze store -> write generation and `wipe.marker` outside DB -> cancel/await schedulers -> close Room -> delete DB files -> clear vault -> clear marker.
+   - Startup recovery (`completePendingWipe`) inspects `wipe.marker` and finishes teardown fail-closed before any account opens.
 
-1. **Session Lifecycle & State Machine (`HubAuthSession`)**:
-   - Tracks states via `StateFlow<AuthState>`: `UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`.
-   - Registration normalizes email (trim + lowercase), validates byte lengths (username: 3..32 bytes, raw password input bounded to 8..128 UTF-8 bytes), and persists initial tokens.
-   - Login verifies `/me.userId` matches the login response `userId`, failing closed with `SafeError.Unauthorized("USER_ID_MISMATCH")` on disparity.
-   - App grant check: evaluates `/me.apps` for the `"doggo"` grant. If present, session enters `AUTHENTICATED`; if absent, transitions to `ACCESS_PENDING` and reconciles or submits an access request.
-   - Offline restore (`restoreSession`): Restores established sessions from the credential vault without network connectivity by verifying `VaultStatus.READY` and the deterministic `AccountKey`.
-
-2. **Single-Flight Refresh & Generation Fencing**:
-   - `SingleFlightRefreshCoordinator`: Concurrent refresh requests across foreground UI and background workers share a single leader network request. Waiters suspend on a shared `CompletableDeferred` without triggering duplicate refresh calls.
-   - `currentGeneration` Fencing: Session quiescence, logout, or account switches increment an atomic generation counter. In-flight refresh completions with stale generations are discarded without updating in-memory tokens or writing to the vault, preventing resurrected sessions.
-
-3. **Prohibited Automatic POST Replays**:
-   - In `authorizedRequest()`, when an HTTP 401 response triggers single-flight token refresh, the session refreshes credentials and verifies `/me`, but **never** automatically replays POST requests (such as strict `bootstrap`, `push`, or `pull`).
-   - Returns `SafeError.Unauthorized(code = "TOKEN_REFRESHED")`, ensuring the caller (`SyncCoordinator`) retains sole control over idempotent retries of frozen operations.
-
-4. **Route Policy & Dual-Auth Headers (`HubHttpClient`)**:
-   - Enforces `canonicalOrigin` validated by `EndpointPolicy` (HTTPS enforced in release, loopback HTTP permitted in debug, paths/queries/userinfo rejected).
-   - Classifies routes and injects headers according to least-privilege policies:
-     - `AUTH_PUBLIC` (`/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/refresh`): omits Authorization, `X-API-Key`, and `X-App-Id`.
-     - `BEARER_ONLY` (`/api/v1/auth/me`, `/api/v1/apps/access-requests*`): injects `Authorization: Bearer <token>`, omits app headers.
-     - `DUAL_AUTH_STRICT` (`/api/v1/sync/{appId}/strong/*`): injects Bearer token + `X-API-Key` + `X-App-Id`.
-     - Disallowed paths & legacy routes (`/api/v1/sync/:app_id`): locally rejected with `SafeError.ProtocolIncompatible`.
-   - Redirects strictly disabled (`followRedirects = false`).
-   - Error sanitization: strips HTML markup from error bodies and truncates to 256 characters.
-
-5. **Protected Credential Vault (`AndroidKeystoreVault`)**:
-   - Android Keystore–protected AES-256-GCM encryption per account key (`doggo_vault_key_{accountKey}`).
-   - Fresh 12-byte cryptographically secure random nonce generated per write.
-   - Authenticated Additional Data (AAD) cryptographically binds ciphertext to the account: `AAD = "doggo_vault_v1:" + accountKey`. Decryption under a mismatched account key fails authentication tag verification.
-   - Atomic file replacement: writes to temporary file `account_{accountKey}.vault.tmp`, flushes to disk via `FileDescriptor.sync()`, and atomically renames via `StandardCopyOption.ATOMIC_MOVE`.
-   - State discrimination: tracks `READY`, `LOCKED`, `CORRUPT`, and `UNAVAILABLE` without wiping the local database.
-
-6. **Platform HTTP Engine Abstraction**:
-   - Factory pattern `createPlatformHttpEngine()` implemented via expect/actual.
-   - Android (`androidMain`): OkHttp engine with 10s connect and 20s read/write timeouts, redirects disabled.
-   - Desktop JVM (`jvmMain`): Java HTTP engine with 10s connect timeout.
 ---
 
 ## 5. Security & Isolation Invariants
@@ -247,3 +244,7 @@ Doggo reuses Glean Hub's authentication service for user identity and opt-in str
 10. **Prohibited Automatic POST Replays**: The HTTP auth layer never automatically replays mutating POST requests across 401 refresh cycles; coordinator controls retry idempotency.
 11. **Cryptographic AAD Binding & Nonce Freshness**: Android Keystore vault generates a fresh 12-byte random nonce per write and cryptographically binds ciphertext to the account key via Authenticated Additional Data (AAD).
 12. **Strict Origin & Route Allowlisting**: Outbound requests are bound to `canonicalOrigin` and classified into public, bearer-only, and dual-auth strict routes; non-allowlisted and legacy endpoints fail closed locally.
+13. **Zero Destructive Migration**: Room database version 1 uses explicit migrations; `fallbackToDestructiveMigration()` is forbidden.
+14. **Per-Row FIFO Queueing & Head Blocking**: Outbox operations dispatch at most one operation per `rowId` in FIFO order. A head operation in `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED` state blocks all successors on that row.
+15. **Exact CAS-Ack Matching & Monotonic Promotion**: Acknowledgements require exact 5-tuple verification. Staged scans verify pre-scan confirmed identity presence; promotion monotonically advances confirmed base without regressing.
+16. **Fail-Closed Teardown & External Marker**: Account leave freezes edits, writes generation and `wipe.marker` outside SQLite before deleting files, and requires startup recovery to complete any interrupted wipe before reopening an account.

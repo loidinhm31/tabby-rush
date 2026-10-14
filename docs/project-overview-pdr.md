@@ -1,9 +1,9 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
 Last Updated: 2026-10-14  
-Document Version: 1.2.0  
+Document Version: 1.3.0  
 Status: Active  
-Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
+Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
 
@@ -123,10 +123,10 @@ Phase 03 establishes backend strict synchronization support on Glean Hub, enforc
 Phase 04 implements the multiplatform authentication client, session state machine, single-flight token refresh, and Android Keystore–protected credential storage, enabling secure opt-in sync against Glean Hub.
 
 ### 6.1 Authentication & Session Requirements
-- **FR-AUTH-01 (Route Policy & Dual-Auth Header Allowlist)**: All outbound requests are bounded to `canonicalOrigin`. Routes are strictly classified into `AUTH_PUBLIC`, `BEARER_ONLY`, and `DUAL_AUTH_STRICT`. Disallowed paths and legacy sync endpoints (`/api/v1/sync/:app_id`) fail closed locally with `SafeError.ProtocolIncompatible`. Redirects are strictly disabled (`followRedirects = false`).
+- **FR-AUTH-01 (Route Policy & Dual-Auth Header Allowlist)**: All outbound requests are bounded to `canonicalOrigin`. Routes are strictly classified into `AUTH_PUBLIC`, `BEARER_ONLY`, and `DUAL_AUTH_STRICT`. Disallowed paths and legacy sync endpoints fail closed locally with `SafeError.ProtocolIncompatible`. Redirects are strictly disabled (`followRedirects = false`).
 - **FR-AUTH-02 (Keystore-Protected Credential Custody)**: Platform `CredentialVault` implemented on Android via `AndroidKeystoreVault` using AES-256-GCM with fresh 12-byte random nonces per write and AAD binding (`"doggo_vault_v1:" + accountKey`). Tokens exist only in memory and within the vault; never exposed in `StateFlow`, loggers, or serialized state.
 - **FR-AUTH-03 (Single-Flight Refresh & Generation Fencing)**: Concurrent foreground and background refresh calls are deduplicated into a single leader network request via `SingleFlightRefreshCoordinator`. Generation counter increments on quiesce/logout/switch to fence stale async completions and prevent resurrected credentials.
-- **FR-AUTH-04 (Prohibited Automatic POST Replays)**: In `authorizedRequest()`, the HTTP auth layer never automatically replays mutating POST requests (such as `bootstrap`, `push`, or `pull`) across 401 token refresh cycles; returns `SafeError.Unauthorized("TOKEN_REFRESHED")`, leaving retry ownership strictly to `SyncCoordinator`.
+- **FR-AUTH-04 (Prohibited Automatic POST Replays)**: In `authorizedRequest()`, the HTTP auth layer never automatically replays mutating POST requests across 401 token refresh cycles; returns `SafeError.Unauthorized("TOKEN_REFRESHED")`, leaving retry ownership strictly to `SyncCoordinator`.
 - **FR-AUTH-05 (Session Lifecycle & App Grant Enforcement)**: Explicit state machine (`UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`). Enforces `/me.userId` matching login response. Evaluates `/me.apps` for `"doggo"` grant; creates and reconciles access requests if grant is pending.
 - **FR-AUTH-06 (Multiplatform Engine Abstraction)**: Common expect/actual factory `createPlatformHttpEngine()` configured with bounded timeouts (10s connect, 20s read/write) and disabled redirects on Android (`OkHttp`) and Desktop JVM (`Java`).
 
@@ -151,24 +151,53 @@ Phase 04 implements the multiplatform authentication client, session state machi
 
 ---
 
-## 7. Technical Constraints & Dependencies
+## 7. Phase 05 Requirements & Acceptance: Durable Local State & Strict Per-Record Sync
+
+Phase 05 implements local persistence via Room KMP version 1 and SQLite `BundledSQLiteDriver`, strict per-record outbox reconciliation, staged full scans, and crash-safe fail-closed account teardown.
+
+### 7.1 Local Persistence & Sync Requirements
+- **FR-STORE-01 (Room Schema & Partitioning)**: Room database version 1 (`DoggoDatabase`) defines 5 stores (`server_base`, `outbox`, `editor_drafts`, `scan_staging`, `account_sync_meta`). Exported schema validated at `shared/schemas/.../1.json`. Destructive fallback is strictly forbidden. Storage is partitioned by canonical `AccountKey` SHA-256 string with path traversal validation.
+- **FR-STORE-02 (Atomic Local Save & Unsent Cancellation)**: Local edits write `account_sync_meta`, `editor_drafts`, and `outbox` atomically via Room `@Transaction` methods (`saveTodoAtomic`, `deleteTodoAtomic`). Deleting a record with only an unsent `CREATE` operation cancels locally via `cancelUnsentCreateAtomic` without wire traffic.
+- **FR-STORE-03 (Per-Row FIFO Dispatch & Head Blocking)**: At most one unresolved operation per `rowId` is dispatched in any round. If the head operation on a row is `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED`, all successor operations on that row are blocked. Dispatch batches enforce `<= 100` operations, zero duplicate `rowId`s, and `<= 256 KiB` total payload.
+- **FR-STORE-04 (Staged Full Scan & Monotonic Promotion)**: 3-stage sync loop (scan -> push -> scan). Pagination begins with `cursor = null`, verifies epoch consistency, detects cursor loops and non-progressing cursors, and stages rows in SQLite `scan_staging`. Pre-scan confirmed identities must all be present in scan staging or sync aborts with `SafeError.ResetRequired("CONSISTENCY_ERROR")`. Monotonic promotion atomically applies higher revisions and verifies logical equivalence on equal revisions.
+- **FR-STORE-05 (Exact CAS-Ack Reconciliation)**: Acknowledging an outbox mutation requires matching `opId`, `rowId`, `digest`, status in `[accepted, replayed]`, and `acceptedRevision == expectedRevision + 1`. Monotonically advances `server_base` and retains `editor_drafts` if `draft.localRevision > outbox.localRevision`.
+- **FR-STORE-06 (UnknownSuperseded Disambiguation)**: Conflicts returned for operations with previous uncertain delivery history are classified as `UNKNOWN_SUPERSEDED`, acknowledging that the mutation may have committed remotely before being superseded. Provides explicit user workflows: `discardConflict`, `reapplyConflict`, `copyAsNew`.
+- **FR-STORE-07 (Crash Recovery & Cancellation Safety)**: Startup resets `DISPATCHING` operations to `UNCERTAIN` via `recoverInterruptedDispatches()`. Coroutine push cancellation uses `NonCancellable` to mark dispatched batches `UNCERTAIN` before rethrowing `CancellationException`.
+- **FR-STORE-08 (Fail-Closed Account Leave & Wipe Protocol)**: Teardown checks 5 unresolved work categories; executes strict 7-step sequence (freeze -> generation + marker write outside DB -> cancel/await schedulers -> close Room -> delete DB files -> clear vault -> clear marker). Startup recovery (`completePendingWipe`) inspects `wipe.marker` and completes teardown fail-closed before opening any account.
+
+### 7.2 Phase 05 Deliverables & Status Distinction
+
+| Deliverable | Implementation Scope | Verification Status |
+|---|---|---|
+| Room KMP Database & Entities | `shared/src/commonMain/kotlin/dev/doggo/shared/data/` (5 entities, DAO, Database, migrations, RoomAccountStore). | Implemented; schema v1 exported, BundledSQLite driver, atomic `@Transaction` methods. |
+| Platform Database Builders & Files | `shared/src/{androidMain,jvmMain}/kotlin/dev/doggo/shared/data/` (Android and JVM database builders and account files). | Implemented; directory partitioning, path traversal guards, atomic wipe markers. |
+| Strict Sync Clients & Reconcilers | `shared/src/commonMain/kotlin/dev/doggo/shared/sync/` (HubSyncDtos, HubSyncClient, StagedFullScan, OutboxReconciliation, AccountSyncCoordinator, AccountLeaveProtocol). | Implemented; 3-stage sync, FIFO dispatch, CAS acks, UnknownSuperseded, fail-closed leave. |
+| Room Schema Export | `shared/schemas/dev.doggo.shared.data.DoggoDatabase/1.json`. | Implemented; verified canonical schema version 1 export. |
+| Local Storage & Sync Specs | `docs/local-storage-and-sync.md`, `docs/sync-acceptance.md`. | Published; complete architecture, lifecycle diagrams, acceptance criteria. |
+| Common & JVM Sync Test Suites (6 suites) | `shared/src/commonTest/.../sync/*-test.kt`, `shared/src/jvmTest/.../room-account-store-test.kt`. | Implemented; 89 unit and SQLite tests pass via `./gradlew --dependency-verification=lenient :shared:jvmTest`. |
+| Android Room Instrumented Tests | `shared/src/androidInstrumentedTest/.../room-account-store-test.kt`. | Implemented; covers app-private storage and Room transactions. (Deferred to Phase 07). |
+
+---
+
+## 8. Technical Constraints & Dependencies
 
 1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
 2. **JDK Requirements**: AGP 8.x requires a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for AGP Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
 3. **Interactive Licensing**: Android SDK licenses must be accepted interactively via `sdkmanager --licenses`; automated blanket acceptance is prohibited.
 4. **Interactive GUI Acceptance**: Full visual verification of Android Studio and the emulator framebuffer requires interactive remote workstation attachment via `xpra attach ssh://.../100`.
 5. **Live Database Testing**: Full backend acceptance requires a live MongoDB daemon (standalone or replica set) accessible via `MONGO_TEST_URI`.
-6. **Instrumented & Hardware Testing**: Keystore encryption verification requires an active Android device or emulator with Google Play / AOSP KeyStore daemon.
+6. **Instrumented & Hardware Testing**: Keystore encryption and Android Room verification require an active Android device or emulator with Google Play / AOSP platform image.
 
 ---
 
-## 8. Traceability & Phased Roadmap
+## 9. Traceability & Phased Roadmap
 
 Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
-- **Phase 02 Frozen Foundation & Contracts**: Staged Gradle build system, SHA-256 pinned wrapper, shared module configuration, common domain contract sources, and test suites implemented (DONE; live Gradle tasks pending downstream phases).
-- **Phase 03 Hub Reuse & Strict Server**: Backend strict synchronization server, legacy isolation fences, admission preflight, schema integration, and operator tooling implemented across 26 files (Implementation Complete; 36 Rust tests pass, clippy clean; live MongoDB gates deferred to Phase 07).
+- **Phase 02 Frozen Foundation & Contracts**: Staged Gradle build system, SHA-256 pinned wrapper, shared module configuration, common domain contract sources, and test suites implemented (DONE).
+- **Phase 03 Hub Reuse & Strict Server**: Backend strict synchronization server, legacy isolation fences, admission preflight, schema integration, and operator tooling implemented across 26 files (Implementation Complete; 36 Rust tests pass; live MongoDB gates deferred to Phase 07).
 - **Phase 04 Hub Authentication & Protected Session**: Authentication client, HTTP engine abstraction, session state machine, generation fencing, single-flight refresh, and Android Keystore vault implemented across 14 files (DONE; 19 JVM unit tests PASS; Android Keystore device run and live Hub integration deferred to Phase 07).
-- **Phases 05–06 (Upcoming)**: Parallel implementation lanes for local strict sync with Room v1, and Compose UI with light theme components.
+- **Phase 05 Durable Local State & Strict Per-Record Sync**: Room KMP database (v1), 5 entities, atomic DAO transactions, BundledSQLite driver, platform account files, staged full scan, FIFO outbox reconciliation, CAS ack matching, UnknownSuperseded, crash recovery, and fail-closed leave protocol implemented across 29 files (Implementation Complete; 89 common/JVM tests PASS; Android device test and live Mongo e2e sync deferred to Phase 07).
+- **Phase 06 (Upcoming)**: Compose UI implementation with light theme components and view models.
 - **Phases 07–08 (Upcoming)**: Android integration, connected emulator testing, live Hub sync coordination, and release operations.
 - **Phases 09–10 (Upcoming)**: Linux RPM and Windows MSI packaging.

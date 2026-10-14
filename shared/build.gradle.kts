@@ -92,3 +92,9 @@ compose.resources {
 dependencyLocking {
     lockAllConfigurations()
 }
+
+tasks.withType<Test> {
+    testLogging {
+        events("passed", "skipped", "failed")
+    }
+}

@@ -1,9 +1,9 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
 Last Updated: 2026-10-14  
-Document Version: 1.1.0  
+Document Version: 1.2.0  
 Status: Active  
-Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md)
+Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
 
@@ -29,7 +29,7 @@ The project prioritizes a clean multiplatform architecture, where the core domai
 | **FR-03** | Aggregate Metrics | The UI displays total, active, and completed task counts dynamically reflecting current filters. |
 | **FR-04** | Cloud Synchronization | Client syncs tasks with the backend service according to the contracts frozen in Phase 02. |
 | **FR-05** | Local State Handling | Task mutations update local state; pending drafts survive transient network faults. |
-| **FR-06** | Secure Authentication | Credentials and tokens are managed securely without plaintext storage in source or logs. |
+| **FR-06** | Secure Authentication | Reuses Glean Hub auth service with single-flight refresh, generation fencing, no automatic POST replays, and Android Keystore–protected vault. |
 
 ### 2.2 Non-Functional Requirements (NFR)
 
@@ -116,22 +116,59 @@ Phase 03 establishes backend strict synchronization support on Glean Hub, enforc
 | Hub Plugin Rust Sources (20 files in sibling repo) | `glean-hub-sync/src/{models,services,routes,middleware,bin}/*.rs` | Implemented; 36 unit and route tests PASS, clippy clean (0 warnings). |
 | **Live Mongo Acceptance Gates** | Live Mongo push/pull/replay/CAS, mounted router, rollback binary, legacy client fixtures. | **DEFERRED**: Requires live Mongo instance (`MONGO_TEST_URI`), deferred to Phase 07 device sync and Phase 08 release ops. |
 
-## 6. Technical Constraints & Dependencies
+---
+
+## 6. Phase 04 Requirements & Acceptance: Hub Authentication & Protected Session
+
+Phase 04 implements the multiplatform authentication client, session state machine, single-flight token refresh, and Android Keystore–protected credential storage, enabling secure opt-in sync against Glean Hub.
+
+### 6.1 Authentication & Session Requirements
+- **FR-AUTH-01 (Route Policy & Dual-Auth Header Allowlist)**: All outbound requests are bounded to `canonicalOrigin`. Routes are strictly classified into `AUTH_PUBLIC`, `BEARER_ONLY`, and `DUAL_AUTH_STRICT`. Disallowed paths and legacy sync endpoints (`/api/v1/sync/:app_id`) fail closed locally with `SafeError.ProtocolIncompatible`. Redirects are strictly disabled (`followRedirects = false`).
+- **FR-AUTH-02 (Keystore-Protected Credential Custody)**: Platform `CredentialVault` implemented on Android via `AndroidKeystoreVault` using AES-256-GCM with fresh 12-byte random nonces per write and AAD binding (`"doggo_vault_v1:" + accountKey`). Tokens exist only in memory and within the vault; never exposed in `StateFlow`, loggers, or serialized state.
+- **FR-AUTH-03 (Single-Flight Refresh & Generation Fencing)**: Concurrent foreground and background refresh calls are deduplicated into a single leader network request via `SingleFlightRefreshCoordinator`. Generation counter increments on quiesce/logout/switch to fence stale async completions and prevent resurrected credentials.
+- **FR-AUTH-04 (Prohibited Automatic POST Replays)**: In `authorizedRequest()`, the HTTP auth layer never automatically replays mutating POST requests (such as `bootstrap`, `push`, or `pull`) across 401 token refresh cycles; returns `SafeError.Unauthorized("TOKEN_REFRESHED")`, leaving retry ownership strictly to `SyncCoordinator`.
+- **FR-AUTH-05 (Session Lifecycle & App Grant Enforcement)**: Explicit state machine (`UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`). Enforces `/me.userId` matching login response. Evaluates `/me.apps` for `"doggo"` grant; creates and reconciles access requests if grant is pending.
+- **FR-AUTH-06 (Multiplatform Engine Abstraction)**: Common expect/actual factory `createPlatformHttpEngine()` configured with bounded timeouts (10s connect, 20s read/write) and disabled redirects on Android (`OkHttp`) and Desktop JVM (`Java`).
+
+### 6.2 Phase 04 Deliverables & Status Distinction
+
+| Deliverable | Implementation Scope | Verification Status |
+|---|---|---|
+| Auth Wire DTOs | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-auth-dtos.kt` | Implemented; redacted `toString()`, email normalization, byte length validation. |
+| Ktor HTTP Client | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-http-client.kt` | Implemented; route classification, dual-auth headers, HTML error sanitization, 10s/20s timeouts. |
+| Hub Auth API Client | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-auth-client.kt` | Implemented; register, login, refresh, `/me`, and access requests. |
+| Auth Session State Machine | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-auth-session.kt` | Implemented; state machine, generation fencing, prohibited POST replay, offline restore, local logout. |
+| Single-Flight Coordinator | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/single-flight-refresh.kt` | Implemented; leader-based concurrency lock using Mutex and CompletableDeferred. |
+| Android HTTP Engine | `shared/src/androidMain/kotlin/dev/doggo/shared/auth/android-http-engine.kt` | Implemented; OkHttp engine with redirects disabled and bounded timeouts. |
+| JVM HTTP Engine | `shared/src/jvmMain/kotlin/dev/doggo/shared/auth/jvm-http-engine.kt` | Implemented; Java HTTP engine with connect timeout. |
+| Android Keystore Vault | `shared/src/androidMain/kotlin/dev/doggo/shared/auth/android-keystore-vault.kt` | Implemented; Android Keystore–protected AES-256-GCM, fresh 12-byte nonces, AAD binding, atomic rename, status discrimination. |
+| Auth Client Unit Tests | `shared/src/commonTest/kotlin/dev/doggo/shared/auth/hub-auth-client-test.kt` | Implemented; 8 unit tests PASS (routes, headers, sanitization). |
+| Auth Session Unit Tests | `shared/src/commonTest/kotlin/dev/doggo/shared/auth/hub-auth-session-test.kt` | Implemented; 8 unit tests PASS (lifecycle, fencing, no POST replay, vault write failure). |
+| Single-Flight Unit Tests | `shared/src/commonTest/kotlin/dev/doggo/shared/auth/single-flight-refresh-test.kt` | Implemented; 3 unit tests PASS (deduplication, error propagation). |
+| Keystore Instrumented Tests | `shared/src/androidInstrumentedTest/kotlin/dev/doggo/shared/auth/android-keystore-vault-test.kt` | Implemented; covers AES-GCM, fresh nonces, AAD tamper rejection, atomic rename. (Deferred to Phase 07). |
+| Auth Acceptance Spec | `docs/auth-acceptance.md` | Published; 21 verification criteria across 4 test suites. |
+| Auth & Credentials Architecture | `docs/authentication-and-credentials.md` | Published; security invariants, route policies, AAD derivation, vault lifecycle. |
+
+---
+
+## 7. Technical Constraints & Dependencies
 
 1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
 2. **JDK Requirements**: AGP 8.x requires a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for AGP Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
 3. **Interactive Licensing**: Android SDK licenses must be accepted interactively via `sdkmanager --licenses`; automated blanket acceptance is prohibited.
 4. **Interactive GUI Acceptance**: Full visual verification of Android Studio and the emulator framebuffer requires interactive remote workstation attachment via `xpra attach ssh://.../100`.
 5. **Live Database Testing**: Full backend acceptance requires a live MongoDB daemon (standalone or replica set) accessible via `MONGO_TEST_URI`.
+6. **Instrumented & Hardware Testing**: Keystore encryption verification requires an active Android device or emulator with Google Play / AOSP KeyStore daemon.
 
 ---
 
-## 7. Traceability & Phased Roadmap
+## 8. Traceability & Phased Roadmap
 
 Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
 - **Phase 02 Frozen Foundation & Contracts**: Staged Gradle build system, SHA-256 pinned wrapper, shared module configuration, common domain contract sources, and test suites implemented (DONE; live Gradle tasks pending downstream phases).
 - **Phase 03 Hub Reuse & Strict Server**: Backend strict synchronization server, legacy isolation fences, admission preflight, schema integration, and operator tooling implemented across 26 files (Implementation Complete; 36 Rust tests pass, clippy clean; live MongoDB gates deferred to Phase 07).
-- **Phases 04–06 (Upcoming)**: Parallel implementation lanes for auth session & credential vault, local strict sync with Room v1, and Compose UI with light theme components.
+- **Phase 04 Hub Authentication & Protected Session**: Authentication client, HTTP engine abstraction, session state machine, generation fencing, single-flight refresh, and Android Keystore vault implemented across 14 files (DONE; 19 JVM unit tests PASS; Android Keystore device run and live Hub integration deferred to Phase 07).
+- **Phases 05–06 (Upcoming)**: Parallel implementation lanes for local strict sync with Room v1, and Compose UI with light theme components.
 - **Phases 07–08 (Upcoming)**: Android integration, connected emulator testing, live Hub sync coordination, and release operations.
 - **Phases 09–10 (Upcoming)**: Linux RPM and Windows MSI packaging.

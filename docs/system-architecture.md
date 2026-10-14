@@ -1,8 +1,8 @@
 # Doggo System Architecture
 
 Last Updated: 2026-10-14  
-Phase: Phase 03 Strict Server & Legacy Isolation (Implementation Complete; Runtime Acceptance Pending)  
-Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md)
+Phase: Phase 04 Hub Authentication & Protected Session (Implementation Complete; Runtime Acceptance Pending)  
+Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 ---
 
 ## 1. Architectural Scope & Principles
@@ -99,7 +99,7 @@ Managed via `scripts/start-android-emulator.sh`:
 
 ## 4. Multiplatform Application & Sync Architecture
 
-Phase 02 established the foundation for Doggo's Kotlin Multiplatform client contracts, and Phase 03 implemented the backend strict synchronization server, route mode fences, and storage isolation on Glean Hub:
+Phase 02 established the foundation for Doggo's Kotlin Multiplatform client contracts, Phase 03 implemented the backend strict synchronization server, route mode fences, and storage isolation on Glean Hub, and Phase 04 implemented the multiplatform authentication client, session state machine, single-flight refresh, and protected credential vault:
 
 ```mermaid
 flowchart TD
@@ -113,12 +113,21 @@ flowchart TD
     State["Todo State & Actions\n(TodoUiState / TodoAction)"]
     Coordinator["Sync Coordinator\n(FIFO Outbox / Reconcile)"]
     RoomDB["Room KMP Local DB\n(SQLite Bundled / Offline First)"]
-    Vault["Protected Credential Vault\n(Keystore / Secret Service / DPAPI)"]
+    
+    subgraph AuthSubsystem["Auth & Protected Session Subsystem (Phase 04)"]
+      AuthSession["HubAuthSession\n(State Machine & Gen Fencing)"]
+      SingleFlight["SingleFlightRefreshCoordinator\n(Leader Concurrency Lock)"]
+      AuthClient["HubAuthClient\n(Auth & Access Operations)"]
+      HttpClient["HubHttpClient\n(Allowlist & Dual-Auth Headers)"]
+      PlatformEngine["Platform Engine\n(Android: OkHttp / JVM: Java)"]
+      Vault["CredentialVault\n(Android: AndroidKeystoreVault)"]
+    end
   end
 
   subgraph HubBackend["Glean Hub Backend (Axum / Rust)"]
-    AuthRoutes["Hub Auth Routes\n(/auth/register, /auth/login, /auth/refresh)"]
-    DualAuth["Dual Auth Layer\n(Bearer JWT + X-API-Key)"]
+    AuthRoutes["Hub Auth Routes\n(/api/v1/auth/{register,login,refresh,me})"]
+    AccessRoutes["App Access Routes\n(/api/v1/apps/access-requests*)"]
+    DualAuth["Dual Auth Layer\n(Bearer JWT + X-API-Key + X-App-Id)"]
     LegacyGuard["Legacy Sync Mode Guard\n(Rejects strict apps with 426)"]
     ScopeGuard["Strong Route Scope Guard\n(Enforces path/header app_id coherence)"]
     StrictRoutes["Strict Routes\n(/api/v1/sync/:app_id/strong/{bootstrap,push,pull})"]
@@ -133,9 +142,15 @@ flowchart TD
   State --> RoomDB
   State --> Coordinator
   Coordinator --> RoomDB
-  Coordinator --> Vault
-  Coordinator -->|Bearer + AppKey| DualAuth
-  Vault -->|Bearer Token| AuthRoutes
+  Coordinator --> AuthSession
+  AuthSession --> SingleFlight
+  AuthSession --> AuthClient
+  AuthSession --> Vault
+  AuthClient --> HttpClient
+  HttpClient --> PlatformEngine
+  PlatformEngine -->|Public Auth / Refresh| AuthRoutes
+  PlatformEngine -->|Bearer Token| AccessRoutes
+  PlatformEngine -->|Bearer + AppKey + AppId| DualAuth
   DualAuth --> ScopeGuard
   ScopeGuard --> StrictRoutes
   StrictRoutes --> MongoDB
@@ -175,6 +190,47 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
 
 ### 4.6 Operator Admission Preflight CLI
 - `strong_sync_admission`: Standalone Rust CLI binary invoking the identical `AppService::validate_strict_admission` validator without modifying database state. Allows operators to verify candidate namespaces prior to epoch activation.
+
+### 4.7 Hub Authentication & Protected Session Subsystem (Phase 04)
+
+Doggo reuses Glean Hub's authentication service for user identity and opt-in strict per-record synchronization, enforcing strict security boundaries across all platforms:
+
+1. **Session Lifecycle & State Machine (`HubAuthSession`)**:
+   - Tracks states via `StateFlow<AuthState>`: `UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`.
+   - Registration normalizes email (trim + lowercase), validates byte lengths (username: 3..32 bytes, raw password input bounded to 8..128 UTF-8 bytes), and persists initial tokens.
+   - Login verifies `/me.userId` matches the login response `userId`, failing closed with `SafeError.Unauthorized("USER_ID_MISMATCH")` on disparity.
+   - App grant check: evaluates `/me.apps` for the `"doggo"` grant. If present, session enters `AUTHENTICATED`; if absent, transitions to `ACCESS_PENDING` and reconciles or submits an access request.
+   - Offline restore (`restoreSession`): Restores established sessions from the credential vault without network connectivity by verifying `VaultStatus.READY` and the deterministic `AccountKey`.
+
+2. **Single-Flight Refresh & Generation Fencing**:
+   - `SingleFlightRefreshCoordinator`: Concurrent refresh requests across foreground UI and background workers share a single leader network request. Waiters suspend on a shared `CompletableDeferred` without triggering duplicate refresh calls.
+   - `currentGeneration` Fencing: Session quiescence, logout, or account switches increment an atomic generation counter. In-flight refresh completions with stale generations are discarded without updating in-memory tokens or writing to the vault, preventing resurrected sessions.
+
+3. **Prohibited Automatic POST Replays**:
+   - In `authorizedRequest()`, when an HTTP 401 response triggers single-flight token refresh, the session refreshes credentials and verifies `/me`, but **never** automatically replays POST requests (such as strict `bootstrap`, `push`, or `pull`).
+   - Returns `SafeError.Unauthorized(code = "TOKEN_REFRESHED")`, ensuring the caller (`SyncCoordinator`) retains sole control over idempotent retries of frozen operations.
+
+4. **Route Policy & Dual-Auth Headers (`HubHttpClient`)**:
+   - Enforces `canonicalOrigin` validated by `EndpointPolicy` (HTTPS enforced in release, loopback HTTP permitted in debug, paths/queries/userinfo rejected).
+   - Classifies routes and injects headers according to least-privilege policies:
+     - `AUTH_PUBLIC` (`/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/refresh`): omits Authorization, `X-API-Key`, and `X-App-Id`.
+     - `BEARER_ONLY` (`/api/v1/auth/me`, `/api/v1/apps/access-requests*`): injects `Authorization: Bearer <token>`, omits app headers.
+     - `DUAL_AUTH_STRICT` (`/api/v1/sync/{appId}/strong/*`): injects Bearer token + `X-API-Key` + `X-App-Id`.
+     - Disallowed paths & legacy routes (`/api/v1/sync/:app_id`): locally rejected with `SafeError.ProtocolIncompatible`.
+   - Redirects strictly disabled (`followRedirects = false`).
+   - Error sanitization: strips HTML markup from error bodies and truncates to 256 characters.
+
+5. **Protected Credential Vault (`AndroidKeystoreVault`)**:
+   - Android Keystore–protected AES-256-GCM encryption per account key (`doggo_vault_key_{accountKey}`).
+   - Fresh 12-byte cryptographically secure random nonce generated per write.
+   - Authenticated Additional Data (AAD) cryptographically binds ciphertext to the account: `AAD = "doggo_vault_v1:" + accountKey`. Decryption under a mismatched account key fails authentication tag verification.
+   - Atomic file replacement: writes to temporary file `account_{accountKey}.vault.tmp`, flushes to disk via `FileDescriptor.sync()`, and atomically renames via `StandardCopyOption.ATOMIC_MOVE`.
+   - State discrimination: tracks `READY`, `LOCKED`, `CORRUPT`, and `UNAVAILABLE` without wiping the local database.
+
+6. **Platform HTTP Engine Abstraction**:
+   - Factory pattern `createPlatformHttpEngine()` implemented via expect/actual.
+   - Android (`androidMain`): OkHttp engine with 10s connect and 20s read/write timeouts, redirects disabled.
+   - Desktop JVM (`jvmMain`): Java HTTP engine with 10s connect timeout.
 ---
 
 ## 5. Security & Isolation Invariants
@@ -186,3 +242,8 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
 5. **Memory-Only Unpersisted Secrets**: Passwords and raw credential tokens are excluded from logs, error envelopes, and toString representations.
 6. **Strict Storage Isolation**: Strict-mode collections (`_strict_v1_*`) are strictly unreachable by legacy sync routes, background cleanup jobs, and older Hub binaries.
 7. **Key Custody & Perms**: Provisioning outputs write API keys with strict `0600` file permissions; scripts support protected environment variables (`GLEAN_ADMIN_TOKEN`, `DOGGO_APP_KEY`) to prevent command-line argument exposure.
+8. **Opaque In-Memory Credential Custody**: Tokens exist strictly in memory and within the Keystore-protected vault. `StateFlow` and public state models emit only `AccountIdentity`, `AccountKey`, and `AuthState`; `CredentialBundle.toString()` redacts token strings.
+9. **Single-Flight Generation Fencing**: Foreground and background refresh calls are deduplicated into a single network operation; generation fencing discards stale async completions on quiesce or logout.
+10. **Prohibited Automatic POST Replays**: The HTTP auth layer never automatically replays mutating POST requests across 401 refresh cycles; coordinator controls retry idempotency.
+11. **Cryptographic AAD Binding & Nonce Freshness**: Android Keystore vault generates a fresh 12-byte random nonce per write and cryptographically binds ciphertext to the account key via Authenticated Additional Data (AAD).
+12. **Strict Origin & Route Allowlisting**: Outbound requests are bound to `canonicalOrigin` and classified into public, bearer-only, and dual-auth strict routes; non-allowlisted and legacy endpoints fail closed locally.

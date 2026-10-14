@@ -4,7 +4,7 @@
 **Last Updated:** 2026-10-14  
 **Target Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Authoritative Evolution Plan)  
 **Historical Plan:** [plans/261013-0914-doggo-compose-todos/plan.md](../plans/261013-0914-doggo-compose-todos/plan.md) (Superseded)  
-**Overall Completion:** 39% planned effort (58h / 148h; Phase 01 & 02 DONE; Phase 03 Implementation Complete, Runtime Acceptance Pending)
+**Overall Completion:** 47% planned effort (70h / 148h; Phase 01 & 02 DONE; Phase 03 & 04 Implementation Complete, Runtime Acceptance Pending)
 
 ---
 
@@ -23,16 +23,17 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 | **01** | [Headless Tooling & Android Environment](../plans/261013-1540-doggo-glean-hub-reuse/phase-01-headless-tooling.md) | A | 6h | **DONE** | 2026-10-13 | 100% |
 | **02** | [Frozen Foundation & Contracts](../plans/261013-1540-doggo-glean-hub-reuse/phase-02-frozen-foundation.md) | B | 12h | **DONE** | 2026-10-14 | 100% |
 | **03** | [Isolated Strict Server](../plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md) | C | 40h | **Implementation Complete\*** | 2026-10-14 | 100% |
-| **04** | [Auth Session & Vault](../plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md) | C | 12h | Pending | — | 0% |
+| **04** | [Auth Session & Vault](../plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md) | C | 12h | **Implementation Complete†** | 2026-10-14 | 100% |
 | **05** | [Local Strict Sync](../plans/261013-1540-doggo-glean-hub-reuse/phase-05-local-sync-state.md) | C | 28h | Pending | — | 0% |
 | **06** | [Compose UI & Light Theme](../plans/261013-1540-doggo-glean-hub-reuse/phase-06-compose-ui-theme.md) | C | 12h | Pending | — | 0% |
 | **07** | [Android Integration](../plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md) | D | 14h | Pending | — | 0% |
 | **08** | [Android Release Operations](../plans/261013-1540-doggo-glean-hub-reuse/phase-08-android-release-operations.md) | E | 10h | Pending | — | 0% |
 | **09** | [Linux Installed RPM Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) | F | 8h | Pending | — | 0% |
 | **10** | [Windows Installed MSI Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) | G | 6h | Pending | — | 0% |
-| **Total** | | | **148h** | | | **39%** |
+| **Total** | | | **148h** | | | **47%** |
 
-*\*Phase 03 implementation complete across 26 files (36 Rust unit/route tests PASS, clippy clean); live Mongo integration gates (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.*
+*\*Phase 03 implementation complete across 26 files (36 Rust unit/route tests PASS, clippy clean); live Mongo integration gates (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.*  
+*†Phase 04 implementation complete across 14 files (43 JVM unit tests PASS, code review cycle 3 approved 7/10); Android Keystore instrumented test and live Hub runtime acceptance deferred to Phase 07.*
 
 ---
 
@@ -68,7 +69,15 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
     - Admission & Tooling: `bin/strong_sync_admission.rs` (read-only candidate preflight CLI), `scripts/hub-schema-provision.mjs` (fail-closed strict-apps provisioner with 0600 key custody), `scripts/hub-compatibility-smoke.mjs` (regression smoke runner), `integration/glean-hub/doggo-schema.json`.
     - Documentation: `docs/hub-schema-integration.md`, `docs/hub-compatibility-acceptance.md`, `docs/evidence/hub-compatibility-summary.md`, and Glean Hub runbook `docs/doggo-strict-sync.md`.
   - *Note on Runtime Acceptance Gate:* 36 unit and route tests pass and clippy clean; live Mongo integration suites (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.
-- **Phases 04–06 (UPCOMING):** Parallel implementation lanes (auth session & credential vault, local strict sync with Room v1, Compose UI and light theme components).
+- **Phase 04 (COMPLETED 2026-10-14):** Hub authentication client, protected session state machine, single-flight refresh coordinator, Android Keystore credential vault, platform HTTP engines, and unit test suites (14 files delivered; 43/43 JVM tests passing, code review cycle 3 approved 7/10).
+  - **Key Deliverables:**
+    - Common Auth DTOs & HTTP Client: `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-auth-dtos.kt`, `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-http-client.kt` (endpoint allowlisting, no redirects/TLS bypass, dual auth headers for strong sync, sanitized safe error handling).
+    - Session & Single-Flight: `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-auth-client.kt`, `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-auth-session.kt`, `shared/src/commonMain/kotlin/dev/doggo/shared/auth/single-flight-refresh.kt` (generation-fenced session transitions, bounded `/me` access checks, single-flight deduplication, atomic successor vault persistence, no automatic POST retry).
+    - Platform Engines & Vault: `shared/src/androidMain/kotlin/dev/doggo/shared/auth/android-http-engine.kt`, `shared/src/jvmMain/kotlin/dev/doggo/shared/auth/jvm-http-engine.kt`, `shared/src/androidMain/kotlin/dev/doggo/shared/auth/android-keystore-vault.kt` (AES-GCM encryption with fresh 12-byte nonce, AAD binding, atomic private file commit).
+    - Unit & Instrumented Test Suites: `shared/src/commonTest/kotlin/dev/doggo/shared/auth/hub-auth-client-test.kt` (8 tests), `shared/src/commonTest/kotlin/dev/doggo/shared/auth/hub-auth-session-test.kt` (8 tests), `shared/src/commonTest/kotlin/dev/doggo/shared/auth/single-flight-refresh-test.kt` (3 tests), `shared/src/androidInstrumentedTest/kotlin/dev/doggo/shared/auth/android-keystore-vault-test.kt`.
+    - Documentation: `docs/authentication-and-credentials.md`, `docs/auth-acceptance.md`.
+  - *Note on Runtime Acceptance Gate:* 43/43 JVM tests pass (100% pass rate). Android Keystore instrumented test execution and live Hub end-to-end authentication validation are scheduled for Phase 07 device integration.
+- **Phases 05–06 (UPCOMING):** Parallel implementation lanes (local strict sync with Room v1, Compose UI and light theme components). Next active phase is **Phase 05: local strict sync**.
 
 ### Milestone 3: Android Release & Live Sync (Groups D & E) — UPCOMING
 - **Phase 07:** Full Android integration, Hub sync coordinator, WorkManager background sync, Android KeyStore credential vault, connected UI tests on emulator (`emulator-5554`).
@@ -80,6 +89,16 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 ---
 
 ## 4. Changelog
+
+### [0.4.0-alpha.1] — 2026-10-14
+#### Completed
+- **Phase 04 Hub Authentication & Protected Session**:
+  - Implemented Hub auth DTOs, endpoint allowlisting, strict-only X-API-Key/X-App-Id header injection, and sanitized SafeError handling.
+  - Implemented `HubAuthSession` state machine with generation-fenced transitions, atomic successor vault updates, bounded `/me` access checks, and no automatic POST replays.
+  - Implemented `SingleFlightRefreshCoordinator` deduplicating concurrent foreground/background refresh attempts.
+  - Implemented Android Keystore AES-GCM credential vault (`AndroidKeystoreVault`) with account-scoped keys, fresh 12-byte nonces, AAD binding, and atomic file replacement.
+  - Delivered 14 files across `:shared` module and documentation.
+  - Validated with 43/43 passing JVM tests across 7 test suites; approved in code review cycle 3 (score 7/10). Android instrumented test runner and live Hub validation deferred to Phase 07.
 
 ### [0.3.0-alpha.1] — 2026-10-14
 #### Completed

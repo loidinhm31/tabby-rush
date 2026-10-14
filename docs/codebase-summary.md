@@ -1,20 +1,20 @@
 # Codebase Summary
 
 Generated on: 2026-10-14  
-Based on Repomix compaction: `repomix-output.xml` (133 files, 211,737 tokens, 893,878 chars)
+Based on Repomix compaction: `repomix-output.xml` (155 files, 261,103 tokens, 1,112,255 chars)
 ---
 
 ## 1. Repository Overview
 
 The `doggo` repository contains the implementation, build configuration, domain contracts, and architectural specifications for Doggo, an Android-first shared Compose Multiplatform task management application with secure multi-device synchronization against Glean Hub.
 
-Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts), and Phase 03 (Isolated Strict Server & Legacy Isolation), the repository contains:
+Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts), Phase 03 (Isolated Strict Server & Legacy Isolation), and Phase 04 (Hub Authentication & Protected Session), the repository contains:
 1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
-2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state and action models, identity/authentication contracts, strict sync canonical framing, validation policies, and unit tests.
+2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state/actions, identity/authentication contracts, strict sync canonical framing, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, and unit/instrumented tests.
 3. **Host Virtualization & Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, and Hub provisioning/smoke runners.
 4. **Hub Integration Artifacts (`integration/`)**: Canonical strict-v1 JSON schema specification matching backend admission rules.
 5. **Automated Verification Harness (`tests/`)**: Automated shell suites validating scripts, Gradle contracts, Kotlin sources, and cryptographic digest vectors.
-6. **Technical Documentation (`docs/`)**: Architecture specifications, API contracts, toolchain evidence, operational runbooks, compatibility acceptance criteria, and coding standards.
+6. **Technical Documentation (`docs/`)**: Architecture specifications, API contracts, toolchain evidence, operational runbooks, compatibility acceptance criteria, auth/credential specifications, and coding standards.
 7. **Planning & Roadmap (`plans/`)**: Phased execution plans, architectural decisions, and verification reports.
 ### High-Level Directory Structure
 
@@ -35,28 +35,47 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 │   ├── build.gradle.kts                # KMP library configuration (dev.doggo.shared, minSdk 26, JVM 17)
 │   ├── gradle.lockfile                 # Dependency locking definition
 │   └── src/
-│       ├── commonMain/kotlin/dev/doggo/shared/contract/
-│       │   ├── account-identity.kt     # AccountIdentity domain model
-│       │   ├── account-key.kt          # AccountKey deterministic SHA-256 key derivation
-│       │   ├── account-store.kt        # AccountStore, AccountStoreFactory interfaces
-│       │   ├── app-factories.kt        # AppFactories dependency wiring interface
-│       │   ├── auth-session.kt         # AuthSession, AuthState, AccessRequestInfo contracts
-│       │   ├── credential-vault.kt     # CredentialVault, CredentialBundle (redacted toString)
-│       │   ├── endpoint-policy.kt      # EndpointPolicy origin, scheme, and port validation
-│       │   ├── hub-config.kt           # HubConfig endpoint configuration (redacted toString)
-│       │   ├── safe-errors.kt          # SafeError sealed taxonomy, ApiResult envelope
-│       │   ├── strict-sync-contract.kt # StrictSyncContract, StrictSyncDigest canonical framing
-│       │   ├── sync-coordinator.kt     # SyncCoordinator, SyncStatus, SyncProgress orchestration
-│       │   ├── sync-scheduler.kt       # SyncScheduler scheduling interface
-│       │   ├── title-policy.kt         # TitlePolicy length and character validation
-│       │   ├── todo-action.kt          # TodoAction sealed UI event taxonomy
-│       │   ├── todo-models.kt          # Todo, TodoCounts, TodoFilter core domain models
-│       │   └── todo-ui-state.kt        # TodoUiState, EditorState, ConflictState view models
-│       └── commonTest/kotlin/dev/doggo/shared/contract/
-│           ├── account-key-test.kt     # Account key derivation and validation tests
-│           ├── endpoint-policy-test.kt # Endpoint policy HTTPS/loopback/port tests
-│           ├── strict-digest-test.kt   # NIST test vectors and field isolation tests
-│           └── title-policy-test.kt    # Title length, trimming, and character tests
+│       ├── commonMain/kotlin/dev/doggo/shared/
+│       │   ├── contract/
+│       │   │   ├── account-identity.kt     # AccountIdentity domain model
+│       │   │   ├── account-key.kt          # AccountKey deterministic SHA-256 key derivation
+│       │   │   ├── account-store.kt        # AccountStore, AccountStoreFactory interfaces
+│       │   │   ├── app-factories.kt        # AppFactories dependency wiring interface
+│       │   │   ├── auth-session.kt         # AuthSession, AuthState, AccessRequestInfo contracts
+│       │   │   ├── credential-vault.kt     # CredentialVault, CredentialBundle (redacted toString)
+│       │   │   ├── endpoint-policy.kt      # EndpointPolicy origin, scheme, and port validation
+│       │   │   ├── hub-config.kt           # HubConfig endpoint configuration (redacted toString)
+│       │   │   ├── safe-errors.kt          # SafeError sealed taxonomy, ApiResult envelope
+│       │   │   ├── strict-sync-contract.kt # StrictSyncContract, StrictSyncDigest canonical framing
+│       │   │   ├── sync-coordinator.kt     # SyncCoordinator, SyncStatus, SyncProgress orchestration
+│       │   │   ├── sync-scheduler.kt       # SyncScheduler scheduling interface
+│       │   │   ├── title-policy.kt         # TitlePolicy length and character validation
+│       │   │   ├── todo-action.kt          # TodoAction sealed UI event taxonomy
+│       │   │   ├── todo-models.kt          # Todo, TodoCounts, TodoFilter core domain models
+│       │   │   └── todo-ui-state.kt        # TodoUiState, EditorState, ConflictState view models
+│       │   └── auth/
+│       │       ├── hub-auth-dtos.kt        # Register/Login/Refresh/Me/Access DTOs and validation helpers
+│       │       ├── hub-http-client.kt      # HubHttpClient with route classification and error parsing
+│       │       ├── hub-auth-client.kt      # HubAuthClient API operations for auth & access requests
+│       │       ├── hub-auth-session.kt     # HubAuthSession state machine & generation-fenced token custody
+│       │       └── single-flight-refresh.kt # SingleFlightRefreshCoordinator concurrent refresh leader
+│       ├── androidMain/kotlin/dev/doggo/shared/auth/
+│       │   ├── android-http-engine.kt      # Android OkHttp platform engine factory
+│       │   └── android-keystore-vault.kt   # AndroidKeystoreVault Keystore-protected AES-256-GCM implementation
+│       ├── jvmMain/kotlin/dev/doggo/shared/auth/
+│       │   └── jvm-http-engine.kt          # Desktop JVM Java HTTP engine factory
+│       ├── commonTest/kotlin/dev/doggo/shared/
+│       │   ├── contract/
+│       │   │   ├── account-key-test.kt     # Account key derivation and validation tests
+│       │   │   ├── endpoint-policy-test.kt # Endpoint policy HTTPS/loopback/port tests
+│       │   │   ├── strict-digest-test.kt   # NIST test vectors and field isolation tests
+│       │   │   └── title-policy-test.kt    # Title length, trimming, and character tests
+│       │   └── auth/
+│       │       ├── hub-auth-client-test.kt # Auth client route, header, and validation tests (8 tests)
+│       │       ├── hub-auth-session-test.kt # Session state machine, restore, and fence tests (8 tests)
+│       │       └── single-flight-refresh-test.kt # Concurrent refresh deduplication tests (3 tests)
+│       └── androidInstrumentedTest/kotlin/dev/doggo/shared/auth/
+│           └── android-keystore-vault-test.kt # Instrumented Android Keystore vault tests
 ├── integration/                         # Integration schemas and specifications
 │   └── glean-hub/
 │       └── doggo-schema.json             # Exact strict-v1 todos schema specification
@@ -71,6 +90,8 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 │   └── test-phase-02-foundation.sh     # Phase 02 foundation, contracts, and digest test suite
 ├── docs/                               # Developer documentation and operational runbooks
 │   ├── api-contract.md                 # REST and strict sync wire protocol contract
+│   ├── auth-acceptance.md              # Acceptance criteria matrix for auth, session, and vault
+│   ├── authentication-and-credentials.md # Auth architecture, security invariants, and credential vault
 │   ├── code-standards.md               # Coding, testing, and security standards
 │   ├── codebase-summary.md             # This document (codebase inventory & metrics)
 │   ├── development-roadmap.md          # Architectural evolution roadmap
@@ -142,11 +163,30 @@ The `:shared` module provides the core domain abstractions and business logic, s
 
 | Test File | Target | Coverage |
 |---|---|---|
-| `strict-digest-test.kt` | `StrictSyncDigest` | Declares test coverage for NIST vectors (empty string, "abc", 56-byte boundary), big-endian field framing, and canonical delete empty data (reference vectors pass via Node.js runner; Kotlin test runner execution pending). |
+| `strict-digest-test.kt` | `StrictSyncDigest` | Test coverage for NIST vectors (empty string, "abc", 56-byte boundary), big-endian field framing, and canonical delete empty data (verified passing in `:shared:jvmTest`; live backend parity unverified under Gradle). |
 | `account-key-test.kt` | `AccountKey` | Validates deterministic lowercase hex hash derivation, input trimming, and empty/blank input rejection. |
 | `title-policy-test.kt` | `TitlePolicy` | Validates valid titles, leading/trailing whitespace trimming, empty/blank rejection, length boundaries, and control character rejection. |
 | `endpoint-policy-test.kt` | `EndpointPolicy` | Validates standard HTTPS URLs, trailing slash stripping, default port normalization, debug HTTP loopback origins, release cleartext rejection, and userinfo/path/query forbidden errors. |
 
+
+#### Authentication & Protected Session Subsystem (Phase 04)
+| Component File | Primary Types & Functions | Architectural Role |
+|---|---|---|
+| `hub-auth-dtos.kt` | `RegisterRequest`/`Response`, `LoginRequest`/`Response`, `RefreshRequest`/`Response`, `MeResponse`, `AccessRequestDto`, `HubAuthValidation` | Wire DTOs with redacted `toString()` preventing token leaks; validation helpers for email normalization and byte length checks. |
+| `hub-http-client.kt` | `HubHttpClient`, `RouteClassification` (`AUTH_PUBLIC`, `BEARER_ONLY`, `DUAL_AUTH_STRICT`) | Ktor HTTP client enforcing origin allowlist, route classification, dual-auth headers, HTML error sanitization, and 10s/20s bounded timeouts. |
+| `hub-auth-client.kt` | `HubAuthClient` | Concrete client handling registration, password login, token refresh rotation, authoritative `/me` inspection, and access requests. |
+| `hub-auth-session.kt` | `HubAuthSession` | Core auth session state machine (`UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`); generation-fenced token custody, single-flight refresh integration, prohibited POST replays, and local logout. |
+| `single-flight-refresh.kt` | `SingleFlightRefreshCoordinator` | Concurrency coordinator deduplicating simultaneous foreground and background refresh calls to a single leader network request. |
+| `android-http-engine.kt` | `createPlatformHttpEngine()` | Android OkHttp engine factory configuring connection/read/write timeouts and disabling redirects. |
+| `jvm-http-engine.kt` | `createPlatformHttpEngine()` | Desktop JVM Java HTTP engine factory configuring connection timeouts. |
+| `android-keystore-vault.kt` | `AndroidKeystoreVault` | Android Keystore–protected AES-256-GCM credential vault with fresh 12-byte random nonces per write, AAD binding (`"doggo_vault_v1:" + accountKey`), atomic file rename, and state discrimination (`READY`, `LOCKED`, `CORRUPT`, `UNAVAILABLE`). |
+
+| Test File | Target | Coverage |
+|---|---|---|
+| `hub-auth-client-test.kt` | `HubAuthClient` | 8 unit tests: route allowlist classification, dual-auth headers, registration/login error handling, `/me` bearer auth, access requests, HTML error sanitization. (8/8 PASS). |
+| `hub-auth-session-test.kt` | `HubAuthSession` | 8 unit tests: login with/without doggo access, user ID mismatch rejection, offline restore, logout generation fencing, prohibited POST replay, vault write failure recovery. (8/8 PASS). |
+| `single-flight-refresh-test.kt` | `SingleFlightRefreshCoordinator` | 3 unit tests: concurrent refresh deduplication, failure propagation, unexpected exception handling. (3/3 PASS). |
+| `android-keystore-vault-test.kt` | `AndroidKeystoreVault` | Instrumented Android tests: AES-256-GCM encryption/decryption, fresh nonces per write, AAD tampering rejection, atomic writes, corrupt file handling. (Deferred to Phase 07). |
 ### 2.3 Host Tooling & Virtualization (`scripts/`)
 
 | Script | Purpose | Key Implementation Details |
@@ -180,12 +220,14 @@ Phase 03 establishes backend strict synchronization support and integration tool
 | Suite | Scope | Status |
 |---|---|---|
 | `tests/test-phase-01-tooling.sh` | Shell syntax (`bash -n`), executable permissions, CLI argument handling, port validation, host prerequisites (`/dev/kvm`, `xpra`, `xterm`, `java`, `node`), and documentation contracts. | 31/31 assertions PASS. |
-| `tests/test-phase-02-foundation.sh` | Wrapper checksums, settings guards, version catalog, shared module config, contract source existence, test suites, contract isolation/redaction, and Node.js reference vector runner for policy and digest logic. (Note: Gradle test runner and Kotlin compiler tasks not yet executed; pending downstream build gates). | 57/57 assertions PASS. |
+| `tests/test-phase-02-foundation.sh` | Wrapper checksums, settings guards, version catalog, shared module config, contract source existence, test suites, contract isolation/redaction, and Node.js reference vector runner for policy and digest logic. (Note: Contract unit tests subsequently executed and passed via `:shared:jvmTest`). | 57/57 assertions PASS. |
 
 ### 2.6 Documentation (`docs/`)
 
 | Document | Purpose |
 |---|---|
+| [`docs/auth-acceptance.md`](./auth-acceptance.md) | Acceptance criteria and verification matrix for Phase 04 Hub authentication, session lifecycle, and credential vault. |
+| [`docs/authentication-and-credentials.md`](./authentication-and-credentials.md) | Authoritative specification for Glean Hub authentication, route classifications, security invariants, and credential vault custody. |
 | [`docs/api-contract.md`](./api-contract.md) | Authoritative wire protocol specification for Glean Hub authentication, admin registration, and strict sync. |
 | [`docs/code-standards.md`](./code-standards.md) | Engineering standards covering Bash scripting, Kotlin Multiplatform, Node.js scripts, Rust backend isolation, and credential security. |
 | [`docs/codebase-summary.md`](./codebase-summary.md) | Comprehensive codebase inventory based on Repomix compaction. |
@@ -205,23 +247,27 @@ Phase 03 establishes backend strict synchronization support and integration tool
 
 ## 3. Repomix Compaction Metrics
 
-- **Total Files Packed:** 133 files (134 processed in `doggo` repository; 1 test file excluded by security filter)
-- **Total Character Count:** 893,878 characters
-- **Total Token Count:** 211,737 tokens
-- **Security Check:** Secretlint completed across packed files with 0 findings in packed output. Note: Repomix packs the local `doggo` repository (excluding sibling repository files). 1 test file (`endpoint-policy-test.kt`) was excluded due to a mock userinfo URL vector.
-- **Top Files by Token Footprint:** `file-ownership.md` (7,367 tokens), `reports/contract-review.md` (5,471 tokens), `docs/codebase-summary.md` (5,207 tokens), `contracts.md` (5,106 tokens), `reports/strong-sync-isolation-feasibility.md` (4,054 tokens).
----
+- **Total Files Packed:** 155 files
+- **Total Character Count:** 1,112,255 characters
+- **Total Token Count:** 261,103 tokens
+- **Security Check:** Secretlint completed across packed files with 0 findings in packed output. Repomix packs the local `doggo` repository (excluding sibling repository files). 1 test file (`endpoint-policy-test.kt`) was excluded by default security filters due to a mock userinfo URL vector.
+- **Top Files by Token Footprint:** `file-ownership.md` (7,367 tokens), `docs/codebase-summary.md` (7,000 tokens), `reports/contract-review.md` (5,471 tokens), `contracts.md` (5,106 tokens), `docs/project-overview-pdr.md` (4,385 tokens).
 
 ## 4. Current State & Invariants
 
 1. **Deliverable Scope & Status**:
    - **Phase 01 (Headless Tooling)**: Automation scripts, Xpra display isolation, and technical documentation completed and verified via shell suite (31/31 tests PASS). Interactive Studio GUI wizard, SDK license acceptance, and live AVD screenshot remain an interactive operator prerequisite.
-   - **Phase 02 (Frozen Foundation & Contracts)**: Root Gradle configuration, staged assembly guards, version catalog, shared module, domain contract source files, and test suites completed and verified via shell suite (57/57 tests PASS). Live Gradle build execution and Kotlin test runner execution remain pending downstream build phases.
+   - **Phase 02 (Frozen Foundation & Contracts)**: Root Gradle configuration, staged assembly guards, version catalog, shared module, domain contract source files, and test suites completed and verified via shell suite (57/57 tests PASS) and `:shared:jvmTest` (24/24 contract tests PASS).
    - **Phase 03 (Hub Reuse & Strict Server)**: Backend strict synchronization server, legacy isolation fences, admission preflight, schema integration, and operator tooling implemented across 26 files (6 in Doggo, 20 in sibling `glean-hub-sync`). Unit and route tests passing (36 passed, clippy clean). Live Mongo integration suites and mounted router tests explicitly deferred to Phase 07 device sync and Phase 08 release operations.
+   - **Phase 04 (Hub Authentication & Protected Session)**: Authentication client, HTTP engine abstraction, session state machine, generation fencing, single-flight refresh, and Android Keystore vault implemented across 14 files (5 commonMain, 2 androidMain, 1 jvmMain, 3 commonTest, 1 androidInstrumentedTest, 2 docs). 19 unit tests passing under `:shared:jvmTest` (43 total tests passing). Android Keystore instrumented test and live Glean Hub integration test deferred to Phase 07/08.
 2. **Zero Fake Stubs & Staged Assembly**: The repository contains zero dummy application entrypoints or fake Room implementations. Root `settings.gradle.kts` conditionally guards `:androidApp` and `:desktopApp` until their modules are created in downstream phases.
-3. **Cryptographic & Wrapper Integrity**: Gradle 8.11.1 wrapper distribution SHA-256 and wrapper jar SHA-256 are pinned and verified. Strict sync digest specification uses explicit big-endian length-framed byte buffers matching backend Rust specifications (reference vectors verified via Node.js runner; native Kotlin execution and live backend parity remain unverified under Gradle).
+3. **Cryptographic & Wrapper Integrity**: Gradle 8.11.1 wrapper distribution SHA-256 and wrapper jar SHA-256 are pinned and verified. Strict sync digest specification uses explicit big-endian length-framed byte buffers matching backend Rust specifications (verified passing under JVM test runner; live backend parity unverified under Gradle).
 4. **Credential Redaction**: `CredentialBundle` and `HubConfig` override `toString()` to redact sensitive tokens and API keys, mitigating accidental logging via default string conversion (property access by callers remains unredacted).
 5. **Contract Modularity**: Shared domain contracts in `shared/src/commonMain/kotlin/` have zero dependencies on Android platform classes (`android.*`) or concrete persistence/HTTP engines.
 6. **Headless Infrastructure Isolation**: The Xpra display server binds zero public TCP listeners; all external GUI access is strictly mediated over encrypted SSH tunnels.
 7. **Dependency Locking Configuration**: Dependency locking is declared via `lockAllConfigurations()` with `shared/gradle.lockfile` present on disk, awaiting live dependency resolution to record locked versions.
 8. **Strict Storage & Route Isolation**: Strict collections (`_strict_v1_*`) are completely segregated from legacy collections; legacy routes reject strict apps with HTTP 426 (`protocolUnsupported`); strict routes enforce epoch coherence and fail-closed admission.
+9. **Single-Flight Refresh with Generation Fencing**: Concurrent foreground and background callers share a single leader network refresh; generation counter increments on quiesce/logout/switch to fence stale async completions and prevent resurrected credentials.
+10. **Prohibited Automatic POST Replays**: The HTTP auth layer never automatically replays a POST request (such as bootstrap, push, or pull) upon 401 token refresh; returns `SafeError.Unauthorized("TOKEN_REFRESHED")` leaving frozen retry ownership strictly to `SyncCoordinator`.
+11. **Opaque Vault Storage**: Credentials exist only in memory and in Android Keystore–protected `AndroidKeystoreVault` (AES-256-GCM, fresh 12-byte nonce, AAD bound to accountKey); tokens are excluded from `StateFlow`, loggers, and serialized state models.
+12. **Origin-Bound Allowlist**: Outbound HTTP traffic is strictly restricted to allowlisted endpoints under `canonicalOrigin`; legacy and non-allowlisted routes fail closed locally with `SafeError.ProtocolIncompatible`.

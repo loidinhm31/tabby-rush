@@ -4,10 +4,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class StrictTodoDataDto(
-    val id: String,
-    val title: String,
-    val completed: Boolean,
-    val createdAt: Long
+    val id: String = "",
+    val title: String = "",
+    val completed: Boolean = false,
+    val createdAt: Long = 0L
 )
 
 @Serializable

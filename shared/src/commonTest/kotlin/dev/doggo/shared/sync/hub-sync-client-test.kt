@@ -281,4 +281,45 @@ class HubSyncClientTest {
         assertEquals("token-cursor-1", pull.cursor)
         assertTrue(pull.hasMore)
     }
+
+    @Test
+    fun testPullTombstoneRecordWithEmptyData() = runTest {
+        val engine = TestHttpEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/v1/sync/doggo/strong/pull" -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{
+                            "protocol":"strict-v1",
+                            "epoch":"epoch-1",
+                            "records":[
+                                {
+                                    "tableName":"todos",
+                                    "rowId":"deleted-row-1",
+                                    "revision":2,
+                                    "deleted":true,
+                                    "data":{}
+                                }
+                            ],
+                            "cursor":null,
+                            "hasMore":false
+                        }"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.NotFound, "")
+            }
+        }
+
+        val session = createAuthenticatedSession(engine)
+        val client = HubSyncClient(config, session)
+
+        val result = client.pull("epoch-1", cursor = null, batchSize = 100)
+        assertIs<ApiResult.Success<StrictPullResponseDto>>(result)
+        val pull = result.value
+        assertEquals(1, pull.records.size)
+        assertTrue(pull.records[0].deleted)
+        assertEquals("deleted-row-1", pull.records[0].rowId)
+        assertEquals(2L, pull.records[0].revision)
+        assertFalse(pull.hasMore)
+    }
 }

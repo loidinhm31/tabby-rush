@@ -14,8 +14,8 @@ Group E after passing07. Operator authorizes deployment/provisioning;03 owns str
 - Date: 2026-10-13
 - Description: Authorized Hub operations and signed Android release.
 - Priority: P2
-- Implementation status: pending (0%)
-- Review status: parent plan review complete; implementation/runtime acceptance pending.
+- Implementation status: completed / 100% (2026-10-14T17:00:00Z; tooling & operational readiness delivered, live release gates pending operator prerequisites)
+- Review status: Tooling and operational runbooks delivered across 20 owned paths (including scripts/hub-live-smoke.mjs, scripts/release-security-check.mjs, scripts/hub-strict-recovery.js, operations runbooks, security specifications, and release UI state design mockups). Syntax check clean, offline fixture smoke 18/18 PASS, source audit CLEAN. Technical review cycle 3 (2026-10-14): 6/10 NOT ACCEPTED for live recovery due to open implementation defects (recovery script BSON Int64 import and createdAt Long rewriting, release-security-check debuggable attribute gate and debug-cert rejection) alongside unexecuted environment gates (mongosh against mongod, signed release APK apksigner check, live Hub verification).
 - Effort: 10h estimated; total plan148h,uncertainty ±25–35%.
 
 ## Key Insights
@@ -68,9 +68,9 @@ Exclusive phase08 owner of all 20 exact absolute paths above; those and only tho
 11. README/PDR/summary/roadmap/changelog/deployment/security/release docs record actual strict status,commands/operator maintenance,permanent-marker growth,non-snapshot/UnknownSuperseded/noHA boundaries,offline/account wipe/background/auth/local-only logout. Sanitize release screenshots and hub-recovery-summary. Verify existing embedded apps/shared libraries/source unmodified and actual legacy-client smoke before release; no migration estimate hidden here. Desktop pending until native gates;08 alone updates general docs afterward.
 
 ## Todo list
-- [ ] Implement every owned artifact/requirement with real behavior,not scaffolds.
-- [ ] Pass designated future command and actual runtime gates; record sanitized evidence.
-- [ ] Resolve failures through original owner and complete parent review; do not mark implementation accepted early.
+- [ ] Implement every owned artifact/requirement with real behavior, not scaffolds (20/20 exclusive files delivered; cycle-3 code defects in recovery BSON types and security auditor cert checks remain open).
+- [ ] Pass designated future command and actual runtime gates; record sanitized evidence (pending operator environment prerequisites: real mongod/mongosh instance, Android SDK 35 release build keystore, and reachable live Hub deployment).
+- [ ] Resolve failures through original owner and complete parent review; technical acceptance blocked at 6/10 until BSON Int64 handling, release cert verification, and live recovery rehearsal are satisfied.
 
 ## Success Criteria
 Authorized deployed capable strict Hub registration/read-back/index/journal admission and existing-client safety proof; native signup/approval/refresh/two-device strict sync; signed inspected installed Android HTTPS release with durable/offline/background/unknown/reset/UI gates; real isolated quiescent fresh-epoch recovery and rollback/version fence evidence. No old-epoch reopening or historical receipt reconstruction; essential docs match observations.

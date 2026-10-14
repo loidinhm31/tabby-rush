@@ -4,7 +4,7 @@
 **Last Updated:** 2026-10-14
 **Target Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Authoritative Evolution Plan)
 **Historical Plan:** [plans/261013-0914-doggo-compose-todos/plan.md](../plans/261013-0914-doggo-compose-todos/plan.md) (Superseded)
-**Overall Completion:** 84% planned-effort-weighted administrative progress (124h / 148h; Phase 01 & 02 DONE; Phase 03, 04, 05, 06 & 07 Implementation Complete / Administratively Closed, Runtime Acceptance Pending Phase 08)
+**Overall Completion:** 91% planned-effort-weighted administrative progress (134h / 148h; Phase 01 & 02 DONE; Phase 03, 04, 05, 06 & 07 Implementation Complete / Administratively Closed; Phase 08 Tooling & Operational Readiness 100% Complete, Live Release Gates Pending Operator Prerequisites)
 
 ---
 
@@ -27,16 +27,17 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 | **05** | [Local Strict Sync](../plans/261013-1540-doggo-glean-hub-reuse/phase-05-local-sync-state.md) | C | 28h | **Implementation Complete‡** | 2026-10-14 | 100% |
 | **06** | [Compose UI & Light Theme](../plans/261013-1540-doggo-glean-hub-reuse/phase-06-compose-ui-theme.md) | C | 12h | **Implementation Complete§** | 2026-10-14 | 100% |
 | **07** | [Android Integration](../plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md) | D | 14h | **Administratively Closed¶** | 2026-10-14 | 100% |
-| **08** | [Android Release Operations](../plans/261013-1540-doggo-glean-hub-reuse/phase-08-android-release-operations.md) | E | 10h | Pending | — | 0% |
+| **08** | [Android Release Operations](../plans/261013-1540-doggo-glean-hub-reuse/phase-08-android-release-operations.md) | E | 10h | **Tooling & Ops Complete\*\*** | 2026-10-14 | 100% |
 | **09** | [Linux Installed RPM Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) | F | 8h | Pending | — | 0% |
 | **10** | [Windows Installed MSI Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) | G | 6h | Pending | — | 0% |
-| **Total** | | | **148h** | | | **84%** |
+| **Total** | | | **148h** | | | **91%** |
 
 *\*Phase 03 implementation complete across 26 files (36 Rust unit/route tests PASS, clippy clean); live Mongo integration gates (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.*
 *†Phase 04 implementation complete across 14 files (43 JVM unit tests PASS, code review cycle 3 approved 7/10); Android Keystore instrumented test and live Hub runtime acceptance deferred to Phase 07.*
 *‡Phase 05 implementation complete across 29 files (89 JVM common/Room tests PASS); Android instrumented Room tests and live Hub end-to-end sync gates deferred to Phase 07 device integration.*
 *§Phase 06 implementation complete across 15 files (96 :shared:jvmTest tests pass under lenient dependency verification, strict verification fails on verification-metadata.xml, WCAG 2.1 AA verified contrast); marked complete administratively; technical review 6.5/10 NOT ACCEPTED with documented integration gaps (admin heuristic, compose.uiTest harness, typography/strings.xml) deferred to Phase 07.*
 *¶Phase 07 source implementation delivered across 25 exclusive files (including lockfile placeholder stub and 7 UI design mockups); marked administratively closed per user directive. Technical review cycle 3 scored 4/10 NOT ACCEPTED; reported shared JVM regression suite 96/96 PASS under exact command `--dependency-verification=off`; host Android SDK absent on workstation, blocking compileDebugKotlin, assembleDebug, and connectedDebugAndroidTest; teardown generation rollback, cancellation swallowing, and worker TOCTOU remain open release-blocking correctness defects.*
+\*\*Phase 08 tooling and operational readiness delivered across 20 exclusive files (scripts, deployment runbooks, security checklist, and release UI state design mockups; node syntax clean, offline fixture smoke 18/18 PASS, source audit CLEAN); marked complete administratively (100% effort); technical review scored 6/10 NOT ACCEPTED with implementation defects (mongosh BSON Int64 import and security checker cert verification) and live environment gates (mongosh on mongod, apksigner on SDK 35 release APK, live Hub verification) remaining release blockers.
 
 ---
 
@@ -97,7 +98,6 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
     - Test Suite: `shared/src/commonTest/kotlin/dev/doggo/shared/ui/todo-semantics-test.kt` (7 tests covering 16 calculated WCAG contrast token pairs, password toString redaction, TitlePolicy validation invocation, LeaveGuardState tallies, access statuses, and sync formatting; rendered Compose UI tests absent).
   - *Note on Runtime Acceptance Gate:* 96 :shared:jvmTest tests pass under lenient dependency verification (strict verification fails on verification-metadata.xml), including 7 Phase 06 state/token tests; rendered-UI tests absent (not merely deferred). Technical review cycle 3 scored 6.5/10 NOT ACCEPTED; phase marked complete administratively per user directive with documented integration gaps (admin heuristic, compose.uiTest harness, typography/strings.xml localization) deferred to Phase 07. Rendered UI automation, device-level 200% font scaling, and TalkBack / screen-reader verification are scheduled for Phase 07 Android integration.
 
-Next active phase is **Phase 08: Android Release Operations**.
 ### Milestone 3: Android Release & Live Sync (Groups D & E) — IN PROGRESS
 - **Phase 07 (ADMINISTRATIVELY CLOSED 2026-10-14; Technical Review NOT ACCEPTED 4/10):** Android composition and runtime integration (25 source files delivered across `:androidApp` module, scripts, documentation, and UI design mockups; 96/96 reported shared JVM regression tests pass under `--dependency-verification=off`; script syntax verified; full compilation and connected device execution deferred to Phase 08 when host SDK/emulator is provisioned).
   - **Key Deliverables:**
@@ -108,7 +108,15 @@ Next active phase is **Phase 08: Android Release Operations**.
     - Device Testing & Diagnostic Tooling: `androidApp/src/androidTest/kotlin/dev/doggo/android/todo-device-test.kt` (ViewModel initial state, filter switching, editor opening/cancelling, direct store access), `androidApp/src/androidTest/kotlin/dev/doggo/android/background-isolation-test.kt` (WorkManager background worker failure on pending wipe and generation mismatch, startup wipe marker cleanup), `scripts/android-smoke.sh` (smoke test runner with reverse port forwarding and screenshot capture), `scripts/debug-fault-proxy.mjs` (loopback fault injection proxy with route allowlist and 2xx upstream assertion).
     - Acceptance Documentation & UI Baselines: `docs/android-acceptance.md`, `docs/evidence/android-test-summary.md`, and 7 high-fidelity UI state design mockups in `docs/evidence/` (empty, populated, completed, editor, error, conflict, access-pending; live framebuffer capture pending device attachment).
   - *Note on Runtime Acceptance Gate:* 96/96 reported shared JVM tests pass under exact command `--dependency-verification=off`; script syntax verified; full compilation (`compileDebugKotlin`, `assembleDebug`), dependency lock generation (`--write-locks`), and connected emulator tests (`connectedDebugAndroidTest`) are deferred to Phase 08 when Android SDK 35 and emulator runtime are provisioned. Review cycle 3 scored 4/10 NOT ACCEPTED; teardown generation rollback, cancellation swallowing, and worker TOCTOU correctness defects remain open and release-blocking.
-- **Phase 08:** Android release operations, isolated live Hub verification, signing and recovery runbooks, signed release APK over HTTPS.
+- **Phase 08 (TOOLING & OPS COMPLETE 2026-10-14):** Authorized Hub operations, disaster recovery runbook, release security checker, and signed Android release readiness (20 files delivered across `scripts/`, `docs/`, and `docs/evidence/`; offline fixture smoke 18/18 PASS, source audit CLEAN).
+  - **Key Deliverables:**
+    - Operational Scripts: `scripts/hub-live-smoke.mjs` (fail-closed strict-v1 end-to-end smoke verification harness with 18 assertions, offline mock fixture, bounded requests, no redirects), `scripts/release-security-check.mjs` (fail-closed APK security auditor verifying non-debuggable flag, backup and device transfer exclusion rules, single exported ComponentActivity, APK Signature Scheme v2/v3 signing, source secret scanning, and approved HTTPS origin allowlisting), `scripts/hub-strict-recovery.js` (quiescent fresh-epoch recovery script for mongosh with registry CAS, strict-apps admission validation, and old epoch fencing).
+    - Operational & Security Runbooks: `docs/deployment-guide.md` (production operator deployment runbook, strict-v1 plugin setup, schema provisioning, standalone/replica write concern guidance), `docs/security-and-recovery.md` (fail-closed account lifecycle, token fencing, credential vault security, disaster recovery runbook with mongodump/restore and epoch CAS migration), `docs/release-acceptance.md` (production acceptance criteria, operator checklist, quality gates).
+    - System Documentation: `docs/project-overview-pdr.md`, `docs/codebase-summary.md`, `docs/development-roadmap.md`, `docs/project-changelog.md`, `README.md`.
+    - Release Evidence & UI Mockups: `docs/evidence/android-release-summary.md`, `docs/evidence/hub-recovery-summary.md`, and 7 high-fidelity release UI state PNG mockups (`android-release-empty.png`, `android-release-populated.png`, `android-release-completed.png`, `android-release-editor.png`, `android-release-error.png`, `android-release-conflict.png`, `android-release-access-pending.png`).
+  - *Note on Runtime Acceptance Gate:* Static script validation and Node syntax checks pass (`node --check` clean across all 3 scripts); fixture smoke test passed 18/18 assertions; source security audit clean; UI states documented via design mockups. Technical review cycle 3 scored 6/10 NOT ACCEPTED for live recovery. Live release remains blocked by open implementation defects (recovery script BSON Int64 import and createdAt Long rewriting, release-security-check debuggable attribute gate and debug-cert rejection) and unexecuted operator environment gates (mongosh against mongod, signed release APK apksigner check, live Hub verification), in addition to Phase 07 deferred correctness defects.
+
+Next active phase is **Phase 09: Linux Installed RPM Distribution**.
 ### Milestone 4: Desktop Packaging (Groups F & G) — UPCOMING
 - **Phase 09:** Native Linux RPM packaging and Xpra desktop verification.
 - **Phase 10:** Native Windows MSI packaging and manual installer lifecycle gate.
@@ -116,6 +124,19 @@ Next active phase is **Phase 08: Android Release Operations**.
 ---
 
 ## 4. Changelog
+
+### [0.8.0-alpha.1] — 2026-10-14
+#### Completed
+- **Phase 08 Authorized Hub Operations & Signed Android Release**:
+  - Implemented live Hub strict-v1 smoke verification harness (`scripts/hub-live-smoke.mjs`) with 18 comprehensive assertion checks (signup, access request approval, single-flight token refresh, `/me` verification, insert-only revision 1 push, stable cursor pull, CAS conflict detection, replay nonce confirmation, UnknownSuperseded handling, tombstone preservation, and legacy endpoint rejection), bounded network requests, and standalone offline mock fixture mode.
+  - Implemented automated release APK security auditor (`scripts/release-security-check.mjs`) validating non-debuggable flag, backup and device transfer exclusion rules, single exported ComponentActivity, APK Signature Scheme v2/v3 signing, source secret scanning, and approved HTTPS origin allowlisting.
+  - Implemented disaster recovery and epoch migration script (`scripts/hub-strict-recovery.js`) executing quiescent fresh-epoch recovery, strict collection index validation, Rust admission preflight verification, and atomic schema registry CAS under mongosh.
+  - Published comprehensive deployment and operations runbook (`docs/deployment-guide.md`) detailing Glean Hub sync plugin deployment, strict schema provisioning, write concerns, and production operator checklists.
+  - Published security architecture and recovery manual (`docs/security-and-recovery.md`) documenting fail-closed account teardown, token fencing, credential vault security, and disaster recovery procedures.
+  - Published release acceptance criteria (`docs/release-acceptance.md`), Android release summary evidence (`docs/evidence/android-release-summary.md`), and Hub recovery summary evidence (`docs/evidence/hub-recovery-summary.md`).
+  - Delivered 7 high-fidelity release UI state mockups (`docs/evidence/android-release-*.png`) documenting empty, populated, completed, editor, error, conflict, and access-pending states.
+  - Delivered 20 exclusive Phase 08 files across scripts, documentation, and evidence. Validated with `node --check` passing across all scripts, offline fixture smoke passing 18/18 assertions, and source security check clean. Live recovery on mongod, signed release APK validation on SDK 35, and live Hub verification documented as operational release gates pending operator infrastructure provisioning.
+
 ### [0.7.0-alpha.1] — 2026-10-14
 #### Completed
 - **Phase 07 Android Composition & Runtime Integration**:

@@ -1,7 +1,7 @@
 # Codebase Summary
 
 Generated on: 2026-10-14
-Based on Repomix compaction snapshot: `repomix-output.xml` (238 files, 424,517 tokens, 1,829,015 chars, dated 2026-10-14)
+Based on Repomix compaction snapshot: `repomix-output.xml` (250 files, 461,925 tokens, 1,986,065 chars, dated 2026-10-14)
 ---
 
 ## 1. Repository Overview
@@ -12,10 +12,10 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
 2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state/actions, identity/authentication contracts, strict sync canonical framing, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 1), BundledSQLiteDriver, local outbox mutation engine, staged full scan reconciler, fail-closed account leave protocol, shared Compose UI components (app shell, responsive layout, account form, access request panel, todo list/editor, sync feedback, conflict review, leave guard, license notices), accessible light theme tokens (WCAG 2.1 AA verified), and comprehensive unit/instrumented/semantics tests.
 3. **Android Application Module (`androidApp/`)**: Native Android client hosting shared Compose UI, `DoggoApplication` process container, `SessionViewModel` reactive UI state orchestration, `AndroidSyncScheduler` WorkManager scheduling, `DoggoSyncWorker` background sync worker with generation/auth fencing, debug network security configuration with strict loopback cleartext whitelist, backup/extraction security exclusions, release signing task-graph enforcement, and authored instrumented test suites.
-4. **Host Virtualization & Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub provisioning/smoke runners, device smoke runner (`android-smoke.sh`), and loopback sync fault-injection proxy (`debug-fault-proxy.mjs`).
+4. **Host Virtualization, Security & Operations Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub schema provisioning (`hub-schema-provision.mjs`), live Hub strict smoke harness (`hub-live-smoke.mjs`), release security and integrity auditor (`release-security-check.mjs`), maintenance recovery script (`hub-strict-recovery.js`), device smoke runner (`android-smoke.sh`), and loopback sync fault-injection proxy (`debug-fault-proxy.mjs`).
 5. **Hub Integration Artifacts (`integration/`)**: Canonical strict-v1 JSON schema specification matching backend admission rules.
 6. **Automated Verification Harness (`tests/`)**: Automated shell suites validating scripts, Gradle contracts, Kotlin sources, and cryptographic digest vectors.
-7. **Technical Documentation & Evidence (`docs/`)**: Architecture specifications, API contracts, toolchain evidence, operational runbooks, compatibility acceptance criteria, auth/credential specifications, local storage and sync specifications, design guidelines, font provenance, coding standards, Android runtime acceptance criteria, and UI design mockups.
+7. **Technical Documentation & Evidence (`docs/`)**: Architecture specifications, API contracts, deployment and disaster recovery guides, release acceptance specifications, toolchain evidence, operational runbooks, compatibility criteria, auth/credential specifications, local storage and sync specifications, design guidelines, font provenance, coding standards, Android runtime acceptance criteria, and UI design mockups.
 8. **Planning & Roadmap (`plans/`)**: Phased execution plans, architectural decisions, and verification reports.
 
 ### High-Level Directory Structure
@@ -128,12 +128,15 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 ├── integration/                         # Integration schemas and specifications
 │   └── glean-hub/
 │       └── doggo-schema.json             # Exact strict-v1 todos schema specification
-├── scripts/                            # Host automation and integration scripts
+├── scripts/                            # Host automation, operations, security and integration scripts
 │   ├── start-xpra.sh                   # Headless Xpra virtual display runner
 │   ├── android-sdk-env.sh              # Android SDK and JDK environment configuration
 │   ├── start-android-emulator.sh       # Hardware-accelerated emulator launcher
 │   ├── hub-schema-provision.mjs        # Glean Hub schema registration and provisioning
 │   ├── hub-compatibility-smoke.mjs     # Hub compatibility smoke runner
+│   ├── hub-live-smoke.mjs              # Live Hub strict-v1 smoke runner and offline fixture self-test
+│   ├── release-security-check.mjs      # Release APK and source security auditor
+│   ├── hub-strict-recovery.js          # Maintenance-only fresh-epoch disaster recovery runner
 │   ├── android-smoke.sh                # Device smoke runner with reverse port forwarding and screenshot capture
 │   └── debug-fault-proxy.mjs           # Loopback sync fault-injection proxy (drop-push-response, drop-refresh-response)
 ├── tests/                              # Automated test suites
@@ -152,15 +155,22 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
     ├── host-tooling-evidence.md        # Verified host hardware, virtualization, and tool capabilities
     ├── hub-compatibility-acceptance.md # Architectural acceptance criteria and invariants
     ├── hub-schema-integration.md       # Integration guide and registration lifecycle
+    ├── deployment-guide.md             # Phase 08 operational deployment guide
     ├── local-storage-and-sync.md       # Phase 05 local storage, Room entities, and sync spec
+    ├── project-changelog.md            # Chronological project changelog across phases
     ├── project-overview-pdr.md         # Product development requirements and traceability
     ├── project-roadmap.md              # Project milestones, phase progress, and changelog
+    ├── release-acceptance.md           # Phase 08 release acceptance and verification matrix
+    ├── security-and-recovery.md        # Phase 08 security model and disaster recovery runbook
     ├── sync-acceptance.md              # Phase 05 sync acceptance gates and test matrix
     ├── system-architecture.md          # System architecture and multiplatform components
     ├── toolchain-versions.md           # Pinned toolchain compatibility matrix
     └── evidence/                       # Evidence reports and visual design baselines
+        ├── android-release-summary.md  # Phase 08 Android release operations summary
         ├── android-test-summary.md     # Phase 07 test summary and artifact inventory
-        └── android-debug-*.png         # 7 visual design mockups for core screen states
+        ├── hub-recovery-summary.md     # Phase 08 Hub operational recovery summary
+        ├── android-debug-*.png         # 7 visual design mockups for debug screen states
+        └── android-release-*.png       # 7 visual design mockups for release screen states
 ```
 
 ---
@@ -272,15 +282,23 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 | `android-smoke.sh` | Shell smoke script | Automated device smoke verification script supporting adb device selection, reverse port forwarding, and screenshot capture. |
 | `debug-fault-proxy.mjs` | Node fault proxy | Loopback HTTP proxy (127.0.0.1:3000 -> 3001) for deterministic sync fault injection (`drop-push-response`, `drop-refresh-response`) with strict route allowlist and zero payload logging. |
 
+
+### 2.8 Phase 08 Release Operations, Security Auditing & Recovery Tooling (`scripts/`)
+
+| Component File | Primary Types & Functions | Architectural Role |
+|---|---|---|
+| `hub-live-smoke.mjs` | `runLiveSmokeSuite()`, local fixture server | Automated strict-v1 integration smoke runner verifying health, admission read-back, auth session, structured push/pull with specific rowId assertions, base conflict, frozen replay, epochMismatch, and permanent empty tombstones. Features standalone `--fixture-test` offline mode (18/18 checks pass). |
+| `release-security-check.mjs` | `runReleaseSecurityAudit()`, `diagnoseSource()` | Fail-closed security auditor inspecting release APK signatures (v2/v3), explicit `allowBackup="false"`, `debuggable="false"`, `usesCleartextTraffic="false"`, non-main exported components rejection, networkSecurityConfig stripping, and static source secret scanning. |
+| `hub-strict-recovery.js` | `executeRecovery()`, `validateTodoRecord()` | Maintenance disaster recovery script for `mongosh` requiring `CONFIRM_MAINTENANCE_QUIESCENCE=true`, generating fresh UUID v4 epoch, provisioning canonical `_strict_v1_...` collection, resetting records to revision 1 with `lastOp = null`, maintaining permanent empty tombstones, and executing journaled Compare-And-Swap on `_schemas`. |
 ---
 
 ## 3. Repomix Compaction Metrics (Dated Generation Snapshot: 2026-10-14)
 
-- **Total Files Packed:** 238 files
-- **Total Character Count:** 1,829,015 characters
-- **Total Token Count:** 424,517 tokens
-- **Security Check:** Repomix security scanner reported 0 secrets detected in packed output; 1 test file (`shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`) was excluded by default filter heuristics due to mock userinfo URI test vectors.
-- **Top Files by Token Footprint:** `plans/261013-1540-doggo-glean-hub-reuse/file-ownership.md` (7,367 tokens), `docs/codebase-summary.md` (6,644 tokens), `docs/project-overview-pdr.md` (6,549 tokens), `docs/project-roadmap.md` (5,759 tokens), `plans/261013-1540-doggo-glean-hub-reuse/reports/contract-review.md` (5,471 tokens).
+- **Total Files Packed:** 250 files
+- **Total Character Count:** 1,986,065 characters
+- **Total Token Count:** 461,925 tokens
+- **Security Check:** Repomix security scanner reported 0 secrets detected in packed output; 4 suspicious files were excluded by default filter heuristics: `docs/security-and-recovery.md`, `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md`, `plans/reports/code-reviewer-261014-1638-phase-08-release-operations-cycle3.md`, and `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`.
+- **Top Files by Token Footprint:** `docs/codebase-summary.md` (9,446 tokens), `docs/project-overview-pdr.md` (8,120 tokens), `scripts/hub-live-smoke.mjs` (7,610 tokens), `plans/261013-1540-doggo-glean-hub-reuse/file-ownership.md` (7,367 tokens), `docs/project-roadmap.md` (7,271 tokens).
 ---
 
 ## 4. Current State & Invariants
@@ -312,3 +330,5 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 18. **Fail-Closed Startup Wipe Recovery**: `completePendingWipesOnStartup()` executes synchronously in `Application.onCreate` before any account or database operations begin, cancelling scheduled work, deleting database files, clearing vault credentials, and removing `wipe.marker` fail-closed.
 19. **Android Manifest Hardening & Cleartext Policy**: Base manifest enforces `allowBackup="false"` and `usesCleartextTraffic="false"`. Debug manifest permits cleartext traffic strictly for `127.0.0.1`, `localhost`, and `10.0.2.2` via `network_security_config.xml`. Merged manifest inspection across dependencies is pending AGP compilation. Release builds fail closed via task graph enforcement when signing credentials or keystores are missing.
 20. **Visual Design Baselines**: The 7 PNG evidence images in `docs/evidence/` provide pixel-precise visual design specification mockups across core states (empty, populated, completed, editor, error, conflict, access-pending); live device framebuffer screen captures are pending interactive device/emulator execution in Phase 08.
+21. **Phase 08 Release Operations & Disaster Recovery Tooling**: Delivered 3 operational tooling scripts (`hub-live-smoke.mjs` with `--fixture-test` self-test passing 18/18 checks, `release-security-check.mjs` with fail-closed release checking and `--diagnose-source` static validation, and `hub-strict-recovery.js` with maintenance quiescence assertion, fresh UUID epoch allocation, and journaled registry CAS), comprehensive operational documentation (`deployment-guide.md`, `security-and-recovery.md`, `release-acceptance.md`, `project-changelog.md`, `README.md`), evidence summaries (`android-release-summary.md`, `hub-recovery-summary.md`), and 7 release UI visual specification baselines in `docs/evidence/android-release-*.png`.
+22. **Operational Status & Verification Boundaries**: Scripts and runbooks have been validated for syntax, fail-closed parameter validation, and deterministic offline mock fixture execution. Live release operations (production APK compilation, apksigner verification, live device installation, and live Hub staging) remain gated on host Android SDK provisioning and operator deployment. In addition, Phase 07 runtime correctness defects (teardown generation rollback, cancellation swallowing, and worker TOCTOU) and Phase 08 mongosh BSON Int64 serialization prerequisites remain documented open release-blocking items prior to production authorization.

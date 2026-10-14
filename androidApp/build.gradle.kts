@@ -164,6 +164,7 @@ dependencies {
     // WorkManager for background sync scheduling
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
+    testImplementation(libs.kotlin.test)
     // Android Test dependencies
     androidTestImplementation(libs.kotlin.test)
     androidTestImplementation(libs.kotlinx.coroutines.test)

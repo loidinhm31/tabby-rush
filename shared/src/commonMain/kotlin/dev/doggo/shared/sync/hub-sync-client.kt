@@ -268,10 +268,17 @@ class HubSyncClient(
                 )
             }
             status == HttpStatusCode.Unauthorized || code == "unauthorized" -> {
-                SafeError.Unauthorized(
-                    code = "UNAUTHORIZED",
-                    message = message
-                )
+                if (message.contains("API key", ignoreCase = true)) {
+                    SafeError.Unauthorized(
+                        code = "INVALID_API_KEY",
+                        message = message
+                    )
+                } else {
+                    SafeError.Unauthorized(
+                        code = "UNAUTHORIZED",
+                        message = message
+                    )
+                }
             }
             status == HttpStatusCode.NotFound || code == "appNotFound" -> {
                 SafeError.Validation(

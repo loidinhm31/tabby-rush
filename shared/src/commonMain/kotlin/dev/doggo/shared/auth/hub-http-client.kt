@@ -167,10 +167,20 @@ class HubHttpClient(
         val sanitized = sanitizeErrorMessage(rawBody)
 
         return when (status) {
-            HttpStatusCode.Unauthorized -> SafeError.Unauthorized(
-                code = "UNAUTHORIZED",
-                message = "Authentication credentials rejected (HTTP 401)"
-            )
+            HttpStatusCode.Unauthorized -> {
+                val serverMsg = extractErrorMessage(rawBody)
+                if (serverMsg?.contains("API key", ignoreCase = true) == true) {
+                    SafeError.Unauthorized(
+                        code = "INVALID_API_KEY",
+                        message = serverMsg
+                    )
+                } else {
+                    SafeError.Unauthorized(
+                        code = "UNAUTHORIZED",
+                        message = serverMsg ?: "Authentication credentials rejected (HTTP 401)"
+                    )
+                }
+            }
             HttpStatusCode.Forbidden -> SafeError.Unauthorized(
                 code = "FORBIDDEN",
                 message = "Access forbidden (HTTP 403)"

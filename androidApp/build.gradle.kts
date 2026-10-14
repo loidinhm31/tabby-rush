@@ -22,7 +22,11 @@ android {
             ?: System.getenv("APPROVED_HUB_ORIGIN")
             ?: "https://hub.example.com"
 
-        buildConfigField("String", "HUB_API_KEY", "\"doggo-dev-api-key\"")
+        val defaultApiKey = project.findProperty("hubApiKey")?.toString()
+            ?: System.getenv("DOGGO_API_KEY")
+            ?: ""
+
+        buildConfigField("String", "HUB_API_KEY", "\"$defaultApiKey\"")
         buildConfigField("String", "HUB_ORIGIN_DEBUG", "\"$defaultOrigin\"")
         buildConfigField("String", "HUB_ORIGIN_RELEASE", "\"$defaultOrigin\"")
     }

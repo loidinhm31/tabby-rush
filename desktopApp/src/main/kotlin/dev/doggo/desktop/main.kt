@@ -74,7 +74,7 @@ class DesktopController(
     val hubConfig = HubConfig(
         canonicalOrigin = origin,
         appId = "doggo",
-        appApiKey = "doggo-dev-api-key",
+        appApiKey = System.getenv("DOGGO_API_KEY") ?: "",
         buildMode = mode
     )
     val vault = PlatformVaultDispatcher.createVault(accountFiles)
@@ -242,7 +242,10 @@ class DesktopController(
                 is TodoAction.DiscardConflict -> resolveConflict { it.discardConflict(action.rowId) }
                 is TodoAction.ReapplyConflict -> resolveConflict { it.reapplyConflict(action.rowId) }
                 is TodoAction.CopyAsNew -> resolveConflict { it.copyAsNew(action.rowId) }
-                is TodoAction.DismissError -> _uiState.value = _uiState.value.copy(safeError = null)
+                is TodoAction.DismissError -> {
+                    activeRuntime?.coordinator?.dismissError()
+                    _uiState.value = _uiState.value.copy(safeError = null)
+                }
                 is TodoAction.RequestLeave -> requestLeave()
                 is TodoAction.ConfirmLeave -> {
                     if (activeRuntime?.leaveProtocol?.discardAndLeave() == true) {

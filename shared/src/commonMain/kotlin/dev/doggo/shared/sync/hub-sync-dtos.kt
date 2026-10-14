@@ -89,5 +89,5 @@ data class StrictPullResponseDto(
 @Serializable
 data class StrictSyncErrorDto(
     val error: String,
-    val code: String
+    val code: String? = null
 )

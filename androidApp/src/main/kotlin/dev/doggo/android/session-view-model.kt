@@ -59,7 +59,7 @@ class SessionViewModel : ViewModel() {
                 syncJob?.cancel()
                 syncJob = launch {
                     runtime.coordinator.progress.collect { p ->
-                        _uiState.value = _uiState.value.copy(syncProgress = p, safeError = p.safeError ?: _uiState.value.safeError)
+                        _uiState.value = _uiState.value.copy(syncProgress = p, safeError = p.safeError)
                         if (p.conflictCount > 0) inspectAndShowConflict(runtime)
                         reloadTodos()
                     }
@@ -111,7 +111,10 @@ class SessionViewModel : ViewModel() {
                 is TodoAction.DiscardConflict -> resolveConflict { it.discardConflict(action.rowId) }
                 is TodoAction.ReapplyConflict -> resolveConflict { it.reapplyConflict(action.rowId) }
                 is TodoAction.CopyAsNew -> resolveConflict { it.copyAsNew(action.rowId) }
-                is TodoAction.DismissError -> _uiState.value = _uiState.value.copy(safeError = null)
+                is TodoAction.DismissError -> {
+                    app.getActiveRuntime()?.coordinator?.dismissError()
+                    _uiState.value = _uiState.value.copy(safeError = null)
+                }
                 is TodoAction.RequestLeave -> requestLeave()
                 is TodoAction.ConfirmLeave -> if (app.getActiveRuntime()?.leaveProtocol?.discardAndLeave() == true) { app.clearActiveAccount(); app.closeActiveRuntime(); _uiState.value = _uiState.value.copy(leaveGuard = null) }
                 is TodoAction.CancelLeave -> _uiState.value = _uiState.value.copy(leaveGuard = null)

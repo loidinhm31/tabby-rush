@@ -104,7 +104,11 @@ class AccountSyncCoordinator(
         updateProgress(status = SyncStatus.SYNCING, safeError = null)
 
         // 2. Bootstrap & Epoch verification
-        val bootstrapResult = syncClient.bootstrap()
+        var bootstrapResult = syncClient.bootstrap()
+        if (bootstrapResult is ApiResult.Failure && bootstrapResult.error is SafeError.Unauthorized && bootstrapResult.error.code == "TOKEN_REFRESHED") {
+            // Coordinator controls retry of operation once across token refresh (AUTH_ACCEPT_15)
+            bootstrapResult = syncClient.bootstrap()
+        }
         if (capturedGeneration != currentGeneration || store.isFrozen) return // Fenced
 
         val bootstrap = when (bootstrapResult) {
@@ -135,7 +139,10 @@ class AccountSyncCoordinator(
         val activeEpoch = serverEpoch
 
         // 3. Stage 1: Initial Staged Full Scan
-        val initialScan = StagedFullScan(syncClient, store, activeEpoch).executeScan()
+        var initialScan = StagedFullScan(syncClient, store, activeEpoch).executeScan()
+        if (initialScan is ApiResult.Failure && initialScan.error is SafeError.Unauthorized && initialScan.error.code == "TOKEN_REFRESHED") {
+            initialScan = StagedFullScan(syncClient, store, activeEpoch).executeScan()
+        }
         if (capturedGeneration != currentGeneration || store.isFrozen) return
 
         when (initialScan) {
@@ -384,6 +391,10 @@ class AccountSyncCoordinator(
 
     override fun close() {
         store.close()
+    }
+
+    fun dismissError() {
+        _progress.value = _progress.value.copy(safeError = null)
     }
 
     private fun generateUuid(): String {

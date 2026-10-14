@@ -466,6 +466,13 @@ class HubAuthSession(
                     return firstAttempt
                 }
 
+                // Invalid API key is an application configuration error, not a refreshable JWT session expiration!
+                if (firstAttempt.error.code == "INVALID_API_KEY" ||
+                    firstAttempt.error.message.contains("API key", ignoreCase = true)
+                ) {
+                    return firstAttempt
+                }
+
                 // 401 is ambiguous: JWT expiry, missing grant, or bad key.
                 // Perform at most one single-flight refresh recovery:
                 when (val refreshOutcome = refresh()) {

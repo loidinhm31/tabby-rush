@@ -35,6 +35,7 @@ import dev.doggo.shared.theme.DoggoTheme
 import dev.doggo.shared.ui.AuthSubmitAction
 import dev.doggo.shared.ui.DoggoApp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -93,6 +94,7 @@ class DesktopController(
     }
     private val runtimeMutex = Mutex()
     private var activeRuntime: DesktopAccountRuntime? = null
+    private var syncJob: Job? = null
     private val activeAccountFile = File(accountFiles.baseDir, "active_account.dat")
     private val _uiState = MutableStateFlow(TodoUiState())
     val uiState: StateFlow<TodoUiState> = _uiState.asStateFlow()
@@ -191,10 +193,20 @@ class DesktopController(
         saveActiveAccount(id, key)
         scope.launch {
             try {
-                getOrCreateAccountRuntime(key)
+                val runtime = getOrCreateAccountRuntime(key)
+                syncJob?.cancel()
+                syncJob = launch {
+                    runtime.coordinator.progress.collect { p ->
+                        _uiState.value = _uiState.value.copy(syncProgress = p, safeError = p.safeError)
+                        if (p.conflictCount > 0) inspectAndShowConflict(runtime)
+                        reloadTodos()
+                    }
+                }
                 reloadTodos()
                 syncScheduler.schedulePeriodic(key)
-                syncScheduler.triggerImmediate(key)
+                triggerSync()
+            } catch (ce: CancellationException) {
+                throw ce
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(safeError = SafeError.Internal("INTERNAL_ERROR", "Storage operation failed"))
             }
@@ -202,6 +214,8 @@ class DesktopController(
     }
 
     private fun onUnauthenticated() {
+        syncJob?.cancel()
+        syncJob = null
         activeRuntime?.let { closeRuntimeInternal(it) }
         activeRuntime = null
         allTodos = emptyList()
@@ -315,8 +329,18 @@ class DesktopController(
 
     private fun triggerSync() {
         activeRuntime?.let { r ->
-            syncScheduler.triggerImmediate(r.accountKey)
+            scope.launch {
+                r.coordinator.triggerSync()
+                syncScheduler.triggerImmediate(r.accountKey)
+            }
         }
+    }
+
+    private suspend fun inspectAndShowConflict(runtime: DesktopAccountRuntime) {
+        val entry = runtime.store.dao.getAllOutbox().firstOrNull { it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED } ?: return
+        val base = runtime.store.dao.getServerBase(entry.rowId)
+        val remoteTodo = base?.let { Todo(it.rowId, it.title, it.completed, it.createdAt, it.updatedAt, it.serverRevision) }
+        _uiState.value = _uiState.value.copy(conflict = ConflictState(entry.rowId, allTodos.firstOrNull { it.id == entry.rowId }, remoteTodo))
     }
 
     private suspend fun resolveConflict(block: suspend (AccountSyncCoordinator) -> Unit) {
@@ -358,10 +382,10 @@ class DesktopController(
     fun onAuthSubmit(action: AuthSubmitAction) = scope.launch {
         try {
             when (action) {
-                is AuthSubmitAction.Login -> authSession.login(action.email, action.password)
-                is AuthSubmitAction.Register -> authSession.register(action.username, action.email, action.password)
-                is AuthSubmitAction.RequestAccess -> authSession.requestAccess(action.message)
-                is AuthSubmitAction.RefreshStatus -> authSession.checkAccess()
+                is AuthSubmitAction.Login -> handleAuth(authSession.login(action.email, action.password))
+                is AuthSubmitAction.Register -> handleAuth(authSession.register(action.username, action.email, action.password))
+                is AuthSubmitAction.RequestAccess -> handleAccess(authSession.requestAccess(action.message))
+                is AuthSubmitAction.RefreshStatus -> handleAccess(authSession.checkAccess())
                 is AuthSubmitAction.Logout -> requestLeave()
             }
         } catch (ce: CancellationException) {
@@ -371,7 +395,18 @@ class DesktopController(
         }
     }
 
+    private fun handleAuth(res: ApiResult<*>) {
+        if (res is ApiResult.Failure) _uiState.value = _uiState.value.copy(safeError = res.error)
+    }
+
+    private fun handleAccess(res: ApiResult<*>) {
+        if (res is ApiResult.Failure) _uiState.value = _uiState.value.copy(safeError = res.error)
+        else if (res is ApiResult.Success) _uiState.value = _uiState.value.copy(accessRequest = res.value as? AccessRequestInfo)
+    }
+
     fun dispose() {
+        syncJob?.cancel()
+        syncJob = null
         runBlocking {
             syncScheduler.disposeAndAwait()
         }

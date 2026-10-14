@@ -75,4 +75,22 @@ class DesktopControllerEnvTest {
             if (origProp != null) System.setProperty("doggo.env.file", origProp) else System.clearProperty("doggo.env.file")
         }
     }
+
+    @Test
+    fun testDesktopControllerTriggerSyncUpdatesProgressFlow() {
+        val lockFile = File.createTempFile("doggo_ctrl_sync_test", ".lock")
+        lockFile.deleteOnExit()
+        val guard = SingleInstanceGuard.tryAcquire(lockFile)
+        assertNotNull(guard)
+
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val controller = DesktopController(BuildMode.DEBUG, scope, guard)
+
+        try {
+            controller.onAction(dev.doggo.shared.contract.TodoAction.TriggerSync)
+            assertNotNull(controller.uiState.value.syncProgress)
+        } finally {
+            controller.dispose()
+        }
+    }
 }

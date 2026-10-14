@@ -1,8 +1,8 @@
 # Doggo Code Standards & Implementation Guidelines
 
 Last Updated: 2026-10-14
-Phase: Phase 05 Durable Local State & Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)
-Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Codebase Summary](./codebase-summary.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md)
+Phase: Phases 01–10 implementation conventions; desktop installed-runtime acceptance remains pending
+Related Docs: [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
 
@@ -77,6 +77,9 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
   - Compose UI components: `dev.doggo.shared.ui.*`
 - Android application: `dev.doggo.android.*`
 - Desktop application: `dev.doggo.desktop.*`
+  - Linux adapter: `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/*`
+  - Windows adapter: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/*`
+  - Each selected target must register exactly one matching `CredentialVaultProvider` in `META-INF/services`; platform dependencies and lockfiles remain isolated by target.
 
 ### 3.2 Immutability & State Management
 - UI models must be immutable Kotlin `data class` types.
@@ -88,7 +91,7 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
       onAction: (TodoAction) -> Unit
   )
   ```
-- Shared common code (`commonMain`) must never import Android platform APIs (`android.*`) or platform-specific display frameworks. Platform adaptations must be isolated in `androidMain` and `jvmMain`.
+- Shared `commonMain` must never import Android APIs or platform-specific desktop frameworks. KMP adaptations belong in `androidMain` and `jvmMain`; desktop OS adapters belong only in the selected `desktopApp/src/linuxMain` or `desktopApp/src/windowsMain` source set. The desktop build must reject explicit targets that do not match the host before resolving target dependencies.
 
 ### 3.3 Naming Conventions
 - Types, classes, interfaces, and composable functions: PascalCase.
@@ -192,6 +195,12 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - Mocks must be strictly limited to network transport adapters (e.g. `MockEngine`); storage and database logic must execute against real SQLite instances (`BundledSQLiteDriver`).
 - Android instrumented tests must be housed in `shared/src/androidInstrumentedTest/` and tested via real platform APIs.
 
+
+### 7.3 Desktop Target & Packaging Verification
+- Run desktop tests on the matching native host/target (`-PdesktopTarget=linux` on Linux; `-PdesktopTarget=windows` on Windows); the platform-specific vault suite must exercise the real OS API where available.
+- Resolve dependencies from the target-specific lockfile. Use `--write-locks` only when intentionally regenerating a reviewed lockfile, not for ordinary builds.
+- Run the corresponding package smoke harness against the distributable and MSI/RPM artifact. Static class/metadata inspection is not a substitute for interactive install, runtime, vault, or accessibility acceptance.
+
 ---
 
 ## 8. Security & Isolation Invariants
@@ -203,3 +212,6 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 5. **System Device Safety**: Never modify system device permissions (such as `/dev/kvm`) with `chmod` or `chown`.
 6. **No Destructive Database Migration**: Room database must use explicit migrations; destructive fallback is prohibited.
 7. **Fail-Closed Teardown Order**: Account logout must write generation and wipe markers outside SQLite before deleting any data, ensuring crash safety.
+8. **Windows Credential Scope**: Desktop Windows tokens must use current-user DPAPI; machine-wide protection and plaintext file/registry/preferences fallback are prohibited.
+9. **Windows ACL Must Not Be Overclaimed**: An ACL helper that suppresses unsupported-view or owner/permission failures cannot be documented as guaranteeing restrictive ACL enforcement; verify native ACLs separately.
+10. **Artifact Signing Status**: Report MSI Authenticode status and digest accurately. An unsigned development installer is not a trusted production release.

@@ -90,6 +90,8 @@ export DOGGO_KEY_PASSWORD="<password>"
 - [System Architecture](docs/system-architecture.md)
 - [Code Standards](docs/code-standards.md)
 - [Deployment Guide](docs/deployment-guide.md)
+- [Windows Desktop Guide](docs/windows-desktop-guide.md)
+- [Windows Acceptance](docs/windows-acceptance.md)
 - [Security & Recovery](docs/security-and-recovery.md)
 - [Release Acceptance](docs/release-acceptance.md)
 - [Android Integration Acceptance](docs/android-acceptance.md)

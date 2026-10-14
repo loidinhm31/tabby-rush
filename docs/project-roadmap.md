@@ -1,10 +1,10 @@
 # Doggo Project Roadmap
 
-**Current Status:** In Progress
+**Current Status:** In Progress — implementation delivered; technical and operator acceptance gates remain open
 **Last Updated:** 2026-10-14
 **Target Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Authoritative Evolution Plan)
 **Historical Plan:** [plans/261013-0914-doggo-compose-todos/plan.md](../plans/261013-0914-doggo-compose-todos/plan.md) (Superseded)
-**Overall Completion:** 96% planned-effort-weighted administrative progress (142h / 148h; Phase 01 & 02 DONE; Phase 03, 04, 05, 06 & 07 Implementation Complete / Administratively Closed; Phase 08 Tooling & Operational Readiness 100% Complete; Phase 09 Desktop Tooling, SPI, Distributable & Tests Complete, Live RPM & Xpra Gates Pending Operator Prerequisites)
+**Overall Progress:** 100% planned-effort-weighted implementation-delivery status (148h / 148h allocated; a phase-status roll-up, not measured effort or technical acceptance). The project remains In Progress: root-level strict dependency verification, Phase 10 interactive MSI/Narrator, and earlier-phase technical findings remain open.
 
 ---
 
@@ -29,8 +29,8 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 | **07** | [Android Integration](../plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md) | D | 14h | **Administratively Closed¶** | 2026-10-14 | 100% |
 | **08** | [Android Release Operations](../plans/261013-1540-doggo-glean-hub-reuse/phase-08-android-release-operations.md) | E | 10h | **Tooling & Ops Complete\*\*** | 2026-10-14 | 100% |
 | **09** | [Linux Installed RPM Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) | F | 8h | **Desktop & Tooling Complete††** | 2026-10-14 | 100% |
-| **10** | [Windows Installed MSI Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) | G | 6h | Pending | — | 0% |
-| **Total** | | | **148h** | | | **96%** |
+| **10** | [Windows Installed MSI Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) | G | 6h | **Implementation Delivered / 100%†††** | 2026-10-14 | 100% |
+| **Total** | | | **148h** | | | **100%** |
 
 *\*Phase 03 implementation complete across 26 files (36 Rust unit/route tests PASS, clippy clean); live Mongo integration gates (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.*
 *†Phase 04 implementation complete across 14 files (43 JVM unit tests PASS, code review cycle 3 approved 7/10); Android Keystore instrumented test and live Hub runtime acceptance deferred to Phase 07.*
@@ -39,6 +39,7 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 *¶Phase 07 source implementation delivered across 25 exclusive files (including lockfile placeholder stub and 7 UI design mockups); marked administratively closed per user directive. Technical review cycle 3 scored 4/10 NOT ACCEPTED; reported shared JVM regression suite 96/96 PASS under exact command `--dependency-verification=off`; host Android SDK absent on workstation, blocking compileDebugKotlin, assembleDebug, and connectedDebugAndroidTest; teardown generation rollback, cancellation swallowing, and worker TOCTOU remain open release-blocking correctness defects.*
 \*\*Phase 08 tooling and operational readiness delivered across 20 exclusive files (scripts, deployment runbooks, security checklist, and release UI state design mockups; node syntax clean, offline fixture smoke 18/18 PASS, source audit CLEAN); marked complete administratively (100% effort); technical review scored 6/10 NOT ACCEPTED with implementation defects (mongosh BSON Int64 import and security checker cert verification) and live environment gates (mongosh on mongod, apksigner on SDK 35 release APK, live Hub verification) remaining release blockers.
 ††Phase 09 desktop tooling, SPI architecture, Linux dependency locking, distributable packaging, and unit test suites delivered across 23 exclusive files (19/19 desktop unit tests PASS and 96/96 shared JVM tests PASS per QA report under `--dependency-verification=off`); marked complete administratively (100% effort); technical review scored 3/10 NOT ACCEPTED with implementation defects (single-instance guard ordering in `main.kt`, vault subprocess vs D-Bus binding, hardcoded release key, untested multiple-provider assertions) and live environment gates (rpmbuild for RPM package, installed package verification, and live Secret Service daemon in Xpra) remaining release blockers.
+†††Phase 10 implementation delivered / 100% on 2026-10-14 per supplied Windows evidence (121/121 combined desktop/shared tests reported passing; Windows lockfile, Doggo.exe distributable, unsigned 100.68 MB MSI, and target isolation reported verified). Technical acceptance is blocked by root-level strict dependency verification, interactive MSI installation, and Narrator verification; clean-user runtime/sync and uninstall/reinstall remain open. Current source fails closed on Windows ACL errors; the reported ACL test checks the stored-file owner ALLOW entry. Mockups are design evidence, not live UI captures.
 
 ---
 
@@ -117,7 +118,7 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
     - Release Evidence & UI Mockups: `docs/evidence/android-release-summary.md`, `docs/evidence/hub-recovery-summary.md`, and 7 high-fidelity release UI state PNG mockups (`android-release-empty.png`, `android-release-populated.png`, `android-release-completed.png`, `android-release-editor.png`, `android-release-error.png`, `android-release-conflict.png`, `android-release-access-pending.png`).
   - *Note on Runtime Acceptance Gate:* Static script validation and Node syntax checks pass (`node --check` clean across all 3 scripts); fixture smoke test passed 18/18 assertions; source security audit clean; UI states documented via design mockups. Technical review cycle 3 scored 6/10 NOT ACCEPTED for live recovery. Live release remains blocked by open implementation defects (recovery script BSON Int64 import and createdAt Long rewriting, release-security-check debuggable attribute gate and debug-cert rejection) and unexecuted operator environment gates (mongosh against mongod, signed release APK apksigner check, live Hub verification), in addition to Phase 07 deferred correctness defects.
 
-### Milestone 4: Desktop Packaging (Groups F & G) — IN PROGRESS
+### Milestone 4: Desktop Packaging (Groups F & G) — IMPLEMENTATION DELIVERED; TECHNICAL ACCEPTANCE IN PROGRESS
 - **Phase 09 (DESKTOP & TOOLING COMPLETE 2026-10-14; Technical Review NOT ACCEPTED 3/10):** Linux desktop and installed RPM distribution (23 files delivered across `:desktopApp` module, scripts, documentation, and evidence mockups; 19/19 desktop unit tests PASS, 96/96 shared JVM regression tests PASS under `--dependency-verification=off`; packaging smoke script diagnosed).
   - **Key Deliverables:**
     - Desktop JVM & Compose Multiplatform Build: `desktopApp/build.gradle.kts` (Compose 1.7.3 desktop, target detection with fail-closed host matching `-PdesktopTarget`, per-target source set routing for Linux/Windows, custom dependency locking `gradle-linux.lockfile` with 161 locked configurations, nativeDistributions packaging for RPM and MSI with version 1.0.0 and frozen upgrade UUID), `desktopApp/gradle-linux.lockfile`.
@@ -129,13 +130,22 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
     - Documentation & Test Evidence: `docs/linux-desktop-guide.md`, `docs/linux-acceptance.md`, `docs/evidence/linux-test-summary.md`, and 7 desktop UI state design mockups in `docs/evidence/linux-*.png` (visual design baselines; live native Xpra screenshots pending display session).
     - Test Suites: `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-lifecycle-test.kt` (8 tests), `desktopApp/src/test/kotlin/dev/doggo/desktop/platform-vault-dispatcher-test.kt` (5 tests), `desktopApp/src/linuxTest/kotlin/dev/doggo/desktop/linux/linux-secret-service-vault-test.kt` (6 tests) — 19/19 passing tests.
   - *Note on Runtime Acceptance Gate:* 19/19 desktop unit tests and 96/96 shared JVM regression tests pass per QA report under exact command `--dependency-verification=off`. Technical review cycle scored 3/10 NOT ACCEPTED due to open implementation defects (single-instance guard ordering in `main.kt`, secret-tool subprocess vs planned D-Bus binding, hardcoded dev release key in `main.kt`, and multiple-provider test assertion coverage) and unexecuted operator environment gates (`rpmbuild` required for RPM packaging, live Secret Service daemon session, and interactive Xpra visual capture). Packaging configuration is not proof of a verified distributable.
-- **Phase 10:** Native Windows MSI packaging and manual installer lifecycle gate (remains blocked pending Phase 09 installed-RPM acceptance and operator prerequisites).
+- **Phase 10 (IMPLEMENTATION DELIVERED / 100% 2026-10-14; technical acceptance blocked):** Windows DPAPI, Windows provider SPI, Linux/D-Bus target isolation, Windows lockfile, packaging smoke harness, Doggo.exe distributable, and unsigned 100.68 MB Doggo-1.0.0.msi are reported delivered and verified. A total of 121/121 desktop and shared tests is reported passing; seven Windows UI mockups are design-only. Root-level strict dependency verification, interactive installation, and Narrator verification remain technical acceptance gates; clean-user runtime/sync and uninstall/reinstall evidence remain pending ([test summary](evidence/windows-test-summary.md), [acceptance](windows-acceptance.md)).
 
-Next active phase is **Phase 10: Windows Installed MSI Distribution** (blocked pending Phase 09 installed-RPM runtime gates).
+All phase allocations are marked delivered (148h/148h planned-effort roll-up, not measured effort); the project remains in progress for root-level strict dependency verification, Phase 10 native acceptance, and cross-phase technical findings.
 
 ---
 
 ## 4. Changelog
+
+### [1.0.0-alpha.1] — 2026-10-14
+#### Completed
+- **Phase 10 Native Windows DPAPI & Installed MSI implementation**:
+  - Delivered the user-scoped Windows DPAPI vault/provider with atomic credential replacement and fail-closed ACL enforcement. Current source throws on missing ACL support, owner resolution, or ACL assignment failure; the reported stored-vault test checks for the owner ALLOW entry.
+  - Added the Windows dependency lockfile and PowerShell packaging smoke harness with COM metadata inspection.
+  - Windows test summary reports the Doggo.exe distributable and unsigned `Doggo-1.0.0.msi` (100.68 MB) built and verified; unsigned development-build status is disclosed.
+  - Windows test summary reports 121/121 combined desktop and shared JVM tests passing, including the stored-vault ACL test, and seven high-fidelity UI design mockups.
+  - Phase 10 implementation delivered / 100% on 2026-10-14. Technical acceptance is blocked by root-level strict dependency verification, interactive MSI installation, and Narrator verification; clean-user runtime/sync and uninstall/reinstall remain open. This does not claim production release or runtime UI acceptance.
 
 ### [0.9.0-alpha.1] — 2026-10-14
 #### Completed

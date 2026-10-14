@@ -3,6 +3,20 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 10] - 2026-10-14: Native Windows DPAPI & Installed MSI Implementation
+
+### Added
+- Windows `WindowsDpapiVault` using user-scoped `CryptProtectData` / `CryptUnprotectData`, atomic replacement, and fail-closed user ACL enforcement; `testAclEnforcementOnStoredVaultFile` checks the stored-file owner ALLOW entry.
+- `WindowsDpapiVaultProvider` ServiceLoader registration; Windows runtime excludes Linux D-Bus dependencies.
+- `desktopApp/gradle-windows.lockfile` and `scripts/windows-package-smoke.ps1` with COM metadata inspection.
+- Windows evidence summary reports the `Doggo.exe` distributable and unsigned `Doggo-1.0.0.msi` (100.68 MB) built and verified; seven high-fidelity Windows UI design mockups.
+
+### Verification and remaining acceptance
+- Evidence summary reports 121/121 combined desktop and shared JVM tests passing, target isolation verified, and MSI generated/package metadata inspected.
+- Phase 10 implementation delivered / 100% on 2026-10-14. Technical acceptance is blocked by root-level strict dependency verification, interactive MSI installation, and Narrator verification; clean-user runtime/sync and uninstall/reinstall remain pending. The MSI is unsigned and is not a production release.
+
+---
+
 ## [Phase 09] - 2026-10-14: Linux Desktop & Installed RPM Distribution
 
 ### Added

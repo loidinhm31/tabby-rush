@@ -1,9 +1,9 @@
 # Doggo Security Model & Operational Disaster Recovery
 
-**Document Version**: 1.1.0  
-**Phase**: 08 — Authorized Hub Operations & Signed Android Release  
-**Status**: Authoritative Security Architecture & Recovery Runbook  
-**Related Documents**: [Deployment Guide](./deployment-guide.md) · [Release Acceptance](./release-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [System Architecture](./system-architecture.md)
+**Document Version**: 1.2.0  
+**Phase**: 10 — Native Windows DPAPI and MSI Artifact Delivery  
+**Status**: Platform credential custody model; Windows ACL and installed-runtime acceptance caveats disclosed  
+**Related Documents**: [Deployment Guide](./deployment-guide.md) · [Release Acceptance](./release-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
 ---
 
@@ -11,10 +11,11 @@
 
 ### 1.1 Credential & Key Lifecycle
 - **Zero Plaintext Credentials in Storage**: Passwords exist in memory only during user submission and are never stored in databases, shared preferences, view models, or process bundles.
-- **Hardware-Backed Credential Vault**:
-  - Android: `AndroidKeystoreVault` uses Android KeyStore (`MasterKey` with AES-256 GCM) to encrypt access and refresh tokens.
-  - Linux: Freedesktop Secret Service API via DBus (Phase 09).
-  - Windows: DPAPI (Data Protection API) (Phase 10).
+- **OS-Protected Platform Credential Custody**:
+  - Android: `AndroidKeystoreVault` uses Android KeyStore with AES-256-GCM to encrypt access and refresh tokens.
+  - Linux: Freedesktop Secret Service API via D-Bus (Phase 09).
+  - Windows: `WindowsDpapiVault` uses JNA `CryptProtectData` / `CryptUnprotectData` in current-user scope; it stores the encrypted account-key/token pair in `credentials.dpapi` using temporary-file and atomic replacement. Machine-wide scope and plaintext fallback are prohibited.
+  - **Windows ACL limitation**: `applyRestrictiveUserAcl()` attempts an owner ACL before the atomic move, but returns when the ACL view or owner is absent and suppresses exceptions. Effective owner-only ACL enforcement is therefore best-effort, not guaranteed. The vault also treats a missing/zero-length file as no saved credentials and does not reject an empty serialized account key; these edge cases remain security-hardening concerns.
 - **API Key Classification**: The `DOGGO_API_KEY` is an extractable client application identifier, NOT an administrative credential. It identifies the client as authorized for the `doggo` app schema. Human user authentication relies exclusively on short-lived JWT access tokens and rotatable refresh tokens.
 - **Single-Flight Token Refresh**: Mutex-coordinated refresh ensures only one in-flight network refresh executes at a time. All concurrent requests wait on the resulting token or fail closed.
 

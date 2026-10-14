@@ -52,9 +52,6 @@ kotlin {
         jvmMain.dependencies {
             implementation(libs.ktor.client.java)
             implementation(libs.kotlinx.coroutines.swing)
-            implementation(libs.jna)
-            implementation(libs.jna.platform)
-            implementation(libs.dbus.java)
         }
     }
 }

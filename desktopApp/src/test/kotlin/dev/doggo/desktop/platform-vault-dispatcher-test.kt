@@ -36,21 +36,22 @@ class PlatformVaultDispatcherTest {
 
     @Test
     fun testResolveProviderRealLinuxProviderDiscovered() {
-        // In the desktopApp Linux build, exactly one provider (LinuxSecretServiceVaultProvider) is packaged
-        val provider = PlatformVaultDispatcher.resolveProvider("linux")
-        assertNotNull(provider)
-        assertEquals("linux", provider.target)
-        assertEquals("dev.doggo.desktop.linux.LinuxSecretServiceVaultProvider", provider::class.java.name)
+        val os = System.getProperty("os.name")?.lowercase() ?: ""
+        if (os.contains("linux")) {
+            val provider = PlatformVaultDispatcher.resolveProvider("linux")
+            assertNotNull(provider)
+            assertEquals("linux", provider.target)
+            assertEquals("dev.doggo.desktop.linux.LinuxSecretServiceVaultProvider", provider::class.java.name)
+        }
     }
 
     @Test
     fun testResolveProviderNoMatchFailsClosed() {
         val ex = assertFailsWith<IllegalStateException> {
-            PlatformVaultDispatcher.resolveProvider("windows")
+            PlatformVaultDispatcher.resolveProvider("nonexistent_target")
         }
-        assertTrue(ex.message!!.contains("No CredentialVaultProvider found for desktop target 'windows'"))
+        assertTrue(ex.message!!.contains("No CredentialVaultProvider found for desktop target 'nonexistent_target'"))
     }
-
     @Test
     fun testResolveProviderUnknownTargetFailsClosed() {
         val ex = assertFailsWith<IllegalStateException> {

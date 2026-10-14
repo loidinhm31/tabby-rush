@@ -1,9 +1,9 @@
 # Doggo Deployment & Operations Guide
 
-**Document Version**: 1.2.0  
-**Phase**: 09 — Linux Desktop & Installed RPM Distribution  
-**Status**: Desktop Tooling & Standalone Distributable Operational; Live RPM Build Pending Host rpm-build Tool  
-**Related Documents**: [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md)
+**Document Version**: 1.3.0  
+**Phase**: 09–10 — Linux and Windows Desktop Distribution  
+**Status**: Linux and Windows distributable artifacts documented; interactive RPM/MSI installation and runtime acceptance remain operator gates  
+**Related Documents**: [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
 ---
 
@@ -15,7 +15,7 @@ In strict adherence to architectural boundaries:
 - **Client Distribution**: The Doggo Android client ships with fixed, compile-time approved Hub endpoints; no administrative or database credentials are ever distributed to end-user devices.
 - **Backend Infrastructure**: Glean Hub (implemented in Rust with the `glean-hub-sync` extension) and its underlying MongoDB persistence remain strictly under operator custody.
 - **Sync Protocol Isolation**: The strict-v1 protocol runs in dedicated namespaces and route trees, completely isolated from legacy Glean clients.
-- **Desktop Distribution**: The Doggo Linux desktop application ships as a standalone unpacked distributable image or an installable `.rpm` package for Fedora/RHEL. Hardware/OS credential custody relies on the Freedesktop Secret Service via `secret-tool` / D-Bus.
+- **Desktop Distribution**: Linux uses the self-contained image or RPM and Freedesktop Secret Service; Windows uses a self-contained application image or per-user MSI and current-user DPAPI. Each target uses its own dependency lock and OS credential provider.
 
 ---
 
@@ -251,3 +251,52 @@ secret-tool clear service doggo account <account_key>
 # 5. Remove application data and local SQLite databases after process termination
 rm -rf ~/.local/share/doggo
 ```
+
+## 8. Windows Desktop & MSI Deployment
+
+### 8.1 Build Host Prerequisites
+Build and package on a Windows x64 host with JDK 21 LTS (`java`, `javac`, and `jpackage`) and PowerShell. The `:desktopApp:packageMsi` task also requires WiX tooling; the recorded build used WiX 3.11 provisioned by the Compose Desktop plugin. Run diagnostics before resolving dependencies:
+
+```powershell
+.\scripts\windows-package-smoke.ps1 -Diagnose
+```
+
+The Windows build selects `desktopTarget=windows`; explicit targets that do not match the host are rejected. Keep Gradle dependency verification enabled for package builds. Do not use `--dependency-verification=off` to produce a distributable or MSI.
+
+### 8.2 Build and Test
+Run the target-specific build, Windows desktop tests, and shared JVM regression suite:
+
+```powershell
+.\gradlew.bat -PdesktopTarget=windows :desktopApp:dependencies
+.\gradlew.bat -PdesktopTarget=windows :desktopApp:compileKotlin :desktopApp:test
+.\gradlew.bat :shared:jvmTest
+.\gradlew.bat -PdesktopTarget=windows :desktopApp:createDistributable
+.\gradlew.bat -PdesktopTarget=windows :desktopApp:packageMsi
+```
+
+The Windows lockfile is `desktopApp\gradle-windows.lockfile`; ordinary builds consume the target-specific lock without `--write-locks`. The self-contained application image is written to `desktopApp\build\compose\binaries\main\app\Doggo\`. The MSI output is `desktopApp\build\compose\binaries\main\msi\Doggo-1.0.0.msi`. `createDistributable` includes the runtime and `Doggo.exe`; it does not require WiX.
+
+### 8.3 Audit the Bundle and MSI
+Inspect the distributable and MSI using the Windows-specific PowerShell harness:
+
+```powershell
+.\scripts\windows-package-smoke.ps1 -DistDir desktopApp\build\compose\binaries\main\app\Doggo
+.\scripts\windows-package-smoke.ps1 -MsiPath desktopApp\build\compose\binaries\main\msi\Doggo-1.0.0.msi
+```
+
+The bundle audit checks the launcher/runtime, Windows DPAPI class and SPI registration, exactly one registered vault provider, and absence of Linux D-Bus/Secret Service classes. The MSI audit calculates SHA-256, reports Authenticode status, and reads Windows Installer metadata through COM. See [Windows Test Summary](./evidence/windows-test-summary.md) for the recorded 100.68 MB unsigned development MSI and its exact hash; rebuilds may have different hashes.
+
+### 8.4 Installation and Runtime Acceptance
+The evidence records successful MSI generation and package metadata inspection, **not** a completed interactive installation. Only install a trusted, approved artifact; the recorded development MSI is unsigned and is not suitable for public production distribution. Production delivery requires an approved Authenticode signature and verification.
+
+For an authorized operator acceptance run:
+
+```powershell
+msiexec.exe /i "desktopApp\build\compose\binaries\main\msi\Doggo-1.0.0.msi"
+```
+
+After installation, verify the per-user Start Menu entry launches Doggo without a developer JDK on `PATH`, then exercise login, offline restart, task edits, and synchronization. Verify credentials remain usable only in the intended Windows user context. Treat sync quiescence and clearing local account data and vault credentials on account leave as acceptance requirements to test, not as established Windows behavior. Use the [Windows Acceptance](./windows-acceptance.md) matrix for the complete runtime and accessibility checklist. The seven Windows PNGs are design mockups, not installed-app captures; Windows Narrator, scaling, and live UI states still need operator verification.
+
+To uninstall, close Doggo and use Windows **Settings → Apps → Installed apps** or the ProductCode inspected from the MSI. Uninstalling the package is not a promise that per-user account data is erased; use Doggo's guarded account-leave flow before removal when account data should be cleared. Verify same-version reinstall separately; it does not establish future upgrade behavior.
+
+Phase 10 implementation is recorded at **100% (2026-10-14)**; technical acceptance is blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not guaranteed by the current source, and clean-user runtime/sync plus uninstall/reinstall evidence remain open. Upstream Phase 09 installed-RPM acceptance is also open. Do not report package generation or metadata inspection as installed-runtime acceptance.

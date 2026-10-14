@@ -8,15 +8,15 @@ Based on Repomix compaction snapshot: `repomix-output.xml` (268 files, 498,743 t
 
 The `doggo` repository contains the implementation, build configuration, domain contracts, and architectural specifications for Doggo, an Android-first shared Compose Multiplatform task management application with secure multi-device synchronization against Glean Hub.
 
-Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts), Phase 03 (Isolated Strict Server & Legacy Isolation), Phase 04 (Hub Authentication & Protected Session), Phase 05 (Durable Local State & Strict Per-Record Sync), Phase 06 (Shared Compose UI & Accessible Light Theme), Phase 07 (Android Composition & Runtime Integration), Phase 08 (Authorized Hub Operations & Signed Android Release), and Phase 09 (Linux Desktop & Installed RPM Distribution), the repository contains:
+Following Phases 01–10, the repository contains the Android and shared Compose Multiplatform clients, Linux desktop source/distribution tooling, and the delivered Windows desktop DPAPI provider, isolated build, distributable, MSI artifact, and package-verification harness:
 1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
 2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state/actions, identity/authentication contracts, strict sync canonical framing, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 1), BundledSQLiteDriver, local outbox mutation engine, staged full scan reconciler, fail-closed account leave protocol, shared Compose UI components (app shell, responsive layout, account form, access request panel, todo list/editor, sync feedback, conflict review, leave guard, license notices), accessible light theme tokens (WCAG 2.1 AA verified), and comprehensive unit/instrumented/semantics tests.
 3. **Android Application Module (`androidApp/`)**: Native Android client hosting shared Compose UI, `DoggoApplication` process container, `SessionViewModel` reactive UI state orchestration, `AndroidSyncScheduler` WorkManager scheduling, `DoggoSyncWorker` background sync worker with generation/auth fencing, debug network security configuration with strict loopback cleartext whitelist, backup/extraction security exclusions, release signing task-graph enforcement, and authored instrumented test suites.
-4. **Desktop Application Module (`desktopApp/`)**: Compose Multiplatform desktop target on JVM 21, hosting shared Compose UI, `MainKt` (RELEASE) and `DevelopmentLauncher` (DEBUG) entrypoints, `CredentialVaultProvider` SPI, `PlatformVaultDispatcher` ServiceLoader resolution, `SingleInstanceGuard` file-channel lock, `DesktopSyncScheduler` foreground sync coordination with `LeaveSchedulerCancelGate`, and Linux Secret Service vault implementation (`LinuxSecretServiceVault`).
-5. **Host Virtualization, Security & Operations Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub schema provisioning (`hub-schema-provision.mjs`), live Hub strict smoke harness (`hub-live-smoke.mjs`), release security and integrity auditor (`release-security-check.mjs`), maintenance recovery script (`hub-strict-recovery.js`), device smoke runner (`android-smoke.sh`), loopback sync fault-injection proxy (`debug-fault-proxy.mjs`), and Linux packaging smoke runner (`linux-package-smoke.sh`).
+4. **Desktop Application Module (`desktopApp/`)**: Compose Multiplatform JVM app with target-isolated Linux and Windows source sets; shared `CredentialVaultProvider` SPI, fail-closed `PlatformVaultDispatcher`, `SingleInstanceGuard`, `DesktopSyncScheduler`, Linux Secret Service provider, and Windows current-user DPAPI provider.
+5. **Host Virtualization, Security & Operations Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub schema provisioning (`hub-schema-provision.mjs`), live Hub strict smoke harness (`hub-live-smoke.mjs`), release security and integrity auditor (`release-security-check.mjs`), maintenance recovery script (`hub-strict-recovery.js`), device smoke runner (`android-smoke.sh`), loopback sync fault-injection proxy (`debug-fault-proxy.mjs`), and Linux/Windows package smoke runners.
 6. **Hub Integration Artifacts (`integration/`)**: Canonical strict-v1 JSON schema specification matching backend admission rules.
 7. **Automated Verification Harness (`tests/`)**: Automated shell suites validating scripts, Gradle contracts, Kotlin sources, and cryptographic digest vectors.
-8. **Technical Documentation & Evidence (`docs/`)**: Architecture specifications, API contracts, deployment and disaster recovery guides, release acceptance specifications, toolchain evidence, operational runbooks, compatibility criteria, auth/credential specifications, local storage and sync specifications, design guidelines, font provenance, coding standards, Android runtime acceptance criteria, Linux desktop guide and acceptance specifications, and UI design mockups.
+8. **Technical Documentation & Evidence (`docs/`)**: Architecture specifications, API contracts, deployment and disaster recovery guides, release acceptance specifications, toolchain evidence, operational runbooks, compatibility criteria, auth/credential specifications, local storage and sync specifications, design guidelines, coding standards, Android/Linux/Windows desktop guides and acceptance specifications, test summaries, and UI design mockups.
 9. **Planning & Roadmap (`plans/`)**: Phased execution plans, architectural decisions, and verification reports.
 ### High-Level Directory Structure
 
@@ -51,7 +51,8 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 │           └── background-isolation-test.kt # Authored instrumented tests for WorkManager and isolation (unexecuted)
 ├── desktopApp/                         # Desktop application module (Kotlin JVM 2.1.10, Compose 1.7.3)
 │   ├── build.gradle.kts                # Desktop build script, target detection (linux/windows), RPM/MSI config
-│   ├── gradle-linux.lockfile           # Dependency lockfile for Linux target (161 locked artifacts)
+│   ├── gradle-linux.lockfile           # Linux dependency lockfile (161 locked artifacts)
+│   ├── gradle-windows.lockfile         # Windows target-specific dependency lockfile
 │   └── src/
 │       ├── main/kotlin/dev/doggo/desktop/
 │       │   ├── main.kt                 # MainKt (RELEASE) and DevelopmentLauncher (DEBUG), window scaffold
@@ -64,11 +65,18 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 │       │   │   └── linux-secret-service-vault.kt # Freedesktop Secret Service vault implementation
 │       │   └── resources/META-INF/services/
 │       │       └── dev.doggo.desktop.CredentialVaultProvider # ServiceLoader descriptor for Linux provider
+│       ├── windowsMain/
+│       │   ├── kotlin/dev/doggo/desktop/windows/
+│       │   │   └── windows-dpapi-vault.kt # Current-user DPAPI vault and provider
+│       │   └── resources/META-INF/services/
+│       │       └── dev.doggo.desktop.CredentialVaultProvider # Windows ServiceLoader descriptor
 │       ├── test/kotlin/dev/doggo/desktop/
 │       │   ├── platform-vault-dispatcher-test.kt # SPI resolution, zero/duplicate/target validation tests
 │       │   └── desktop-lifecycle-test.kt # Single instance lock, sync scheduling, and build mode tests
-│       └── linuxTest/kotlin/dev/doggo/desktop/linux/
-│           └── linux-secret-service-vault-test.kt # Secret Service status, store, replace, clear tests
+│       ├── linuxTest/kotlin/dev/doggo/desktop/linux/
+│       │   └── linux-secret-service-vault-test.kt # Secret Service status, store, replace, clear tests
+│       └── windowsTest/kotlin/dev/doggo/desktop/windows/
+│           └── windows-dpapi-vault-test.kt # DPAPI provider, vault lifecycle, and native round-trip tests
 ├── gradle/
 │   ├── libs.versions.toml              # Version catalog (Kotlin 2.1.10, Compose 1.7.3, AGP 8.7.3, Room 2.7.0-alpha12)
 │   ├── verification-metadata.xml       # Gradle dependency checksum verification
@@ -159,7 +167,8 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 │   ├── hub-strict-recovery.js          # Maintenance-only fresh-epoch disaster recovery runner
 │   ├── android-smoke.sh                # Device smoke runner with reverse port forwarding and screenshot capture
 │   ├── debug-fault-proxy.mjs           # Loopback sync fault-injection proxy (drop-push-response, drop-refresh-response)
-│   └── linux-package-smoke.sh          # Linux desktop package and distributable smoke verification runner
+│   ├── linux-package-smoke.sh          # Linux desktop package/distributable/RPM audit runner
+│   └── windows-package-smoke.ps1       # Windows distributable/MSI audit and COM metadata inspection
 ├── tests/                              # Automated test suites
 └── docs/                               # Developer documentation and operational runbooks
     ├── android-acceptance.md           # Android composition, security invariants, and acceptance spec
@@ -176,9 +185,11 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
     ├── host-tooling-evidence.md        # Verified host hardware, virtualization, and tool capabilities
     ├── hub-compatibility-acceptance.md # Architectural acceptance criteria and invariants
     ├── hub-schema-integration.md       # Integration guide and registration lifecycle
-    ├── deployment-guide.md             # Phase 08 operational deployment guide
+    ├── deployment-guide.md             # Hub, Android, Linux, and Windows deployment procedures
     ├── linux-acceptance.md             # Phase 09 Linux desktop and RPM acceptance specification
     ├── linux-desktop-guide.md          # Phase 09 Linux desktop operations and build guide
+    ├── windows-acceptance.md           # Phase 10 Windows desktop and MSI acceptance specification
+    ├── windows-desktop-guide.md        # Windows DPAPI, build, packaging, and operations guide
     ├── local-storage-and-sync.md       # Phase 05 local storage, Room entities, and sync spec
     ├── project-changelog.md            # Chronological project changelog across phases
     ├── project-overview-pdr.md         # Product development requirements and traceability
@@ -195,7 +206,9 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
         ├── android-debug-*.png         # 7 visual design mockups for debug screen states
         ├── android-release-*.png       # 7 visual design mockups for release screen states
         ├── linux-test-summary.md       # Phase 09 Linux desktop verification test summary
-        └── linux-*.png                 # 7 visual design mockups for Linux desktop screen states
+        ├── windows-test-summary.md     # Phase 10 Windows tests, bundle, and MSI evidence
+        ├── linux-*.png                 # 7 visual design mockups for Linux desktop screen states
+        └── windows-*.png               # 7 visual design mockups for Windows desktop screen states
 ```
 
 ---
@@ -316,35 +329,41 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 | `release-security-check.mjs` | `runReleaseSecurityAudit()`, `diagnoseSource()` | Fail-closed security auditor inspecting release APK signatures (v2/v3), explicit `allowBackup="false"`, `debuggable="false"`, `usesCleartextTraffic="false"`, non-main exported components rejection, networkSecurityConfig stripping, and static source secret scanning. |
 | `hub-strict-recovery.js` | `executeRecovery()`, `validateTodoRecord()` | Maintenance disaster recovery script for `mongosh` requiring `CONFIRM_MAINTENANCE_QUIESCENCE=true`, generating fresh UUID v4 epoch, provisioning canonical `_strict_v1_...` collection, resetting records to revision 1 with `lastOp = null`, maintaining permanent empty tombstones, and executing journaled Compare-And-Swap on `_schemas`. |
 
-### 2.9 Linux Desktop Application Module & Packaging Tooling (Phase 09)
+### 2.9 Desktop Application Module & Packaging Tooling (Phases 09–10)
 
 | Component File | Primary Types & Functions | Architectural Role |
 |---|---|---|
-| `build.gradle.kts` | `:desktopApp` build script | Configures Compose Multiplatform 1.7.3 on Kotlin JVM 2.1.10; detects host OS (`linux` vs `windows`); enforces target isolation; binds target-specific dependencies (`libs.dbus.java` on Linux); configures native RPM/MSI distributions; pins lockfile to `gradle-$desktopTarget.lockfile`; registers `runDebug` task. |
-| `gradle-linux.lockfile` | Dependency locking definition | Pinned dependency locks for Linux x86_64 desktop configuration (161 locked artifacts). |
-| `credential-vault-provider.kt` | `CredentialVaultProvider` | Hardware/OS credential vault Service Provider Interface (SPI) contract for desktop platforms. |
-| `platform-vault-dispatcher.kt` | `PlatformVaultDispatcher` | Dispatches and resolves `CredentialVaultProvider` via Java `ServiceLoader`; requires exactly one provider matching the active desktop target; fails closed if zero or duplicate providers exist; zero plaintext fallback. |
-| `single-instance-guard.kt` | `SingleInstanceGuard` | Acquires exclusive OS file-channel lock on `~/.local/share/doggo/accounts/doggo.lock` before vault or database initialization; prevents concurrent launch, refresh races, and database corruption; retains lock file across exits. |
-| `desktop-sync-scheduler.kt` | `DesktopSyncScheduler` | Implements `SyncScheduler` and `LeaveSchedulerCancelGate` for window-scoped lifecycle; schedules periodic 15-minute and immediate sync rounds; `cancelAndAwait()` guarantees active sync jobs are quiesced before account leave or wipe. |
-| `main.kt` | `MainKt`, `DevelopmentLauncher`, `DesktopController`, `DesktopAccountRuntime` | Application entrypoint and Compose window container; `MainKt` enforces `BuildMode.RELEASE` (HTTPS only); `DevelopmentLauncher` enables `BuildMode.DEBUG` (HTTP loopback permitted) via `:desktopApp:runDebug`; coordinates account lifecycle, local database, and auth session. |
-| `linux-secret-service-vault.kt` | `LinuxSecretServiceVault`, `LinuxSecretServiceVaultProvider`, `SecretServiceClient` | Freedesktop Secret Service client and SPI provider; stores access and refresh tokens as an atomic JSON bundle via `secret-tool` / D-Bus; reports `READY`, `LOCKED`, `UNAVAILABLE` status; fails closed without plaintext fallback. |
-| `dev.doggo.desktop.CredentialVaultProvider` | ServiceLoader configuration | Service provider configuration file registering `dev.doggo.desktop.linux.LinuxSecretServiceVaultProvider`. |
-| `scripts/linux-package-smoke.sh` | Shell smoke script | Packaging verification runner providing host diagnostics (`--diagnose`), unpacked distributable verification (`--dist`), and RPM query/dependency audit (`--rpm`). |
+| `build.gradle.kts` | `:desktopApp` build script | Configures Compose Multiplatform 1.7.3 on Kotlin JVM 2.1.10; detects and isolates Linux/Windows host targets; binds D-Bus only on Linux and JNA only on Windows; configures RPM/MSI distributions and target-specific lockfiles. |
+| `gradle-linux.lockfile` | Dependency locking definition | Linux desktop dependency lockfile (161 locked artifacts). |
+| `gradle-windows.lockfile` | Dependency locking definition | Windows desktop target lockfile, independently resolved from Linux. |
+| `credential-vault-provider.kt` | `CredentialVaultProvider` | OS credential-vault Service Provider Interface for desktop targets. |
+| `platform-vault-dispatcher.kt` | `PlatformVaultDispatcher` | Uses Java `ServiceLoader`; requires exactly one provider matching the active target and fails closed for zero or duplicate matches. |
+| `single-instance-guard.kt` | `SingleInstanceGuard` | Acquires the OS file-channel lock before vault/database initialization to prevent concurrent launch and profile races. |
+| `desktop-sync-scheduler.kt` | `DesktopSyncScheduler` | Window-scoped immediate/15-minute sync and `LeaveSchedulerCancelGate` quiescence. |
+| `main.kt` | `MainKt`, `DevelopmentLauncher`, `DesktopController`, `DesktopAccountRuntime` | Desktop Compose entrypoints and runtime; production launcher uses RELEASE mode, while `runDebug` enables loopback development mode. |
+| `linux-secret-service-vault.kt` | `LinuxSecretServiceVault`, provider, client | Linux Secret Service credential provider over D-Bus; no plaintext token fallback. |
+| `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-dpapi-vault.kt` | `WindowsDpapiVault`, `WindowsDpapiVaultProvider`, `JnaWindowsDpapiProtector` | Windows user-scoped DPAPI credential bundle with temporary-file/atomic replacement and plaintext byte-buffer clearing. `applyRestrictiveUserAcl()` is best-effort; ACL failures are suppressed. |
+| `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` | ServiceLoader descriptors | Target-specific registrations select the Linux or Windows provider; Windows packaging contains one Windows provider and excludes Linux D-Bus classes. |
+| `linux-package-smoke.sh` / `windows-package-smoke.ps1` | Platform package audits | Inspect target-specific distributable contents; Windows runner also computes MSI SHA-256, reports signature status, and inspects MSI metadata using COM. |
 
 | Test Suite File | Scope & Tested Invariants | Status |
 |---|---|---|
-| `platform-vault-dispatcher-test.kt` | Host detection, ServiceLoader provider resolution, zero-match fail-closed, multiple-match fail-closed. | **PASSED** (JVM, 5/5 tests) |
-| `desktop-lifecycle-test.kt` | SingleInstanceGuard exclusive lock acquisition, lock retention, periodic and immediate sync scheduling, cancelAndAwait quiescence, RELEASE vs DEBUG build mode origin policies. | **PASSED** (JVM, 8/8 tests) |
-| `linux-secret-service-vault-test.kt` | Secret Service status transitions (READY/LOCKED/UNAVAILABLE), atomic store and load, atomic replacement, corrupt payload handling, clear credentials. | **PASSED** (JVM, 6/6 tests) |
+| `platform-vault-dispatcher-test.kt` | Host target and ServiceLoader provider resolution; zero-match, duplicate-match, and mismatch fail-closed cases. | **PASSED** (5/5 in the Windows suite) |
+| `desktop-lifecycle-test.kt` | Single-instance lock, scheduler/quiescence behavior, and RELEASE/DEBUG origin policies. | **PASSED** (8/8 in the Windows suite) |
+| `linux-secret-service-vault-test.kt` | Linux Secret Service status, atomic storage/replacement, corruption handling, and clear. | **PASSED** (Linux, 6/6 per Phase 09 evidence) |
+| `windows-dpapi-vault-test.kt` | DPAPI vault status, store/load, replacement/deletion, corrupt payload handling, provider discovery, target isolation, native DPAPI round-trip, and stored-file ACL check on ACL-capable filesystems. | **PASSED** (Windows, 12/12 per Phase 10 evidence; ACL failure paths are not covered) |
+
+Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summary reports 25/25 Windows desktop tests and 96/96 shared JVM tests passing (121/121 combined), a verified `Doggo.exe` bundle, and a generated unsigned 100.68 MB MSI. Technical acceptance is blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification; package metadata inspection is not installed-runtime acceptance.
 ---
 
 ## 3. Repomix Compaction Metrics (Dated Generation Snapshot: 2026-10-14)
 
-- **Total Files Packed:** 268 files
-- **Total Character Count:** 2,148,581 characters
-- **Total Token Count:** 498,743 tokens
+- **Compaction Artifact:** Generated on 2026-10-14 for analysis; the XML was not retained in the repository.
+- **Total Files Packed:** 279 files
+- **Total Character Count:** 2,320,587 characters
+- **Total Token Count:** 533,057 tokens
 - **Security Check:** Repomix security scanner flagged 5 suspicious files that were excluded from the compaction output by default filter heuristics: `docs/security-and-recovery.md`, `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md`, `plans/reports/code-reviewer-261014-1638-phase-08-release-operations-cycle3.md`, `plans/reports/docs-manager-261014-1643-phase-08-docs-verification.md`, and `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`. These exclusions represent heuristic scanner flags and are not an affirmative clean security adjudication of those files.
-- **Top Files by Token Footprint:** `docs/codebase-summary.md` (12,077 tokens), `docs/project-roadmap.md` (10,002 tokens), `docs/project-overview-pdr.md` (9,454 tokens), `scripts/hub-live-smoke.mjs` (7,610 tokens), `plans/261013-1540-doggo-glean-hub-reuse/file-ownership.md` (7,367 tokens).
+- **Snapshot Scope:** These counts describe a single 2026-10-14 Repomix generation. The XML snapshot is not retained, and self-report metrics may not appear identically in its copy of this file.
 ---
 
 ## 4. Current State & Invariants
@@ -359,6 +378,7 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
    - **Phase 07 (Android Composition & Runtime Integration)**: Native Android application module delivered in source (14 files in `androidApp/`, 2 in `scripts/`, `docs/android-acceptance.md`, `docs/evidence/android-test-summary.md`, and 7 visual design mockups in `docs/evidence/android-debug-*.png`). JVM shared regression suite 100% green (96/96 tests PASS across 14 test classes). Tooling scripts syntax verified (`bash -n scripts/android-smoke.sh`, `node --check scripts/debug-fault-proxy.mjs`). Android bytecode compilation (`:androidApp:compileDebugKotlin`) and instrumented test execution (`connectedDebugAndroidTest`) are blocked on the host by absent Android SDK (`ANDROID_HOME`), unrun on device/emulator, and deferred to Phase 08 release operations.
    - **Phase 08 (Authorized Hub Operations & Signed Android Release)**: Operational tooling, release security auditor (`scripts/release-security-check.mjs`), live strict smoke runner (`scripts/hub-live-smoke.mjs`), mongosh recovery script (`scripts/hub-strict-recovery.js`), deployment guide, security & recovery architecture, release acceptance specification, and evidence reports implemented across 20 artifacts. Tooling & harnesses operational; live bytecode compilation, binary signing verification, and live device acceptance gated on host SDK provisioning.
    - **Phase 09 (Linux Desktop & Installed RPM Distribution)**: Native Linux desktop application module (`:desktopApp`), Secret Service vault SPI (`CredentialVaultProvider`), ServiceLoader dispatcher (`PlatformVaultDispatcher`), `SingleInstanceGuard` file-channel lock, `DesktopSyncScheduler` foreground sync coordination, packaging smoke runner (`scripts/linux-package-smoke.sh`), runbooks, and test suites implemented across 23 artifacts. 19/19 unit tests PASS across 3 test classes (`PlatformVaultDispatcherTest`, `DesktopLifecycleTest`, `LinuxSecretServiceVaultTest`). Standalone application image assembled and inspected via smoke runner (`scripts/linux-package-smoke.sh --dist`); live GUI execution without host JDK, live RPM packaging, and interactive Secret Service D-Bus sessions remain pending operator prerequisites.
+   - **Phase 10 (Windows Desktop & MSI Distribution)**: Windows DPAPI vault and ServiceLoader provider, per-target dependency isolation/lockfile, PowerShell bundle/MSI audit, `Doggo.exe` distributable, and unsigned MSI delivered; implementation recorded at **100% (2026-10-14)**. The evidence summary reports 25/25 desktop tests and 96/96 shared JVM tests passing (121/121 combined) and records bundle/MSI metadata checks. Technical acceptance remains blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not guaranteed by the current source, and clean-user runtime/sync plus uninstall/reinstall evidence remain open; the seven PNGs are design mockups, not live screenshots.
 2. **Zero Destructive Fallback**: Room database version 1 uses explicit migrations; `fallbackToDestructiveMigration()` is strictly forbidden.
 3. **Account Directory Isolation**: Account directories are keyed strictly by canonical `AccountKey` SHA-256 lowercase hex strings; canonical path validation rejects symlinks and directory traversal attempts outside the base directory.
 4. **FIFO Outbox & Head Blocking**: Outbox operations dispatch at most one operation per `rowId` in FIFO order (`localRevision`). A head operation in `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED` state blocks all successors on that row from dispatching.
@@ -380,9 +400,13 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 20. **Visual Design Baselines**: The 7 PNG evidence images in `docs/evidence/` provide pixel-precise visual design specification mockups across core states (empty, populated, completed, editor, error, conflict, access-pending); live device framebuffer screen captures are pending interactive device/emulator execution in Phase 08.
 21. **Phase 08 Release Operations & Disaster Recovery Tooling**: Delivered 3 operational tooling scripts (`hub-live-smoke.mjs` with `--fixture-test` self-test passing 18/18 checks, `release-security-check.mjs` with fail-closed release checking and `--diagnose-source` static validation, and `hub-strict-recovery.js` with maintenance quiescence assertion, fresh UUID epoch allocation, and journaled registry CAS), comprehensive operational documentation (`deployment-guide.md`, `security-and-recovery.md`, `release-acceptance.md`, `project-changelog.md`, `README.md`), evidence summaries (`android-release-summary.md`, `hub-recovery-summary.md`), and 7 release UI visual specification baselines in `docs/evidence/android-release-*.png`.
 22. **Operational Status & Verification Boundaries**: Scripts and runbooks have been validated for syntax, fail-closed parameter validation, and deterministic offline mock fixture execution. Live release operations (production APK compilation, apksigner verification, live device installation, and live Hub staging) remain gated on host Android SDK provisioning and operator deployment. In addition, Phase 07 runtime correctness defects (teardown generation rollback, cancellation swallowing, and worker TOCTOU) and Phase 08 mongosh BSON Int64 serialization prerequisites remain documented open release-blocking items prior to production authorization.
-23. **Desktop Target Isolation & Custom Dependency Locking**: Desktop build detects host OS (`linux` vs `windows`), rejects target mismatches prior to dependency resolution, binds target-specific dependencies (`libs.dbus.java` on Linux), and pins locked dependencies to custom lockfiles (`desktopApp/gradle-linux.lockfile`, 161 locked artifacts). Packaged binaries contain only Linux provider classes with zero Windows references.
+23. **Desktop Target Isolation & Custom Dependency Locking**: Desktop build detects Linux/Windows host targets and rejects mismatches before dependency resolution. Linux D-Bus and Windows JNA dependencies are target-specific; `gradle-linux.lockfile` and `gradle-windows.lockfile` preserve separate resolution graphs. Package inspection reports each target contains its platform provider and excludes the foreign provider/runtime classes.
 24. **ServiceLoader SPI Provider Resolution**: Hardware/OS vaults are decoupled behind the `CredentialVaultProvider` SPI; `PlatformVaultDispatcher` requires exactly one provider matching the active desktop target and fails closed with an explicit exception if zero or duplicate providers exist. Plaintext token file fallback is strictly forbidden.
 25. **Single-Instance Profile File Lock**: `SingleInstanceGuard` acquires an exclusive OS file-channel lock on `~/.local/share/doggo/accounts/doggo.lock` before initializing database or vault; prevents concurrent launch, refresh races, and database corruption. The lock file is retained on exit to prevent inode recycling race conditions.
 26. **Foreground Desktop Sync Quiescence**: `DesktopSyncScheduler` coordinates periodic 15-minute and immediate sync within the window coroutine scope; implements `LeaveSchedulerCancelGate` to cancel and join active sync jobs before account leave or wipe.
 27. **Immutable Build Modes & Launchers**: `MainKt` enforces `BuildMode.RELEASE` (HTTPS only, loopback denied); `DevelopmentLauncher` enables `BuildMode.DEBUG` (HTTP 127.0.0.1:3000 permitted) via `:desktopApp:runDebug`.
 28. **Standalone Distributable & Disclosed Packaging Gates**: Standalone unpacked application image assembled and statically inspected (`scripts/linux-package-smoke.sh --dist`); live GUI execution without host JDK, native RPM packaging (`:desktopApp:packageRpm`), system installation, and live Secret Service D-Bus sessions remain pending host `rpm-build` installation, interactive sudo, and an active desktop session. Visual evidence images in `docs/evidence/linux-*.png` represent high-fidelity design specifications.
+29. **Windows User-Scoped Credential Custody**: `WindowsDpapiVault` uses JNA `CryptProtectData` / `CryptUnprotectData` with UI prompts forbidden and current-user scope; machine-wide protection and plaintext token fallback are not used.
+30. **Windows Credential File Replacement**: DPAPI-protected JSON credential pairs are written to a temporary file and atomically moved into place; plaintext byte buffers are cleared after cryptographic operations. The implementation attempts an owner ACL but suppresses ACL-view/owner errors, so ACL enforcement is not guaranteed when unavailable or failed.
+31. **Windows MSI Provenance**: The recorded MSI is unsigned; its hash/metadata inspection does not establish Authenticode trust or successful interactive installation.
+32. **Windows Acceptance Status**: Phase 10 implementation is recorded at 100% (2026-10-14), but technical acceptance is blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not fail-closed and clean-user runtime/sync plus uninstall/reinstall evidence remain open. The seven Windows PNGs are design mockups; they are not live application captures.

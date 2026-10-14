@@ -14,18 +14,18 @@ Group G after passing09 native gate; actual interactive Windows host mandatory. 
 - Date: 2026-10-13
 - Description: Native Windows DPAPI and installed MSI.
 - Priority: P2
-- Implementation status: pending (0%)
-- Review status: parent plan review complete; implementation/runtime acceptance pending.
+- **Implementation status:** implementation delivered / 100% (2026-10-14); technical acceptance blocked by root-level strict dependency verification, interactive MSI installation, and Narrator verification. Clean-user runtime/sync and uninstall/reinstall remain open.
+- **Review status:** cycle 2 was approved, score 8.5/10; findings reviewed in that cycle were reported resolved. A later implementation update reports fail-closed ACL enforcement; current source throws on Windows ACL support/owner/assignment failures, and the added test is reported passing for the stored-file owner ALLOW entry. Root-level strict dependency verification and native installation/accessibility/uninstall gates remain pending.
 - Effort: 6h estimated; total plan148h,uncertainty ±25–35%.
 
 ## Key Insights
-Manual native packageMsi build/install is Windows-only. Linux skipped task cannot pass. DPAPI user-bound bundle file/user ACL and packaged ServiceLoader need actual Windows tests; unsigned MSI must not be called trusted-signed. Runtime persistence remains offline established account,not clear-on-process-exit.
+Manual native packageMsi build/install is Windows-only. Linux skipped task cannot pass. The DPAPI user-bound bundle and packaged ServiceLoader require native tests. Windows ACL application now fails closed if ACL support, owner resolution, or ACL assignment fails; a dedicated stored-vault ACL test was added and reported passing. Unsigned MSI must not be called trusted-signed. Runtime persistence remains offline established account,not clear-on-process-exit.
 
 ## Requirements
 Actual supported Windows x64/JDK/jpackage/WiX tuple and interactive machine; real user-scoped DPAPI,no machine scope/plaintext fallback,atomic file replacement; native strict target lock,installed self-contained MSI/common feature parity/accessibility/DPAPI/isolation/uninstall-reinstall. No CI/auto updater/public publisher certificate added.
 
 ## Architecture
-10 contributes src/windowsMain real WindowsDpapiVaultProvider and descriptor through09 host-matched target selection; base MainKt/dispatcher/build unchanged. Windows main compilation excludes src/linuxMain/D-Bus provider.10 dependencyLocking writes only gradle-windows.lockfile,never Linux lock. DPAPI protected bundle at restricted per-user application-data path includes opaque account identity/token pair; reused05 JVM Room/session/wipe handling.
+10 contributes src/windowsMain real WindowsDpapiVaultProvider and descriptor through09 host-matched target selection; base MainKt/dispatcher/build unchanged. Windows main compilation excludes src/linuxMain/D-Bus provider.10 dependencyLocking writes only gradle-windows.lockfile,never Linux lock. DPAPI-protected bundle is stored at the per-user application-data path; Windows ACL enforcement now fails closed when ACL support or assignment is unavailable.
 
 ## Related code files
 Future tracked implementation artifacts only; current task creates planning documents,not these files.
@@ -62,10 +62,10 @@ Exclusive phase10 owner of all 15 exact absolute paths above; those and only tho
 11. Return Windows native acceptance to parent and08 doc owner; original02/04/05/06/09 owners repair their defects. Routine10 addition requires no09 edits and leaves Linux build target selection unchanged. Overall implementation completes only after required native evidence; unavailable machine is explicit pending prerequisite,not canceled platform.
 
 ## Todo list
-- [ ] Implement every owned artifact/requirement with real behavior,not scaffolds.
-- [ ] Pass designated future command and actual runtime gates; record sanitized evidence.
-- [ ] Resolve failures through original owner and complete parent review; do not mark implementation accepted early.
-
+- [x] Implement every owned artifact/requirement with real behavior,not scaffolds.
+- [x] Pass designated automated packaging and audit gates; record sanitized evidence (MSI generated, hardened smoke script passes, negative injection audit verified, target isolation confirmed).
+- [ ] Close native/technical acceptance gates: root-level strict dependency verification, clean-user interactive MSI installation/runtime and sync, Narrator/accessibility session, and uninstall/reinstall evidence.
+- [x] Resolve failures through original owner and complete parent review (CRIT-1 D-Bus leak remediated, CRIT-2 audit hardened, WARN-1 COM query fixed).
 ## Success Criteria
 Real Windows DPAPI file/user-scope/atomic replacement tests and packaged exactly-one Windows provider; native locked packageMsi executes; installed release runs without developer JDK with durable/shared/offline/auth/sync/account/UI parity. Actual Narrator/scale/provider/installer identity/hash/signature status and uninstall/reinstall evidence complete.09 artifacts untouched by routine10 addition.
 
@@ -73,13 +73,14 @@ Real Windows DPAPI file/user-scope/atomic replacement tests and packaged exactly
 No edits outside owned registry rows,no alias/glob ownership,no shared Gradle/lock/manifest/resource sweeping changes. Original owner repairs integration defects; main integrator reruns required affected gate once after fixes. Generated tracked lock/schema/evidence never placeholder.
 
 ## Risk Assessment
-Hardware/architecture/toolchain/WiX/install policy/DPAPI ACL/native module/Skiko/font support may block. Windows verifier hashes may reopen02 only; frozen09 mechanism must already support source/resource/lock isolation. No substitutes from Linux.
+Remaining risks include root-level strict dependency verification, interactive MSI install policy, Windows runtime/auth/sync and accessibility evidence, hardware/architecture/toolchain/WiX/native module/Skiko/font support. Windows verifier hashes may reopen02 only; frozen09 mechanism must already support source/resource/lock isolation. No substitutes from Linux.
 
 ## Security Considerations
-DPAPI user scope/restricted file ACL,no plaintext,machine scope or password persistence. Approved origin/mode,no secrets transferred/logged/PowerShell arguments. Unsigned MSI disclosed; no security-software disable. Native DPAPI failure preserves local pending work.
+DPAPI user scope, fail-closed per-user ACLs, and no plaintext or machine scope are security requirements. Current Windows source throws if ACL support, owner resolution, or ACL assignment is unavailable; the reported ACL test checks the stored-file owner ALLOW entry, not injected ACL failure paths. Approved origin/mode,no secrets transferred/logged/PowerShell arguments. Unsigned MSI disclosed; no security-software disable. Native DPAPI failure preserves local pending work.
 
 ## Next steps
-Parent final architecture/implementation drift review and08-only final general docs/status after actual all-platform gates. No implementation performed now.
+1. Complete root-level strict dependency verification and operator-run live `msiexec /i Doggo-1.0.0.msi` installation, runtime smoke, Windows Narrator accessibility verification, and `msiexec /x` uninstallation.
+2. Document live installation evidence in acceptance report and proceed to final parent plan signoff.
 
 ## Unresolved questions
-Actual Windows workstation/interactive access,exact supported JDK/WiX tuple,second-user DPAPI test account and native install trust policy remain implementation prerequisites.
+1. Will an operator complete root-level strict dependency verification, live MSI installation/runtime smoke, and Windows Narrator verification in the designated session?

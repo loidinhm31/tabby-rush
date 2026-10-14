@@ -1,9 +1,9 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
 Last Updated: 2026-10-14
-Document Version: 1.6.0
+Document Version: 1.7.0
 Status: Active
-Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md)
+Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
 ---
 
@@ -13,7 +13,7 @@ Doggo is an Android-first shared Compose Multiplatform application designed for 
 
 The project prioritizes a clean multiplatform architecture, where the core domain logic, state management, and user interface are planned in Kotlin Multiplatform and Compose Multiplatform:
 1. **Android Application (`androidApp/`)**: Native mobile client delivered in source (Phase 07); AGP bytecode compilation, instrumented tests, and runtime device gates pending host SDK provisioning in Phase 08.
-2. **Desktop Application (`desktopApp/`)**: Native Linux desktop target delivered in source and standalone distributable (Phase 09), featuring Secret Service hardware/OS vault SPI, SingleInstanceGuard, DesktopSyncScheduler, and packaging smoke runner; live RPM packaging and interactive Xpra session pending operator prerequisites. Windows MSI planned for Phase 10.
+2. **Desktop Application (`desktopApp/`)**: Linux desktop source and a standalone distributable were delivered in Phase 09; RPM installation and a live Secret Service session remain operator acceptance gates. Phase 10 Windows implementation was delivered and recorded at 100% (2026-10-14), including the x64 DPAPI provider, isolated dependency lock, package audit harness, self-contained `Doggo.exe` bundle, and unsigned MSI. Technical acceptance remains blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification.
 3. **Headless Development Infrastructure**: Immediate development, IDE execution, and emulator testing on headless Fedora Linux servers via secure Xpra virtual display sessions (delivered in Phase 01).
 
 ---
@@ -29,7 +29,7 @@ The project prioritizes a clean multiplatform architecture, where the core domai
 | **FR-03** | Aggregate Metrics | The UI displays total, active, and completed task counts dynamically reflecting current filters. |
 | **FR-04** | Cloud Synchronization | Client syncs tasks with the backend service according to the contracts frozen in Phase 02. |
 | **FR-05** | Local State Handling | Task mutations update local state; pending drafts survive transient network faults. |
-| **FR-06** | Secure Authentication | Reuses Glean Hub auth service with single-flight refresh, generation fencing, no automatic POST replays, and platform hardware/OS vaults (Android Keystore on mobile; Freedesktop Secret Service on Linux). |
+| **FR-06** | Secure Authentication | Reuses Glean Hub auth service with single-flight refresh, generation fencing, no automatic POST replays, and platform OS credential custody (Android Keystore on mobile, Freedesktop Secret Service on Linux, and current-user DPAPI on Windows). |
 
 ### 2.2 Non-Functional Requirements (NFR)
 
@@ -262,7 +262,37 @@ Phase 09 delivers the desktop application module (`:desktopApp`) targeting Linux
 
 ---
 
-## 11. Technical Constraints & Dependencies
+## 11. Phase 10 Requirements & Acceptance: Native Windows DPAPI and MSI
+
+Phase 10 implementation was delivered and is recorded at **100% (2026-10-14)**. This is implementation status, not technical acceptance: interactive MSI installation, Narrator verification, and strict dependency verification remain blocked pending operator prerequisites. The latest Windows evidence summary reports 25/25 desktop tests and 96/96 shared JVM tests passing (121/121 combined), a successful `Doggo.exe` bundle audit, and MSI metadata/hash inspection. Separately, the source ACL helper does not guarantee restrictive ACL enforcement; clean-user runtime/sync and uninstall/reinstall evidence also remain open.
+
+### 11.1 Windows Desktop Requirements
+- **FR-WIN-01 (Target Isolation & Locked Tooling)**: `desktopTarget` selects `windows` only on a Windows host and rejects mismatches before resolution. `desktopApp/gradle-windows.lockfile` freezes the Windows target graph. Windows packaging includes JNA and the Windows provider, not Linux D-Bus/Secret Service runtime dependencies.
+- **FR-WIN-02 (User-Scoped DPAPI Custody)**: `WindowsDpapiVault` protects one JSON credential bundle containing account key and access/refresh tokens using JNA-backed `CryptProtectData` / `CryptUnprotectData` with UI prompts forbidden; machine-wide scope and plaintext token fallback are prohibited. The vault zeroes plaintext byte buffers after cryptographic use.
+- **FR-WIN-03 (Atomic Credential Replacement)**: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-dpapi-vault.kt` writes protected bytes to a temporary file and atomically moves them into place. `applyRestrictiveUserAcl()` attempts an owner ACL but returns when the ACL view/owner is absent and suppresses exceptions, so effective ACL enforcement is not guaranteed.
+- **FR-WIN-04 (Service Provider Isolation)**: Java `ServiceLoader` discovers `WindowsDpapiVaultProvider`; the shared dispatcher requires exactly one provider matching the active target and fails closed when resolution is empty or ambiguous. The Windows package smoke script audits the provider descriptor and absence of Linux D-Bus/Secret Service classes.
+- **FR-WIN-05 (Windows Distribution)**: `:desktopApp:createDistributable` creates the self-contained `Doggo.exe` application image; `:desktopApp:packageMsi` creates the per-user MSI with Start Menu integration. The developer MSI is unsigned; organizational Authenticode signing is a production distribution prerequisite.
+- **FR-WIN-06 (Installed Runtime Acceptance)**: Installation without a developer JDK, launch, persistence/sync, DPAPI custody, accessibility, and uninstall/reinstall require a real interactive Windows session. Account-leave quiescence and credential/data clearing must be verified as acceptance criteria, not assumed from source or package inspection. Interactive MSI install, Narrator verification, and strict dependency verification remain pending operator prerequisites.
+
+### 11.2 Phase 10 Deliverables & Status Distinction
+
+| Category | Deliverable Summary | Verification Status |
+|---|---|---|
+| Windows Vault & SPI | `windows-dpapi-vault.kt`, Windows `META-INF/services` descriptor | Implemented; live JNA DPAPI round-trip and provider discovery reported in the Windows evidence summary. |
+| Target Lock & Isolation | `gradle-windows.lockfile`, JNA-only Windows target dependencies | 160 configurations locked; package inspection reports Windows provider present and Linux D-Bus artifacts absent. |
+| Automated Tests | Windows `desktopApp` tests and `:shared:jvmTest` | 25/25 desktop and 96/96 shared tests reported passing (121/121 combined) in [Windows Test Summary](./evidence/windows-test-summary.md). |
+| Distribution Artifacts | `createDistributable`, `packageMsi` | `Doggo.exe` bundle and `Doggo-1.0.0.msi` generated and audited; MSI is 100.68 MB and unsigned. |
+| Package Verification | `scripts/windows-package-smoke.ps1` | Audits distributable JAR contents/provider, target isolation, MSI SHA-256, Authenticode status, and COM metadata. |
+| UI Evidence | Seven `docs/evidence/windows-*.png` renders | Design mockups only; not live application captures or Narrator evidence. |
+| **Technical Acceptance Gates** | Interactive MSI install/runtime, Narrator verification, strict dependency verification | **BLOCKED** pending operator prerequisites; package metadata inspection is not proof of installed runtime behavior. |
+
+Windows review cycle 2 was approved with a score of 8.5/10. This review status does not replace pending interactive acceptance or the Phase 09 installed-RPM gate.
+
+---
+
+## 12. Technical Constraints & Dependencies
+10. **Windows Desktop Toolchain**: Windows x64 build and packaging require JDK 21 with `jpackage`; `packageMsi` requires WiX tooling (the Compose plugin provisioned WiX for the recorded build). The distributable bundle does not require WiX.
+11. **Windows Installer Trust**: The recorded MSI is unsigned. Production distribution requires an approved Authenticode signing certificate and verification; the current package build is not a signed public release.
 
 1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
 2. **JDK Requirements**: AGP 8.x and Compose Desktop require a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
@@ -276,7 +306,7 @@ Phase 09 delivers the desktop application module (`:desktopApp`) targeting Linux
 
 ---
 
-## 12. Traceability & Phased Roadmap
+## 13. Traceability & Phased Roadmap
 
 Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
@@ -288,4 +318,4 @@ Progress across the Doggo project is tracked in the living [Project Roadmap](./p
 - **Phase 07 Android Composition & Runtime Integration**: Native Android client module, process container, WorkManager background sync, debug network security config, manifest hardening, fault-injection proxy, smoke runner, and authored instrumented test suites delivered across 25 artifacts (Android source delivered; JVM regression suite 96/96 PASS; AGP bytecode compilation, connected device tests, and live framebuffer capture pending host SDK provisioning in Phase 08).
 - **Phase 08 Authorized Hub Operations & Signed Android Release**: Operational tooling, release security auditor (`scripts/release-security-check.mjs`), live strict smoke runner (`scripts/hub-live-smoke.mjs`), mongosh recovery script (`scripts/hub-strict-recovery.js`), deployment guide, security & recovery architecture, release acceptance specification, and evidence reports implemented across 20 artifacts (Tooling & harnesses operational; live bytecode compilation, binary signing verification, and live device acceptance gated on host SDK provisioning and Phase 07 defect remediation).
 - **Phase 09 Linux Desktop & Installed RPM Distribution**: Native Linux desktop module (`:desktopApp`), Secret Service hardware/OS vault SPI (`CredentialVaultProvider`), ServiceLoader dispatcher (`PlatformVaultDispatcher`), `SingleInstanceGuard` file-channel lock, `DesktopSyncScheduler` foreground sync coordination, packaging smoke runner (`scripts/linux-package-smoke.sh`), and unit test suites implemented across 23 artifacts (19/19 desktop tests PASS; standalone distributable assembled and inspected; live RPM packaging, installed smoke test, and interactive D-Bus session pending operator prerequisites).
-- **Phase 10 (Upcoming)**: Windows desktop distribution and MSI packaging.
+**Phase 10 Windows Desktop & MSI Distribution**: DPAPI vault, Windows SPI, target lock/isolation, smoke harness, `Doggo.exe` distributable and MSI artifacts delivered; test/package evidence recorded. Interactive MSI installation, runtime/accessibility checks, uninstall/reinstall, and upstream Phase 09 acceptance remain pending.

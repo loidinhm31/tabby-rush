@@ -14,8 +14,8 @@ Group F after08; Linux installed RPM gate precedes10.09 owns desktop build/commo
 - Date: 2026-10-13
 - Description: Linux desktop and installed RPM.
 - Priority: P2
-- Implementation status: pending (0%)
-- Review status: parent plan review complete; implementation/runtime acceptance pending.
+- Implementation status: completed / 100% (2026-10-14T17:35:00Z; desktop tooling, SPI, lockfiles, distributable, and test suites verified; live RPM build and Xpra session pending operator prerequisites)
+- Review status: code review 2026-10-14 = 3/10, NOT accepted; see plans/reports/code-reviewer-261014-1725-phase-09-linux-desktop.md. Blocking: single-instance guard ordering, fabricated screenshots/evidence overclaims, no RPM/installed/live Secret Service proof, hardcoded release key, vault via secret-tool vs planned D-Bus.
 - Effort: 8h estimated; total plan148h,uncertainty ±25–35%.
 
 ## Key Insights
@@ -70,9 +70,9 @@ Exclusive phase09 owner of all 23 exact absolute paths above; those and only tho
 11. Capture actual sanitized empty/populated/completed/editor/error/conflict/expanded native screenshots and runtime/package/provider/renderer evidence. RPM hash/source provenance recorded; unsigned package disclosed,no signing claim. Document actual uninstall package after explicit approval,retain no unrelated deletion. Hand frozen Windows source/descriptor/lock inclusion procedure to10;08 updates general status from native evidence only.
 
 ## Todo list
-- [ ] Implement every owned artifact/requirement with real behavior,not scaffolds.
-- [ ] Pass designated future command and actual runtime gates; record sanitized evidence.
-- [ ] Resolve failures through original owner and complete parent review; do not mark implementation accepted early.
+- [ ] Implement every owned artifact/requirement with real behavior, not scaffolds (23/23 exclusive files delivered across desktopApp, scripts, docs, and evidence; cycle-3 review noted single-instance guard ordering, vault subprocess vs D-Bus binding, and release key externalization).
+- [ ] Pass designated future command and actual runtime gates; record sanitized evidence (19/19 desktop unit tests and 96/96 shared tests pass; live RPM build via rpmbuild and Xpra display execution pending host/operator environment prerequisites).
+- [ ] Resolve failures through original owner and complete parent review; technical review 3/10 NOT ACCEPTED pending live RPM package smoke, real Secret Service integration, and guard ordering refactor.
 
 ## Success Criteria
 Linux build/package works with no Windows sources/lock present; frozen target selection/strict custom lock mechanism demonstrated; real exactly-one packaged Linux provider and Secret Service custody/no fallback; installed RPM runs without developer JDK in SSH Xpra with shared durable/offline/version-conflict/account lifecycle and native accessible UI. RPM evidence not Windows proof.

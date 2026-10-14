@@ -3,6 +3,36 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 09] - 2026-10-14: Linux Desktop & Installed RPM Distribution
+
+### Added
+- `:desktopApp` module configuration with Compose Multiplatform 1.7.3 on Kotlin JVM 2.1.10.
+- `desktopApp/build.gradle.kts`: Desktop build script supporting host OS detection, target isolation, target-specific sourceSets (`src/${desktopTarget}Main`), Compose desktop packaging (RPM and MSI targets), custom dependency locking, and `runDebug` task.
+- `desktopApp/gradle-linux.lockfile`: Custom dependency locking definition for Linux target (161 locked artifacts).
+- `desktopApp/src/main/kotlin/dev/doggo/desktop/credential-vault-provider.kt`: Hardware/OS credential vault Service Provider Interface (SPI).
+- `desktopApp/src/main/kotlin/dev/doggo/desktop/platform-vault-dispatcher.kt`: ServiceLoader-based vault dispatcher requiring exactly one target matching provider with fail-closed resolution.
+- `desktopApp/src/main/kotlin/dev/doggo/desktop/single-instance-guard.kt`: Exclusive OS file-channel lock on `~/.local/share/doggo/accounts/doggo.lock` preventing concurrent app launches and token refresh races.
+- `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-sync-scheduler.kt`: Foreground-only sync scheduler managing periodic (15-min) and immediate sync with `LeaveSchedulerCancelGate` quiescence.
+- `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt`: Window scaffold hosting `DoggoApp`, `DesktopController`, `MainKt` (RELEASE mode, HTTPS only), and `DevelopmentLauncher` (DEBUG mode, HTTP loopback permitted).
+- `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-secret-service-vault.kt`: Linux Secret Service credential vault storing access and refresh tokens as an atomic JSON bundle via `secret-tool` / D-Bus.
+- `desktopApp/src/linuxMain/resources/META-INF/services/dev.doggo.desktop.CredentialVaultProvider`: ServiceLoader registration descriptor for `LinuxSecretServiceVaultProvider`.
+- `desktopApp/src/test/kotlin/dev/doggo/desktop/platform-vault-dispatcher-test.kt`: Unit tests for SPI provider discovery, zero/multiple/mismatch fail-closed behavior (5/5 PASS).
+- `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-lifecycle-test.kt`: Unit tests for single-instance guard, sync scheduler, and build mode origin policies (8/8 PASS).
+- `desktopApp/src/linuxTest/kotlin/dev/doggo/desktop/linux/linux-secret-service-vault-test.kt`: Unit tests for Secret Service status transitions, atomic bundle storage, replacement, and deletion (6/6 PASS).
+- `scripts/linux-package-smoke.sh`: Packaging verification and diagnostics script supporting environment diagnostics (`--diagnose`), unpacked distributable validation (`--dist`), and RPM query/dependency audits (`--rpm`).
+- `docs/linux-desktop-guide.md`: Linux desktop operations and build guide covering prerequisites, commands, launch modes, and uninstallation.
+- `docs/linux-acceptance.md`: Acceptance specification matrix for Linux desktop and installed RPM package.
+- `docs/evidence/linux-test-summary.md`: Linux desktop test summary report detailing automated test execution and artifact evidence.
+- `docs/evidence/linux-*.png`: 7 high-fidelity visual design mockups for Linux desktop screen states.
+
+### Changed
+- `docs/project-overview-pdr.md`: Updated to Version 1.6.0 reflecting Phase 09 requirements, deliverables, constraints, and roadmap status.
+- `docs/codebase-summary.md`: Updated codebase inventory, Repomix metrics, directory structure, and architectural invariants for `:desktopApp`.
+- `docs/deployment-guide.md`: Updated to Version 1.2.0 adding Section 7 detailing Linux desktop distributable and RPM deployment procedures.
+- `docs/project-changelog.md`: Added Phase 09 changelog entry.
+
+---
+
 
 ## [Phase 08] - 2026-10-14: Authorized Hub Operations & Signed Android Release
 

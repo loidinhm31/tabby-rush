@@ -1,9 +1,9 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
 Last Updated: 2026-10-14
-Document Version: 1.5.0
+Document Version: 1.6.0
 Status: Active
-Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
+Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md)
 
 ---
 
@@ -13,7 +13,7 @@ Doggo is an Android-first shared Compose Multiplatform application designed for 
 
 The project prioritizes a clean multiplatform architecture, where the core domain logic, state management, and user interface are planned in Kotlin Multiplatform and Compose Multiplatform:
 1. **Android Application (`androidApp/`)**: Native mobile client delivered in source (Phase 07); AGP bytecode compilation, instrumented tests, and runtime device gates pending host SDK provisioning in Phase 08.
-2. **Desktop Application (`desktopApp/`)**: Planned desktop targets for native Linux RPM (Phase 09) and Windows MSI (Phase 10).
+2. **Desktop Application (`desktopApp/`)**: Native Linux desktop target delivered in source and standalone distributable (Phase 09), featuring Secret Service hardware/OS vault SPI, SingleInstanceGuard, DesktopSyncScheduler, and packaging smoke runner; live RPM packaging and interactive Xpra session pending operator prerequisites. Windows MSI planned for Phase 10.
 3. **Headless Development Infrastructure**: Immediate development, IDE execution, and emulator testing on headless Fedora Linux servers via secure Xpra virtual display sessions (delivered in Phase 01).
 
 ---
@@ -29,7 +29,7 @@ The project prioritizes a clean multiplatform architecture, where the core domai
 | **FR-03** | Aggregate Metrics | The UI displays total, active, and completed task counts dynamically reflecting current filters. |
 | **FR-04** | Cloud Synchronization | Client syncs tasks with the backend service according to the contracts frozen in Phase 02. |
 | **FR-05** | Local State Handling | Task mutations update local state; pending drafts survive transient network faults. |
-| **FR-06** | Secure Authentication | Reuses Glean Hub auth service with single-flight refresh, generation fencing, no automatic POST replays, and Android Keystore–protected vault. |
+| **FR-06** | Secure Authentication | Reuses Glean Hub auth service with single-flight refresh, generation fencing, no automatic POST replays, and platform hardware/OS vaults (Android Keystore on mobile; Freedesktop Secret Service on Linux). |
 
 ### 2.2 Non-Functional Requirements (NFR)
 
@@ -234,19 +234,49 @@ The 25 Phase 07 deliverables are fully enumerated in the artifact inventory at [
 
 ---
 
-## 10. Technical Constraints & Dependencies
+## 10. Phase 09 Requirements & Acceptance: Linux Desktop & Installed RPM
 
-1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
-2. **JDK Requirements**: AGP 8.x requires a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for AGP Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
-3. **Android SDK Requirements**: AGP bytecode compilation and Android instrumented tests require Android SDK 35 (`cmdline-tools;latest`, `platforms;android-35`, `platform-tools`, emulator) and interactive license acceptance (`sdkmanager --licenses`).
-4. **Interactive Licensing**: Android SDK licenses must be accepted interactively via `sdkmanager --licenses`; automated blanket acceptance is prohibited.
-5. **Interactive GUI Acceptance**: Full visual verification of Android Studio and the emulator framebuffer requires interactive remote workstation attachment via `xpra attach ssh://.../100`.
-6. **Live Database Testing**: Full backend acceptance requires a live MongoDB daemon (standalone or replica set) accessible via `MONGO_TEST_URI`.
-7. **Instrumented & Hardware Testing**: Keystore encryption and Android Room verification require an active Android device or emulator with Google Play / AOSP platform image.
+Phase 09 delivers the desktop application module (`:desktopApp`) targeting Linux x86_64 with Compose Multiplatform 1.7.3, hardware/OS credential custody via Freedesktop Secret Service, foreground sync coordination, single-instance profile locking, and fail-closed account leave lifecycle.
+
+### 10.1 Linux Desktop Requirements
+- **FR-DSK-01 (Target Isolation & Locked Tooling)**: `desktopTarget` defaults to detected host OS (`linux`); explicit target mismatches fail before dependency resolution. Locked dependencies defined in `desktopApp/gradle-linux.lockfile` (161 locked artifacts). Packaged binaries contain Linux provider only with zero Windows references.
+- **FR-DSK-02 (Hardware/OS Vault SPI & ServiceLoader Dispatcher)**: Extensible `CredentialVaultProvider` SPI discovered via Java `ServiceLoader`. `PlatformVaultDispatcher` requires exactly one provider matching the active desktop target; zero, multiple, or mismatched providers fail closed with explicit exception. Plaintext token file fallback is strictly prohibited.
+- **FR-DSK-03 (Freedesktop Secret Service Vault Custody)**: `LinuxSecretServiceVault` stores access and refresh tokens as an atomic JSON bundle via Freedesktop Secret Service (`secret-tool` / D-Bus). Unlocked keyring status represented faithfully; missing daemon fails closed (`UNAVAILABLE`).
+- **FR-DSK-04 (Single-Instance Profile Guard)**: `SingleInstanceGuard` acquires exclusive OS file-channel lock on `~/.local/share/doggo/accounts/doggo.lock` before initializing vault or database. Second launch exits immediately without touching database or racing refresh. Lock file is retained across exits to prevent inode recycling races.
+- **FR-DSK-05 (Foreground Sync Scheduling & Quiescence)**: `DesktopSyncScheduler` coordinates periodic (15-min) and immediate sync within the window coroutine scope; implements `LeaveSchedulerCancelGate` to cancel and await active sync jobs before account leave or wipe.
+- **FR-DSK-06 (Immutable Modes & Packaging Smoke Runner)**: Default entrypoint `MainKt` enforces `BuildMode.RELEASE` (HTTPS only). `DevelopmentLauncher` enables `BuildMode.DEBUG` (HTTP loopback permitted) via `:desktopApp:runDebug`. `scripts/linux-package-smoke.sh` audits distributable bundle, RPM metadata, and absence of foreign platform classes.
+
+### 10.2 Phase 09 Deliverables & Status Distinction
+
+| Category | Deliverable Summary | Verification Status |
+|---|---|---|
+| Desktop Build & Tooling (3 files) | `desktopApp/build.gradle.kts`, `desktopApp/gradle-linux.lockfile`, `scripts/linux-package-smoke.sh` | Implemented; Kotlin JVM 2.1.10, Compose 1.7.3, 161 locked artifacts, smoke runner syntax verified. |
+| Common Desktop Source (5 files) | `main.kt`, `credential-vault-provider.kt`, `platform-vault-dispatcher.kt`, `desktop-sync-scheduler.kt`, `single-instance-guard.kt` | Implemented; ServiceLoader SPI, file lock guard, foreground scheduler, and RELEASE/DEBUG entrypoints. |
+| Linux Target Source & SPI (2 files) | `linux-secret-service-vault.kt`, `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` | Implemented; Freedesktop Secret Service client, atomic JSON payload, ServiceLoader descriptor. |
+| Desktop Unit Test Suites (3 files) | `platform-vault-dispatcher-test.kt`, `desktop-lifecycle-test.kt`, `linux-secret-service-vault-test.kt` | Implemented; 19/19 unit tests PASS via `./gradlew :desktopApp:test`. |
+| Desktop Acceptance & Runbooks (3 files) | `docs/linux-desktop-guide.md`, `docs/linux-acceptance.md`, `docs/evidence/linux-test-summary.md` | Published; architecture, runbooks, acceptance criteria, and test execution evidence. |
+| Visual Design Baselines (7 PNGs) | `docs/evidence/linux-*.png` | Visual design mockups for desktop screen states conforming to ForumFlash light theme. |
+| Standalone Distributable Bundle | `desktopApp/build/compose/binaries/main/app/Doggo/` | Assembled and statically inspected via smoke runner (`bin/Doggo` executable verified; live launch without JDK unrun). |
+| **Live RPM Packaging & System Install** | `:desktopApp:packageRpm`, `sudo dnf install` | **PENDING**: Blocked by absent `rpmbuild` (`rpm-build` package) on host and interactive sudo; deferred to operator setup. |
+| **Live D-Bus / Secret Service Session** | Running desktop under active D-Bus session and Xpra framebuffer capture. | **PENDING**: Requires interactive Xpra desktop attachment (`xpra attach`) with unlocked GNOME Keyring. |
 
 ---
 
-## 11. Traceability & Phased Roadmap
+## 11. Technical Constraints & Dependencies
+
+1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
+2. **JDK Requirements**: AGP 8.x and Compose Desktop require a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
+3. **Android SDK Requirements**: AGP bytecode compilation and Android instrumented tests require Android SDK 35 (`cmdline-tools;latest`, `platforms;android-35`, `platform-tools`, emulator) and interactive license acceptance (`sdkmanager --licenses`).
+4. **Interactive Licensing**: Android SDK licenses must be accepted interactively via `sdkmanager --licenses`; automated blanket acceptance is prohibited.
+5. **Interactive GUI Acceptance**: Full visual verification of Android Studio, emulator framebuffer, and desktop Xpra windowing requires interactive remote workstation attachment via `xpra attach ssh://.../100`.
+6. **Live Database Testing**: Full backend acceptance requires a live MongoDB daemon (standalone or replica set) accessible via `MONGO_TEST_URI`.
+7. **Instrumented & Hardware Testing**: Keystore encryption and Android Room verification require an active Android device or emulator with Google Play / AOSP platform image.
+8. **Linux Packaging Dependencies**: Compiling RPM native distributions (`:desktopApp:packageRpm`) requires `rpm-build` (`rpmbuild` executable); installing requires administrative (`sudo`) access.
+9. **Secret Service Daemon**: Hardware/OS credential custody on Linux requires an active D-Bus session bus (`DBUS_SESSION_BUS_ADDRESS`) and an unlocked Secret Service provider (`gnome-keyring-daemon` or `ksecretservice`).
+
+---
+
+## 12. Traceability & Phased Roadmap
 
 Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
@@ -257,4 +287,5 @@ Progress across the Doggo project is tracked in the living [Project Roadmap](./p
 - **Phase 06 Shared Compose UI & Accessible Light Theme**: Shared Compose UI components, responsive compact/expanded layout, light theme palette with verified WCAG 2.1 AA contrast, transient password protection, and UI semantic test suite implemented across 15 files (5 conditional font/license files omitted per provenance audit; 96 :shared:jvmTest tests pass under lenient dependency verification; marked complete administratively; technical review 6.5/10 NOT ACCEPTED with documented integration gaps deferred to Phase 07).
 - **Phase 07 Android Composition & Runtime Integration**: Native Android client module, process container, WorkManager background sync, debug network security config, manifest hardening, fault-injection proxy, smoke runner, and authored instrumented test suites delivered across 25 artifacts (Android source delivered; JVM regression suite 96/96 PASS; AGP bytecode compilation, connected device tests, and live framebuffer capture pending host SDK provisioning in Phase 08).
 - **Phase 08 Authorized Hub Operations & Signed Android Release**: Operational tooling, release security auditor (`scripts/release-security-check.mjs`), live strict smoke runner (`scripts/hub-live-smoke.mjs`), mongosh recovery script (`scripts/hub-strict-recovery.js`), deployment guide, security & recovery architecture, release acceptance specification, and evidence reports implemented across 20 artifacts (Tooling & harnesses operational; live bytecode compilation, binary signing verification, and live device acceptance gated on host SDK provisioning and Phase 07 defect remediation).
-- **Phases 09–10 (Upcoming)**: Linux RPM and Windows MSI packaging.
+- **Phase 09 Linux Desktop & Installed RPM Distribution**: Native Linux desktop module (`:desktopApp`), Secret Service hardware/OS vault SPI (`CredentialVaultProvider`), ServiceLoader dispatcher (`PlatformVaultDispatcher`), `SingleInstanceGuard` file-channel lock, `DesktopSyncScheduler` foreground sync coordination, packaging smoke runner (`scripts/linux-package-smoke.sh`), and unit test suites implemented across 23 artifacts (19/19 desktop tests PASS; standalone distributable assembled and inspected; live RPM packaging, installed smoke test, and interactive D-Bus session pending operator prerequisites).
+- **Phase 10 (Upcoming)**: Windows desktop distribution and MSI packaging.

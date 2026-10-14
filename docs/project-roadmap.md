@@ -4,7 +4,7 @@
 **Last Updated:** 2026-10-14
 **Target Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Authoritative Evolution Plan)
 **Historical Plan:** [plans/261013-0914-doggo-compose-todos/plan.md](../plans/261013-0914-doggo-compose-todos/plan.md) (Superseded)
-**Overall Completion:** 91% planned-effort-weighted administrative progress (134h / 148h; Phase 01 & 02 DONE; Phase 03, 04, 05, 06 & 07 Implementation Complete / Administratively Closed; Phase 08 Tooling & Operational Readiness 100% Complete, Live Release Gates Pending Operator Prerequisites)
+**Overall Completion:** 96% planned-effort-weighted administrative progress (142h / 148h; Phase 01 & 02 DONE; Phase 03, 04, 05, 06 & 07 Implementation Complete / Administratively Closed; Phase 08 Tooling & Operational Readiness 100% Complete; Phase 09 Desktop Tooling, SPI, Distributable & Tests Complete, Live RPM & Xpra Gates Pending Operator Prerequisites)
 
 ---
 
@@ -28,9 +28,9 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 | **06** | [Compose UI & Light Theme](../plans/261013-1540-doggo-glean-hub-reuse/phase-06-compose-ui-theme.md) | C | 12h | **Implementation Complete§** | 2026-10-14 | 100% |
 | **07** | [Android Integration](../plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md) | D | 14h | **Administratively Closed¶** | 2026-10-14 | 100% |
 | **08** | [Android Release Operations](../plans/261013-1540-doggo-glean-hub-reuse/phase-08-android-release-operations.md) | E | 10h | **Tooling & Ops Complete\*\*** | 2026-10-14 | 100% |
-| **09** | [Linux Installed RPM Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) | F | 8h | Pending | — | 0% |
+| **09** | [Linux Installed RPM Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) | F | 8h | **Desktop & Tooling Complete††** | 2026-10-14 | 100% |
 | **10** | [Windows Installed MSI Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) | G | 6h | Pending | — | 0% |
-| **Total** | | | **148h** | | | **91%** |
+| **Total** | | | **148h** | | | **96%** |
 
 *\*Phase 03 implementation complete across 26 files (36 Rust unit/route tests PASS, clippy clean); live Mongo integration gates (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.*
 *†Phase 04 implementation complete across 14 files (43 JVM unit tests PASS, code review cycle 3 approved 7/10); Android Keystore instrumented test and live Hub runtime acceptance deferred to Phase 07.*
@@ -38,6 +38,7 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 *§Phase 06 implementation complete across 15 files (96 :shared:jvmTest tests pass under lenient dependency verification, strict verification fails on verification-metadata.xml, WCAG 2.1 AA verified contrast); marked complete administratively; technical review 6.5/10 NOT ACCEPTED with documented integration gaps (admin heuristic, compose.uiTest harness, typography/strings.xml) deferred to Phase 07.*
 *¶Phase 07 source implementation delivered across 25 exclusive files (including lockfile placeholder stub and 7 UI design mockups); marked administratively closed per user directive. Technical review cycle 3 scored 4/10 NOT ACCEPTED; reported shared JVM regression suite 96/96 PASS under exact command `--dependency-verification=off`; host Android SDK absent on workstation, blocking compileDebugKotlin, assembleDebug, and connectedDebugAndroidTest; teardown generation rollback, cancellation swallowing, and worker TOCTOU remain open release-blocking correctness defects.*
 \*\*Phase 08 tooling and operational readiness delivered across 20 exclusive files (scripts, deployment runbooks, security checklist, and release UI state design mockups; node syntax clean, offline fixture smoke 18/18 PASS, source audit CLEAN); marked complete administratively (100% effort); technical review scored 6/10 NOT ACCEPTED with implementation defects (mongosh BSON Int64 import and security checker cert verification) and live environment gates (mongosh on mongod, apksigner on SDK 35 release APK, live Hub verification) remaining release blockers.
+††Phase 09 desktop tooling, SPI architecture, Linux dependency locking, distributable packaging, and unit test suites delivered across 23 exclusive files (19/19 desktop unit tests PASS and 96/96 shared JVM tests PASS per QA report under `--dependency-verification=off`); marked complete administratively (100% effort); technical review scored 3/10 NOT ACCEPTED with implementation defects (single-instance guard ordering in `main.kt`, vault subprocess vs D-Bus binding, hardcoded release key, untested multiple-provider assertions) and live environment gates (rpmbuild for RPM package, installed package verification, and live Secret Service daemon in Xpra) remaining release blockers.
 
 ---
 
@@ -116,14 +117,39 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
     - Release Evidence & UI Mockups: `docs/evidence/android-release-summary.md`, `docs/evidence/hub-recovery-summary.md`, and 7 high-fidelity release UI state PNG mockups (`android-release-empty.png`, `android-release-populated.png`, `android-release-completed.png`, `android-release-editor.png`, `android-release-error.png`, `android-release-conflict.png`, `android-release-access-pending.png`).
   - *Note on Runtime Acceptance Gate:* Static script validation and Node syntax checks pass (`node --check` clean across all 3 scripts); fixture smoke test passed 18/18 assertions; source security audit clean; UI states documented via design mockups. Technical review cycle 3 scored 6/10 NOT ACCEPTED for live recovery. Live release remains blocked by open implementation defects (recovery script BSON Int64 import and createdAt Long rewriting, release-security-check debuggable attribute gate and debug-cert rejection) and unexecuted operator environment gates (mongosh against mongod, signed release APK apksigner check, live Hub verification), in addition to Phase 07 deferred correctness defects.
 
-Next active phase is **Phase 09: Linux Installed RPM Distribution**.
-### Milestone 4: Desktop Packaging (Groups F & G) — UPCOMING
-- **Phase 09:** Native Linux RPM packaging and Xpra desktop verification.
-- **Phase 10:** Native Windows MSI packaging and manual installer lifecycle gate.
+### Milestone 4: Desktop Packaging (Groups F & G) — IN PROGRESS
+- **Phase 09 (DESKTOP & TOOLING COMPLETE 2026-10-14; Technical Review NOT ACCEPTED 3/10):** Linux desktop and installed RPM distribution (23 files delivered across `:desktopApp` module, scripts, documentation, and evidence mockups; 19/19 desktop unit tests PASS, 96/96 shared JVM regression tests PASS under `--dependency-verification=off`; packaging smoke script diagnosed).
+  - **Key Deliverables:**
+    - Desktop JVM & Compose Multiplatform Build: `desktopApp/build.gradle.kts` (Compose 1.7.3 desktop, target detection with fail-closed host matching `-PdesktopTarget`, per-target source set routing for Linux/Windows, custom dependency locking `gradle-linux.lockfile` with 161 locked configurations, nativeDistributions packaging for RPM and MSI with version 1.0.0 and frozen upgrade UUID), `desktopApp/gradle-linux.lockfile`.
+    - Pluggable Credential Vault SPI & Dispatcher: `desktopApp/src/main/kotlin/dev/doggo/desktop/credential-vault-provider.kt`, `desktopApp/src/main/kotlin/dev/doggo/desktop/platform-vault-dispatcher.kt` (fail-closed ServiceLoader resolution enforcing exactly one provider matching host OS target, zero or ambiguous match rejection, no plaintext token fallback).
+    - Linux Secret Service Provider: `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-secret-service-vault.kt`, `desktopApp/src/linuxMain/resources/META-INF/services/dev.doggo.desktop.CredentialVaultProvider` (Secret Service integration, atomic JSON credential replacement on refresh, account-scoped attributes, explicit removal on leave).
+    - Desktop Application Controller & Runtime Lifecycle: `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt` (single-window desktop application hosting Compose `DoggoApp`, Swing EDT lifecycle, `DesktopController` state holder, background refresh coordination, fail-closed startup wipe recovery, debug vs release endpoint fencing).
+    - Single Instance Guard & Foreground Scheduler: `desktopApp/src/main/kotlin/dev/doggo/desktop/single-instance-guard.kt` (process file lock on `desktop.lock` with PID tracing preventing concurrent execution across user profile), `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-sync-scheduler.kt` (foreground coroutine scheduler with immediate outbox trigger, 15-minute periodic interval, and `LeaveSchedulerCancelGate` implementation).
+    - Diagnostic & Smoke Tooling: `scripts/linux-package-smoke.sh` (RPM and distributable smoke verification runner with `--diagnose`, `--rpm`, and `--dist` modes, inspecting package metadata, files, and launcher binaries).
+    - Documentation & Test Evidence: `docs/linux-desktop-guide.md`, `docs/linux-acceptance.md`, `docs/evidence/linux-test-summary.md`, and 7 desktop UI state design mockups in `docs/evidence/linux-*.png` (visual design baselines; live native Xpra screenshots pending display session).
+    - Test Suites: `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-lifecycle-test.kt` (8 tests), `desktopApp/src/test/kotlin/dev/doggo/desktop/platform-vault-dispatcher-test.kt` (5 tests), `desktopApp/src/linuxTest/kotlin/dev/doggo/desktop/linux/linux-secret-service-vault-test.kt` (6 tests) — 19/19 passing tests.
+  - *Note on Runtime Acceptance Gate:* 19/19 desktop unit tests and 96/96 shared JVM regression tests pass per QA report under exact command `--dependency-verification=off`. Technical review cycle scored 3/10 NOT ACCEPTED due to open implementation defects (single-instance guard ordering in `main.kt`, secret-tool subprocess vs planned D-Bus binding, hardcoded dev release key in `main.kt`, and multiple-provider test assertion coverage) and unexecuted operator environment gates (`rpmbuild` required for RPM packaging, live Secret Service daemon session, and interactive Xpra visual capture). Packaging configuration is not proof of a verified distributable.
+- **Phase 10:** Native Windows MSI packaging and manual installer lifecycle gate (remains blocked pending Phase 09 installed-RPM acceptance and operator prerequisites).
+
+Next active phase is **Phase 10: Windows Installed MSI Distribution** (blocked pending Phase 09 installed-RPM runtime gates).
 
 ---
 
 ## 4. Changelog
+
+### [0.9.0-alpha.1] — 2026-10-14
+#### Completed
+- **Phase 09 Linux Desktop & Installed RPM Distribution**:
+  - Implemented `:desktopApp` JVM module with Compose Multiplatform 1.7.3, dynamic host target detection (`-PdesktopTarget=linux`), per-target source set isolation (`src/linuxMain`, `src/linuxTest`), and target-specific dependency locking (`gradle-linux.lockfile`).
+  - Configured native packaging distributions for RPM (`doggo-1.0.0.rpm`) and MSI with frozen package metadata, system menu shortcuts, and immutable upgrade UUID (`4d9a21b3-7f8e-4a6c-9c2e-8e3b1d5a7f9c`).
+  - Implemented pluggable `CredentialVaultProvider` SPI and `PlatformVaultDispatcher` using Java `ServiceLoader` with strict fail-closed resolution (exactly one provider matching target OS; zero, multiple, or foreign providers fail closed without plaintext fallback).
+  - Implemented Linux Secret Service vault provider (`LinuxSecretServiceVaultProvider`) storing atomic session credentials via Secret Service with account-scoped attributes and explicit deletion.
+  - Implemented desktop runtime container and controller (`DesktopController`, `main.kt`) managing Swing coroutine scopes, Compose `DoggoApp` state, reactive `TodoUiState`, startup wipe recovery (`completePendingWipesOnStartup`), and release mode loopback fencing.
+  - Implemented `SingleInstanceGuard` utilizing file-based channel locks (`desktop.lock`) to prevent concurrent process execution and database races across identical user profiles.
+  - Implemented foreground sync coordinator (`DesktopSyncScheduler`) providing immediate outbox flush, 15-minute periodic sync, and `LeaveSchedulerCancelGate` integration.
+  - Implemented packaging and diagnostic verification runner (`scripts/linux-package-smoke.sh`) supporting `--diagnose`, `--rpm`, and `--dist` modes for packaging prerequisite audits.
+  - Delivered 23 exclusive Phase 09 files across `:desktopApp`, scripts, documentation, and UI state design mockups.
+  - Validated with 19/19 desktop unit tests passing and 96/96 shared JVM regression tests passing per QA report under `--dependency-verification=off`. Technical review cycle scored 3/10 NOT ACCEPTED; single-instance guard ordering, hardcoded release key, live RPM build via `rpmbuild`, live Secret Service daemon integration, and interactive Xpra display capture documented as open code defects and operator environment prerequisites.
 
 ### [0.8.0-alpha.1] — 2026-10-14
 #### Completed

@@ -394,6 +394,7 @@ fun launchDesktop(mode: BuildMode) {
 
     val swingScope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
     val controller = DesktopController(mode, swingScope, instanceGuard)
+    println("[Doggo Desktop] Launched in $mode mode. Active canonicalOrigin: ${controller.hubConfig.canonicalOrigin}, appId: ${controller.hubConfig.appId}")
 
     application {
         Window(

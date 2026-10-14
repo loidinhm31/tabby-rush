@@ -11,9 +11,9 @@
  *    - All traffic must be drained and writers quiesced. Requires CONFIRM_MAINTENANCE_QUIESCENCE=true.
  * 2. Fresh Epoch Allocation:
  *    - Generates a new external UUID v4 epoch (canonical lowercase). Never reuses or reopens a stale epoch.
- * 3. Isolated Canonical Namespace Provisioning:
- *    - Creates an entirely new collection namespace matching backend convention:
- *      `_strict_v1_<appIdLength>_<appId>_<epochWithoutHyphens>`
+ * 3. Target Collection Provisioning:
+ *    - Uses canonical collection namespace matching backend convention:
+ *      `app_<appId>` (e.g. `app_doggo`)
  *    - Creates exact scan index: { userId: 1, tableName: 1, rowId: 1 } with simple collation, not capped, no TTL.
  * 4. Sanitized Data Import:
  *    - Requires non-empty SOURCE_BACKUP_COLLECTION. Cannot publish an unseeded or empty epoch.
@@ -108,11 +108,10 @@ function validatePrerequisites() {
   }
 
   if (CONFIG.sourceCollection) {
-    if (CONFIG.sourceCollection.startsWith('_strict_v1_') ||
+    if (CONFIG.sourceCollection.startsWith('app_') ||
         CONFIG.sourceCollection === '_schemas' ||
-        CONFIG.sourceCollection.startsWith('system.') ||
-        CONFIG.sourceCollection.startsWith('app_')) {
-      errors.push("SOURCE_BACKUP_COLLECTION cannot be an active, internal, or system collection ('" + CONFIG.sourceCollection + "'). Must be an isolated staging collection.");
+        CONFIG.sourceCollection.startsWith('system.')) {
+      errors.push("SOURCE_BACKUP_COLLECTION cannot be an active app collection ('" + CONFIG.sourceCollection + "'), internal, or system collection. Must be an isolated staging collection (e.g. 'staging_doggo_restore' or 'backup_doggo').");
     }
   }
 
@@ -201,31 +200,32 @@ function runRecoveryInDatabase(db) {
 
   console.log('[PASS] Verified current registry epoch in _schemas: ' + schemaDoc.strictEpoch);
 
-  // Step 2: Allocate fresh epoch and new canonical namespace: _strict_v1_<appIdLength>_<appId>_<epochWithoutHyphens>
+  // Step 2: Allocate fresh epoch and staging collection
   var newEpoch = generateUuidV4();
   var cleanEpoch = newEpoch.replace(/-/g, '');
-  var targetCollectionName = '_strict_v1_' + CONFIG.appId.length + '_' + CONFIG.appId + '_' + cleanEpoch;
-  console.log('\n[Step 2/6] Allocating fresh canonical epoch and isolated target namespace...');
-  console.log('  New Epoch:         ' + newEpoch);
-  console.log('  Target Collection: ' + targetCollectionName);
+  var liveCollectionName = 'app_' + CONFIG.appId;
+  var stagingCollectionName = '_recovery_staging_' + CONFIG.appId + '_' + cleanEpoch;
+  var backupCollectionName = '_recovery_backup_' + CONFIG.appId + '_' + cleanEpoch;
+  console.log('\n[Step 2/6] Allocating fresh canonical epoch and isolated staging collection...');
+  console.log('  New Epoch:          ' + newEpoch);
+  console.log('  Live Collection:    ' + liveCollectionName);
+  console.log('  Staging Collection: ' + stagingCollectionName);
 
   if (CONFIG.dryRun) {
     console.log('[DRY-RUN] Dry run active; skipping collection creation, document imports, and CAS.');
     return;
   }
 
-  // Step 3: Create target collection and required indexes matching validate_strict_admission
-  console.log('\n[Step 3/6] Provisioning target collection and scan index...');
-  db.createCollection(targetCollectionName);
-  var targetCol = db.getCollection(targetCollectionName);
+  // Step 3: Create staging collection and required indexes matching validate_strict_admission
+  console.log('\n[Step 3/6] Provisioning isolated staging collection and scan index...');
+  db.createCollection(stagingCollectionName);
+  var stagingCol = db.getCollection(stagingCollectionName);
 
   // Exact scan index matching backend: { userId: 1, tableName: 1, rowId: 1 }
-  targetCol.createIndex(
-    { userId: 1, tableName: 1, rowId: 1 },
-    { name: 'scan_user_table_row' }
+  stagingCol.createIndex(
+    { userId: 1, tableName: 1, rowId: 1 }
   );
-  console.log('[PASS] Indexes provisioned successfully (scan_user_table_row).');
-
+  console.log('[PASS] Staging scan index provisioned successfully.');
   // Step 4: Import and sanitize source backup records
   console.log("\n[Step 4/6] Importing and sanitizing records from '" + CONFIG.sourceCollection + "'...");
   var importedCount = 0;
@@ -239,60 +239,101 @@ function runRecoveryInDatabase(db) {
 
   var cursor = sourceCol.find({});
   var batch = [];
-  while (cursor.hasNext()) {
-    var doc = cursor.next();
-    if (!validateTodoRecord(doc)) {
-      throw new Error("Record validation failed for rowId '" + (doc ? doc.rowId : 'unknown') + "'. Aborting recovery.");
-    }
+  try {
+    while (cursor.hasNext()) {
+      var doc = cursor.next();
+      if (!validateTodoRecord(doc)) {
+        throw new Error("Record validation failed for rowId '" + (doc ? doc.rowId : 'unknown') + "'. Aborting recovery.");
+      }
 
-    var sanitizedData = {};
-    if (!doc.deleted && doc.data) {
-      var rawCreatedAt = typeof doc.data.createdAt === 'number' ? doc.data.createdAt : (doc.data.createdAt.toNumber ? doc.data.createdAt.toNumber() : doc.data.createdAt);
-      sanitizedData = {
-        id: doc.data.id,
-        title: doc.data.title,
-        completed: Boolean(doc.data.completed),
-        createdAt: toBsonLong(rawCreatedAt)
+      var sanitizedData = {};
+      if (!doc.deleted && doc.data) {
+        var rawCreatedAt = typeof doc.data.createdAt === 'number' ? doc.data.createdAt : (doc.data.createdAt.toNumber ? doc.data.createdAt.toNumber() : doc.data.createdAt);
+        sanitizedData = {
+          id: doc.data.id,
+          title: doc.data.title,
+          completed: Boolean(doc.data.completed),
+          createdAt: toBsonLong(rawCreatedAt)
+        };
+      }
+
+      var sanitized = {
+        _id: doc.userId + ':' + doc.rowId,
+        userId: doc.userId,
+        tableName: 'todos',
+        rowId: doc.rowId,
+        data: sanitizedData,
+        revision: toBsonLong(1), // Explicit Int64 revision 1 for Hub compatibility
+        deleted: doc.deleted,
+        lastOp: null
       };
+
+      if (doc.deleted) tombstoneCount++;
+      else importedCount++;
+
+      batch.push(sanitized);
+
+      if (batch.length >= 500) {
+        stagingCol.insertMany(batch, { writeConcern: { w: 'majority', j: true } });
+        batch = [];
+      }
     }
 
-    var sanitized = {
-      _id: doc.userId + ':' + doc.rowId,
-      userId: doc.userId,
-      tableName: 'todos',
-      rowId: doc.rowId,
-      data: sanitizedData,
-      revision: toBsonLong(1), // Explicit Int64 revision 1 for Hub compatibility
-      deleted: doc.deleted,
-      lastOp: null
-    };
-
-    if (doc.deleted) tombstoneCount++;
-    else importedCount++;
-
-    batch.push(sanitized);
-
-    if (batch.length >= 500) {
-      targetCol.insertMany(batch, { writeConcern: { w: 'majority', j: true } });
-      batch = [];
+    if (batch.length > 0) {
+      stagingCol.insertMany(batch, { writeConcern: { w: 'majority', j: true } });
     }
+  } catch (importErr) {
+    console.error('[ERROR] Import failed; cleaning up staging collection: ' + stagingCollectionName);
+    try {
+      stagingCol.drop();
+    } catch (_) {}
+    throw importErr;
   }
 
-  if (batch.length > 0) {
-    targetCol.insertMany(batch, { writeConcern: { w: 'majority', j: true } });
-  }
-
-  var actualTargetCount = targetCol.countDocuments({});
-  if (actualTargetCount !== totalSourceCount) {
-    throw new Error('Import count mismatch! Source count ' + totalSourceCount + ' != target count ' + actualTargetCount);
+  var actualStagingCount = stagingCol.countDocuments({});
+  if (actualStagingCount !== totalSourceCount) {
+    try { stagingCol.drop(); } catch (_) {}
+    throw new Error('Import count mismatch! Source count ' + totalSourceCount + ' != staging count ' + actualStagingCount);
   }
 
   console.log('[PASS] Imported ' + importedCount + ' active records and ' + tombstoneCount + ' permanent tombstones (' + totalSourceCount + ' total).');
 
-  // Step 5: Rust Preflight Helper Assertion
-  console.log('\n[Step 5/6] Executing strong_sync_admission candidate preflight...');
-  executeAdmissionPreflight(CONFIG.appId, newEpoch);
+  // Step 5: Promote staging collection to live and execute candidate preflight
+  console.log('\n[Step 5/6] Promoting staging collection to live and running candidate preflight...');
+  var collNames = db.getCollectionNames();
+  var liveExists = collNames.indexOf(liveCollectionName) !== -1;
+  var livePreserved = false;
+  var stagingPromoted = false;
 
+  try {
+    if (liveExists) {
+      console.log("  Preserving existing live collection to '" + backupCollectionName + "'...");
+      db.getCollection(liveCollectionName).renameCollection(backupCollectionName);
+      livePreserved = true;
+    }
+    db.getCollection(stagingCollectionName).renameCollection(liveCollectionName);
+    stagingPromoted = true;
+
+    executeAdmissionPreflight(CONFIG.appId, newEpoch);
+  } catch (err) {
+    console.error('[ERROR] Promotion or admission preflight failed: ' + err.message);
+    if (stagingPromoted) {
+      try {
+        db.getCollection(liveCollectionName).renameCollection(stagingCollectionName + '_failed');
+      } catch (e) {
+        console.error('[WARN] Failed to rename failed live collection away: ' + e.message);
+      }
+    }
+    if (livePreserved) {
+      try {
+        console.log("  Restoring previous live collection from '" + backupCollectionName + "'...");
+        db.getCollection(backupCollectionName).renameCollection(liveCollectionName);
+      } catch (e) {
+        console.error('[CRITICAL] Failed to restore previous live collection: ' + e.message + '. Manual restoration required: rename ' + backupCollectionName + ' to ' + liveCollectionName);
+      }
+    }
+    throw err;
+  }
   // Step 6: Atomic Journaled Registry CAS on `_schemas`
   console.log('\n[Step 6/6] Executing atomic journaled registry CAS on _schemas collection...');
   var casResult;
@@ -322,6 +363,8 @@ function runRecoveryInDatabase(db) {
 
   var modified = casResult.modifiedCount !== undefined ? casResult.modifiedCount : casResult.nModified;
   if (modified !== 1) {
+    console.error('[CRITICAL ERROR] Registry CAS failed! modifiedCount=' + modified + '. Another operator or process may have updated _schemas.');
+    console.error('Operator action: Traffic remains BLOCKED. Live data is at ' + liveCollectionName + ', previous data preserved at ' + backupCollectionName + '. Reconcile registry and storage before resuming.');
     throw new Error(
       'Registry CAS failed! modifiedCount=' + modified + '. Stale old epoch or concurrent modification. Traffic remains BLOCKED.'
     );
@@ -330,7 +373,9 @@ function runRecoveryInDatabase(db) {
   console.log('\n================================================================');
   console.log('[SUCCESS] Strict-v1 Recovery Completed Successfully.');
   console.log('Active Epoch Promoted: ' + newEpoch);
-  console.log('Previous namespace retained intact (never dropped).');
+  if (liveExists) {
+    console.log('Previous live collection preserved as: ' + backupCollectionName);
+  }
   console.log('Mandatory next steps before unblocking traffic:');
   console.log('  1. Re-run strong_sync_admission against active epoch.');
   console.log('  2. Verify Hub strict bootstrap returns HTTP 200 with new epoch.');

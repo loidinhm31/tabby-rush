@@ -37,7 +37,7 @@ Strict apps register with an immutable, strict schema containing exclusively the
 2. **Server-Generated Epoch**:
    - Server creates a lowercase UUIDv4 epoch string (e.g. `550e8400-e29b-41d4-a716-446655440000`).
 3. **Storage Provisioning**:
-   - Creates isolated MongoDB collection: `_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>`.
+   - Targets designated MongoDB collection: `app_<appId>` (e.g. `app_doggo`).
    - Sets up compound scan index `{ userId: 1, tableName: 1, rowId: 1 }`.
    - Verifies collection is uncapped, has no custom validators, no TTL indexes, and simple/absent collation.
 4. **Registry Publication Last**:

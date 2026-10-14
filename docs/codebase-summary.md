@@ -327,7 +327,7 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 |---|---|---|
 | `hub-live-smoke.mjs` | `runLiveSmokeSuite()`, local fixture server | Automated strict-v1 integration smoke runner verifying health, admission read-back, auth session, structured push/pull with specific rowId assertions, base conflict, frozen replay, epochMismatch, and permanent empty tombstones. Features standalone `--fixture-test` offline mode (18/18 checks pass). |
 | `release-security-check.mjs` | `runReleaseSecurityAudit()`, `diagnoseSource()` | Fail-closed security auditor inspecting release APK signatures (v2/v3), explicit `allowBackup="false"`, `debuggable="false"`, `usesCleartextTraffic="false"`, non-main exported components rejection, networkSecurityConfig stripping, and static source secret scanning. |
-| `hub-strict-recovery.js` | `executeRecovery()`, `validateTodoRecord()` | Maintenance disaster recovery script for `mongosh` requiring `CONFIRM_MAINTENANCE_QUIESCENCE=true`, generating fresh UUID v4 epoch, provisioning canonical `_strict_v1_...` collection, resetting records to revision 1 with `lastOp = null`, maintaining permanent empty tombstones, and executing journaled Compare-And-Swap on `_schemas`. |
+| `hub-strict-recovery.js` | `executeRecovery()`, `validateTodoRecord()` | Maintenance disaster recovery script for `mongosh` requiring `CONFIRM_MAINTENANCE_QUIESCENCE=true`, generating fresh UUID v4 epoch, targeting target collection `app_<appId>`, resetting records to revision 1 with `lastOp = null`, maintaining permanent empty tombstones, and executing journaled Compare-And-Swap on `_schemas`. |
 
 ### 2.9 Desktop Application Module & Packaging Tooling (Phases 09–10)
 

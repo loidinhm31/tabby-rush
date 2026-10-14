@@ -3,6 +3,18 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [2026-10-15] - Direct Target Collection Migration (FR-STRICT-02)
+
+### Changed
+- Migrated Glean Hub `strict-v1` backend storage resolution from dynamic epoch-based formula (`_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>`) to direct application target collection (`app_<appId>`, e.g. `app_doggo`).
+- Updated `AppService::strict_collection_name` and `validate_strict_admission` in `glean-hub-sync` to validate and admit target collection `app_<appId>` with compound scan index `{ userId: 1, tableName: 1, rowId: 1 }`, uncapped storage, and no TTL indexes.
+- Reconciled MongoDB standalone topology check in admission preflight to handle both `isWritablePrimary` and `ismaster`.
+- Updated Doggo maintenance recovery script `scripts/hub-strict-recovery.js` to target `app_${CONFIG.appId}` with collision safeguards.
+- Rechecked Doggo shared KMP and Android client modules, confirming zero breaking changes and full strict-v1 protocol compatibility.
+- Added operator migration runbook: existing `_strict_v1_5_doggo_<cleanEpoch>` collections can be renamed in `mongosh` via `db.getCollection(oldCollectionName).renameCollection("app_doggo")` before running `strong_sync_admission`.
+
+---
+
 ## [Phase 10] - 2026-10-14: Native Windows DPAPI & Installed MSI Implementation
 
 ### Added

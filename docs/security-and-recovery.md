@@ -29,8 +29,8 @@
 ## 2. Hub Strict Persistence Invariants
 
 1. **Namespace Isolation**:
-   - Each strict-v1 application is partitioned into an epoch-scoped collection: `_strict_v1_<appIdLength>_<appId>_<epochWithoutHyphens>`.
-   - Legacy Glean Hub collections (`app_*`) are never queried, updated, or written to by strict endpoints.
+   - Each strict-v1 application is partitioned into a dedicated collection: `app_<appId>` (e.g. `app_doggo`).
+   - Legacy Glean Hub camelCase collections (`app<AppId>`) are never queried, updated, or written to by strict endpoints.
 2. **CAS & Tombstone Policy**:
    - Inserts: require `expectedRevision === 0` and produce revision 1.
    - Updates: require exact `expectedRevision === currentRevision`.

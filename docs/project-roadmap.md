@@ -227,7 +227,7 @@ All phase allocations are marked delivered (148h/148h planned-effort roll-up, no
 ### [0.3.0-alpha.1] — 2026-10-14
 #### Completed
 - **Phase 03 Doggo-only Strict Server & Legacy Isolation**:
-  - Implemented isolated strict-v1 schema registration, fail-closed admission helper, and legacy-only mode guard (`_strict_v1_*` namespace).
+  - Implemented isolated strict-v1 schema registration, fail-closed admission helper, and legacy-only mode guard targeting target collection (`app_<appId>`).
   - Implemented strong sync routes: `bootstrap`, `push`, and `pull` with exact CAS, single-mutation FIFO semantics, and replay confirmation nonces.
   - Implemented legacy isolation middleware rejecting strict-mode apps on legacy routes with non-401 status.
   - Delivered 26 files across Doggo scripts/docs and Glean Hub Sync plugin (models, services, routes, middleware, admission CLI binary).

@@ -138,7 +138,7 @@ flowchart TD
     StrictRoutes["Strict Routes\n(/api/v1/sync/:app_id/strong/{bootstrap,push,pull})"]
     AdminStrict["Admin Strict Registration\n(POST /api/v1/strict-apps)"]
     AdmissionHelper["Admission Validator\n(Exact index, topology, uncapped, no TTL)"]
-    MongoDB["MongoDB Dedicated Namespace\n(_strict_v1_5_doggo_<epoch>)"]
+    MongoDB["MongoDB Target Collection\n(app_doggo)"]
   end
 
   MainActivity --> UI
@@ -181,7 +181,7 @@ flowchart TD
 
 ### 4.1 Storage Namespace & Backend Isolation
 Strict sync completely segregates Doggo data from legacy Hub storage:
-- **Naming Pattern**: `_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>` (e.g. `_strict_v1_5_doggo_550e8400e29b41d4a716446655440000`).
+- **Naming Pattern**: `app_<appId>` (e.g. `app_doggo`).
 - **Document Key (`_id`)**: Exact composite key `userId:rowId` preventing cross-user collisions.
 - **Scan Index**: Exact compound index `{ userId: 1, tableName: 1, rowId: 1 }` with simple collation.
 - **Publication-Last Registration**: Schema entry published only after storage and indexes pass admission.
@@ -311,7 +311,7 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 3. **Privilege Separation**: Android Studio, emulator, and build tasks execute as unprivileged user (`loidinh`).
 4. **Credential Safety**: Authentication tokens and keystores are never written to version control; `.gitignore` strictly excludes `local.properties`, keystores, and credentials.
 5. **Memory-Only Unpersisted Secrets**: Passwords and raw credential tokens are excluded from logs, error envelopes, and toString representations.
-6. **Strict Storage Isolation**: Strict-mode collections (`_strict_v1_*`) are strictly unreachable by legacy sync routes, background cleanup jobs, and older Hub binaries.
+6. **Strict Storage Isolation**: Strict-mode collections (`app_<appId>`) are strictly unreachable by legacy sync routes, background cleanup jobs, and older Hub binaries.
 7. **Key Custody & Perms**: Provisioning outputs write API keys with strict `0600` file permissions; scripts support protected environment variables (`GLEAN_ADMIN_TOKEN`, `DOGGO_APP_KEY`) to prevent command-line argument exposure.
 8. **Opaque In-Memory Credential Custody**: Tokens are held in memory and persisted only through the platform-protected vault (Android Keystore, Linux Secret Service, or Windows current-user DPAPI). `StateFlow` and public state models emit only `AccountIdentity`, `AccountKey`, and `AuthState`; `CredentialBundle.toString()` redacts token strings.
 9. **Single-Flight Generation Fencing**: Foreground and background refresh calls are deduplicated into a single network operation; generation fencing discards stale async completions on quiesce or logout.

@@ -99,7 +99,7 @@ Phase 03 establishes backend strict synchronization support on Glean Hub, enforc
 
 ### 5.1 Strict Server Requirements
 - **FR-STRICT-01 (Strict Mode & Canonical Epoch)**: Opt-in `syncMode: "strict-v1"` registered via admin endpoint (`POST /api/v1/strict-apps`); server generates an immutable lowercase UUIDv4 epoch string before publishing the schema.
-- **FR-STRICT-02 (Storage Namespace Isolation)**: Dedicated collections using the exact pattern `_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>` with exact composite document key `_id: "userId:rowId"` and compound scan index `{ userId: 1, tableName: 1, rowId: 1 }`.
+- **FR-STRICT-02 (Storage Target Collection)**: Dedicated application collection using the direct pattern `app_<appId>` (e.g. `app_doggo`) with exact composite document key `_id: "userId:rowId"` and compound scan index `{ userId: 1, tableName: 1, rowId: 1 }`.
 - **FR-STRICT-03 (Fail-Closed Admission Preflight)**: Admission validation requires uncapped collection, no TTL index, no custom validator, simple or absent collation, and verified scan index before schema publication. A standalone CLI (`strong_sync_admission`) executes identical validation rules.
 - **FR-STRICT-04 (Atomic CAS Mutations)**: Single-document conditional writes enforce revision predicates (Create expected 0 -> rev 1 insert-only; Update expected current -> rev current+1 live filter; Delete -> rev current+1 compact tombstone with canonical empty data).
 - **FR-STRICT-05 (Durable Replay Confirmation)**: Replay of matching `(opId, digest)` mutations executes conditional write updating `confirmationNonce` under journaled write concern; confirmation requires `matched_count == 1`.

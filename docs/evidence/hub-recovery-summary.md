@@ -14,7 +14,7 @@ In Glean Hub strict-v1 synchronization, disaster recovery must strictly prevent 
 The recovery procedure implemented in `scripts/hub-strict-recovery.js` establishes the following architectural guarantees:
 1. **Writer Quiescence Before Mutation**: Recovery cannot proceed while live ingress traffic is permitted. `CONFIRM_MAINTENANCE_QUIESCENCE=true` is strictly required.
 2. **Fresh External UUID Epoch**: The script generates a new UUID v4 epoch (lowercase, canonical). It never reuses, reopens, or rolls back to a stale epoch.
-3. **Dedicated Canonical Target Namespace**: Records are imported into a fresh, isolated MongoDB collection matching backend conventions: `_strict_v1_${appId.length}_${appId}_${cleanEpoch}`. The previous collection is retained intact and never dropped or physically purged.
+3. **Dedicated Target Namespace**: Records are imported into the designated target MongoDB collection matching backend conventions: `app_${appId}`.
 4. **Mandatory Source Collection Validation**: Requires non-empty `SOURCE_BACKUP_COLLECTION`. Publishing an unseeded or empty epoch is strictly prohibited. Source collection must not be the active namespace.
 5. **Active Record Normalization**: Active (non-deleted) records are reset to revision 1 with `lastOp = null`. Each record must contain a valid `userId` and match the schema.
 6. **Empty Tombstone Normalization**: Deleted records are imported with `deleted: true` and an empty data object (`data: {}`), ensuring tombstones remain permanent and compact.

@@ -33,7 +33,36 @@
 import http from 'node:http';
 import https from 'node:https';
 import crypto from 'node:crypto';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+
+function loadDotEnv() {
+  const envPath = resolve(process.cwd(), '.env');
+  if (existsSync(envPath)) {
+    try {
+      const content = readFileSync(envPath, 'utf8');
+      for (const line of content.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const idx = trimmed.indexOf('=');
+        if (idx > 0) {
+          const key = trimmed.slice(0, idx).trim();
+          let val = trimmed.slice(idx + 1).trim();
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          if (process.env[key] === undefined) {
+            process.env[key] = val;
+          }
+        }
+      }
+    } catch {
+      // ignore unreadable .env
+    }
+  }
+}
+loadDotEnv();
 
 const DEFAULT_TIMEOUT_MS = 10000;
 
@@ -498,7 +527,7 @@ async function runLiveSmoke(options) {
 
   // --- Suite 4: Strict-v1 Sync Protocol Operations ---
   console.log(`\n--- Suite 4: Strict Strong Sync Operations ---`);
-  const apiKey = process.env.DOGGO_API_KEY || (options['fixture-test'] ? 'valid_doggo_key' : '');
+  const apiKey = options['fixture-test'] ? 'valid_doggo_key' : (process.env.DOGGO_API_KEY || '');
   const testHeaders = {
     'X-App-Id': options['app-id']
   };

@@ -68,13 +68,22 @@ class DesktopController(
     val instanceGuard: SingleInstanceGuard
 ) {
     val accountFiles = JvmAccountFiles()
-    val origin = System.getenv("APPROVED_HUB_ORIGIN")
-        ?: System.getProperty("doggo.hub.origin")
-        ?: if (mode == BuildMode.DEBUG) "http://127.0.0.1:3000" else "https://hub.example.com"
+    val dotEnv = DotEnvLoader.load(baseDir = accountFiles.baseDir)
+    val origin = System.getenv("APPROVED_HUB_ORIGIN")?.takeIf { it.isNotBlank() }
+        ?: System.getProperty("doggo.hub.origin")?.takeIf { it.isNotBlank() }
+        ?: dotEnv["APPROVED_HUB_ORIGIN"]?.takeIf { it.isNotBlank() }
+        ?: if (mode == BuildMode.DEBUG) "http://127.0.0.1:3000" else throw IllegalStateException(
+            "Release mode requires an approved HTTPS origin. Set APPROVED_HUB_ORIGIN in environment or .env, or system property doggo.hub.origin."
+        )
+    val apiKey = System.getenv("DOGGO_API_KEY")?.takeIf { it.isNotBlank() }
+        ?: dotEnv["DOGGO_API_KEY"]?.takeIf { it.isNotBlank() }
+        ?: if (mode == BuildMode.DEBUG) "" else throw IllegalStateException(
+            "Release mode requires an application API key. Set DOGGO_API_KEY in environment or .env."
+        )
     val hubConfig = HubConfig(
         canonicalOrigin = origin,
         appId = "doggo",
-        appApiKey = System.getenv("DOGGO_API_KEY") ?: "",
+        appApiKey = apiKey,
         buildMode = mode
     )
     val vault = PlatformVaultDispatcher.createVault(accountFiles)

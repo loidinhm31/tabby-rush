@@ -1,9 +1,48 @@
+import java.io.File
+import java.net.URI
+
 plugins {
     alias(libs.plugins.android.application)
     kotlin("android")
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
 }
+
+fun loadDotEnv(rootDir: File): Map<String, String> {
+    val envFile = File(rootDir, ".env")
+    if (!envFile.exists() || !envFile.isFile) return emptyMap()
+    val env = mutableMapOf<String, String>()
+    envFile.forEachLine(Charsets.UTF_8) { rawLine ->
+        val line = rawLine.trim()
+        if (line.isNotEmpty() && !line.startsWith("#")) {
+            val idx = line.indexOf('=')
+            if (idx > 0) {
+                val key = line.substring(0, idx).trim()
+                var value = line.substring(idx + 1).trim()
+                if (value.length >= 2 && (
+                    (value.startsWith("\"") && value.endsWith("\"")) ||
+                    (value.startsWith("'") && value.endsWith("'"))
+                )) {
+                    value = value.substring(1, value.length - 1)
+                }
+                env[key] = value
+            }
+        }
+    }
+    return env
+}
+
+val dotEnv = loadDotEnv(rootDir)
+val configuredOrigin = (project.findProperty("hubOrigin")?.toString()?.takeIf { it.isNotBlank() })
+    ?: System.getenv("APPROVED_HUB_ORIGIN")?.takeIf { it.isNotBlank() }
+    ?: dotEnv["APPROVED_HUB_ORIGIN"]?.takeIf { it.isNotBlank() }
+
+val configuredApiKey = (project.findProperty("hubApiKey")?.toString()?.takeIf { it.isNotBlank() })
+    ?: System.getenv("DOGGO_API_KEY")?.takeIf { it.isNotBlank() }
+    ?: dotEnv["DOGGO_API_KEY"]?.takeIf { it.isNotBlank() }
+
+fun escapeBuildConfig(str: String): String =
+    "\"" + str.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 android {
     namespace = "dev.doggo.android"
@@ -18,17 +57,13 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val defaultOrigin = project.findProperty("hubOrigin")?.toString()
-            ?: System.getenv("APPROVED_HUB_ORIGIN")
-            ?: "https://hub.example.com"
+        val debugOrigin = configuredOrigin ?: "http://10.0.2.2:3000"
+        val releaseOrigin = configuredOrigin ?: ""
+        val apiKey = configuredApiKey ?: ""
 
-        val defaultApiKey = project.findProperty("hubApiKey")?.toString()
-            ?: System.getenv("DOGGO_API_KEY")
-            ?: ""
-
-        buildConfigField("String", "HUB_API_KEY", "\"$defaultApiKey\"")
-        buildConfigField("String", "HUB_ORIGIN_DEBUG", "\"$defaultOrigin\"")
-        buildConfigField("String", "HUB_ORIGIN_RELEASE", "\"$defaultOrigin\"")
+        buildConfigField("String", "HUB_API_KEY", escapeBuildConfig(apiKey))
+        buildConfigField("String", "HUB_ORIGIN_DEBUG", escapeBuildConfig(debugOrigin))
+        buildConfigField("String", "HUB_ORIGIN_RELEASE", escapeBuildConfig(releaseOrigin))
     }
 
     signingConfigs {
@@ -90,8 +125,25 @@ gradle.taskGraph.whenReady {
     }
     if (isReleaseTask) {
         val signing = android.signingConfigs.getByName("release")
-        if (signing.storeFile == null || !signing.storeFile!!.exists() || signing.storePassword.isNullOrBlank()) {
+        if (signing.storeFile == null || !signing.storeFile!!.exists() ||
+            signing.storePassword.isNullOrBlank() ||
+            signing.keyAlias.isNullOrBlank() ||
+            signing.keyPassword.isNullOrBlank()
+        ) {
             throw GradleException("Release build requires DOGGO_KEYSTORE, DOGGO_KEY_ALIAS, DOGGO_STORE_PASSWORD, and DOGGO_KEY_PASSWORD environment variables with a valid keystore file.")
+        }
+        if (configuredOrigin.isNullOrBlank()) {
+            throw GradleException("Release build requires an approved HTTPS origin. Set APPROVED_HUB_ORIGIN in environment or .env, or project property hubOrigin.")
+        }
+        val originUri = try { URI(configuredOrigin) } catch (_: Exception) { null }
+        if (originUri == null || originUri.scheme != "https" || originUri.host.isNullOrBlank() ||
+            originUri.rawUserInfo != null || originUri.rawQuery != null || originUri.rawFragment != null ||
+            (originUri.rawPath.isNotEmpty() && originUri.rawPath != "/")
+        ) {
+            throw GradleException("Release build requires a valid canonical HTTPS origin without subpath, query, or credentials. Got: '$configuredOrigin'")
+        }
+        if (configuredApiKey.isNullOrBlank()) {
+            throw GradleException("Release build requires a provisioned API key. Set DOGGO_API_KEY in environment or .env, or project property hubApiKey.")
         }
     }
 }

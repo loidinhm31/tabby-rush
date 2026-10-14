@@ -1,9 +1,9 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
 Last Updated: 2026-10-14
-Document Version: 1.3.0
+Document Version: 1.4.0
 Status: Active
-Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
+Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
 
@@ -12,7 +12,7 @@ Related Docs: [System Architecture](./system-architecture.md) · [Code Standards
 Doggo is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization.
 
 The project prioritizes a clean multiplatform architecture, where the core domain logic, state management, and user interface are planned in Kotlin Multiplatform and Compose Multiplatform:
-1. **Android Application (`androidApp/`)**: Planned primary mobile target (Phase 07).
+1. **Android Application (`androidApp/`)**: Native mobile client delivered in source (Phase 07); AGP bytecode compilation, instrumented tests, and runtime device gates pending host SDK provisioning in Phase 08.
 2. **Desktop Application (`desktopApp/`)**: Planned desktop targets for native Linux RPM (Phase 09) and Windows MSI (Phase 10).
 3. **Headless Development Infrastructure**: Immediate development, IDE execution, and emulator testing on headless Fedora Linux servers via secure Xpra virtual display sessions (delivered in Phase 01).
 
@@ -204,18 +204,49 @@ Phase 06 delivers the shared Compose Multiplatform user interface, accessible li
 
 ---
 
-## 9. Technical Constraints & Dependencies
+## 9. Phase 07 Requirements & Acceptance: Android Composition & Runtime Integration
 
-1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
-2. **JDK Requirements**: AGP 8.x requires a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for AGP Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
-3. **Interactive Licensing**: Android SDK licenses must be accepted interactively via `sdkmanager --licenses`; automated blanket acceptance is prohibited.
-4. **Interactive GUI Acceptance**: Full visual verification of Android Studio and the emulator framebuffer requires interactive remote workstation attachment via `xpra attach ssh://.../100`.
-5. **Live Database Testing**: Full backend acceptance requires a live MongoDB daemon (standalone or replica set) accessible via `MONGO_TEST_URI`.
-6. **Instrumented & Hardware Testing**: Keystore encryption and Android Room verification require an active Android device or emulator with Google Play / AOSP platform image.
+Phase 07 delivers the native Android application module (`:androidApp`), integrating the frozen domain contracts (Phase 02), backend strict protocol client (Phase 03), Keystore credential vault and auth session (Phase 04), Room database and outbox sync coordinator (Phase 05), and accessible Compose UI (Phase 06).
+
+### 9.1 Android Integration Requirements
+- **FR-AND-01 (Process Container & Account Runtime Isolation)**: `DoggoApplication` manages application-level singletons (`vault`, `accountFiles`, `hubConfig`, `authSession`, `syncScheduler`). `AccountRuntime` encapsulates `DoggoDatabase`, `RoomAccountStore`, `AccountSyncCoordinator`, and `AccountLeaveProtocol` bound to an `AccountKey` and generation counter. Foreground UI (`SessionViewModel`) and background tasks (`DoggoSyncWorker`) share the identical runtime instance and coordinator mutex.
+- **FR-AND-02 (Cold-Start Active Identity Persistence)**: Active account key and identity persist in app-private `active_account.dat` via temporary file write and `StandardCopyOption.ATOMIC_MOVE` upon authenticated login/register. On cold start, `DoggoApplication` restores the session from the vault only after verifying no `wipe.marker` exists.
+- **FR-AND-03 (Retained ViewModel & Reactive State Flow)**: `SessionViewModel` binds `TodoUiState` to auth and sync progress flows, dispatches `TodoAction` variants, maps storage and validation errors to sanitized `SafeError.Internal` and `SafeError.Validation` envelopes, and ensures passwords and auth tokens are not retained in ViewModel fields or `SavedStateHandle` after submission.
+- **FR-AND-04 (Background Sync Scheduling & Generation Fencing)**: `AndroidSyncScheduler` schedules WorkManager unique one-shot (`KEEP` policy, network connected constraint) and periodic 15-minute (`UPDATE` policy) work tagged with `doggo_sync_account_<key>`. `DoggoSyncWorker` enforces wipe marker absence, session auth state, account key match, and persisted generation counter equality before accessing store resources.
+- **FR-AND-05 (Fail-Closed Quiescence & Wipe Protocol)**: `cancelAndAwait()` cancels WorkManager tasks by tag, polls WorkInfo completion for up to 5s (throwing `IllegalStateException` on timeout), and polls `coordinatorMutex.tryLock()` for up to 5s (throwing `IllegalStateException` on timeout). `completePendingWipesOnStartup()` synchronously cancels tasks, deletes database files, clears vault credentials, and removes markers before opening accounts.
+- **FR-AND-06 (Manifest Hardening & Diagnostic Infrastructure)**: Base manifest enforces single exported `MainActivity`, `allowBackup="false"`, and `usesCleartextTraffic="false"`. Debug manifest links `network_security_config.xml` strictly allowlisting `127.0.0.1`, `localhost`, and `10.0.2.2`. Backup and data extraction XML rules exclude private databases and accounts. Release task graph listener fails builds closed when keystore or signing credentials are absent. Includes `android-smoke.sh` and `debug-fault-proxy.mjs` for loopback fault injection.
+
+### 9.2 Phase 07 Deliverables & Status Distinction
+
+The 25 Phase 07 deliverables are fully enumerated in the artifact inventory at [Android Test Summary](./evidence/android-test-summary.md) and [Android Acceptance Spec](./android-acceptance.md):
+
+| Category | Deliverable Summary | Verification Status |
+|---|---|---|
+| Android Build & Config (2 files) | `androidApp/{build.gradle.kts,gradle.lockfile}` | Implemented; AGP 8.7.3, compileSdk 35, release signing gate. |
+| Manifests & Security (5 files) | `androidApp/src/{main,debug}/AndroidManifest.xml`, `backup_rules.xml`, `data_extraction_rules.xml`, `network_security_config.xml` | Implemented; source audited; cleartext disabled in release, loopback-only debug NSC. |
+| Android Kotlin Source (5 files) | `main-activity.kt`, `doggo-application.kt`, `session-view-model.kt`, `android-sync-scheduler.kt`, `doggo-sync-worker.kt` | Implemented; source audited; uncompiled by AGP (host SDK absent); shared JVM regression suite (`:shared` only) 100% PASS (96/96 tests under lenient dependency verification). |
+| Instrumented Test Suites (2 files) | `todo-device-test.kt`, `background-isolation-test.kt` | Authored; covers ViewModel, Room store, WorkManager, and wipe isolation (unexecuted on device). |
+| Host Scripts (2 files) | `scripts/{android-smoke.sh,debug-fault-proxy.mjs}` | Implemented; syntax verified (`bash -n`, `node --check`). |
+| Acceptance & Evidence Docs (2 files) | `docs/{android-acceptance.md,evidence/android-test-summary.md}` | Published; complete invariants, test matrices, and inventory. |
+| Visual Design Baselines (7 PNGs) | `docs/evidence/android-debug-*.png` | Visual design mockups for core screen states (live device captures pending Phase 08). |
+| **Android Compilation & Device Gates** | Bytecode compilation (`:androidApp:compileDebugKotlin`), `assembleDebug`, connected device tests (`connectedDebugAndroidTest`). | **PENDING**: Blocked by absent Android SDK on host (`ANDROID_HOME`); deferred to Phase 08 release operations. |
+| **Previously Deferred Platform Gates** | Live Mongo routes (Phase 03), Android Keystore vault test (Phase 04), Android Room store test (Phase 05), rendered UI & 200% font scale checks (Phase 06). | **DEFERRED**: Scheduled for Phase 07, now carried forward to Phase 08 release operations alongside Android host SDK provisioning. |
 
 ---
 
-## 10. Traceability & Phased Roadmap
+## 10. Technical Constraints & Dependencies
+
+1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
+2. **JDK Requirements**: AGP 8.x requires a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for AGP Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
+3. **Android SDK Requirements**: AGP bytecode compilation and Android instrumented tests require Android SDK 35 (`cmdline-tools;latest`, `platforms;android-35`, `platform-tools`, emulator) and interactive license acceptance (`sdkmanager --licenses`).
+4. **Interactive Licensing**: Android SDK licenses must be accepted interactively via `sdkmanager --licenses`; automated blanket acceptance is prohibited.
+5. **Interactive GUI Acceptance**: Full visual verification of Android Studio and the emulator framebuffer requires interactive remote workstation attachment via `xpra attach ssh://.../100`.
+6. **Live Database Testing**: Full backend acceptance requires a live MongoDB daemon (standalone or replica set) accessible via `MONGO_TEST_URI`.
+7. **Instrumented & Hardware Testing**: Keystore encryption and Android Room verification require an active Android device or emulator with Google Play / AOSP platform image.
+
+---
+
+## 11. Traceability & Phased Roadmap
 
 Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
@@ -224,5 +255,6 @@ Progress across the Doggo project is tracked in the living [Project Roadmap](./p
 - **Phase 04 Hub Authentication & Protected Session**: Authentication client, HTTP engine abstraction, session state machine, generation fencing, single-flight refresh, and Android Keystore vault implemented across 14 files (DONE; 19 JVM unit tests PASS; Android Keystore device run and live Hub integration deferred to Phase 07).
 - **Phase 05 Durable Local State & Strict Per-Record Sync**: Room KMP database (v1), 5 entities, atomic DAO transactions, BundledSQLite driver, platform account files, staged full scan, FIFO outbox reconciliation, CAS ack matching, UnknownSuperseded, crash recovery, and fail-closed leave protocol implemented across 29 files (Implementation Complete; 89 common/JVM tests PASS; Android device test and live Mongo e2e sync deferred to Phase 07).
 - **Phase 06 Shared Compose UI & Accessible Light Theme**: Shared Compose UI components, responsive compact/expanded layout, light theme palette with verified WCAG 2.1 AA contrast, transient password protection, and UI semantic test suite implemented across 15 files (5 conditional font/license files omitted per provenance audit; 96 :shared:jvmTest tests pass under lenient dependency verification; marked complete administratively; technical review 6.5/10 NOT ACCEPTED with documented integration gaps deferred to Phase 07).
-- **Phases 07–08 (Upcoming)**: Android integration, connected emulator testing, live Hub sync coordination, and release operations.
+- **Phase 07 Android Composition & Runtime Integration**: Native Android client module, process container, WorkManager background sync, debug network security config, manifest hardening, fault-injection proxy, smoke runner, and authored instrumented test suites delivered across 25 artifacts (Android source delivered; JVM regression suite 96/96 PASS; AGP bytecode compilation, connected device tests, and live framebuffer capture pending host SDK provisioning in Phase 08).
+- **Phase 08 (Upcoming)**: Android release operations, keystore provisioning, SDK setup, and connected device validation.
 - **Phases 09–10 (Upcoming)**: Linux RPM and Windows MSI packaging.

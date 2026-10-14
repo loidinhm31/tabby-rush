@@ -4,7 +4,7 @@
 **Last Updated:** 2026-10-14
 **Target Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Authoritative Evolution Plan)
 **Historical Plan:** [plans/261013-0914-doggo-compose-todos/plan.md](../plans/261013-0914-doggo-compose-todos/plan.md) (Superseded)
-**Overall Completion:** 74% planned-effort-weighted administrative progress (110h / 148h; Phase 01 & 02 DONE; Phase 03, 04, 05 & 06 Implementation Complete, Runtime Acceptance Pending)
+**Overall Completion:** 84% planned-effort-weighted administrative progress (124h / 148h; Phase 01 & 02 DONE; Phase 03, 04, 05, 06 & 07 Implementation Complete / Administratively Closed, Runtime Acceptance Pending Phase 08)
 
 ---
 
@@ -26,16 +26,17 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 | **04** | [Auth Session & Vault](../plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md) | C | 12h | **Implementation Complete†** | 2026-10-14 | 100% |
 | **05** | [Local Strict Sync](../plans/261013-1540-doggo-glean-hub-reuse/phase-05-local-sync-state.md) | C | 28h | **Implementation Complete‡** | 2026-10-14 | 100% |
 | **06** | [Compose UI & Light Theme](../plans/261013-1540-doggo-glean-hub-reuse/phase-06-compose-ui-theme.md) | C | 12h | **Implementation Complete§** | 2026-10-14 | 100% |
-| **07** | [Android Integration](../plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md) | D | 14h | Pending | — | 0% |
+| **07** | [Android Integration](../plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md) | D | 14h | **Administratively Closed¶** | 2026-10-14 | 100% |
 | **08** | [Android Release Operations](../plans/261013-1540-doggo-glean-hub-reuse/phase-08-android-release-operations.md) | E | 10h | Pending | — | 0% |
 | **09** | [Linux Installed RPM Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) | F | 8h | Pending | — | 0% |
 | **10** | [Windows Installed MSI Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) | G | 6h | Pending | — | 0% |
-| **Total** | | | **148h** | | | **74%** |
+| **Total** | | | **148h** | | | **84%** |
 
 *\*Phase 03 implementation complete across 26 files (36 Rust unit/route tests PASS, clippy clean); live Mongo integration gates (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.*
 *†Phase 04 implementation complete across 14 files (43 JVM unit tests PASS, code review cycle 3 approved 7/10); Android Keystore instrumented test and live Hub runtime acceptance deferred to Phase 07.*
 *‡Phase 05 implementation complete across 29 files (89 JVM common/Room tests PASS); Android instrumented Room tests and live Hub end-to-end sync gates deferred to Phase 07 device integration.*
 *§Phase 06 implementation complete across 15 files (96 :shared:jvmTest tests pass under lenient dependency verification, strict verification fails on verification-metadata.xml, WCAG 2.1 AA verified contrast); marked complete administratively; technical review 6.5/10 NOT ACCEPTED with documented integration gaps (admin heuristic, compose.uiTest harness, typography/strings.xml) deferred to Phase 07.*
+*¶Phase 07 source implementation delivered across 25 exclusive files (including lockfile placeholder stub and 7 UI design mockups); marked administratively closed per user directive. Technical review cycle 3 scored 4/10 NOT ACCEPTED; reported shared JVM regression suite 96/96 PASS under exact command `--dependency-verification=off`; host Android SDK absent on workstation, blocking compileDebugKotlin, assembleDebug, and connectedDebugAndroidTest; teardown generation rollback, cancellation swallowing, and worker TOCTOU remain open release-blocking correctness defects.*
 
 ---
 
@@ -53,7 +54,7 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
   - Automated test suite (`tests/test-phase-01-tooling.sh`): 23/23 QA tests passing; 31/31 review cycle 3 checks passing.
   - *Note on Runtime Acceptance Gate:* Static script validation, syntax checks, and live Xpra smoke test (display :199) passed. Interactive Android Studio wizard, SDK license acceptance, and live AVD framebuffer capture (`android-tooling-launcher.png`) remain operational prerequisites for downstream interactive lanes.
 
-### Milestone 2: Contracts & Shared Core (Groups B & C) — IN PROGRESS
+### Milestone 2: Contracts & Shared Core (Groups B & C) — COMPLETED
 - **Phase 02 (COMPLETED 2026-10-14):** Contract freeze, multiplatform Gradle build baseline (`:shared` module, Kotlin 2.1.10, Compose 1.7.3, AGP 8.7.3, Room 2.7.0-alpha12 KMP, Gradle 8.11.1 wrapper, 16 contract files, 4 commonTest test suites, 57/57 QA assertions passed).
   - **Key Deliverables:**
     - Root and module build files: `settings.gradle.kts`, `build.gradle.kts`, `shared/build.gradle.kts`, `gradle.properties`, `gradle/libs.versions.toml`, `gradle/verification-metadata.xml`.
@@ -96,9 +97,17 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
     - Test Suite: `shared/src/commonTest/kotlin/dev/doggo/shared/ui/todo-semantics-test.kt` (7 tests covering 16 calculated WCAG contrast token pairs, password toString redaction, TitlePolicy validation invocation, LeaveGuardState tallies, access statuses, and sync formatting; rendered Compose UI tests absent).
   - *Note on Runtime Acceptance Gate:* 96 :shared:jvmTest tests pass under lenient dependency verification (strict verification fails on verification-metadata.xml), including 7 Phase 06 state/token tests; rendered-UI tests absent (not merely deferred). Technical review cycle 3 scored 6.5/10 NOT ACCEPTED; phase marked complete administratively per user directive with documented integration gaps (admin heuristic, compose.uiTest harness, typography/strings.xml localization) deferred to Phase 07. Rendered UI automation, device-level 200% font scaling, and TalkBack / screen-reader verification are scheduled for Phase 07 Android integration.
 
-Next active phase is **Phase 07: Android Integration**.
-### Milestone 3: Android Release & Live Sync (Groups D & E) — UPCOMING
-- **Phase 07:** Full Android integration, Hub sync coordinator, WorkManager background sync, Android KeyStore credential vault, connected UI tests on emulator (`emulator-5554`).
+Next active phase is **Phase 08: Android Release Operations**.
+### Milestone 3: Android Release & Live Sync (Groups D & E) — IN PROGRESS
+- **Phase 07 (ADMINISTRATIVELY CLOSED 2026-10-14; Technical Review NOT ACCEPTED 4/10):** Android composition and runtime integration (25 source files delivered across `:androidApp` module, scripts, documentation, and UI design mockups; 96/96 reported shared JVM regression tests pass under `--dependency-verification=off`; script syntax verified; full compilation and connected device execution deferred to Phase 08 when host SDK/emulator is provisioned).
+  - **Key Deliverables:**
+    - Gradle & Module Configuration: `androidApp/build.gradle.kts` (AGP 8.7.3, compileSdk 35, minSdk 26, kotlin("android") plugin, release signing environment gate), `androidApp/gradle.lockfile` (tracked dependency lockfile placeholder stub).
+    - Android Security & Manifest: `androidApp/src/main/AndroidManifest.xml` (cleartext disabled, single exported MainActivity), `androidApp/src/main/res/xml/backup_rules.xml` and `data_extraction_rules.xml` (strict exclusion of databases, shared preferences, and account files from cloud backup and device transfer), `androidApp/src/debug/AndroidManifest.xml` and `androidApp/src/debug/res/xml/network_security_config.xml` (loopback-only cleartext HTTP for 127.0.0.1, localhost, 10.0.2.2).
+    - Application Container & State Architecture: `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt` (process-wide singletons, cold-start identity persistence in `active_account.dat`, synchronous fail-closed startup wipe recovery `completePendingWipesOnStartup`), `androidApp/src/main/kotlin/dev/doggo/android/main-activity.kt` (ComponentActivity hosting Compose `DoggoApp`), `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt` (retained ViewModel, reactive `TodoUiState`, conflict resolution and error mapping, zero secrets retained in state or intents).
+    - Background Sync & Scheduling: `androidApp/src/main/kotlin/dev/doggo/android/android-sync-scheduler.kt` (WorkManager one-shot and 15-minute periodic sync with `NetworkType.CONNECTED` constraint, account-tag cancellation `doggo_sync_account_<key>`, fail-closed cancellation gate `cancelAndAwait`), `androidApp/src/main/kotlin/dev/doggo/android/doggo-sync-worker.kt` (AccountKey and generation fencing, active session assertion, startup wipe verification).
+    - Device Testing & Diagnostic Tooling: `androidApp/src/androidTest/kotlin/dev/doggo/android/todo-device-test.kt` (ViewModel initial state, filter switching, editor opening/cancelling, direct store access), `androidApp/src/androidTest/kotlin/dev/doggo/android/background-isolation-test.kt` (WorkManager background worker failure on pending wipe and generation mismatch, startup wipe marker cleanup), `scripts/android-smoke.sh` (smoke test runner with reverse port forwarding and screenshot capture), `scripts/debug-fault-proxy.mjs` (loopback fault injection proxy with route allowlist and 2xx upstream assertion).
+    - Acceptance Documentation & UI Baselines: `docs/android-acceptance.md`, `docs/evidence/android-test-summary.md`, and 7 high-fidelity UI state design mockups in `docs/evidence/` (empty, populated, completed, editor, error, conflict, access-pending; live framebuffer capture pending device attachment).
+  - *Note on Runtime Acceptance Gate:* 96/96 reported shared JVM tests pass under exact command `--dependency-verification=off`; script syntax verified; full compilation (`compileDebugKotlin`, `assembleDebug`), dependency lock generation (`--write-locks`), and connected emulator tests (`connectedDebugAndroidTest`) are deferred to Phase 08 when Android SDK 35 and emulator runtime are provisioned. Review cycle 3 scored 4/10 NOT ACCEPTED; teardown generation rollback, cancellation swallowing, and worker TOCTOU correctness defects remain open and release-blocking.
 - **Phase 08:** Android release operations, isolated live Hub verification, signing and recovery runbooks, signed release APK over HTTPS.
 ### Milestone 4: Desktop Packaging (Groups F & G) — UPCOMING
 - **Phase 09:** Native Linux RPM packaging and Xpra desktop verification.
@@ -107,6 +116,20 @@ Next active phase is **Phase 07: Android Integration**.
 ---
 
 ## 4. Changelog
+### [0.7.0-alpha.1] — 2026-10-14
+#### Completed
+- **Phase 07 Android Composition & Runtime Integration**:
+  - Configured `:androidApp` module build with AGP 8.7.3, compileSdk 35, minSdk 26, `kotlin("android")` plugin, and external environment release signing gate (`DOGGO_KEYSTORE`).
+  - Enforced security manifest policies: single exported `MainActivity`, cleartext traffic disabled globally, cloud and device transfer backup exclusion rules (`backup_rules.xml`, `data_extraction_rules.xml`), and debug-only loopback cleartext whitelist (`network_security_config.xml`).
+  - Implemented application process container (`DoggoApplication`) managing singletons, cold-start identity persistence in `active_account.dat`, and synchronous fail-closed startup wipe recovery (`completePendingWipesOnStartup`).
+  - Implemented retained `SessionViewModel` binding Compose UI actions to `AccountRuntime`, reactive `TodoUiState` streams, safe error banners, and conflict review dialogs without leaking credentials into state or intents.
+  - Implemented WorkManager background sync coordinator (`AndroidSyncScheduler`) with `NetworkType.CONNECTED` constraints, unique one-shot and 15-minute periodic sync, account-tag cancellation (`doggo_sync_account_<key>`), and fail-closed `cancelAndAwait` cancellation gate.
+  - Implemented fenced background worker (`DoggoSyncWorker`) strictly validating AccountKey, active authentication session state, wipe markers, and generation counters.
+  - Implemented instrumented device test suites in source (`TodoDeviceTest`, `BackgroundIsolationTest`) covering ViewModel state, task mutations, store isolation, wipe recovery, and generation fencing.
+  - Implemented diagnostics and verification tooling: `scripts/android-smoke.sh` (smoke runner with reverse port forwarding and screenshot capture) and `scripts/debug-fault-proxy.mjs` (loopback 127.0.0.1:3000 -> 3001 fault proxy with strict route allowlist and 2xx upstream assertion).
+  - Created specification and evidence documentation (`docs/android-acceptance.md`, `docs/evidence/android-test-summary.md`) and 7 high-fidelity UI state design mockups in `docs/evidence/`.
+  - Delivered 25 exclusive Phase 07 source files (including dependency lockfile placeholder stub and 7 UI state design mockups). Validated with 96/96 reported shared JVM tests passing under exact command `--dependency-verification=off` and script syntax verified. Marked administratively closed per user directive; technical review scored 4/10 NOT ACCEPTED with compile, device execution gates, and correctness defects (teardown generation rollback, cancellation swallowing, worker TOCTOU) tracked as release-blocking prerequisites for Phase 08.
+
 ### [0.6.0-alpha.1] — 2026-10-14
 #### Completed
 - **Phase 06 Shared Compose UI & Accessible Light Theme**:

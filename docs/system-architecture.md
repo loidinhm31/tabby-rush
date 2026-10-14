@@ -1,8 +1,8 @@
 # Doggo System Architecture
 
 Last Updated: 2026-10-14
-Phase: Phase 05 Durable Local State & Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)
-Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
+Phase: Phase 07 Android Composition & Runtime Integration (Source Delivered; Host SDK & Device Run Pending Operator Tooling)
+Related Docs: [System Architecture](./system-architecture.md) · [Android Acceptance](./android-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
 
@@ -93,9 +93,16 @@ Managed via `scripts/start-android-emulator.sh`:
 
 ```mermaid
 flowchart TD
-  subgraph ClientApp["Client Layer"]
-    AndroidApp["Android App\n(androidApp / Phase 07)"]
-    DesktopApp["Desktop App\n(desktopApp / Phase 09-10)"]
+  subgraph ClientApp["Android Application Layer (androidApp / Phase 07)"]
+    MainActivity["MainActivity\n(Single Exported Activity)"]
+    SessionVM["SessionViewModel\n(Retained ViewModel / StateFlow)"]
+    DoggoAppContainer["DoggoApplication\n(Singletons / Active Runtime / Wipe Recovery)"]
+    Scheduler["AndroidSyncScheduler\n(WorkManager / cancelAndAwait)"]
+    SyncWorker["DoggoSyncWorker\n(Fencing / Auth / Gen Check)"]
+  end
+
+  subgraph DesktopLayer["Desktop Application Layer (Phase 09-10)"]
+    DesktopApp["Desktop App\n(desktopApp)"]
   end
 
   subgraph SharedKMP["Shared Core (shared/)"]
@@ -134,7 +141,13 @@ flowchart TD
     MongoDB["MongoDB Dedicated Namespace\n(_strict_v1_5_doggo_<epoch>)"]
   end
 
-  AndroidApp --> UI
+  MainActivity --> UI
+  MainActivity --> SessionVM
+  SessionVM --> UI
+  SessionVM --> DoggoAppContainer
+  DoggoAppContainer --> Scheduler
+  Scheduler --> SyncWorker
+  SyncWorker --> Coordinator
   DesktopApp --> UI
   UI --> State
   State --> Store
@@ -251,6 +264,34 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
    - `ConflictReviewDialog`: Side-by-side local vs remote diff inspection with Discard, Reapply, CopyAsNew, and Decide Later workflows.
    - `LeaveGuardDialog`: Fail-closed sign-out confirmation warning displaying unsynced draft, pending, uncertain, and conflict tallies.
    - `LicenseNoticesDialog`: In-app attribution viewer for bundled open-source dependencies.
+
+### 4.8 Native Android Architecture & Runtime Integration (Phase 07)
+
+1. **Application Process Container & Singletons (`DoggoApplication`)**:
+   - Manages process-scoped singletons: `hubConfig` (dynamically configured via `BuildConfig.DEBUG`), `vault` (`AndroidKeystoreVault`), `accountFiles` (`AndroidAccountFiles`), `syncScheduler` (`AndroidSyncScheduler`), and `authSession` (`HubAuthSession`).
+   - Active account runtime is encapsulated in `AccountRuntime` (`accountKey`, `generation`, `database`, `store`, `coordinator`, `leaveProtocol`). Foreground UI (`SessionViewModel`) and background jobs (`DoggoSyncWorker`) share the exact same runtime instance and `coordinatorMutex`.
+2. **Cold-Start Active Identity Persistence & Session Restoration**:
+   - When an account authenticates, `saveActiveAccount(identity, accountKey)` writes serialized account identity to `active_account.tmp` and executes `StandardCopyOption.ATOMIC_MOVE`.
+   - On application cold start, `completePendingWipesOnStartup()` executes synchronously before `checkAndRestoreEstablishedSession()` restores the auth session from the vault, ensuring wiped accounts cannot resurrect.
+3. **Retained ViewModel & Reactive State Flow (`SessionViewModel`)**:
+   - Extends AndroidX `ViewModel` with `viewModelScope`.
+   - Collects `authSession.state` to trigger authenticated runtime initialization or unauthenticated teardown.
+   - Collects `coordinator.progress` to update `TodoUiState.syncProgress`, inspect and present conflicts via `ConflictReviewDialog`, and reload todos.
+   - Sanitizes storage errors to `SafeError.Internal` and validation errors to `SafeError.Validation`, preventing raw system exception details from leaking to the UI layer. Passwords and auth tokens are not retained in ViewModel fields or `SavedStateHandle` after submission.
+4. **WorkManager Sync Scheduling & Worker Fencing**:
+   - `AndroidSyncScheduler` schedules unique one-shot sync (`doggo_sync_oneshot_<key>_<gen>`) with `NetworkType.CONNECTED` constraint and `ExistingWorkPolicy.KEEP`, and unique periodic 15-minute sync (`doggo_sync_periodic_<key>`) with `ExistingPeriodicWorkPolicy.UPDATE`.
+   - All sync tasks are tagged with `doggo_sync_account_<accountKey>`.
+   - `DoggoSyncWorker` enforces check order: wipe marker check (fails closed) -> auth session check (retries if unauthenticated) -> account key check (drops mismatch) -> persisted generation check (drops stale work) -> runtime generation check.
+5. **Teardown Quiescence & Fail-Closed Wipe Protocol**:
+   - `cancelAndAwait(accountKey)` cancels WorkManager tasks by account tag, polls `WorkInfo.state.isFinished` for up to 5s (throwing `IllegalStateException` on timeout), and polls `coordinatorMutex.tryLock()` for up to 5s (throwing `IllegalStateException` on timeout).
+   - `completePendingWipesOnStartup()` scans `accounts/*/wipe.marker` synchronously during `Application.onCreate`, cancelling tasks, deleting database files, clearing vault credentials, and removing markers fail-closed.
+6. **Manifest Hardening, Cleartext Policies & Release Gating**:
+   - Base manifest enforces single exported `MainActivity`, `allowBackup="false"`, and `usesCleartextTraffic="false"`.
+   - Debug manifest links `network_security_config.xml` strictly allowing `127.0.0.1`, `localhost`, and `10.0.2.2`. Merged manifest inspection across dependencies is pending AGP compilation.
+   - `build.gradle.kts` release signing task graph gate checks for `DOGGO_KEYSTORE`, `DOGGO_KEY_ALIAS`, `DOGGO_STORE_PASSWORD`, and `DOGGO_KEY_PASSWORD`, failing closed with a `GradleException` if any are missing.
+7. **Diagnostic & Fault Injection Infrastructure**:
+   - `scripts/debug-fault-proxy.mjs`: Dedicated loopback HTTP proxy (127.0.0.1:3000 -> 3001) for deterministic sync fault injection (`drop-push-response`, `drop-refresh-response`) with strict route allowlist and zero payload logging.
+   - `scripts/android-smoke.sh`: Device smoke verification runner supporting device auto-detection, reverse port forwarding, and evidence screenshot capture.
 ---
 
 ## 5. Security & Isolation Invariants
@@ -274,3 +315,9 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
 17. **Transient Password Privacy**: Password fields configure `PasswordVisualTransformation` visual masking, emit `semantics { password() }`, and dereference transient strings upon submission, mode switch, or disposal; `AuthSubmitAction.toString()` masks passwords with `[REDACTED]`. (JVM string immutability precludes guaranteed memory erasure; device screen-reader behavior unverified).
 18. **WCAG 2.1 AA Palette Contrast**: Baseline mathematical pairing verified for 16 opaque token pairs (text >= 4.5:1, interactive outline borders >= 3.0:1); decorative mint is restricted to non-text accents. Rendered UI contrast across devices is deferred to Phase 07.
 19. **Non-Color Conveyance**: Task completion, conflict, error, and leave status indicators provide explicit icons, text descriptions, and accessibility state descriptions without relying solely on color.
+20. **Single Exported Activity**: Manifest declares only `MainActivity` as exported (`android:exported="true"`) with launcher intent filters. Zero public services, receivers, or content providers are declared in the application manifest. Merged manifest verification is pending AGP compilation.
+21. **Strict Backup & Data Extraction Exclusions**: `backup_rules.xml` (API <= 30) and `data_extraction_rules.xml` (API >= 31) explicitly exclude private SQLite databases, shared preferences, and `accounts/` partition directories from cloud backups and device-to-device transfers.
+22. **Cleartext Restrictions & Debug NSC**: Cleartext HTTP traffic is disabled globally (`usesCleartextTraffic="false"`). Debug builds override this exclusively for loopback development hosts (`127.0.0.1`, `localhost`, `10.0.2.2`) via `network_security_config.xml`. Custom trust anchors and public domain overrides are prohibited.
+23. **WorkManager Account-Tag Cancellation**: All WorkManager sync requests are tagged with `doggo_sync_account_<accountKey>`, ensuring `cancel` and `cancelAndAwait` cancel all pending and running work for an account across generation increments.
+24. **Teardown Quiescence & Wipe Fail-Closed Enforcement**: `cancelAndAwait()` verifies WorkManager and coordinator mutex quiescence with 5s deadlines, throwing `IllegalStateException` on timeout. Startup recovery completes pending wipes fail-closed before any account or database resources are initialized.
+25. **Release Signing Custody Fail-Closed Gate**: The Gradle task graph dynamically inspects release build tasks; execution fails closed with a `GradleException` if `DOGGO_KEYSTORE`, `DOGGO_KEY_ALIAS`, `DOGGO_STORE_PASSWORD`, or `DOGGO_KEY_PASSWORD` are missing or the keystore file does not exist.

@@ -1,8 +1,8 @@
 # QA Test Report: Phase 01 Headless Tooling & Android Environment
 
-**Date:** 2026-10-13  
-**Target Suite:** `./tests/test-phase-01-tooling.sh`  
-**Execution Context:** Headless Fedora Linux 44 Server (`x86_64`)  
+**Date:** 2026-10-13
+**Target Suite:** `./tests/test-phase-01-tooling.sh`
+**Execution Context:** Headless Fedora Linux 44 Server (`x86_64`)
 
 ---
 

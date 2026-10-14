@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup rules for Android 11 (API 30) and below.
+  Explicitly excludes all databases, shared preferences, accounts storage,
+  credential vaults, and wipe markers from cloud backup.
+-->
+<full-backup-content>
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="file" path="accounts" />
+    <exclude domain="file" path="accounts/." />
+    <exclude domain="root" path="." />
+</full-backup-content>

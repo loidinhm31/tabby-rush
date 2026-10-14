@@ -1,8 +1,8 @@
 # QA Test Report: Phase 04 Auth Session & Vault Test Validation
 
-**Date:** 2026-10-14  
-**Target:** Phase 04 Hub Authentication, Protected Session, and Contract Test Suites  
-**Command:** `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`  
+**Date:** 2026-10-14
+**Target:** Phase 04 Hub Authentication, Protected Session, and Contract Test Suites
+**Command:** `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`
 **Environment:** Linux x86_64 (`/home/loidinh/WS/doggo`), OpenJDK 21.0.8
 
 ---
@@ -58,8 +58,8 @@
 
 ## 3. Keystore Vault Test Definitions & Android Status
 
-**Static Test Definitions File:** `shared/src/androidInstrumentedTest/kotlin/dev/doggo/shared/auth/android-keystore-vault-test.kt`  
-**Runner:** `AndroidJUnit4`  
+**Static Test Definitions File:** `shared/src/androidInstrumentedTest/kotlin/dev/doggo/shared/auth/android-keystore-vault-test.kt`
+**Runner:** `AndroidJUnit4`
 **7 Defined Test Cases:**
 1. `testStoreAndLoadCredentials`: Round-trip storage and retrieval under Android Keystore AES-256-GCM.
 2. `testFreshNoncePerWrite`: Verifies 12-byte random IV differs between consecutive writes.

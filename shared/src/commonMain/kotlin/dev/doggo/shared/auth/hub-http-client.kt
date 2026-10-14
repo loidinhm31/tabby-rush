@@ -20,6 +20,9 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 expect fun createPlatformHttpEngine(): HttpClientEngine
 
@@ -50,6 +53,20 @@ class HubHttpClient(
         ignoreUnknownKeys = true
         isLenient = false
         encodeDefaults = true
+    }
+
+    private fun extractErrorMessage(rawBody: String): String? {
+        if (rawBody.isBlank()) return null
+        return try {
+            val element = json.parseToJsonElement(rawBody)
+            if (element is JsonObject) {
+                element["error"]?.jsonPrimitive?.contentOrNull
+                    ?: element["message"]?.jsonPrimitive?.contentOrNull
+                    ?: element["detail"]?.jsonPrimitive?.contentOrNull
+            } else null
+        } catch (_: Exception) {
+            null
+        }
     }
 
     val ktorClient: HttpClient = HttpClient(engine ?: createPlatformHttpEngine()) {
@@ -158,10 +175,20 @@ class HubHttpClient(
                 code = "FORBIDDEN",
                 message = "Access forbidden (HTTP 403)"
             )
-            HttpStatusCode.Conflict -> SafeError.ResetRequired(
-                code = "EPOCH_MISMATCH",
-                message = "Server reported epoch conflict or reset required (HTTP 409)"
-            )
+            HttpStatusCode.Conflict -> {
+                val serverMsg = extractErrorMessage(rawBody)
+                if (path.contains("/auth/")) {
+                    SafeError.Validation(
+                        code = "CONFLICT",
+                        message = serverMsg ?: "Email or username already in use (HTTP 409)"
+                    )
+                } else {
+                    SafeError.ResetRequired(
+                        code = "EPOCH_MISMATCH",
+                        message = "Server reported epoch conflict or reset required (HTTP 409)"
+                    )
+                }
+            }
             HttpStatusCode.UpgradeRequired -> SafeError.ProtocolIncompatible(
                 code = "PROTOCOL_INCOMPATIBLE",
                 message = "Server rejected protocol version (HTTP 426)"
@@ -183,10 +210,13 @@ class HubHttpClient(
                 code = "SERVICE_UNAVAILABLE",
                 message = "Service unavailable or admission pending (HTTP 503)"
             )
-            HttpStatusCode.BadRequest -> SafeError.Validation(
-                code = "BAD_REQUEST",
-                message = "Invalid request format or parameters (HTTP 400)"
-            )
+            HttpStatusCode.BadRequest -> {
+                val serverMsg = extractErrorMessage(rawBody)
+                SafeError.Validation(
+                    code = "BAD_REQUEST",
+                    message = serverMsg ?: "Invalid request format or parameters (HTTP 400)"
+                )
+            }
             HttpStatusCode.TooManyRequests -> SafeError.Network(
                 code = "RATE_LIMITED",
                 message = "Rate limit exceeded (HTTP 429)"

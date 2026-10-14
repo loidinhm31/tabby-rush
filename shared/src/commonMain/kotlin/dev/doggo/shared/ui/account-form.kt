@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import dev.doggo.shared.contract.AuthState
 import dev.doggo.shared.contract.SafeError
 import dev.doggo.shared.theme.DoggoThemeTokens
+import dev.doggo.shared.auth.HubAuthValidation
 
 /**
  * Transient actions for authentication.
@@ -76,6 +77,7 @@ fun AccountForm(
     var mode by remember { mutableStateOf(AccountFormMode.LOGIN) }
     var email by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
+    var clientValidationError by remember { mutableStateOf<String?>(null) }
 
     // Password state is strictly transient in memory, NEVER preserved across configuration changes
     var password by remember { mutableStateOf("") }
@@ -94,12 +96,24 @@ fun AccountForm(
 
     val submit = {
         if (canSubmit) {
+            val trimmedEmail = email.trim()
+            val trimmedUsername = username.trim()
             val passToSubmit = password
-            password = "" // clear transient state immediately upon submission
-            if (mode == AccountFormMode.LOGIN) {
-                onAuthSubmit(AuthSubmitAction.Login(email.trim(), passToSubmit))
+
+            if (mode == AccountFormMode.SIGNUP && !HubAuthValidation.validateUsername(trimmedUsername)) {
+                clientValidationError = "Username must be 3–32 characters (letters, digits, _, -)"
+            } else if (!HubAuthValidation.validateEmail(trimmedEmail)) {
+                clientValidationError = "Please enter a valid email address"
+            } else if (!HubAuthValidation.validatePassword(passToSubmit)) {
+                clientValidationError = "Password must be at least 8 characters"
             } else {
-                onAuthSubmit(AuthSubmitAction.Register(username.trim(), email.trim(), passToSubmit))
+                clientValidationError = null
+                password = "" // clear transient state immediately upon submission
+                if (mode == AccountFormMode.LOGIN) {
+                    onAuthSubmit(AuthSubmitAction.Login(trimmedEmail, passToSubmit))
+                } else {
+                    onAuthSubmit(AuthSubmitAction.Register(trimmedUsername, trimmedEmail, passToSubmit))
+                }
             }
         }
     }
@@ -140,10 +154,11 @@ fun AccountForm(
                 color = DoggoThemeTokens.customColors.muted
             )
 
-            if (safeError != null) {
+            val errorText = clientValidationError ?: safeError?.message
+            if (errorText != null) {
                 Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingMedium))
                 Text(
-                    text = safeError.message,
+                    text = errorText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.semantics {
@@ -157,7 +172,7 @@ fun AccountForm(
             if (mode == AccountFormMode.SIGNUP) {
                 OutlinedTextField(
                     value = username,
-                    onValueChange = { username = it },
+                    onValueChange = { username = it; clientValidationError = null },
                     label = { Text("Username") },
                     singleLine = true,
                     enabled = !isSubmitting,
@@ -177,7 +192,7 @@ fun AccountForm(
 
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
+                onValueChange = { email = it; clientValidationError = null },
                 label = { Text("Email address") },
                 singleLine = true,
                 enabled = !isSubmitting,
@@ -197,7 +212,7 @@ fun AccountForm(
 
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
+                onValueChange = { password = it; clientValidationError = null },
                 label = { Text("Password") },
                 singleLine = true,
                 enabled = !isSubmitting,
@@ -257,6 +272,7 @@ fun AccountForm(
                     onClick = {
                         mode = if (mode == AccountFormMode.LOGIN) AccountFormMode.SIGNUP else AccountFormMode.LOGIN
                         password = "" // clear on mode switch
+                        clientValidationError = null
                     },
                     enabled = !isSubmitting,
                     modifier = Modifier.defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)

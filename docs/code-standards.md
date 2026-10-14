@@ -1,7 +1,7 @@
 # Doggo Code Standards & Implementation Guidelines
 
-Last Updated: 2026-10-14  
-Phase: Phase 05 Durable Local State & Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)  
+Last Updated: 2026-10-14
+Phase: Phase 05 Durable Local State & Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)
 Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Codebase Summary](./codebase-summary.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
@@ -73,8 +73,8 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
   - Authentication & session: `dev.doggo.shared.auth.*`
   - Local database & persistence: `dev.doggo.shared.data.*`
   - Strict sync protocol: `dev.doggo.shared.sync.*`
-  - UI state & controllers: `dev.doggo.shared.state.*`
-  - Compose UI & theme: `dev.doggo.shared.ui.*`
+  - Theme & tokens: `dev.doggo.shared.theme.*`
+  - Compose UI components: `dev.doggo.shared.ui.*`
 - Android application: `dev.doggo.android.*`
 - Desktop application: `dev.doggo.desktop.*`
 
@@ -101,6 +101,13 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
 - Canonical digest calculation must use explicit length-framed big-endian fields matching the backend Rust implementation.
 - Credentials (`CredentialBundle`, session tokens, passwords) must never be serialized to unencrypted storage, diagnostic logs, or `toString()` output; structured serialization is restricted exclusively to authorized transport payloads and encrypted vault containers.
 
+### 3.5 Compose UI, Accessibility & Theme Guidelines
+- **WCAG 2.1 AA Palette Contrast**: All functional text pairings must mathematically satisfy the WCAG 2.1 AA baseline contrast threshold of >= 4.5:1 (>= 3.0:1 for non-text interactive borders). Dynamic device theming is disabled; rendered UI contrast requires platform device validation.
+- **Universal Typography**: Rely on Compose `FontFamily.SansSerif` rather than bundling partial Latin-only TTFs, avoiding Latin glyph restrictions and delegating to platform system fonts; international script rendering and OS font scaling up to 200% require platform device testing.
+- **Minimum Touch Targets**: All interactive elements (buttons, checkboxes, chips, row actions) must measure strictly `>= 48.dp`.
+- **Non-Color Conveyance**: Completion, error, conflict, and leave states must not be communicated by color alone. Checkboxes must provide visual checkmarks and `stateDescription` semantics; error banners must provide explicit textual guidance.
+- **Transient Credential Privacy**: Passwords in UI forms must use `PasswordVisualTransformation` visual masking, emit `semantics { password() }`, and be dereferenced from memory upon form submission, mode toggling, or composable disposal. Password strings in `AuthSubmitAction.toString()` must be redacted with `[REDACTED]`. (JVM string immutability precludes guaranteed memory erasure; device screen-reader behavior unverified).
+- **Responsive Hierarchy**: UI must adapt cleanly across breakpoints (<840dp compact vertical stack, >=840dp two-column desktop sidebar).
 ---
 
 ## 4. Node.js Integration Script Standards

@@ -1,7 +1,7 @@
 # Doggo System Architecture
 
-Last Updated: 2026-10-14  
-Phase: Phase 05 Durable Local State & Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)  
+Last Updated: 2026-10-14
+Phase: Phase 05 Durable Local State & Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)
 Related Docs: [System Architecture](./system-architecture.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
@@ -101,7 +101,7 @@ flowchart TD
   subgraph SharedKMP["Shared Core (shared/)"]
     UI["Compose Multiplatform UI\n(Material 3 / Light Theme)"]
     State["Todo State & Actions\n(TodoUiState / TodoAction)"]
-    
+
     subgraph LocalPersistence["Local Persistence & Sync (Phase 05)"]
       Coordinator["AccountSyncCoordinator\n(3-Stage Sync / Mutex)"]
       Store["RoomAccountStore\n(Store Mutex & Atomic Ops)"]
@@ -111,7 +111,7 @@ flowchart TD
       LeaveProtocol["AccountLeaveProtocol\n(Fail-Closed Teardown)"]
       AccountFiles["Platform Account Files\n(Android / JVM Partitioning)"]
     end
-    
+
     subgraph AuthSubsystem["Auth & Protected Session Subsystem (Phase 04)"]
       AuthSession["HubAuthSession\n(State Machine & Gen Fencing)"]
       SingleFlight["SingleFlightRefreshCoordinator\n(Leader Concurrency Lock)"]
@@ -228,6 +228,29 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
    - Strict 7-step sequence: freeze store -> write generation and `wipe.marker` outside DB -> cancel/await schedulers -> close Room -> delete DB files -> clear vault -> clear marker.
    - Startup recovery (`completePendingWipe`) inspects `wipe.marker` and finishes teardown fail-closed before any account opens.
 
+### 4.7 Shared Compose UI & Accessible Light Theme Subsystem (Phase 06)
+
+1. **Light Theme & Design Tokens (`DoggoTheme`, `DoggoColors`)**:
+   - Material 3 `LightColorScheme` mapping with custom semantic extensions (`DoggoCustomColors`).
+   - Dynamic colors are disabled to avoid overriding calculated token ratios.
+   - Calculated high-contrast pairings: 16 verified opaque token pairs exceeding 4.5:1 (text) and 3.0:1 (outline borders). Overall rendered control contrast across OEM devices is deferred to Phase 07.
+2. **Platform-Universal Typography (`DoggoTypography`)**:
+   - Pinned 12sp–34sp type scale built on Compose `FontFamily.SansSerif`.
+   - Documented omission of upstream Latin-only binary font assets (`font-provenance.md`), delegating font resolution to platform system fonts. Broad Unicode script rendering, TalkBack/Orca, and OS-level 200% scaling require platform testing.
+3. **Responsive Breakpoint Layout (`DoggoApp`)**:
+   - Compact mode (<840dp): Vertical layout with warm cream header and scrolling list. Note: compact top bar is non-scrolling in `Scaffold.topBar`, tracked for Phase 07 200% font scale verification.
+   - Expanded desktop mode (>=840dp): Two-column layout with fixed-width deep teal navigation sidebar (280dp) and constrained-width task workspace (max 760dp).
+4. **Credential Security & Privacy in UI (`AccountForm`)**:
+   - Masked inputs with `PasswordVisualTransformation` and `semantics { password() }`.
+   - Transient password state is held in component memory and dereferenced upon submission, mode switch, or composable disposal (JVM string immutability precludes guaranteed memory erasure; device screen-reader behavior unverified).
+   - `AuthSubmitAction.toString()` masks passwords with `[REDACTED]` to prevent leakage in diagnostic logs.
+5. **Task Management & Dialogs**:
+   - `TodoList`: LazyColumn with stable keys (`rowId`), non-color completion checkboxes (`stateDescription`), and >=48dp touch targets.
+   - `TodoEditorDialog`: Modal task creation/editing dialog with `TitlePolicy` validation (1–200 Unicode scalars).
+   - `SyncFeedback`: Real-time sync status badges, pause/reset guidance, and relative/UTC reconciliation timestamp display.
+   - `ConflictReviewDialog`: Side-by-side local vs remote diff inspection with Discard, Reapply, CopyAsNew, and Decide Later workflows.
+   - `LeaveGuardDialog`: Fail-closed sign-out confirmation warning displaying unsynced draft, pending, uncertain, and conflict tallies.
+   - `LicenseNoticesDialog`: In-app attribution viewer for bundled open-source dependencies.
 ---
 
 ## 5. Security & Isolation Invariants
@@ -248,3 +271,6 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
 14. **Per-Row FIFO Queueing & Head Blocking**: Outbox operations dispatch at most one operation per `rowId` in FIFO order. A head operation in `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED` state blocks all successors on that row.
 15. **Exact CAS-Ack Matching & Monotonic Promotion**: Acknowledgements require exact 5-tuple verification. Staged scans verify pre-scan confirmed identity presence; promotion monotonically advances confirmed base without regressing.
 16. **Fail-Closed Teardown & External Marker**: Account leave freezes edits, writes generation and `wipe.marker` outside SQLite before deleting files, and requires startup recovery to complete any interrupted wipe before reopening an account.
+17. **Transient Password Privacy**: Password fields configure `PasswordVisualTransformation` visual masking, emit `semantics { password() }`, and dereference transient strings upon submission, mode switch, or disposal; `AuthSubmitAction.toString()` masks passwords with `[REDACTED]`. (JVM string immutability precludes guaranteed memory erasure; device screen-reader behavior unverified).
+18. **WCAG 2.1 AA Palette Contrast**: Baseline mathematical pairing verified for 16 opaque token pairs (text >= 4.5:1, interactive outline borders >= 3.0:1); decorative mint is restricted to non-text accents. Rendered UI contrast across devices is deferred to Phase 07.
+19. **Non-Color Conveyance**: Task completion, conflict, error, and leave status indicators provide explicit icons, text descriptions, and accessibility state descriptions without relying solely on color.

@@ -1,16 +1,16 @@
 # EVC command plan index — Doggo isolated strict sync
 Date:2026-10-13. [Main plan](plan.md) · [Contracts](contracts.md) · [Ownership](file-ownership.md) · [Dependencies](dependency-matrix.md).
-User selected strict A;planning revision only,all implementation pending0%. Admin warning/local-only logout confirmed. No installation/build/source implementation or runtime verification now.
+User selected strict A; Phases 01–06 marked completed (Phases 01–02 done; Phases 03–05 complete w/ runtime gates deferred; Phase 06 administratively completed per user directive with technical review NOT ACCEPTED 6.5/10 and implementation/test-authoring gaps deferred to Phase 07). Admin warning/local-only logout confirmed.
 
 ## Phase index
 | Phase | Group | Status | Progress | Estimate | Detailed link |
 |---|---|---|---|---|---|
-|01|A|pending|0%|6h|[headless-tooling](phase-01-headless-tooling.md)|
-|02|B|pending|0%|12h|[frozen-foundation](phase-02-frozen-foundation.md)|
-|03|C|pending|0%|40h|[isolated strict server](phase-03-hub-schema-compatibility.md)|
-|04|C|pending|0%|12h|[auth-session](phase-04-auth-session.md)|
-|05|C|pending|0%|28h|[local strict sync](phase-05-local-sync-state.md)|
-|06|C|pending|0%|12h|[compose-ui-theme](phase-06-compose-ui-theme.md)|
+|01|A|completed|100%|6h|[headless-tooling](phase-01-headless-tooling.md)|
+|02|B|completed|100%|12h|[frozen-foundation](phase-02-frozen-foundation.md)|
+|03|C|completed|100%|40h|[isolated strict server](phase-03-hub-schema-compatibility.md)|
+|04|C|completed|100%|12h|[auth-session](phase-04-auth-session.md)|
+|05|C|completed|100%|28h|[local strict sync](phase-05-local-sync-state.md)|
+|06|C|completed|100%|12h|[compose-ui-theme](phase-06-compose-ui-theme.md)|
 |07|D|pending|0%|14h|[android-integration](phase-07-android-integration.md)|
 |08|E|pending|0%|10h|[android-release-operations](phase-08-android-release-operations.md)|
 |09|F|pending|0%|8h|[linux-distribution](phase-09-linux-distribution.md)|

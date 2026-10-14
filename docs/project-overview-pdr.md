@@ -1,15 +1,15 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
-Last Updated: 2026-10-14  
-Document Version: 1.3.0  
-Status: Active  
+Last Updated: 2026-10-14
+Document Version: 1.3.0
+Status: Active
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
 
 ## 1. Executive Summary & Product Vision
 
-Doggo is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization. 
+Doggo is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization.
 
 The project prioritizes a clean multiplatform architecture, where the core domain logic, state management, and user interface are planned in Kotlin Multiplatform and Compose Multiplatform:
 1. **Android Application (`androidApp/`)**: Planned primary mobile target (Phase 07).
@@ -179,7 +179,32 @@ Phase 05 implements local persistence via Room KMP version 1 and SQLite `Bundled
 
 ---
 
-## 8. Technical Constraints & Dependencies
+## 8. Phase 06 Requirements & Acceptance: Shared Compose UI & Accessible Light Theme
+
+Phase 06 delivers the shared Compose Multiplatform user interface, accessible light theme palette, typography scale, responsive layouts, credential security protections, and UI semantics tests.
+
+### 8.1 UI & Theme Requirements
+- **FR-UI-01 (Accessible Light Palette)**: Deliver an accessible light theme palette (`DoggoTheme`, `DoggoColors`) with 16 calculated opaque token pairs meeting WCAG 2.1 AA contrast thresholds (normal text >= 4.5:1, interactive controls >= 3.0:1). Dynamic color is disabled; rendered UI contrast across OEM devices is deferred to Phase 07.
+- **FR-UI-02 (Platform-Universal Typography)**: Deliver a typography scale (`DoggoTypography`) based on Compose `FontFamily.SansSerif`, omitting binary Latin-only font assets to delegate font resolution to platform system fonts; international glyph rendering, TalkBack/Orca compatibility, and OS-level 200% font scaling require platform device testing.
+- **FR-UI-03 (Responsive Breakpoint Architecture)**: Deliver a unified Compose layout adapting between a compact vertical stack (<840dp) and an expanded desktop two-column fixed sidebar layout (>=840dp). Note: compact top bar is non-scrolling in `Scaffold.topBar`, tracked for Phase 07 200% font scale verification.
+- **FR-UI-04 (Transient Password Security)**: Protect passwords with `PasswordVisualTransformation` visual masking, `semantics { password() }` semantic tag, memory dereferencing upon submission or disposal, and `AuthSubmitAction.toString()` redaction with `[REDACTED]`.
+- **FR-UI-05 (Accessible Task Management)**: Display tasks in a lazy column (`TodoList`) with stable keys, non-color completion states, >=48dp touch targets, and modal editing (`TodoEditorDialog`) enforcing `TitlePolicy` scalar limits (1–200 scalars).
+- **FR-UI-06 (Sync Feedback & Review Dialogs)**: Render sync status chips and last reconciled timestamps (`SyncFeedback`), side-by-side conflict resolution (`ConflictReviewDialog`), unsynced work tallies upon sign-out (`LeaveGuardDialog`), and open-source licenses (`LicenseNoticesDialog`).
+
+### 8.2 Phase 06 Deliverables & Status Distinction
+
+| Deliverable | Implementation Scope | Verification Status |
+|---|---|---|
+| Theme & Typography (2 files) | `shared/.../theme/{doggo-theme,doggo-typography}.kt` | Implemented; 16 contrast pairs verified >= 4.5:1 (text) and >= 3.0:1 (controls). |
+| Shared UI Composables (9 files) | `shared/.../ui/{doggo-app,account-form,access-request-panel,todo-list,todo-editor,sync-feedback,conflict-review,leave-guard,license-notices}.kt` | Implemented; responsive layouts, transient password masking, dialogs, 48dp targets. |
+| Resources & Notices (1 file) | `shared/.../composeResources/values/strings.xml` | Implemented; string resource catalog. |
+| UI Semantics Test Suite (1 file) | `shared/.../ui/todo-semantics-test.kt` | Implemented; 7 unit tests PASS via `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest`. |
+| Design & Provenance Specs (2 files) | `docs/{design-guidelines,font-provenance}.md` | Published; WCAG 2.1 AA contrast calculations, font audit, and documented deferrals. |
+| **Rendered UI & Platform Gates** | Full rendered composables, TalkBack, IME Done, 200% device font scaling. | **DEFERRED**: Requires `compose.uiTest` harness and physical/emulator device, scheduled for Phase 07. |
+
+---
+
+## 9. Technical Constraints & Dependencies
 
 1. **Host Environment**: Fedora Linux 44 Server (`x86_64`, kernel `7.1.10`), AMD-V hardware virtualization enabled.
 2. **JDK Requirements**: AGP 8.x requires a compatible JDK (JDK 17 or JDK 21 LTS). System default Java 25 is not verified for AGP Gradle tasks; Studio bundled JBR or `java-21-openjdk-devel` is required.
@@ -190,7 +215,7 @@ Phase 05 implements local persistence via Room KMP version 1 and SQLite `Bundled
 
 ---
 
-## 9. Traceability & Phased Roadmap
+## 10. Traceability & Phased Roadmap
 
 Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
@@ -198,6 +223,6 @@ Progress across the Doggo project is tracked in the living [Project Roadmap](./p
 - **Phase 03 Hub Reuse & Strict Server**: Backend strict synchronization server, legacy isolation fences, admission preflight, schema integration, and operator tooling implemented across 26 files (Implementation Complete; 36 Rust tests pass; live MongoDB gates deferred to Phase 07).
 - **Phase 04 Hub Authentication & Protected Session**: Authentication client, HTTP engine abstraction, session state machine, generation fencing, single-flight refresh, and Android Keystore vault implemented across 14 files (DONE; 19 JVM unit tests PASS; Android Keystore device run and live Hub integration deferred to Phase 07).
 - **Phase 05 Durable Local State & Strict Per-Record Sync**: Room KMP database (v1), 5 entities, atomic DAO transactions, BundledSQLite driver, platform account files, staged full scan, FIFO outbox reconciliation, CAS ack matching, UnknownSuperseded, crash recovery, and fail-closed leave protocol implemented across 29 files (Implementation Complete; 89 common/JVM tests PASS; Android device test and live Mongo e2e sync deferred to Phase 07).
-- **Phase 06 (Upcoming)**: Compose UI implementation with light theme components and view models.
+- **Phase 06 Shared Compose UI & Accessible Light Theme**: Shared Compose UI components, responsive compact/expanded layout, light theme palette with verified WCAG 2.1 AA contrast, transient password protection, and UI semantic test suite implemented across 15 files (5 conditional font/license files omitted per provenance audit; 96 :shared:jvmTest tests pass under lenient dependency verification; marked complete administratively; technical review 6.5/10 NOT ACCEPTED with documented integration gaps deferred to Phase 07).
 - **Phases 07–08 (Upcoming)**: Android integration, connected emulator testing, live Hub sync coordination, and release operations.
 - **Phases 09–10 (Upcoming)**: Linux RPM and Windows MSI packaging.

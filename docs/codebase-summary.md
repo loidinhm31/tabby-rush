@@ -1,20 +1,20 @@
 # Codebase Summary
 
-Generated on: 2026-10-14  
-Based on Repomix compaction: `repomix-output.xml` (192 files, 333,226 tokens, 1,428,852 chars)
+Generated on: 2026-10-14
+Based on Repomix compaction snapshot: `repomix-output.xml` (213 files, 386,105 tokens, 1,670,149 chars, dated 2026-10-14)
 ---
 
 ## 1. Repository Overview
 
 The `doggo` repository contains the implementation, build configuration, domain contracts, and architectural specifications for Doggo, an Android-first shared Compose Multiplatform task management application with secure multi-device synchronization against Glean Hub.
 
-Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts), Phase 03 (Isolated Strict Server & Legacy Isolation), Phase 04 (Hub Authentication & Protected Session), and Phase 05 (Durable Local State & Strict Per-Record Sync), the repository contains:
+Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts), Phase 03 (Isolated Strict Server & Legacy Isolation), Phase 04 (Hub Authentication & Protected Session), Phase 05 (Durable Local State & Strict Per-Record Sync), and Phase 06 (Shared Compose UI & Accessible Light Theme), the repository contains:
 1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
-2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state/actions, identity/authentication contracts, strict sync canonical framing, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 1), BundledSQLiteDriver, local outbox mutation engine, staged full scan reconciler, fail-closed account leave protocol, and comprehensive unit/instrumented tests.
+2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state/actions, identity/authentication contracts, strict sync canonical framing, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 1), BundledSQLiteDriver, local outbox mutation engine, staged full scan reconciler, fail-closed account leave protocol, shared Compose UI components (app shell, responsive layout, account form, access request panel, todo list/editor, sync feedback, conflict review, leave guard, license notices), accessible light theme tokens (WCAG 2.1 AA verified), and comprehensive unit/instrumented/semantics tests.
 3. **Host Virtualization & Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, and Hub provisioning/smoke runners.
 4. **Hub Integration Artifacts (`integration/`)**: Canonical strict-v1 JSON schema specification matching backend admission rules.
 5. **Automated Verification Harness (`tests/`)**: Automated shell suites validating scripts, Gradle contracts, Kotlin sources, and cryptographic digest vectors.
-6. **Technical Documentation (`docs/`)**: Architecture specifications, API contracts, toolchain evidence, operational runbooks, compatibility acceptance criteria, auth/credential specifications, local storage and sync specifications, and coding standards.
+6. **Technical Documentation (`docs/`)**: Architecture specifications, API contracts, toolchain evidence, operational runbooks, compatibility acceptance criteria, auth/credential specifications, local storage and sync specifications, design guidelines, font provenance, and coding standards.
 7. **Planning & Roadmap (`plans/`)**: Phased execution plans, architectural decisions, and verification reports.
 
 ### High-Level Directory Structure
@@ -39,6 +39,9 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 │   │   └── dev.doggo.shared.data.DoggoDatabase/
 │   │       └── 1.json                  # Canonical Room schema version 1 export
 │   └── src/
+│       ├── commonMain/composeResources/
+│       │   └── values/
+│       │       └── strings.xml             # UI string resource catalog
 │       ├── commonMain/kotlin/dev/doggo/shared/
 │       │   ├── contract/               # Pure domain contracts & validation policies
 │       │   ├── auth/                   # Hub authentication, HTTP client, and session state machine
@@ -59,6 +62,19 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 │       │       ├── outbox-reconciliation.kt    # FIFO dispatch, CAS ack matching, and UnknownSuperseded
 │       │       ├── account-sync-coordinator.kt # 3-stage sync round, conflict actions, generation fencing
 │       │       └── account-leave-protocol.kt   # Fail-closed guarded leave & wipe marker protocol
+│       │   ├── theme/                  # Accessible light theme and typography
+│       │   │   ├── doggo-theme.kt              # Color tokens, WCAG 2.1 AA contrast palette, Theme wrapper
+│       │   │   └── doggo-typography.kt         # Type scale, line heights, system SansSerif basis
+│       │   └── ui/                     # Shared Compose Multiplatform UI components
+│       │       ├── doggo-app.kt                # Root responsive scaffold (compact stack / expanded sidebar)
+│       │       ├── account-form.kt             # Login & registration form with transient password masking
+│       │       ├── access-request-panel.kt     # App access request, status reload, and admin guidance
+│       │       ├── todo-list.kt                # LazyColumn task list, stable keys, filter chips, counts
+│       │       ├── todo-editor.kt              # Task creation/editing dialog with TitlePolicy validation
+│       │       ├── sync-feedback.kt            # Sync progress, last reconciled timestamp, status chips
+│       │       ├── conflict-review.kt          # Conflict dialog (Discard, Reapply, CopyAsNew)
+│       │       ├── leave-guard.kt              # Guarded account sign-out dialog with unsynced tallies
+│       │       └── license-notices.kt          # Bundled open-source dependency license viewer
 │       ├── androidMain/kotlin/dev/doggo/shared/
 │       │   ├── auth/                   # Android OkHttp engine and Keystore vault
 │       │   └── data/
@@ -78,6 +94,8 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 │       │       ├── outbox-reconciliation-test.kt # CAS acks, FIFO, UnknownSuperseded, retries
 │       │       ├── account-sync-coordinator-test.kt # Sync loop, conflict actions, cancellation
 │       │       └── account-leave-protocol-test.kt # Review guards, teardown order, wipe recovery
+│       │   └── ui/                     # Phase 06 UI semantics & theme test suites
+│       │       └── todo-semantics-test.kt      # Contrast calculations, password redaction, UI invariants
 │       ├── jvmTest/kotlin/dev/doggo/shared/data/
 │       │   └── room-account-store-test.kt      # BundledSQLite driver temporary database tests
 │       └── androidInstrumentedTest/kotlin/dev/doggo/shared/
@@ -95,7 +113,9 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
     ├── authentication-and-credentials.md # Auth architecture, security invariants, and credential vault
     ├── code-standards.md               # Coding, testing, and security standards
     ├── codebase-summary.md             # This document (codebase inventory & metrics)
+    ├── design-guidelines.md            # Visual language, tokens, WCAG 2.1 AA contrast, and UI standards
     ├── development-roadmap.md          # Architectural evolution roadmap
+    ├── font-provenance.md              # Upstream font audit and system font fallback decision
     ├── foundation-evidence.md          # Phase 02 cryptographic and toolchain evidence
     ├── headless-android-setup.md       # Operational runbook for headless Xpra & Android
     ├── host-tooling-evidence.md        # Verified host hardware, virtualization, and tool capabilities
@@ -171,20 +191,40 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 | `room-account-store-test.kt` (JVM) | Real SQLite temporary database: schema v1, atomic saves, unsent create-delete cancel, FIFO outbox, monotonic base advancement, crash recovery, wipe. | **PASSED** (JVM) |
 | `room-account-store-test.kt` (Android) | Android instrumented Room tests with app-private storage and Keystore integration. | **DEFERRED** (Phase 07) |
 
-### 2.5 Glean Hub Integration Artifacts & Host Scripts
+### 2.5 Shared Compose UI & Theme Subsystem (Phase 06)
+
+| Component File | Primary Types & Composables | Architectural Role |
+|---|---|---|
+| `doggo-theme.kt` | `DoggoTheme`, `DoggoColors`, `DoggoCustomColors` | Accessible light palette (WCAG 2.1 AA verified), Material 3 `LightColorScheme`, dynamic colors disabled. |
+| `doggo-typography.kt` | `DoggoTypography` | Pinned typography scale (12sp–34sp) based on Compose `FontFamily.SansSerif` for universal platform support. |
+| `doggo-app.kt` | `DoggoApp`, `DoggoContent` | Root composable with responsive layout (<840dp compact vertical stack, >=840dp expanded sidebar). |
+| `account-form.kt` | `AccountForm` | Login/signup toggle, transient password masking, non-saveable state, auto-clearing upon submission. |
+| `access-request-panel.kt` | `AccessRequestPanel` | App access request submission, status polling (`pending`, `rejected`, `approved`, `unknown`), sign-out. |
+| `todo-list.kt` | `TodoList`, `TodoItemRow` | LazyColumn task projection, stable `key = { it.rowId }`, non-color completion state, >=48dp touch targets. |
+| `todo-editor.kt` | `TodoEditorDialog` | Modal task editor, `TitlePolicy` validation (1–200 Unicode scalars), draft error display. |
+| `sync-feedback.kt` | `SyncFeedback` | Sync status badge, last reconciled relative/UTC timestamp formatting, pause/reset error guidance. |
+| `conflict-review.kt` | `ConflictReviewDialog` | Side-by-side local vs remote comparison, user actions (`Discard`, `Reapply`, `CopyAsNew`, `Decide Later`). |
+| `leave-guard.kt` | `LeaveGuardDialog` | Fail-closed sign-out warning displaying uncommitted draft, pending, uncertain, and conflict counts. |
+| `license-notices.kt` | `LicenseNoticesDialog` | In-app open-source attribution viewer for bundled third-party libraries and fonts. |
+| `strings.xml` | Resource definitions | Compose Multiplatform string catalog (`composeResources/values/strings.xml`). |
+
+| Test Suite File | Scope & Tested Invariants | Status |
+|---|---|---|
+| `todo-semantics-test.kt` | 16 WCAG 2.1 AA relative luminance & contrast pairs (Ink, Page, White, Cream, MintSurface, Coral, Muted, Outline), `AuthSubmitAction.toString()` password redaction, `TitlePolicy` editor validation, `LeaveGuardState` tallies, `AccessRequestInfo` statuses, `SyncProgress` formatting and timestamp calculation. | **PASSED** (JVM, 7/7 tests) |
+
+### 2.6 Glean Hub Integration Artifacts & Host Scripts
 
 - `integration/glean-hub/doggo-schema.json`: Canonical strict-v1 todos schema specification.
 - `scripts/`: Headless Xpra display orchestration (`start-xpra.sh`), Android SDK/JDK environment configuration (`android-sdk-env.sh`), emulator management (`start-android-emulator.sh`), and Hub provisioning/smoke runners (`hub-schema-provision.mjs`, `hub-compatibility-smoke.mjs`).
-
 ---
 
-## 3. Repomix Compaction Metrics
+## 3. Repomix Compaction Metrics (Dated Generation Snapshot: 2026-10-14)
 
-- **Total Files Packed:** 192 files
-- **Total Character Count:** 1,428,852 characters
-- **Total Token Count:** 333,226 tokens
-- **Security Check:** 1 test file (`endpoint-policy-test.kt`) was excluded by default security filters due to a mock userinfo URL vector. 0 secrets in packed output.
-- **Top Files by Token Footprint:** `plans/.../file-ownership.md` (7,367 tokens), `docs/codebase-summary.md` (6,997 tokens), `reports/contract-review.md` (5,471 tokens), `contracts.md` (5,106 tokens), `staged-full-scan-test.kt` (4,537 tokens).
+- **Total Files Packed:** 213 files
+- **Total Character Count:** 1,670,149 characters
+- **Total Token Count:** 386,105 tokens
+- **Security Check:** Repomix security scanner reported 0 secrets detected in packed output; 1 test file (`endpoint-policy-test.kt`) was excluded by default filter heuristics due to mock userinfo URI test vectors.
+- **Top Files by Token Footprint:** `plans/261013-1540-doggo-glean-hub-reuse/file-ownership.md` (7,367 tokens), `docs/codebase-summary.md` (6,557 tokens), `docs/project-overview-pdr.md` (6,480 tokens), `docs/project-roadmap.md` (5,758 tokens), `plans/261013-1540-doggo-glean-hub-reuse/reports/contract-review.md` (5,471 tokens).
 
 ---
 
@@ -196,6 +236,7 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
    - **Phase 03 (Hub Reuse & Strict Server)**: Backend strict synchronization server, legacy isolation fences, admission preflight, schema integration, and operator tooling implemented across 26 files (6 in Doggo, 20 in sibling `glean-hub-sync`). Unit and route tests passing (36 passed, clippy clean). Live Mongo integration suites deferred to Phase 07.
    - **Phase 04 (Hub Authentication & Protected Session)**: Authentication client, HTTP engine abstraction, session state machine, generation fencing, single-flight refresh, and Android Keystore vault implemented across 14 files. 19 unit tests passing under `:shared:jvmTest`. Android Keystore instrumented test deferred to Phase 07.
    - **Phase 05 (Durable Local State & Strict Per-Record Sync)**: Room KMP database (v1), 5 Room entities, atomic DAO transactions, BundledSQLite driver, platform account files, staged full scan, FIFO outbox reconciliation, CAS ack matching, UnknownSuperseded disambiguation, crash recovery, and fail-closed account leave protocol implemented across 29 files. 89 common and JVM unit tests pass via `./gradlew --dependency-verification=lenient :shared:jvmTest`. Android instrumented Room tests and live Hub e2e sync deferred to Phase 07.
+   - **Phase 06 (Shared Compose UI & Accessible Light Theme)**: Shared Compose UI composables, responsive compact (<840dp) and expanded (>=840dp) layouts, light theme tokens with verified WCAG 2.1 AA contrast ratios, transient masked password handling, system font fallback (`FontFamily.SansSerif`), open source license viewer, and 7 unit tests in `TodoSemanticsTest` implemented across 15 files (5 conditional font/license files omitted per provenance audit). 96 :shared:jvmTest tests pass under lenient dependency verification (strict verification fails on `verification-metadata.xml`). Marked complete administratively; technical review 6.5/10 NOT ACCEPTED with documented integration gaps deferred to Phase 07 (rendered UI automation with `compose.uiTest`, `AccountIdentity.isAdmin` contract amendment, 200% font scale device verification, and string localization).
 2. **Zero Destructive Fallback**: Room database version 1 uses explicit migrations; `fallbackToDestructiveMigration()` is strictly forbidden.
 3. **Account Directory Isolation**: Account directories are keyed strictly by canonical `AccountKey` SHA-256 lowercase hex strings; canonical path validation rejects symlinks and directory traversal attempts outside the base directory.
 4. **FIFO Outbox & Head Blocking**: Outbox operations dispatch at most one operation per `rowId` in FIFO order (`localRevision`). A head operation in `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED` state blocks all successors on that row from dispatching.
@@ -204,3 +245,7 @@ Following Phase 01 (Headless Tooling), Phase 02 (Frozen Foundation & Contracts),
 7. **UnknownSuperseded Disambiguation**: A conflict returned for an operation that had previous uncertain delivery history is classified as `UNKNOWN_SUPERSEDED` rather than plain `CONFLICT`, acknowledging that the mutation may have committed before a subsequent edit bumped the revision.
 8. **Crash Recovery**: Interrupted dispatches (`DISPATCHING`) are reset to `UNCERTAIN` on startup. Push coroutine cancellation uses `NonCancellable` to ensure in-flight batches are marked `UNCERTAIN`.
 9. **Fail-Closed Teardown Sequence**: Teardown checks 5 categories of unresolved work, freezes the store, writes generation and `wipe.marker` outside SQLite before deleting any data, cancels background schedulers, closes database handles, deletes DB files, and clears credentials before removing the marker.
+10. **WCAG 2.1 AA Palette Contrast**: Baseline mathematical pairing verified for 16 opaque token pairs (text >= 4.5:1, interactive outline borders >= 3.0:1); decorative mint is restricted to non-text accents. Rendered UI contrast across devices is deferred to Phase 07.
+11. **Transient Masked Password Memory**: Password fields configure `PasswordVisualTransformation`, emit `semantics { password() }`, and dereference transient strings upon submission, mode switch, or disposal; `AuthSubmitAction.toString()` masks passwords with `[REDACTED]`. (JVM string immutability precludes guaranteed memory erasure; device screen-reader behavior unverified).
+12. **Non-Color State Conveyance**: Completion, conflict, error, and leave status indicators provide explicit icons, text descriptions, and accessibility state descriptions without relying solely on color.
+13. **Responsive Breakpoint Layout**: Single unified UI hierarchy adapts between a vertical compact stack (<840dp) and a fixed-sidebar desktop workspace (>=840dp). Note: compact top bar is non-scrolling in `Scaffold.topBar`, tracked for 200% font scale device testing in Phase 07.

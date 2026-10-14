@@ -9,7 +9,7 @@ tags: [feature, auth, database, api, frontend]
 created: 2026-10-13
 ---
 # Doggo — Glean Hub reuse implementation plan
-User-selected strict A incorporated; Phase 01 tooling, Phase 02 frozen foundation, Phase 03 isolated strict server, Phase 04 Hub authentication and protected session, and Phase 05 durable local state and strict per-record sync completed (2026-10-14). Existing embedded apps/shared Rust/TS libraries/adminUI/auth server stay unchanged; strict client never falls back to legacy sync.
+User-selected strict A incorporated; Phase 01 tooling, Phase 02 frozen foundation, Phase 03 isolated strict server, Phase 04 Hub authentication and protected session, Phase 05 durable local state and strict per-record sync, and Phase 06 shared Compose UI and accessible light theme completed (2026-10-14; Phase 06 technical review blockers and integration gates deferred to Phase 07). Existing embedded apps/shared Rust/TS libraries/adminUI/auth server stay unchanged; strict client never falls back to legacy sync.
 
 ## Phases
 | Phase | Link | Group | Status | Effort |
@@ -19,7 +19,7 @@ User-selected strict A incorporated; Phase 01 tooling, Phase 02 frozen foundatio
 |03|[isolated strict server](phase-03-hub-schema-compatibility.md)|C|completed / 100% (2026-10-14)|40h|
 |04|[auth-session](phase-04-auth-session.md)|C|completed / 100% (2026-10-14)|12h|
 |05|[local strict sync](phase-05-local-sync-state.md)|C|completed / 100% (2026-10-14T11:30:00Z)|28h|
-|06|[compose-ui-theme](phase-06-compose-ui-theme.md)|C|pending0%|12h|
+|06|[compose-ui-theme](phase-06-compose-ui-theme.md)|C|completed / 100% (2026-10-14T12:56:00Z)|12h|
 |07|[android-integration](phase-07-android-integration.md)|D|pending0%|14h|
 |08|[android-release-operations](phase-08-android-release-operations.md)|E|pending0%|10h|
 |09|[linux-distribution](phase-09-linux-distribution.md)|F|pending0%|8h|

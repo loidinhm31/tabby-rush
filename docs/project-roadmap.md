@@ -1,10 +1,10 @@
 # Doggo Project Roadmap
 
-**Current Status:** In Progress  
-**Last Updated:** 2026-10-14  
-**Target Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Authoritative Evolution Plan)  
-**Historical Plan:** [plans/261013-0914-doggo-compose-todos/plan.md](../plans/261013-0914-doggo-compose-todos/plan.md) (Superseded)  
-**Overall Completion:** 66% planned effort (98h / 148h; Phase 01 & 02 DONE; Phase 03, 04 & 05 Implementation Complete, Runtime Acceptance Pending)
+**Current Status:** In Progress
+**Last Updated:** 2026-10-14
+**Target Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Authoritative Evolution Plan)
+**Historical Plan:** [plans/261013-0914-doggo-compose-todos/plan.md](../plans/261013-0914-doggo-compose-todos/plan.md) (Superseded)
+**Overall Completion:** 74% planned-effort-weighted administrative progress (110h / 148h; Phase 01 & 02 DONE; Phase 03, 04, 05 & 06 Implementation Complete, Runtime Acceptance Pending)
 
 ---
 
@@ -25,16 +25,17 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 | **03** | [Isolated Strict Server](../plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md) | C | 40h | **Implementation Complete\*** | 2026-10-14 | 100% |
 | **04** | [Auth Session & Vault](../plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md) | C | 12h | **Implementation Complete†** | 2026-10-14 | 100% |
 | **05** | [Local Strict Sync](../plans/261013-1540-doggo-glean-hub-reuse/phase-05-local-sync-state.md) | C | 28h | **Implementation Complete‡** | 2026-10-14 | 100% |
-| **06** | [Compose UI & Light Theme](../plans/261013-1540-doggo-glean-hub-reuse/phase-06-compose-ui-theme.md) | C | 12h | Pending | — | 0% |
+| **06** | [Compose UI & Light Theme](../plans/261013-1540-doggo-glean-hub-reuse/phase-06-compose-ui-theme.md) | C | 12h | **Implementation Complete§** | 2026-10-14 | 100% |
 | **07** | [Android Integration](../plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md) | D | 14h | Pending | — | 0% |
 | **08** | [Android Release Operations](../plans/261013-1540-doggo-glean-hub-reuse/phase-08-android-release-operations.md) | E | 10h | Pending | — | 0% |
 | **09** | [Linux Installed RPM Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) | F | 8h | Pending | — | 0% |
 | **10** | [Windows Installed MSI Distribution](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) | G | 6h | Pending | — | 0% |
-| **Total** | | | **148h** | | | **66%** |
+| **Total** | | | **148h** | | | **74%** |
 
-*\*Phase 03 implementation complete across 26 files (36 Rust unit/route tests PASS, clippy clean); live Mongo integration gates (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.*  
-*†Phase 04 implementation complete across 14 files (43 JVM unit tests PASS, code review cycle 3 approved 7/10); Android Keystore instrumented test and live Hub runtime acceptance deferred to Phase 07.*  
+*\*Phase 03 implementation complete across 26 files (36 Rust unit/route tests PASS, clippy clean); live Mongo integration gates (§9–§12) are deferred to Phase 07 device sync, and mounted old-binary/rollback gates to Phase 08 release operations.*
+*†Phase 04 implementation complete across 14 files (43 JVM unit tests PASS, code review cycle 3 approved 7/10); Android Keystore instrumented test and live Hub runtime acceptance deferred to Phase 07.*
 *‡Phase 05 implementation complete across 29 files (89 JVM common/Room tests PASS); Android instrumented Room tests and live Hub end-to-end sync gates deferred to Phase 07 device integration.*
+*§Phase 06 implementation complete across 15 files (96 :shared:jvmTest tests pass under lenient dependency verification, strict verification fails on verification-metadata.xml, WCAG 2.1 AA verified contrast); marked complete administratively; technical review 6.5/10 NOT ACCEPTED with documented integration gaps (admin heuristic, compose.uiTest harness, typography/strings.xml) deferred to Phase 07.*
 
 ---
 
@@ -86,8 +87,16 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
     - Unit & Integration Test Suites: `hub-sync-client-test.kt`, `staged-full-scan-test.kt`, `outbox-reconciliation-test.kt`, `account-sync-coordinator-test.kt`, `account-leave-protocol-test.kt`, `room-account-store-test.kt` (89 JVM tests passing).
     - Documentation: `docs/local-storage-and-sync.md`, `docs/sync-acceptance.md`.
   - *Note on Runtime Acceptance Gate:* 89 JVM common and Room tests pass; Android instrumented tests (`androidInstrumentedTest`) and live Hub sync end-to-end verification are scheduled for Phase 07 device integration.
-- **Phase 06 (UPCOMING):** Compose UI and light theme components. Next active phase is **Phase 06: Compose UI & Light Theme**.
+- **Phase 06 (COMPLETED 2026-10-14):** Shared Compose UI, responsive layout, accessible light theme, transient password protection, open-source attribution, and UI state/token test suite (15 files delivered across `:shared` module, theme, composeResources, test suites, and documentation; 5 conditional font/license files omitted per provenance audit; 96/96 JVM tests passing across 14 test suites under lenient dependency verification).
+  - **Key Deliverables:**
+    - Theme & Typography: `shared/src/commonMain/kotlin/dev/doggo/shared/theme/doggo-theme.kt` (WCAG 2.1 AA verified light palette: primary `#004646`, deep teal `#003838`, mint surface `#E6F0F2`, cream `#F7F4ED`, dark coral `#C62828`, muted `#546269`, outline `#687677`, ink `#0F172A`), `shared/src/commonMain/kotlin/dev/doggo/shared/theme/doggo-typography.kt` (system `FontFamily.SansSerif` basis, 12sp–34sp type scale).
+    - Shared Compose UI Composables: `doggo-app.kt` (responsive compact <840dp vertical stack and expanded >=840dp fixed sidebar layout), `account-form.kt` (login/register with transient password masking and auto-dereference), `access-request-panel.kt` (access state handling for pending, rejected, approved, and unknown), `todo-list.kt` (LazyColumn task list, stable keys, non-color completion states, >=48dp touch targets), `todo-editor.kt` (task creation/editing modal with TitlePolicy validation), `sync-feedback.kt` (sync progress, last reconciled timestamp formatting, paused/reset guidance), `conflict-review.kt` (local vs remote resolution: Discard, Reapply, CopyAsNew, Decide Later), `leave-guard.kt` (fail-closed sign-out warning with unsynced draft/pending/uncertain/conflict tallies), `license-notices.kt` (open-source attribution viewer).
+    - Resources: `shared/src/commonMain/composeResources/values/strings.xml`.
+    - Documentation: `docs/design-guidelines.md` (WCAG 2.1 AA contrast matrix, responsive architecture, documented integration gaps), `docs/font-provenance.md` (upstream font rights audit, system font decision).
+    - Test Suite: `shared/src/commonTest/kotlin/dev/doggo/shared/ui/todo-semantics-test.kt` (7 tests covering 16 calculated WCAG contrast token pairs, password toString redaction, TitlePolicy validation invocation, LeaveGuardState tallies, access statuses, and sync formatting; rendered Compose UI tests absent).
+  - *Note on Runtime Acceptance Gate:* 96 :shared:jvmTest tests pass under lenient dependency verification (strict verification fails on verification-metadata.xml), including 7 Phase 06 state/token tests; rendered-UI tests absent (not merely deferred). Technical review cycle 3 scored 6.5/10 NOT ACCEPTED; phase marked complete administratively per user directive with documented integration gaps (admin heuristic, compose.uiTest harness, typography/strings.xml localization) deferred to Phase 07. Rendered UI automation, device-level 200% font scaling, and TalkBack / screen-reader verification are scheduled for Phase 07 Android integration.
 
+Next active phase is **Phase 07: Android Integration**.
 ### Milestone 3: Android Release & Live Sync (Groups D & E) — UPCOMING
 - **Phase 07:** Full Android integration, Hub sync coordinator, WorkManager background sync, Android KeyStore credential vault, connected UI tests on emulator (`emulator-5554`).
 - **Phase 08:** Android release operations, isolated live Hub verification, signing and recovery runbooks, signed release APK over HTTPS.
@@ -98,6 +107,21 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 ---
 
 ## 4. Changelog
+### [0.6.0-alpha.1] — 2026-10-14
+#### Completed
+- **Phase 06 Shared Compose UI & Accessible Light Theme**:
+  - Implemented accessible light theme palette (`DoggoTheme`, `DoggoColors`) with 16 mathematically verified WCAG 2.1 AA contrast pairs (normal text >= 4.5:1, interactive controls >= 3.0:1) and disabled dynamic color.
+  - Implemented platform-universal typography scale (`DoggoTypography`) using Compose `FontFamily.SansSerif` to support international glyph coverage and OS-level font scaling.
+  - Implemented responsive application scaffold (`DoggoApp`) adapting between compact vertical stack (<840dp) and two-column fixed-sidebar layout (>=840dp).
+  - Implemented authentication form (`AccountForm`) with transient masked passwords, `semantics { password() }`, auto-clearing upon submission, and redacted `toString()` output.
+  - Implemented access request panel (`AccessRequestPanel`) supporting pending, approved, rejected, and unknown statuses.
+  - Implemented task projection list (`TodoList`) and modal editor (`TodoEditorDialog`) with `TitlePolicy` validation (1–200 Unicode scalars), stable keys, and >=48dp touch targets.
+  - Implemented sync progress feedback (`SyncFeedback`), conflict resolution dialog (`ConflictReviewDialog`), and guarded account teardown dialog (`LeaveGuardDialog`).
+  - Implemented open-source dependency attribution viewer (`LicenseNoticesDialog`) and resource strings catalog (`strings.xml`).
+  - Published design standards (`docs/design-guidelines.md`) and font provenance analysis (`docs/font-provenance.md`).
+  - Delivered exactly 15 files across `:shared` module, theme, composeResources, test suites, and documentation (5 conditional font/license files omitted per provenance audit).
+  - Validated with 96 :shared:jvmTest tests passing under lenient dependency verification; marked complete administratively; technical review 6.5/10 NOT ACCEPTED with documented integration gaps (admin heuristic, compose.uiTest harness, typography/strings.xml) deferred to Phase 07.
+
 ### [0.5.0-alpha.1] — 2026-10-14
 #### Completed
 - **Phase 05 Durable Local State & Strict Per-Record Sync**:

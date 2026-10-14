@@ -189,7 +189,6 @@ class OutboxReconciliation(
         for (op in dispatched) {
             val result = resultsByOpId[op.opId]
             if (result == null) {
-                // Server omitted result for this opId; retain UNCERTAIN
                 store.dao.updateDeliveryState(
                     opId = op.opId,
                     state = OutboxEntity.STATE_UNCERTAIN,
@@ -208,14 +207,15 @@ class OutboxReconciliation(
                 continue
             }
 
-            // Validate digest matches
-            if (result.digest != op.digest) {
-                store.dao.updateDeliveryState(
-                    opId = op.opId,
-                    state = OutboxEntity.STATE_UNCERTAIN,
-                    errorMessage = "Server response digest mismatched request digest"
-                )
-                continue
+            if (result.status == StrictOperationStatus.ACCEPTED.wireName || result.status == StrictOperationStatus.REPLAYED.wireName) {
+                if (result.digest != op.digest) {
+                    store.dao.updateDeliveryState(
+                        opId = op.opId,
+                        state = OutboxEntity.STATE_UNCERTAIN,
+                        errorMessage = "Server response digest mismatched request digest"
+                    )
+                    continue
+                }
             }
 
             when (result.status) {
@@ -231,7 +231,6 @@ class OutboxReconciliation(
                             errorMessage = "acceptedRevision $acceptedRev did not equal expected $expectedNextRev"
                         )
                     } else {
-                        // Monotonically advance confirmed base without clearing newer draft edits
                         store.reconcileAccepted(
                             opId = op.opId,
                             serverRevision = acceptedRev

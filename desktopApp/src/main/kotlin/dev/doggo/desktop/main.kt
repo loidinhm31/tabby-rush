@@ -280,7 +280,7 @@ class DesktopController(
         val runtime = activeRuntime ?: return
         val now = System.currentTimeMillis()
         if (editor.id == null) {
-            runtime.store.saveTodoLocally(Todo("todo_" + UUID.randomUUID().toString().replace("-", "").take(16), title, false, now, now))
+            runtime.store.saveTodoLocally(Todo(UUID.randomUUID().toString().lowercase(), title, false, now, now))
         } else {
             allTodos.firstOrNull { it.id == editor.id }?.let {
                 runtime.store.saveTodoLocally(it.copy(title = title, updatedAt = maxOf(now, it.createdAt)))

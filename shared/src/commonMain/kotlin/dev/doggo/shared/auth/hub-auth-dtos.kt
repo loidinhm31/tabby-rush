@@ -5,6 +5,54 @@ import dev.doggo.shared.contract.AccountIdentity
 import dev.doggo.shared.contract.CredentialBundle
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.datetime.Instant
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.longOrNull
+
+/**
+ * Custom serializer for timestamp fields that can be represented either as epoch milliseconds (Long)
+ * or as an ISO-8601 string (e.g. "2026-10-14T15:53:24.077183373Z") from real Hub backends.
+ */
+object FlexibleTimestampSerializer : KSerializer<Long> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("FlexibleTimestamp", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): Long {
+        if (decoder is JsonDecoder) {
+            val element = decoder.decodeJsonElement()
+            if (element is JsonPrimitive) {
+                element.longOrNull?.let { return it }
+                val content = element.content
+                content.toLongOrNull()?.let { return it }
+                try {
+                    return Instant.parse(content).toEpochMilliseconds()
+                } catch (_: Exception) {
+                    return 0L
+                }
+            }
+        }
+        return try {
+            decoder.decodeLong()
+        } catch (_: Exception) {
+            try {
+                Instant.parse(decoder.decodeString()).toEpochMilliseconds()
+            } catch (_: Exception) {
+                0L
+            }
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: Long) {
+        encoder.encodeLong(value)
+    }
+}
 
 @Serializable
 data class RegisterRequest(
@@ -68,6 +116,7 @@ data class MeResponse(
     val isAdmin: Boolean = false,
     val notificationsAllowed: Boolean = false,
     val timezone: String? = null,
+    @Serializable(with = FlexibleTimestampSerializer::class)
     val createdAt: Long = 0L
 ) {
     fun toAccountIdentity(): AccountIdentity = AccountIdentity(
@@ -93,8 +142,10 @@ data class AccessRequestDto(
     val appId: String,
     val message: String? = null,
     val status: String,
-    val createdAt: Long,
-    val updatedAt: Long
+    @Serializable(with = FlexibleTimestampSerializer::class)
+    val createdAt: Long = 0L,
+    @Serializable(with = FlexibleTimestampSerializer::class)
+    val updatedAt: Long = 0L
 ) {
     fun toAccessRequestInfo(): AccessRequestInfo = AccessRequestInfo(
         id = id,

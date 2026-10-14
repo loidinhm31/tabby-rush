@@ -18,9 +18,13 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        val defaultOrigin = project.findProperty("hubOrigin")?.toString()
+            ?: System.getenv("APPROVED_HUB_ORIGIN")
+            ?: "https://hub.example.com"
+
         buildConfigField("String", "HUB_API_KEY", "\"doggo-dev-api-key\"")
-        buildConfigField("String", "HUB_ORIGIN_DEBUG", "\"http://10.0.2.2:3000\"")
-        buildConfigField("String", "HUB_ORIGIN_RELEASE", "\"https://hub.glean.dev\"")
+        buildConfigField("String", "HUB_ORIGIN_DEBUG", "\"$defaultOrigin\"")
+        buildConfigField("String", "HUB_ORIGIN_RELEASE", "\"$defaultOrigin\"")
     }
 
     signingConfigs {

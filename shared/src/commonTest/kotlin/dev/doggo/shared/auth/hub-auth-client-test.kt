@@ -178,6 +178,25 @@ class HubAuthClientTest {
     }
 
     @Test
+    fun testGetMeWithIsoTimestampString() = runTest {
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{"userId":"6acfa5ca5b6bdf1a406f2b85","username":"loidi_app","email":"loidi@doggo.dev","apps":[],"isAdmin":false,"notificationsAllowed":false,"createdAt":"2026-10-14T15:53:24.077183373Z"}"""
+            )
+        }
+
+        val client = HubAuthClient(debugConfig, engine)
+        val result = client.getMe("my-access-token")
+
+        assertIs<ApiResult.Success<MeResponse>>(result)
+        assertEquals("6acfa5ca5b6bdf1a406f2b85", result.value.userId)
+        assertEquals("loidi_app", result.value.username)
+        assertEquals("loidi@doggo.dev", result.value.email)
+        assertTrue(result.value.createdAt > 0L, "ISO timestamp must be parsed to positive epoch milliseconds")
+    }
+
+    @Test
     fun testAccessRequestCreationAndListing() = runTest {
         val engine = TestHttpEngine { request ->
             if (request.url.encodedPath == "/api/v1/apps/access-requests") {

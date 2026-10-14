@@ -68,8 +68,11 @@ class DesktopController(
     val instanceGuard: SingleInstanceGuard
 ) {
     val accountFiles = JvmAccountFiles()
+    val origin = System.getenv("APPROVED_HUB_ORIGIN")
+        ?: System.getProperty("doggo.hub.origin")
+        ?: if (mode == BuildMode.DEBUG) "http://127.0.0.1:3000" else "https://hub.example.com"
     val hubConfig = HubConfig(
-        canonicalOrigin = if (mode == BuildMode.DEBUG) "http://127.0.0.1:3000" else "https://hub.glean.dev",
+        canonicalOrigin = origin,
         appId = "doggo",
         appApiKey = "doggo-dev-api-key",
         buildMode = mode

@@ -1,9 +1,9 @@
 # Doggo Security Model & Operational Disaster Recovery
 
-**Document Version**: 1.2.0  
-**Phase**: 10 — Native Windows DPAPI and MSI Artifact Delivery  
-**Status**: Platform credential custody model; Windows ACL and installed-runtime acceptance caveats disclosed  
-**Related Documents**: [Deployment Guide](./deployment-guide.md) · [Release Acceptance](./release-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
+**Document Version**: 1.3.0
+**Phase**: 12 — Coordinated Cutover, Recovery Runbook & Release Documentation
+**Status**: Platform credential custody model; Windows ACL limits and strict-v2 recovery boundaries documented
+**Related Documents**: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Deployment Guide](./deployment-guide.md) · [Release Acceptance](./release-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
 ---
 
@@ -41,10 +41,11 @@
 
 ---
 
-## 3. Disaster Recovery Runbook: Fresh-Epoch Recovery
+## 3. Disaster Recovery Runbook: Strict-v1 Fresh-Epoch Recovery (Emergency Cold Restore Only)
 
-When database corruption, node failure, or disaster requires restoring records from a backup, the strict-v1 protocol dictates creating a **fresh external UUID epoch** and provisioning an isolated target collection rather than in-place overwriting.
+> **QUARANTINE & SAFETY NOTICE**: This section and `scripts/hub-strict-recovery.js` apply **exclusively** to emergency disaster recovery under the legacy `strict-v1` protocol. It creates a fresh UUID epoch and whitelists only the 4 original columns (`id`, `title`, `completed`, `createdAt`). It is **NOT** compatible with `strict-v2`, cannot be used as a feature rollback mechanism, and will destroy temporal metadata if run against a v2 database. For strict-v2 upgrades and incidents, see Section 4 and the [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md).
 
+When catastrophic database corruption or node loss requires restoring records from cold storage under `strict-v1`, the protocol dictates allocating a **fresh external UUID epoch** and provisioning an isolated target collection rather than in-place overwriting:
 ```
 ┌────────────────────────────────────────────────────────┐
 │ 1. Halt Ingress Traffic & Quiesce All Hub Writers      │
@@ -121,3 +122,25 @@ mongosh --nodb --file scripts/hub-strict-recovery.js
 4. If CAS succeeds, the previous collection is preserved intact (never dropped).
 5. If CAS times out or is ambiguous, ingress traffic remains BLOCKED until the operator manually inspects `_schemas` on primary majority.
 6. Restart Hub API services. Connected Doggo clients will receive an `epochMismatch` HTTP 409 notice, pause in `ResetRequired` state, and await explicit operator review.
+
+---
+
+## 4. Strict-v2 Feature Upgrade & Incident Recovery Boundaries
+
+### 4.1 In-Place Upgrade vs. Disaster Recovery
+Upgrading Doggo to `strict-v2` is a **data-preserving, in-place feature migration**, fundamentally distinct from emergency fresh-epoch disaster recovery:
+- **Preserves Active Epoch**: `strictEpoch` UUID remains unchanged in `_schemas`.
+- **Preserves Collection Identity**: All data resides in `app_doggo` throughout the transform.
+- **Preserves Monotonic Revisions**: Existing revisions, tombstones, and confirmation receipts are preserved bit-for-bit.
+- **Non-Destructive Defaults**: Missing v2 temporal fields default to null (reminders disabled) without modifying user data.
+
+### 4.2 State-Specific Recovery Matrix
+During an upgrade, operators must adhere to strict state-specific recovery rules:
+1. **Pre-Fence Rejection**: Application remains clean `strict-v1`. No database rollback needed. Correct parameters or credentials and re-attempt.
+2. **Fencing Stall / Orphan Permits**: If permits fail to drain or a runner crashes holding the fence, **KEEP FENCED**. Escalate to database operators to verify queries before releasing permits. Never clear permits by TTL or arbitrary shell commands.
+3. **Interrupted Batch Transform**: Idempotently resume using the **exact same** `--migration-id <UUID>` via `scripts/hub-strict-upgrade.mjs`. The engine resumes from `checkpointRowId`. *(Note: `--status-only` inspects status and does not resume transform execution).*
+4. **Lost Publish Response**: Query status with `--status-only`. If the server published `ready-v2`, verify contract read-back. If stalled, resume with same migration ID.
+5. **Preactivation Rollback**: If an unrecoverable validation error occurs before publishing v2, execute preactivation rollback under fence: strip only migration-added fields, verify 4-column schema, and restore `ready-v1`.
+6. **Post-v2 Forward Repair Only**: Once `strict-v2` is published to `_schemas`, **DOWNWARD ROLLBACK IS FORBIDDEN**. Restoring a v1 backup or downgrading client/server binaries would wipe newly saved deadlines and permanently corrupt offline client intentions. All post-cutover issues must be resolved via forward engineering hotfixes.
+
+Consult the [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) for full operational commands and verification scripts.

@@ -51,3 +51,16 @@ Related Docs: [Local Storage & Sync](./local-storage-and-sync.md) · [API Contra
 3. **Deferred to Phase 07 (Device Sync & Live Infrastructure)**:
    - **Android Instrumented Tests**: Execution on real Android emulator/device (`connectedDebugAndroidTest`) requires Android SDK platform tooling, deferred to Phase 07.
    - **Live Hub / MongoDB Integration**: End-to-end sync against running Rust Hub server and MongoDB replica set is deferred to Phase 07 device sync operations. Common tests in Phase 05 utilize deterministic mocked HTTP transport engines.
+
+---
+
+## 4. Strict-v2 Migration & Replay Acceptance (Phases 05–07, 11–12 Delivered)
+
+The evolution plan (`plans/261015-0752-task-deadlines-reminders-strict-upgrades`) delivers the data-preserving `strict-v2` protocol upgrade:
+1. **Room 1→2 Explicit Migration (`MIGRATION_1_2`)**: Non-destructive SQL migration adding 12 temporal columns to `server_base`, `editor_drafts`, `scan_staging`, and `outbox`, plus new account-local entities `account_local_settings` and `reminder_delivery_ledger`.
+2. **Client Version Transition Machine (`ContractTransitionCoordinator`)**: 6-state coordinator (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`) ensuring offline old-client intentions are preserved and rebased without overwriting remote v2 deadline fields.
+3. **Legacy Receipt Reconciliation**: Read-only route `POST /api/v1/sync/:app_id/strong/legacy-receipts` matches deterministic preimages and digests for unacknowledged v1 operations without mutating v2 rows.
+4. **Authoritative Runbook & Rehearsal Tooling**:
+   - Operational runbook: `docs/strict-v2-cutover-runbook.md` establishes preflight backup requirements, deployment ordering, and state-specific incident decision trees.
+   - Rehearsal runner: `scripts/strict-v2-cutover-rehearsal.mjs` executes 7/7 passing tooling checks verifying CLI parameter validation, token redaction, interrupted POST recovery, and canonical v2 read-back assertions.
+5. **Production Gate G7 Status**: Live production cutover remains formally blocked pending Gate G3 live cluster execution, Gate G2 native platform delivery, and Gate G6 three-device live sync proof.

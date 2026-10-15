@@ -64,6 +64,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
   let rejectWith400 = false;
   let returnCorruptedV2Contract = false;
   let simulatedMigrationState = 'transforming';
+  let simulatedError = null;
   let receivedMigrationIds = [];
   before(async () => {
     mockServer = http.createServer((req, res) => {
@@ -170,6 +171,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
               targetVersion: 'strict-v2',
               recordsTransformed: 50,
               tombstonesPreserved: 5,
+              error: simulatedError,
             }),
           );
         }
@@ -352,5 +354,70 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
     returnCorruptedV2Contract = false;
     assert.equal(code, 1);
     assert.ok(stderr.includes('CRITICAL: Read-back schema does not contain 16 columns'));
+  });
+
+  it('fails with exit code 1 if epoch invariant is violated on read-back', async () => {
+    currentSyncMode = 'strict-v2';
+    currentFingerprint = CANONICAL_V2_FINGERPRINT;
+    simulatedMigrationState = 'ready-v2';
+    currentEpoch = '99999999-0000-4000-8000-000000000000'; // Altered epoch!
+
+    const { code, stderr } = await runScript([
+      '--origin',
+      serverOrigin,
+      '--token',
+      'valid-test-token',
+      '--expected-epoch',
+      '550e8400-e29b-41d4-a716-446655440000',
+      '--migration-id',
+      'epoch-test-migration-id',
+      '--status-only',
+    ]);
+
+    currentEpoch = '550e8400-e29b-41d4-a716-446655440000'; // Reset
+    assert.equal(code, 1);
+    assert.ok(stderr.includes('Epoch invariant violated'));
+  });
+
+  it('validates columns when already on target version and fails if corrupt', async () => {
+    currentSyncMode = 'strict-v2';
+    currentFingerprint = CANONICAL_V2_FINGERPRINT;
+    returnCorruptedV2Contract = true;
+
+    const { code, stderr, stdout } = await runScript([
+      '--origin',
+      serverOrigin,
+      '--token',
+      'valid-test-token',
+    ]);
+
+    returnCorruptedV2Contract = false; // Reset
+    assert.equal(code, 1);
+    assert.ok(stdout.includes('reports target version'));
+    assert.ok(stderr.includes('CRITICAL: Read-back schema does not contain 16 columns'));
+  });
+
+  it('redacts sensitive tokens in server-returned migration errors', async () => {
+    const sensitiveToken = 'super-secret-admin-token-12345';
+    simulatedMigrationState = 'failed';
+    simulatedError = `Internal error with Bearer ${sensitiveToken}`;
+
+    const { stdout, stderr } = await runScript(
+      [
+        '--origin',
+        serverOrigin,
+        '--token',
+        sensitiveToken,
+        '--migration-id',
+        'error-redaction-test',
+        '--status-only',
+      ],
+      { GLEAN_ADMIN_TOKEN: sensitiveToken },
+    );
+
+    simulatedMigrationState = 'transforming'; // Reset
+    simulatedError = null;
+    assert.ok(!stdout.includes(sensitiveToken), 'Secret token must not appear in stdout');
+    assert.ok(!stderr.includes(sensitiveToken), 'Secret token must not appear in stderr');
   });
 });

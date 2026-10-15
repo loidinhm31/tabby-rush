@@ -1,8 +1,8 @@
 # Linux Desktop & Installed RPM Acceptance Specification
 
-**Document Version**: 1.2.0
-**Phase**: 09 — Linux desktop distribution & Process-scoped reminder scheduler
-**Status**: Desktop Multiplatform Implementation, Process-Scoped Scheduler, and D-Bus Adapter Delivered; Gate G2 Live Desktop Visual Display & RPM Package Installation Pending Operator/Testbed Prerequisites
+**Document Version**: 1.3.0
+**Phase**: 12 — Coordinated cutover, recovery runbook and release documentation
+**Status**: Desktop Multiplatform Implementation, Process-Scoped Scheduler, and D-Bus Adapter Delivered; Gate G2 Live Desktop Visual Display & Gate G7 Production Cutover Pending Operator/Testbed Prerequisites
 **Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
 
 ---
@@ -71,7 +71,7 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 | **Controller Reminder Lifecycle** | Subsystem initialization, delivery gate linkage, startup wipe recovery notification cleanup, and fail-closed marker retention on cancellation error | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.DesktopReminderControllerLifecycleTest"` | PASS (3/3 tests passing) |
 | **ServiceLoader SPI Provider** | Target-specific discovery of `LinuxReminderAdapterProvider` under Linux host | `PlatformReminderDispatcher.createAdapter("linux")` | PASS (Discovered and instantiated) |
 | **Distributable Application Assembly** | Self-contained bundled application packaging with Linux reminder classes | `./gradlew -PdesktopTarget=linux :desktopApp:createDistributable` | PASS (Application bundle generated at `desktopApp/build/compose/binaries/main/app`) |
-| **Live Visual Notification Bubble** | Native notification bubble display and removal in active desktop session | Live desktop session notification | BLOCKED (Headless workstation lacks active notification daemon; Gate G2 physical execution pending Phase 11) |
+| **Live Visual Notification Bubble** | Native notification bubble display and removal in active desktop session | Live desktop session notification | BLOCKED (Headless workstation lacks active notification daemon; Gate G2 physical execution pending hardware/desktop testbed) |
 
 #### Disclosed Limitations for Phase 09 Linux Reminders
 1. **Process-Memory Notification Tracking**: `LinuxNativeReminderAdapter` tracks posted notification IDs in an in-memory set (`ConcurrentHashMap<String, MutableSet<Long>>`). If the desktop process is killed or crashes with active notifications displayed in the notification center, subsequent startup wipe recovery cannot discover or remove those orphaned notifications through this adapter.

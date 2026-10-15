@@ -28,11 +28,13 @@ The application reuses the **Glean Hub** backend infrastructure with an opt-in, 
 │   ├── src/commonMain/  # Domain models, strict-v1 protocol contracts, auth session, Room DB, Compose UI
 │   └── src/commonTest/  # Unit tests, digest vectors, and in-memory SQLite integration tests
 ├── scripts/             # Host tooling, emulator orchestration, Hub smoke runners, and recovery scripts
-│   ├── hub-live-smoke.mjs          # Live Hub strict-v1 verification harness
-│   ├── release-security-check.mjs  # Release APK security and manifest auditor
-│   ├── hub-strict-recovery.js      # Maintenance-only fresh-epoch recovery script
-│   ├── hub-schema-provision.mjs    # Schema registration and admission runner
-│   └── android-smoke.sh            # Device smoke runner with reverse port-forwarding
+│   ├── hub-strict-upgrade.mjs          # Strict-v2 Hub migration CLI runner
+│   ├── strict-v2-cutover-rehearsal.mjs # Strict-v2 operator tooling rehearsal and self-test harness
+│   ├── hub-live-smoke.mjs              # Live Hub strict-v1 verification harness
+│   ├── release-security-check.mjs      # Release APK security and manifest auditor
+│   ├── hub-strict-recovery.js          # Maintenance-only fresh-epoch recovery script (strict-v1 only)
+│   ├── hub-schema-provision.mjs        # Schema registration and admission runner
+│   └── android-smoke.sh                # Device smoke runner with reverse port-forwarding
 ├── integration/         # Canonical strict-v1 schema specifications
 │   └── glean-hub/doggo-schema.json
 └── docs/                # Architecture specifications, operational runbooks, and test evidence
@@ -82,6 +84,12 @@ export DOGGO_KEY_PASSWORD="<password>"
 ./gradlew :androidApp:assembleRelease
 ```
 
+### 5. Run Strict-v2 Cutover Rehearsal & Tooling Self-Test
+Run the automated in-process mock self-test verifying CLI upgrade workflows, same-ID retry, and read-back assertions:
+```bash
+node scripts/strict-v2-cutover-rehearsal.mjs --self-test
+```
+
 ---
 
 ## Documentation Index
@@ -90,6 +98,7 @@ export DOGGO_KEY_PASSWORD="<password>"
 - [System Architecture](docs/system-architecture.md)
 - [Code Standards](docs/code-standards.md)
 - [Deployment Guide](docs/deployment-guide.md)
+- [Strict-v2 Cutover Runbook](docs/strict-v2-cutover-runbook.md)
 - [Windows Desktop Guide](docs/windows-desktop-guide.md)
 - [Windows Acceptance](docs/windows-acceptance.md)
 - [Security & Recovery](docs/security-and-recovery.md)

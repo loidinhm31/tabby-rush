@@ -1,8 +1,8 @@
 # Android Composition, Reminder Alarms & Runtime Acceptance Specification
 
-**Document Version**: 1.2.0  
-**Phase**: 08 — Android alarms, private notifications and restoration  
-**Status**: Logic & Native Adapters Implemented & Unit Verified (Physical Connected Device / Emulator & Doze Mode Acceptance Formally Pending Gate G2 / Phase 11)  
+**Document Version**: 1.3.0
+**Phase**: 12 — Coordinated Cutover, Recovery Runbook & Release Documentation
+**Status**: Logic & Native Adapters Implemented & Unit Verified (Physical Connected Device / Emulator & Doze Mode Acceptance Formally Held Pending Gate G2 / Hardware Testbed)
 **Related Documents**: [Project Overview PDR](./project-overview-pdr.md) · [System Architecture](./system-architecture.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Design Guidelines](./design-guidelines.md)
 
 ---
@@ -187,10 +187,10 @@ The following test suites, security checks, and build outputs were executed and 
 7. **Note on Unavailable Tools**:
    - `.omp/evcrate/scripts/validate-docs.cjs` is absent from repo environment and was not executed.
 
-### 4.3 Gate G2 Physical Execution Status
+### 4.3 Gate G2 Physical Execution Status & Cutover Integration
 - **Current Position**: Gate G2 native Android logic, adapters, receivers, intent factories, and cancel gates are fully implemented and verified via unit tests and debug APK assembly.
-- **Formal Hold**: Physical connected device/emulator execution, Doze mode battery optimization bypass (`setExactAndAllowWhileIdle`), real lock-screen private notification masking, and system reboot restoration remain formally pending Gate G2 acceptance testing in **Phase 11 (Adversarial Integration and Platform Acceptance)**. Deferral to Phase 11 does not constitute technical acceptance of Gate G2.
-
+- **Formal Hold**: Physical connected device/emulator execution, Doze mode battery optimization bypass (`setExactAndAllowWhileIdle`), real lock-screen private notification masking, and system reboot restoration remain formally held on physical hardware testbeds under Gate G2.
+- **Cutover Sequence Integration**: In the coordinated deployment sequence ([Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md)), the Android client is distributed in Step 2. While the backend remains on `strict-v1`, deadline and reminder submission is disabled in `TodoEditor` via `isUpgradeBlocked`, allowing safe background migration and title/completion edits without premature deadline sync failures.
 ---
 
 ## 5. UI Accessibility & Acceptance Checklist

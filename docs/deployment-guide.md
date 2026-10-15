@@ -1,9 +1,9 @@
 # Doggo Deployment & Operations Guide
 
-**Document Version**: 1.3.0  
-**Phase**: 09–10 — Linux and Windows Desktop Distribution  
-**Status**: Linux and Windows distributable artifacts documented; interactive RPM/MSI installation and runtime acceptance remain operator gates  
-**Related Documents**: [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
+**Document Version**: 1.4.0
+**Phase**: 12 — Coordinated Cutover, Recovery Runbook & Release Documentation
+**Status**: Strict-v2 cutover runbook and operator tooling rehearsal delivered; live production cutover blocked pending Gates G2, G3, G6, and G7
+**Related Documents**: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
 ---
 
@@ -300,3 +300,35 @@ After installation, verify the per-user Start Menu entry launches Doggo without 
 To uninstall, close Doggo and use Windows **Settings → Apps → Installed apps** or the ProductCode inspected from the MSI. Uninstalling the package is not a promise that per-user account data is erased; use Doggo's guarded account-leave flow before removal when account data should be cleared. Verify same-version reinstall separately; it does not establish future upgrade behavior.
 
 Phase 10 implementation is recorded at **100% (2026-10-14)**; technical acceptance is blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not guaranteed by the current source, and clean-user runtime/sync plus uninstall/reinstall evidence remain open. Upstream Phase 09 installed-RPM acceptance is also open. Do not report package generation or metadata inspection as installed-runtime acceptance.
+
+---
+
+## 9. Strict-v2 Protocol Migration & Cutover Operations
+
+### 9.1 Architecture & Deployment Ordering
+Upgrading Doggo and Glean Hub to `strict-v2` (task deadlines, strict timezones, and native reminders) requires strict versioned coordination. Deploying schema changes or database modifications in isolation is strictly prohibited.
+
+The authorized deployment ordering is:
+1. **All-Node Backend Deployment**: Deploy the fence-aware Glean Hub backend binary across all instances. Ingress continues serving `strict-v1`.
+2. **Client Publication**: Publish updated Doggo clients (Android APK, Linux package, Windows MSI) containing Room 1→2 migration and `ContractTransitionCoordinator`. UI guards keep deadline submission disabled with an upgrade prompt while the backend remains on v1.
+3. **Non-Mutating Preflight**: Execute dry-run preflight via `node scripts/hub-strict-upgrade.mjs --app-id doggo --dry-run`.
+4. **Controlled In-Place Upgrade**: Execute the upgrade via CLI or Web Admin UI with a durable migration UUID. The backend fences new traffic, drains admitted request permits, transforms documents in batches of 500, validates all documents, publishes canonical `strict-v2` in `_schemas` via CAS, and releases the fence.
+5. **Mandatory Post-Cutover Read-Back**: Verify `syncMode === 'strict-v2'`, canonical fingerprint `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`, all 16 columns active, and unchanged active epoch UUID.
+6. **Client Replay & Transition**: Connected clients transition to `ready-v2`, reconcile legacy receipts, and unlock full deadline and reminder functionality.
+
+For the complete, step-by-step incident response and recovery procedures, consult the authoritative [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md).
+
+### 9.2 Tooling Rehearsal & Testing
+Operators can rehearse CLI upgrade flows and verify parameter validation, token redaction, same-ID retry, and read-back assertions using the dedicated rehearsal runner:
+```bash
+# In-process mock tooling self-test
+node scripts/strict-v2-cutover-rehearsal.mjs --self-test
+
+# Disposable staging rehearsal (requires explicit safety flag and token via env)
+export GLEAN_ADMIN_TOKEN="<operator_admin_token>"
+node scripts/strict-v2-cutover-rehearsal.mjs \
+  --staging-origin "https://staging-hub.example.com" \
+  --app-id doggo \
+  --confirm-disposable-staging
+```
+*Note: Tooling self-tests verify client-side CLI orchestration; physical Gate G3 multi-instance cluster migration must be verified on a live MongoDB replica set before production cutover.*

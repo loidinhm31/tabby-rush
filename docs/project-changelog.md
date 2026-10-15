@@ -3,6 +3,74 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 12] - 2026-10-16: Coordinated Cutover Runbook, Rehearsal Tooling & Release Documentation (Runbook & Tooling Delivered; Live Production Cutover Blocked Pending Gates G2, G3, G6, G7)
+
+*Note: Part of the 2026-10-15 Task Deadlines, Reminders & Strict Upgrades initiative.*
+
+### Added
+- Authoritative Strict-v2 Coordinated Cutover & Recovery Runbook (`docs/strict-v2-cutover-runbook.md`):
+  - Complete operational runbook detailing exact deployment ordering: (1) all-node Hub backend binary deployment, (2) Room v2 Doggo client distribution, (3) non-mutating preflight dry-run, (4) controlled in-place upgrade via `hub-strict-upgrade.mjs` or Web Admin UI with durable migration UUID, (5) mandatory post-cutover read-back assertion of all 16 columns and canonical v2 fingerprint, and (6) client replay and transition.
+  - State-specific incident decision matrix covering pre-fence rejection, orphan permit stalls (keep fenced, escalate), interrupted batch (idempotent resume with same migration ID from checkpoint), lost publish response (read-back verify), preactivation rollback under fence (strip added fields only), and post-v2 forward repair rule (never restore v1 backup or downgrade binaries once v2 is published).
+  - Emergency disaster recovery quarantine: explicitly quarantines `scripts/hub-strict-recovery.js` as an emergency cold restore tool for `strict-v1` only, forbidding its use for v2 upgrades or rollbacks.
+- Strict-v2 Operator Tooling Rehearsal Suite (`scripts/strict-v2-cutover-rehearsal.mjs`):
+  - Dedicated executable rehearsal and self-test harness verifying CLI parameter checking, missing token fail-fast, sensitive token redaction across stdout/stderr, non-mutating preflight dry-run, interrupted POST recovery, status-only query without mutation, and final schema read-back assertion.
+  - 7/7 checks PASS in automated tooling self-test (`node scripts/strict-v2-cutover-rehearsal.mjs --self-test`).
+  - Includes gated staging rehearsal mode (`--staging-origin` with `--confirm-disposable-staging`).
+
+### Changed
+- Reconciled operational and acceptance documentation:
+  - `docs/deployment-guide.md`: Added Section 9 documenting strict-v2 deployment ordering, operator upgrade commands, and dual-auth app-scoped requirements.
+  - `docs/security-and-recovery.md`: Added Section 4 delineating feature migration in-place transform from emergency fresh-epoch disaster recovery, documenting recovery rules for all migration states.
+  - `docs/release-acceptance.md`: Added Gate G7 (Coordinated Cutover, Recovery Runbook & Release Gate) to formal operational gates and included rehearsal self-test suite (404 total verification targets across 15 groups: 400 automated checks with 399 passed, 0 failures, 1 ignored live Mongo gate; plus 4 build, lint, and packaging targets).
+  - `docs/hub-schema-integration.md`: Documented Phase 12 cutover runbook and rehearsal tooling.
+  - `docs/sync-acceptance.md`: Added strict-v2 migration and replay acceptance section.
+  - `docs/android-acceptance.md`, `docs/linux-acceptance.md`, `docs/windows-acceptance.md`: Updated Gate G2 and cutover release status.
+  - `docs/system-architecture.md`: Added Section 6.13 covering Phase 12 architecture, runbook, and rehearsal tooling.
+  - `README.md`: Added rehearsal script and cutover runbook references.
+  - Glean Hub `docs/doggo-strict-sync.md`: Documented Phase 12 cutover runbook and corrected `--status-only` distinction.
+
+### Gate & Release Status
+- Phase 12 runbook, rehearsal tooling, and documentation reconciliation delivered (12h credited, completing all 236h of planned implementation effort).
+- Live production cutover (Gate G7) remains formally **BLOCKED** pending:
+  1. Gate G3 multi-instance MongoDB replica set migration execution and resolution of three Phase 03 code findings (permit release duplicate filter, `permitCount` backfill, and batch/checkpoint write atomicity).
+  2. Gate G2 physical native hardware delivery (connected Android Doze/reboot, Linux desktop graphical bubble, Windows native WinRT/COM toast bridge).
+  3. Gate G6 three-device concurrent live sync proof between Android, Linux, and Windows.
+  4. Strict supply-chain dependency verification metadata regeneration.
+
+---
+## [Phase 11] - 2026-10-16: Adversarial Boundary Regressions, SQLite Crash Invariance & Platform Acceptance (Automated Regressions Approved; Live Platform & Cluster Acceptance Held; Code Review Score 8.6/10)
+
+*Note: Part of the 2026-10-15 Task Deadlines, Reminders & Strict Upgrades initiative.*
+
+### Added
+- Adversarial scheduler boundary regression suite (`AdversarialSchedulerBoundaryTest.kt` in `shared/src/commonTest/kotlin/dev/doggo/shared/contract/`):
+  - Verified repetition limit bounds (1..10, min interval 15m, non-repeating interval null).
+  - Verified checked 64-bit integer arithmetic overflow rejection (`safeMultiply`, `safeSubtract`, `safeAdd`).
+  - Verified date-only 09:00 morning non-overdue calculation via production `DeadlineCalculatorHelpers.validateAndComputeDeadline`.
+  - Verified exact 5-minute grace window evaluation: 300,000ms passes, 300,001ms skips without catch-up burst or retroactive delivery.
+  - Verified editor draft isolation: drafts in `editor_drafts` never project into active schedules.
+  - Verified cancellation barriers: completed, deleted, and disabled tasks immediately clear projected schedules.
+  - Verified schedule token preservation across non-temporal edits vs advancement on reminder updates.
+- SQLite crash boundary and frozen retry persistence suite (`AdversarialSyncSqliteTest.kt` in `shared/src/jvmTest/kotlin/dev/doggo/shared/data/`):
+  - Real disk-backed SQLite database close and reopen cycles verifying bit-for-bit retention of all 12 temporal fields and schedule tokens.
+  - Frozen retry invariance: network timeouts replay nonces idempotently without duplicate commits.
+  - Cross-contract intent rebase: legacy v1 title-only modifications rebase over remote v2 deadlines without field erasure.
+  - Conflict lock durability: `UNKNOWN_SUPERSEDED` conflict locks survive database restarts.
+- Debug fault-injection proxy (`scripts/debug-fault-proxy.mjs` and `scripts/debug-fault-proxy.test.mjs`):
+  - Loopback proxy simulating dropped push and legacy-receipt responses via client socket aborts, upstream 502/504 errors, sensitive URL path redaction on 403 rejections, and strict allowlist enforcement (8/8 tests PASS).
+
+### Changed
+- `PersistedScheduleProjector`:
+  - Fixed `INTENT_REMINDER` updates to assign `scheduleToken = op.scheduleToken` when `deadline != null && op.scheduleToken != null`, eliminating scheduler desynchronization on reminder-only modifications.
+- Temporal Fixture Offsets:
+  - Corrected America/New_York offsets for 2026-11-01 15:00 from `-14400L` (EDT) to `-18000L` (EST) across adversarial test suites to align with the 02:00 DST fallback.
+
+### Verification and Delivery Status
+- QA test execution report (`plans/reports/qa-261015-2330-phase-11-validation.md`) records 395 total automated checks/targets across 14 verification groups (394 PASS, 0 failures, 1 ignored live Mongo gate).
+- Code review report (`plans/reports/code-review-261015-2345-phase-11-adversarial-acceptance.md`) approved at **8.6 / 10** for automated regressions.
+- Gate G2 physical native delivery (connected Android Doze/reboot, Linux desktop notification bubble, Windows WinRT toast bridge candidate stub), Gate G3 live cluster execution (multi-node MongoDB replica set live migration and 3 open Phase 03 backend findings), and Gate G6 full platform acceptance remain formally held pending physical testbeds.
+
+---
 ## [Phase 10] - 2026-10-15: Shared Deadline Editor, Task List and Local Settings (Implementation Delivered; Platform Acceptance & Windows Bridge Pending Phase 11; Code Review Score 9.2/10 Approved)
 
 *Note: Part of the 2026-10-15 Task Deadlines, Reminders & Strict Upgrades initiative; distinct from the historical 2026-10-14 Phase 10 Windows desktop MSI release.*

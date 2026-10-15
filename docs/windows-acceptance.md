@@ -1,8 +1,8 @@
 # Windows Desktop & Installed MSI Acceptance Specification
 
-**Document Version**: 1.1.0
-**Phase**: 10 (Historical) — Native Windows DPAPI & Installed MSI; Phase 09 (Current) — Process-scoped desktop scheduler and Windows reminder adapter
-**Status**: Desktop Multiplatform Scheduler & Windows Candidate Adapter Delivered; Native WinRT/COM Toast Bridge Unimplemented (Stub); Gate G2 Live Installed MSI & Toast Verification Blocked on Windows Host Runner
+**Document Version**: 1.2.0
+**Phase**: 12 — Coordinated cutover, recovery runbook and release documentation
+**Status**: Desktop Multiplatform Scheduler & Windows Candidate Adapter Delivered; Native WinRT/COM Toast Bridge Unimplemented (Candidate Stub); Gate G2 Live Installed MSI & Gate G7 Production Cutover Blocked on Windows Host Runner
 **Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
 
 ---

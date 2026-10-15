@@ -1,8 +1,8 @@
 # Doggo Hub Schema Integration
 
-Date: 2026-10-15  
-Phase: Phase 04 Hub Admin UI and Upgrade Script Delivered (Phase 03 Backend Contracts & Logic Delivered; Gate G3 Live Multi-Instance Staging Pending)  
-Related Docs: [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [API Contract](./api-contract.md) · [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Evidence Summary](./evidence/hub-compatibility-summary.md)
+Date: 2026-10-16
+Phase: Phase 12 Coordinated Cutover Runbook & Release Documentation Delivered (Production Cutover Blocked Pending Gates G2, G3, G6, and G7)
+Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [API Contract](./api-contract.md) · [System Architecture](./system-architecture.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md)
 
 ---
 ## Overview
@@ -223,3 +223,18 @@ Phase 04 operator tooling and script suites are verified in unit tests and again
 2. **Phase 03 Coordination Document Compatibility**: Backfill and handling for pre-existing `_coordination` documents lacking `permitCount` require live cluster verification.
 3. **Phase 03 Crash Resumption Accounting**: Formal validation of exact cumulative accounting and idempotency across arbitrary mid-batch crash interruptions during document transformation.
 4. **Phase 03 Duplicate Permit Release Filter**: Remediation of permit release filtering to guard against multiple decrements on repeated release calls.
+
+---
+
+## Coordinated Cutover Runbook & Rehearsal Tooling (Phase 12 Delivered)
+
+Phase 12 delivers the authoritative operational runbook and staging rehearsal tooling for executing the strict-v1 to strict-v2 upgrade:
+1. **Authoritative Runbook (`docs/strict-v2-cutover-runbook.md`)**:
+   - Enforces strict deployment ordering: all-node Hub binary deploy -> Doggo client distribution -> non-mutating preflight dry-run -> controlled in-place upgrade via `hub-strict-upgrade.mjs` or Web Admin UI with durable migration UUID -> mandatory read-back assertion of all 16 columns and v2 fingerprint -> client replay & transition.
+   - Documents state-specific failure recovery: pre-fence rejection, orphan permit stalls, interrupted batch resumption with matching migration ID, lost publish response handling, preactivation rollback under fence, and forward-repair-only rule once v2 is published.
+   - Explicitly quarantines legacy `scripts/hub-strict-recovery.js` as an emergency fresh-epoch restore tool for `strict-v1` only; it must never be used for v2 upgrades.
+2. **Tooling Rehearsal Suite (`scripts/strict-v2-cutover-rehearsal.mjs`)**:
+   - Validates CLI parameter checking, missing token fail-fast, sensitive token redaction, preflight dry-run non-mutation, interrupted POST recovery, status-only query without mutation, and final schema read-back assertion.
+   - 7/7 checks PASS in automated tooling self-test (`node scripts/strict-v2-cutover-rehearsal.mjs --self-test`).
+   - Provides gated staging rehearsal mode (`--staging-origin` with `--confirm-disposable-staging`).
+3. **Production Gate G7 Status**: Live production cutover remains formally blocked pending Gate G3 replica-set cluster execution and code remediations, Gate G2 physical native platform delivery, Gate G6 three-device sync proof, and formal operator authorization.

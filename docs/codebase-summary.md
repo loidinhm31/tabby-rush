@@ -1,19 +1,19 @@
 # Codebase Summary
 
-Generated on: 2026-10-15
-Based on Repomix compaction snapshot: `repomix-output.xml` (point-in-time partial snapshot taken prior to Phase 11 documentation updates: 413 files packed, 5 excluded for security check, 921,949 tokens, 3,998,169 chars)
+Generated on: 2026-10-16
+Based on Repomix compaction snapshot: `repomix-output.xml` (dated point-in-time partial snapshot taken prior to final Phase 12 documentation edits: 417 files packed, 5 excluded by security heuristic filter, 955,112 tokens, 4,132,666 chars)
 ---
 
 ## 1. Repository Overview
 
 The `doggo` repository contains the implementation, build configuration, domain contracts, and architectural specifications for Doggo, an Android-first shared Compose Multiplatform task management application with secure multi-device synchronization against Glean Hub.
 
-Following Phases 01–11, the repository contains the Android and shared Compose Multiplatform clients, Linux desktop source/distribution tooling, Windows desktop DPAPI provider, and comprehensive adversarial integration and SQLite crash invariance test harnesses:
+Following Phases 01–12, the repository contains the Android and shared Compose Multiplatform clients, Linux desktop source/distribution tooling, Windows desktop DPAPI provider, comprehensive adversarial integration and SQLite crash invariance test harnesses, and authoritative strict-v2 cutover runbook and rehearsal tooling:
 1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
 2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models (`TaskDeadline`, `ReminderRule`, `Todo`), UI state/actions (`EditorState`, `ReminderSettingsState`, `TodoUiState`, `TodoAction`, `ClockTick`), identity/authentication contracts, strict sync canonical framing (`strict-v1` and `strict-v2`), `StrictV2Constants`, `StrictV2TodoData`, `StrictV2SyncOp`, `LegacyReceiptStatus`, `LegacyReceiptResult`, checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`), `StrictSyncV2Digest` binary preimage engine, `StrictTimeZoneResolver` and `StrictZoneOffsetResult` (`Single`, `Overlap`, `Gap`) with `ZoneRules` platform actuals, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 2, 7 entities, `DatabaseMigrations.MIGRATION_1_2`), BundledSQLiteDriver, local outbox mutation engine with intent masks and provenance tracking, staged full scan reconciler, fail-closed account leave protocol, `RoomAccountStore` authoritative temporal snapshot projection hierarchy (preventing cleared deadline resurrection) and schedule-token rotation on semantic temporal changes, shared Compose UI components (`DeadlineEditorSection`, `DeadlineCalculatorHelpers`, `ReminderSettingsDialog`, `TodoEditor`, `TodoList`, `ConflictReview`), accessible light theme tokens, and comprehensive unit/instrumented/semantics/vector tests.
 3. **Android Application Module (`androidApp/`)**: Native Android client hosting shared Compose UI, `DoggoApplication` process container, `SessionViewModel` reactive UI state orchestration with cold-start `pendingTarget` routing, notification deep-link selection routed through `openEdit(task)` full hydration, reminder settings flow, periodic 15s `ClockTick` emission, `AccountRuntime` / `AccountRuntimeFactory` runtime isolation, `AndroidSyncScheduler` WorkManager scheduling, `DoggoSyncWorker` background sync worker with generation/auth fencing, `AndroidNotificationAdapter` exact/inexact AlarmManager scheduling and private notification delivery, `AndroidAlarmRegistry` synchronized alarm tracking, `DoggoAlarmReceiver` and `ReminderRestoreReceiver` direct-boot/wipe-first receivers, `CompositeLeaveSchedulerCancelGate` 4-stage teardown, `ReminderPermissionController` sealed capability evaluations, debug network security configuration with strict loopback cleartext whitelist, backup/extraction security exclusions, release signing task-graph enforcement, and authored unit/instrumented test suites.
 4. **Desktop Application Module (`desktopApp/`)**: Compose Multiplatform JVM app with target-isolated Linux and Windows source sets; shared `CredentialVaultProvider` SPI, fail-closed `PlatformVaultDispatcher`, `SingleInstanceGuard`, `DesktopSyncScheduler`, `DesktopController` with settings actions, submit validation, and 15s `ClockTick` flow, Linux Secret Service provider, Windows current-user DPAPI provider, `DbusLinuxNotificationAdapter` with safe unavailability fallback, and candidate `WindowsNotificationAdapter` with XML escaping and explicit unavailable stub bridge.
-5. **Host Virtualization, Security & Operations Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub schema provisioning (`hub-schema-provision.mjs`), live Hub strict smoke harness (`hub-live-smoke.mjs`), release security and integrity auditor (`release-security-check.mjs`), maintenance recovery script (`hub-strict-recovery.js`), device smoke runner (`android-smoke.sh`), loopback sync fault-injection proxy (`debug-fault-proxy.mjs`), Linux/Windows package smoke runners, strict-v2 vector runner (`strict-v2-vector-runner.mjs`), and vector generator (`generate-strict-v2-vectors.mjs`).
+5. **Host Virtualization, Security & Operations Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub schema provisioning (`hub-schema-provision.mjs`), live Hub strict smoke harness (`hub-live-smoke.mjs`), release security and integrity auditor (`release-security-check.mjs`), maintenance recovery script (`hub-strict-recovery.js`, quarantined for legacy strict-v1 emergency cold restores), device smoke runner (`android-smoke.sh`), loopback sync fault-injection proxy (`debug-fault-proxy.mjs`), Linux/Windows package smoke runners, strict-v2 vector runner (`strict-v2-vector-runner.mjs`), vector generator (`generate-strict-v2-vectors.mjs`), CLI upgrade runner (`hub-strict-upgrade.mjs`), and operator cutover rehearsal runner (`strict-v2-cutover-rehearsal.mjs`).
 6. **Hub Integration Artifacts (`integration/`)**: Canonical JSON schema definitions for `strict-v1` (`doggo-schema-v1.json`) and `strict-v2` (`doggo-schema-v2.json`), active schema (`doggo-schema.json`), and cryptographic reference test vector fixture (`strict-v2-vectors.json`).
 7. **Automated Verification Harness (`tests/`)**: Automated shell suites validating scripts, Gradle contracts, Kotlin sources, and cryptographic digest vectors.
 8. **Technical Documentation & Evidence (`docs/`)**: Architecture specifications, API contracts, deployment and disaster recovery guides, release acceptance specifications, toolchain evidence, operational runbooks, compatibility criteria, auth/credential specifications, local storage and sync specifications, design guidelines, coding standards, Android/Linux/Windows desktop guides and acceptance specifications, test summaries, and UI design mockups.
@@ -215,7 +215,8 @@ Following Phases 01–11, the repository contains the Android and shared Compose
 │   ├── strict-v2-vector-runner.mjs     # Strict-v2 vector & schema fingerprint verification runner
 │   ├── generate-strict-v2-vectors.mjs  # Strict-v2 vector reference generator
 │   ├── hub-strict-upgrade.mjs          # Strict-v1 to strict-v2 CLI upgrade runner with bounded polling & read-back
-│   └── hub-strict-upgrade.test.mjs     # Unit test suite for CLI upgrade runner (mock HTTP server)
+│   ├── hub-strict-upgrade.test.mjs     # Unit test suite for CLI upgrade runner (mock HTTP server)
+│   └── strict-v2-cutover-rehearsal.mjs # Strict-v2 operator tooling rehearsal and self-test harness
 ├── tests/                              # Automated test suites
 └── docs/                               # Developer documentation and operational runbooks
     ├── android-acceptance.md           # Android composition, security invariants, and acceptance spec
@@ -233,6 +234,7 @@ Following Phases 01–11, the repository contains the Android and shared Compose
     ├── hub-compatibility-acceptance.md # Architectural acceptance criteria and invariants
     ├── hub-schema-integration.md       # Integration guide and registration lifecycle
     ├── deployment-guide.md             # Hub, Android, Linux, and Windows deployment procedures
+    ├── strict-v2-cutover-runbook.md    # Phase 12 authoritative operator cutover and recovery runbook
     ├── linux-acceptance.md             # Phase 09 Linux desktop and RPM acceptance specification
     ├── linux-desktop-guide.md          # Phase 09 Linux desktop operations and build guide
     ├── windows-acceptance.md           # Phase 10 Windows desktop and MSI acceptance specification
@@ -483,21 +485,20 @@ Following Phases 01–11, the repository contains the Android and shared Compose
 
 ---
 
-## 3. Repomix Compaction Metrics (Dated Generation Snapshot: 2026-10-15)
+## 3. Repomix Compaction Metrics (Dated Generation Snapshot: 2026-10-16)
 
-- **Compaction Artifact:** Generated on 2026-10-15 at `repomix-output.xml` in repository root.
-- **Total Files Packed:** 413 files
-- **Total Character Count:** 3,998,169 characters
-- **Total Token Count:** 921,949 tokens
+- **Compaction Artifact:** Generated on 2026-10-16 at `repomix-output.xml` in repository root.
+- **Total Files Packed:** 418 files
+- **Total Character Count:** 4,163,193 characters
+- **Total Token Count:** 962,265 tokens
 - **Top 5 Files by Token Count:**
-  1. `docs/project-roadmap.md` (27,829 tokens, 120,739 chars, 3%)
-  2. `docs/codebase-summary.md` (22,231 tokens, 96,932 chars, 2.4%)
-  3. `docs/system-architecture.md` (20,437 tokens, 91,083 chars, 2.2%)
-  4. `docs/project-changelog.md` (18,450 tokens, 81,216 chars, 2%)
-  5. `plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md` (13,004 tokens, 56,358 chars, 1.4%)
-- **Security Check:** Repomix security scanner flagged 5 suspicious files that were excluded from the compaction output by default filter heuristics: `docs/security-and-recovery.md`, `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md`, `plans/reports/code-reviewer-261014-1638-phase-08-release-operations-cycle3.md`, `plans/reports/docs-manager-261014-1643-phase-08-docs-verification.md`, and `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`. These exclusions represent heuristic scanner flags and are not an affirmative clean security adjudication of those files.
-- **Snapshot Scope:** These counts describe a single point-in-time Repomix generation taken prior to Phase 11 documentation updates.
-
+  1. `docs/project-roadmap.md` (30,931 tokens, 133,991 chars, 3.2%)
+  2. `docs/codebase-summary.md` (23,810 tokens, 104,202 chars, 2.5%)
+  3. `docs/system-architecture.md` (23,175 tokens, 103,366 chars, 2.4%)
+  4. `docs/project-changelog.md` (20,180 tokens, 88,805 chars, 2.1%)
+  5. `plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md` (14,407 tokens, 62,295 chars, 1.5%)
+- **Security Check:** Repomix security scanner flagged 5 suspicious files that were excluded from the compaction output by default filter heuristics: `docs/security-and-recovery.md`, `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md`, `plans/reports/code-reviewer-261014-1638-phase-08-release-operations-cycle3.md`, `plans/reports/docs-manager-261014-1643-phase-08-docs-verification.md`, and `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`. These exclusions represent heuristic scanner flags (e.g. placeholder connection strings, test mock keys) and are not an affirmative clean security adjudication of those files.
+- **Snapshot Scope:** These counts describe a single point-in-time partial Repomix generation taken prior to final Phase 12 documentation edits, with 5 files excluded by the scanner.
 ## 4. Current State & Invariants
 
 1. **Deliverable Scope & Verification**:
@@ -596,3 +597,11 @@ Following Phases 01–11, the repository contains the Android and shared Compose
     - Projector Token Fold Bug Remediation: In `persisted-schedule-projector.kt`, assigned `scheduleToken = op.scheduleToken` in the outbox fold under `INTENT_REMINDER`, eliminating scheduler desynchronization on reminder-only modifications.
     - Automated Verification: Total 397 reported verification targets across 14 verification groups (393 automated test and contract checks: 392 passed, 0 failures, 1 ignored live Mongo test: `test_strong_sync_live_mongo_acceptance_gate` in `glean-hub-sync` when `MONGO_TEST_URI` is unset; plus 4 build, lint, and packaging targets passed). Both packaging targets passed (`:desktopApp:createDistributable`, `:androidApp:assembleDebug`). Code review approved at 8.6/10 (`plans/reports/code-review-261015-2345-phase-11-adversarial-acceptance.md`).
     - Platform Accounting & Honest Boundaries: Gate G6 logic delivered; end-to-end multiplatform acceptance (Gate G2 connected Android device Doze timing, live desktop D-Bus visual notification display, Windows COM/WinRT toast bridge) and live cluster execution (Gate G3 staging replica set and 3 open Phase 03 code findings) remain formally held pending respective implementation/remediation and testbed acceptance.
+50. **Phase 12 Coordinated Cutover Runbook, Rehearsal Tooling & Release Documentation (Gate G7 Runbook Delivered / Production Cutover Formally Blocked)**: Delivered on 2026-10-16. Implements authoritative cutover and recovery runbooks, operator tooling rehearsal harness, CLI security hardenings, legacy script quarantine, and cross-repository operational documentation reconciliation:
+    - `docs/strict-v2-cutover-runbook.md`: Authoritative operational guide establishing preflight conditions, app-scoped admin JWT authorization, credential custody (environment parameters, never bare command-line `argv`), restorable journaled MongoDB oplog backups, and strict chronological deployment order (all-node Hub binary deploy -> Room v2 Doggo client distribution -> non-mutating preflight dry-run -> controlled in-place upgrade with durable migration UUID -> mandatory 16-column/v2-fingerprint contract read-back assertion -> client replay & transition). Defines state-specific incident decision matrix across 6 failure states (pre-fence rejection, orphan permit stalls, interrupted batch idempotent resume via same migration ID, lost publish response status query, preactivation rollback under fence, post-v2 forward repair only).
+    - `scripts/strict-v2-cutover-rehearsal.mjs`: Dedicated rehearsal and tooling self-test harness (7/7 passing automated checks) executing the actual `scripts/hub-strict-upgrade.mjs` CLI runner against an in-process mock Glean Hub server. Exercises CLI help, token requirement fail-closed exit, token redaction in stdout/stderr, preflight dry-run non-mutation, interrupted batch recovery using identical migration ID, status-only inspection, and canonical 16-column schema divergence rejection.
+    - CLI Hardenings in `scripts/hub-strict-upgrade.mjs`: Strips sensitive authorization tokens from `s.error` logs, validates active epoch invariance in `assertFinalContract()`, and executes complete read-back validation upon detecting that the target contract is already published before exiting 0 (9/9 passing tests in `scripts/hub-strict-upgrade.test.mjs`).
+    - Legacy Script Quarantine: `scripts/hub-strict-recovery.js` is documented as quarantined strictly for legacy `strict-v1` emergency cold disaster recovery (allocating fresh UUID epoch and dropping/recreating collection). Its use for `strict-v2` upgrades or rollbacks is strictly forbidden.
+    - Operational Documentation Reconciliation: Updated `docs/deployment-guide.md`, `docs/security-and-recovery.md`, `docs/release-acceptance.md`, `docs/system-architecture.md`, `docs/hub-schema-integration.md`, `docs/sync-acceptance.md`, `docs/android-acceptance.md`, `docs/linux-acceptance.md`, `docs/windows-acceptance.md`, `docs/project-roadmap.md`, `docs/project-changelog.md`, `README.md`, and Glean Hub `docs/doggo-strict-sync.md`.
+    - Automated Verification: Total 404 reported verification targets across 15 verification groups (400 automated test, contract, and rehearsal checks: 399 passed, 0 failures, 1 ignored live Mongo test: `test_strong_sync_live_mongo_acceptance_gate` in `glean-hub-sync` when `MONGO_TEST_URI` is unset; plus 4 build, lint, and packaging targets passed).
+    - Gate G7 Blocker Boundaries: Live production cutover remains formally blocked pending Gate G3 multi-instance MongoDB replica set migration and Phase 03 backend code remediations, Gate G2 physical native platform delivery (Android Doze, Linux session D-Bus, Windows COM/WinRT toast bridge), Gate G6 three-device sync proof, and formal operator authorization.

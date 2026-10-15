@@ -259,10 +259,10 @@ async function main() {
       process.exit(1);
     }
     const s = statusRes.body;
-    console.log(`[Upgrade] Status: state=${s.state}, transformed=${s.recordsTransformed}, tombstones=${s.tombstonesPreserved}, error=${s.error || 'none'}`);
+    console.log(`[Upgrade] Status: state=${s.state}, transformed=${s.recordsTransformed}, tombstones=${s.tombstonesPreserved}, error=${sanitizeLog(s.error) || 'none'}`);
     if (s.state === 'ready-v2') {
       console.log('[Upgrade] Server reports ready-v2; validating final contract read-back...');
-      await assertFinalContract(client, options);
+      await assertFinalContract(client, options, options.expectedEpoch);
       process.exit(0);
     }
     process.exit(s.state === 'operatorRequired' || s.state === 'rolledBack' ? 1 : 2);
@@ -302,7 +302,9 @@ async function main() {
     contract.syncMode === options.targetVersion &&
     contract.schemaFingerprint === options.targetFingerprint
   ) {
-    console.log(`[Upgrade] SUCCESS: App '${options.appId}' is already on target version '${options.targetVersion}' with matching fingerprint.`);
+    console.log(`[Upgrade] App '${options.appId}' reports target version '${options.targetVersion}'; running validation...`);
+    await assertFinalContract(client, options, contract.epoch);
+    console.log(`[Upgrade] SUCCESS: App '${options.appId}' is already on target version '${options.targetVersion}' with verified schema.`);
     process.exit(0);
   }
 
@@ -419,7 +421,7 @@ async function main() {
           break;
         }
         if (s.state === 'operatorRequired' || s.state === 'rolledBack') {
-          console.error(`[Upgrade] FAILURE: Migration entered terminal error state '${s.state}'. Error: ${s.error || 'Unknown error'}`);
+          console.error(`[Upgrade] FAILURE: Migration entered terminal error state '${s.state}'. Error: ${sanitizeLog(s.error) || 'Unknown error'}`);
           console.error(`[Upgrade] Recovery: Check MongoDB logs. Migration ID '${migrationId}'.`);
           process.exit(1);
         }
@@ -434,17 +436,17 @@ async function main() {
       console.error(
         `[Upgrade] ERROR: Polling timed out after ${options.timeoutMs}ms without terminal state. Server migration may still be executing under exclusive fence.`,
       );
-      console.error(`[Upgrade] DO NOT issue a new migration ID. Resume with: node scripts/hub-strict-upgrade.mjs --migration-id ${migrationId} --status-only`);
+      console.error(`[Upgrade] DO NOT issue a new migration ID. Inspect status with: node scripts/hub-strict-upgrade.mjs --migration-id ${migrationId} --status-only (or resume transform by re-running with the same migration ID without --status-only)`);
       process.exit(2);
     }
   }
 
   // 5. Mandatory Final Read-Back Assertion
-  await assertFinalContract(client, options);
+  await assertFinalContract(client, options, activeEpoch);
   process.exit(0);
 }
 
-async function assertFinalContract(client, options) {
+async function assertFinalContract(client, options, expectedEpoch = null) {
   console.log('[Upgrade] Performing mandatory final contract read-back assertion...');
   const verifyRes = await client.request(
     'GET',
@@ -457,8 +459,14 @@ async function assertFinalContract(client, options) {
     );
     process.exit(1);
   }
-
   const verified = verifyRes.body;
+  const targetEpoch = expectedEpoch || options.expectedEpoch;
+  if (targetEpoch && verified.epoch && verified.epoch !== targetEpoch) {
+    console.error(
+      `[Upgrade] CRITICAL: Epoch invariant violated: expected active epoch '${targetEpoch}', got '${verified.epoch}'`,
+    );
+    process.exit(1);
+  }
   if (verified.syncMode !== options.targetVersion) {
     console.error(
       `[Upgrade] CRITICAL: Read-back syncMode mismatch: expected '${options.targetVersion}', got '${verified.syncMode}'`,

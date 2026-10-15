@@ -1,8 +1,8 @@
 # Doggo Code Standards & Implementation Guidelines
 
-Last Updated: 2026-10-14
-Phase: Phases 01–10 implementation conventions; desktop installed-runtime acceptance remains pending
-Related Docs: [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md)
+Last Updated: 2026-10-16
+Phase: Phases 01–12 implementation conventions; desktop installed-runtime and live production cutover remain operator gates
+Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
 
@@ -223,3 +223,34 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 8. **Windows Credential Scope**: Desktop Windows tokens must use current-user DPAPI; machine-wide protection and plaintext file/registry/preferences fallback are prohibited.
 9. **Windows ACL Must Not Be Overclaimed**: An ACL helper that suppresses unsupported-view or owner/permission failures cannot be documented as guaranteeing restrictive ACL enforcement; verify native ACLs separately.
 10. **Artifact Signing Status**: Report MSI Authenticode status and digest accurately. An unsigned development installer is not a trusted production release.
+11. **Quarantine of Strict-v1 Fresh-Epoch Script**: `scripts/hub-strict-recovery.js` is operationally quarantined for legacy `strict-v1` emergency cold disaster recovery only. It must never be executed against a `strict-v2` deployment.
+12. **CLI Credential Custody on `argv`**: Administrative tokens, database URIs, and passwords must never be passed as bare command-line arguments. Process-table observation via `/proc/<pid>/cmdline` or `ps` must be prevented by reading credentials from protected environment variables or secured configuration files.
+
+---
+
+## 9. Temporal Models, Scheduling & Cutover Standards (Phases 01–12)
+
+### 9.1 Checked 64-bit Integer Arithmetic
+- All timestamp, epoch millisecond, and lead-duration calculations must use overflow-checked arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`).
+- Silent truncation, bitwise integer overflow wrap, or silent clamping is strictly prohibited across shared Kotlin, Rust backend, and Node.js tooling.
+
+### 9.2 Strict Timezone & DST Resolution
+- Calendar dates and times must resolve through `StrictTimeZoneResolver` using platform `ZoneRules`.
+- Impossible calendar dates (e.g. Feb 30) and spring-forward gap instants must be rejected with validation errors.
+- Overlap ambiguous times during fall-back transitions must require explicit offset selection.
+- Overdue calculations must use calendar arithmetic (start of the next calendar day in the captured timezone), never fixed +24h additions.
+
+### 9.3 Claim-Before-Post Reminder Lifecycle
+- Native notification delivery must follow the atomic claim-before-post pattern via `ReminderOccurrenceStore` (`reminder_delivery_ledger`).
+- Notifications must be claimed in SQLite with a 5-minute grace window before posting to native OS notification services.
+- Obsolete, completed, or deleted task notifications must be cancelled at the native OS layer.
+
+### 9.4 Coordinated Quiescence & Teardown
+- Account logout or leave must execute composite ordered quiescence (`CompositeLeaveSchedulerCancelGate` on Android, `CompositeDesktopLeaveCancelGate` on Desktop) draining delivery gates before cancelling observers, schedulers, and native notifications.
+
+### 9.5 Cutover & In-Place Migration Standards
+- Operator tooling (`hub-strict-upgrade.mjs`, `strict-v2-cutover-rehearsal.mjs`) must pass sensitive tokens via protected environment variables (`$GLEAN_ADMIN_TOKEN`), never on command-line `argv`.
+- Log outputs and error strings must sanitize tokens via `sanitizeLog()`.
+- Resumed migrations must use the identical `migrationId`.
+- Contract assertions must verify 16 canonical columns, SHA-256 fingerprint, and active epoch invariance before exit 0.
+- Downward migration or restoring v1 backups after v2 publication is forbidden. Forward repair under fence is the only approved remediation.

@@ -1,9 +1,9 @@
 # Release & Operations Acceptance Specification
 
-**Document Version**: 2.0.0  
-**Phase**: Phase 11 — Adversarial Integration and Separately Observed Platform Acceptance (incorporating Phases 08–11 operational and platform verification)  
-**Status**: Automated Adversarial Validation & Build Packaging Delivered (397 Reported Verification Targets across 14 Groups: 396 Passed, 1 Ignored); End-to-End Platform Acceptance (Gate G2), Live Cluster Execution (Gate G3), and Production Deployment (Gate G6) Formally Held Pending Implementation/Remediation and Testbed Acceptance  
-**Related Documents**: [System Architecture](./system-architecture.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Android Acceptance](./android-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Acceptance](./windows-acceptance.md) · [Project Roadmap](./project-roadmap.md) · [QA Validation Report](../plans/reports/qa-261015-2330-phase-11-validation.md) · [Code Review Report](../plans/reports/code-review-261015-2345-phase-11-adversarial-acceptance.md)
+**Document Version**: 2.1.0
+**Phase**: Phase 12 — Coordinated Cutover, Recovery Runbook & Release Documentation
+**Status**: Operational Cutover Runbook & Tooling Rehearsal Delivered; Live Production Cutover (Gate G7) Formally Blocked Pending Resolution of Gates G2, G3, and G6
+**Related Documents**: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [System Architecture](./system-architecture.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Android Acceptance](./android-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Acceptance](./windows-acceptance.md) · [Project Roadmap](./project-roadmap.md)
 
 ---
 
@@ -25,6 +25,7 @@ Phase 11 delivers comprehensive adversarial boundary regressions, file-backed SQ
 | **Gate G4** | Storage Migration & Client Version Transition | **PASSED** | Room v1-to-v2 non-destructive migration (`RoomMigrationV1ToV2Test`), 6-phase client contract transition state machine (`ContractTransitionCoordinator`), and legacy receipt reconciliation verified across shared test suites. |
 | **Gate G5** | Shared Scheduling, Persisted Eligibility & Teardown Barrier | **PASSED** | Checked 64-bit arithmetic, 1..10 repeat bounds, strict 300,000ms grace window, reactive projection without draft leakage, durable occurrence lifecycle, and fail-closed account leave teardown barrier verified on JVM BundledSQLite (`ReminderTeardownBarrierSqliteTest`). |
 | **Gate G6** | Adversarial Integration & Separately Observed Platform Acceptance | **LOGIC PASSED / DEPLOYMENT HELD** | Automated boundary logic, file-backed SQLite restart invariance, vectors, and build packaging verified 100% (Cycle 2 review approved at 8.6/10). End-to-end multiplatform acceptance and cluster execution formally held pending platform implementation/remediation and testbed availability. |
+| **Gate G7** | Coordinated Cutover, Recovery Runbook & Release Gate | **RUNBOOK DELIVERED / CUTOVER BLOCKED** | Authoritative operator runbook (`docs/strict-v2-cutover-runbook.md`) and tooling rehearsal harness (`scripts/strict-v2-cutover-rehearsal.mjs`, 7/7 checks PASS) delivered. Live production cutover remains formally blocked pending resolution of Gates G2, G3, and G6, plus formal operator authorization. |
 
 ---
 
@@ -40,18 +41,19 @@ All verification groups across Doggo multiplatform client and Glean Hub backend 
 | 4 | `doggo` | `node scripts/strict-v2-vector-runner.mjs` | Contract Vectors | Strict v2 Wire Vectors & Schema Fingerprints | 23 | 23 | 0 | 0 | PASS |
 | 5 | `doggo` | `node scripts/hub-live-smoke.mjs --fixture-test` | Protocol Fixture | Hub Offline Protocol Smoke Harness (5 suites) | 18 | 18 | 0 | 0 | PASS |
 | 6 | `doggo` | `node scripts/release-security-check.mjs --diagnose-source` | Security Diagnostic | Static Manifest & Secret Audit | 6 | 6 | 0 | 0 | PASS |
-| 7 | `doggo` | `node scripts/hub-strict-upgrade.test.mjs` | Integration CLI | Hub Strict Upgrade CLI Harness | 9 | 9 | 0 | 0 | PASS |
-| 8 | `doggo` | `node scripts/debug-fault-proxy.test.mjs` | Fault Injection | Debug Fault Proxy Route & Redaction Suite | 6 | 6 | 0 | 0 | PASS |
+| 7 | `doggo` | `node scripts/hub-strict-upgrade.test.mjs` | Integration CLI | Hub Strict Upgrade CLI Harness | 12 | 12 | 0 | 0 | PASS |
+| 8 | `doggo` | `node scripts/debug-fault-proxy.test.mjs` | Fault Injection | Debug Fault Proxy Route & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
 | 9 | `doggo` | `./gradlew :desktopApp:createDistributable --dependency-verification=off` | Packaging Build | Desktop Linux App Distributable Bundle | 1 | 1 | 0 | 0 | PASS |
 | 10 | `doggo` | `./gradlew :androidApp:assembleDebug --dependency-verification=off` | Packaging Build | Android Debug APK Compilation (20.6 MB) | 1 | 1 | 0 | 0 | PASS |
 | 11 | `glean-hub` | `cargo test -p glean-hub-sync --locked` | Backend Integration | Hub Sync Crate Tests | 55 | 54 | 0 | 1 | PASS* |
 | 12 | `glean-hub` | `cargo clippy -p glean-hub-sync --locked` | Static Analysis | Rust Code Quality / Linter | 1 | 1 | 0 | 0 | PASS |
 | 13 | `glean-hub` | `pnpm test:unit` (in `glean-hub-app`) | Unit | Admin UI Service & Vite Preload Suite | 13 | 13 | 0 | 0 | PASS |
 | 14 | `glean-hub` | `pnpm build` (in `glean-hub-app`) | Frontend Packaging | TypeScript Compilation & Vite Production Build | 1 | 1 | 0 | 0 | PASS** |
+| 15 | `doggo` | `node scripts/strict-v2-cutover-rehearsal.mjs --self-test` | Tooling Rehearsal | Strict-v2 Upgrade CLI Rehearsal & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
 
 \* *1 ignored: `test_strong_sync_live_mongo_acceptance_gate` (requires live MongoDB at `MONGO_TEST_URI`; Gate G3 staging hold).*  
 \*\* *Vite production build succeeded in 11.20s with dynamic import chunking warnings in embedded apps.*  
-**Grand Total**: 397 reported verification targets across 14 groups (393 automated test and contract checks: 392 passed, 0 failures, 1 ignored; plus 4 build, lint, and packaging targets passed).
+**Grand Total**: 410 reported verification targets across 15 groups (406 automated test, contract, and rehearsal checks: 405 passed, 0 failures, 1 ignored; plus 4 build, lint, and packaging targets passed).
 
 ---
 

@@ -451,6 +451,70 @@ class RoomAccountStoreTest {
     }
 
     @Test
+    fun testClearingDeadlineToServerBaseDoesNotResurrect() = runTest {
+        val v2Store = RoomAccountStore(
+            accountKey = accountKey,
+            userId = "user-jvm-test",
+            database = database,
+            defaultContractVersion = OutboxEntity.CONTRACT_VERSION_V2
+        )
+        val d = TaskDeadline(
+            date = "2026-10-15",
+            time = "10:00",
+            zone = "UTC",
+            offsetSeconds = 0L,
+            anchorEpochMs = 100000L,
+            overdueEpochMs = 100000L
+        )
+        val initial = Todo(
+            id = "todo-v2-clear-base",
+            title = "Deadline in Base Test",
+            completed = false,
+            createdAt = 1000L,
+            updatedAt = 1000L,
+            deadline = d,
+            reminderRule = ReminderRule(enabled = true, leadMinutes = 15L, count = 1L),
+            scheduleToken = "tok-clear-1"
+        )
+        v2Store.saveTodoLocally(initial)
+        val op = v2Store.dao.getOutboxByRowId("todo-v2-clear-base").first()
+        v2Store.reconcileAccepted(op.opId, 1L)
+
+        // Verify base has deadline
+        val base = v2Store.dao.getServerBase("todo-v2-clear-base")
+        assertNotNull(base?.deadlineDate)
+
+        // Now edit task locally to remove deadline completely
+        val loaded = v2Store.loadTodos().first { it.id == "todo-v2-clear-base" }
+        val withoutDeadline = loaded.copy(deadline = null, reminderRule = ReminderRule.DISABLED, scheduleToken = null, updatedAt = 2000L)
+        v2Store.saveTodoLocally(withoutDeadline)
+
+        // loadTodos MUST return null deadline, not resurrect from base
+        val reloaded = v2Store.loadTodos().first { it.id == "todo-v2-clear-base" }
+        assertNull(reloaded.deadline, "Deadline must not be resurrected from base")
+        assertNull(reloaded.scheduleToken, "Schedule token must be null when deadline cleared")
+        assertFalse(reloaded.reminderRule.enabled, "Reminder rule must be disabled")
+
+        // Switch from timed to date-only
+        val dateOnly = TaskDeadline(
+            date = "2026-10-15",
+            time = null,
+            zone = "UTC",
+            offsetSeconds = 0L,
+            reminderAnchorTime = "09:00",
+            anchorEpochMs = 90000L,
+            overdueEpochMs = 186400000L
+        )
+        val dateOnlyTodo = reloaded.copy(deadline = dateOnly, scheduleToken = "tok-do", updatedAt = 3000L)
+        v2Store.saveTodoLocally(dateOnlyTodo)
+
+        val reloadedDateOnly = v2Store.loadTodos().first { it.id == "todo-v2-clear-base" }
+        assertNotNull(reloadedDateOnly.deadline)
+        assertNull(reloadedDateOnly.deadline?.time, "Time must be null for date-only task")
+        assertEquals("09:00", reloadedDateOnly.deadline?.reminderAnchorTime)
+    }
+
+    @Test
     fun testTombstoneMutationForbidden() = runTest {
         val now = System.currentTimeMillis()
         // Seed server base with confirmed deleted tombstone

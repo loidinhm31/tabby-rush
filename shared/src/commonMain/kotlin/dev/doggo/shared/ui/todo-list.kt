@@ -1,5 +1,6 @@
 package dev.doggo.shared.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -53,7 +54,8 @@ fun TodoList(
     filter: TodoFilter,
     deleteCandidate: Todo?,
     onAction: (TodoAction) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    nowEpochMs: Long = 0L
 ) {
     Column(
         modifier = modifier.fillMaxSize()
@@ -96,7 +98,8 @@ fun TodoList(
                         todo = todo,
                         onToggle = { onAction(TodoAction.ToggleCompleted(todo)) },
                         onEdit = { onAction(TodoAction.OpenEdit(todo)) },
-                        onDelete = { onAction(TodoAction.RequestDelete(todo)) }
+                        onDelete = { onAction(TodoAction.RequestDelete(todo)) },
+                        nowEpochMs = nowEpochMs
                     )
                 }
             }
@@ -166,8 +169,11 @@ private fun TodoRow(
     onToggle: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    nowEpochMs: Long = 0L
 ) {
+    val currentClockMs = if (nowEpochMs > 0L) nowEpochMs else System.currentTimeMillis()
+    val isOverdue = !todo.completed && todo.deadline != null && (currentClockMs >= todo.deadline.overdueEpochMs)
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -209,6 +215,39 @@ private fun TodoRow(
                     textDecoration = if (todo.completed) TextDecoration.LineThrough else TextDecoration.None
                 )
 
+                if (todo.deadline != null) {
+                    Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingXSmall))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(DoggoThemeTokens.SpacingSmall)
+                    ) {
+                        val deadlineLabel = if (todo.deadline.time != null) {
+                            "Due: ${todo.deadline.date} ${todo.deadline.time} (${todo.deadline.zone})"
+                        } else {
+                            "Due: ${todo.deadline.date} (date-only)"
+                        }
+                        Text(
+                            text = deadlineLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = DoggoThemeTokens.customColors.primaryDeep
+                        )
+
+                        if (isOverdue) {
+                            Text(
+                                text = "Overdue",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .background(DoggoThemeTokens.customColors.coralSurface, MaterialTheme.shapes.extraSmall)
+                                    .padding(horizontal = DoggoThemeTokens.SpacingXSmall, vertical = 2.dp)
+                                    .semantics {
+                                        contentDescription = "Task is overdue"
+                                    }
+                            )
+                        }
+                    }
+                }
+
                 if (todo.isPending) {
                     Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingXSmall))
                     Text(
@@ -218,7 +257,6 @@ private fun TodoRow(
                     )
                 }
             }
-
             Spacer(modifier = Modifier.width(DoggoThemeTokens.SpacingSmall))
 
             TextButton(

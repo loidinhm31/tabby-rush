@@ -153,46 +153,11 @@ class RoomAccountStore(
             }
             val isPending = hasPendingOp || (draft != null && draft.localRevision > 0L)
 
-            // Temporal deadline & reminder projections
-            val deadlineDate = draft?.deadlineDate ?: latestOp?.deadlineDate ?: base?.deadlineDate
-            val deadlineTime = draft?.deadlineTime ?: latestOp?.deadlineTime ?: base?.deadlineTime
-            val deadlineZone = draft?.deadlineZone ?: latestOp?.deadlineZone ?: base?.deadlineZone
-            val deadlineOffsetSeconds = draft?.deadlineOffsetSeconds ?: latestOp?.deadlineOffsetSeconds ?: base?.deadlineOffsetSeconds
-            val reminderAnchorTime = draft?.reminderAnchorTime ?: latestOp?.reminderAnchorTime ?: base?.reminderAnchorTime
-            val deadlineAnchorEpochMs = draft?.deadlineAnchorEpochMs ?: latestOp?.deadlineAnchorEpochMs ?: base?.deadlineAnchorEpochMs
-            val deadlineOverdueEpochMs = draft?.deadlineOverdueEpochMs ?: latestOp?.deadlineOverdueEpochMs ?: base?.deadlineOverdueEpochMs
-
-            val reminderEnabled = draft?.reminderEnabled ?: latestOp?.reminderEnabled ?: base?.reminderEnabled ?: false
-            val reminderLeadMinutes = draft?.reminderLeadMinutes ?: latestOp?.reminderLeadMinutes ?: base?.reminderLeadMinutes ?: 0L
-            val reminderIntervalMinutes = draft?.reminderIntervalMinutes ?: latestOp?.reminderIntervalMinutes ?: base?.reminderIntervalMinutes
-            val reminderCount = draft?.reminderCount ?: latestOp?.reminderCount ?: base?.reminderCount ?: 1L
-
-            val rawToken = draft?.scheduleToken ?: latestOp?.scheduleToken ?: base?.scheduleToken
-
-            val deadline = if (deadlineDate != null && deadlineZone != null && deadlineOffsetSeconds != null && deadlineAnchorEpochMs != null && deadlineOverdueEpochMs != null) {
-                TaskDeadline(
-                    date = deadlineDate,
-                    time = deadlineTime,
-                    zone = deadlineZone,
-                    offsetSeconds = deadlineOffsetSeconds,
-                    reminderAnchorTime = reminderAnchorTime,
-                    anchorEpochMs = deadlineAnchorEpochMs,
-                    overdueEpochMs = deadlineOverdueEpochMs
-                )
-            } else null
-
-            val reminderRule = if (deadline != null) {
-                ReminderRule(
-                    enabled = reminderEnabled,
-                    leadMinutes = reminderLeadMinutes,
-                    intervalMinutes = reminderIntervalMinutes,
-                    count = reminderCount
-                )
-            } else {
-                ReminderRule.DISABLED
-            }
-
-            val scheduleToken = if (deadline != null) rawToken else null
+            // Temporal deadline & reminder projections from authoritative snapshot source
+            val temporalProj = resolveTemporalProjection(draft, latestOp, base)
+            val deadline = toTaskDeadline(temporalProj)
+            val reminderRule = toReminderRule(temporalProj, deadline != null)
+            val scheduleToken = if (deadline != null) temporalProj.scheduleToken else null
 
             result.add(
                 Todo(
@@ -243,37 +208,11 @@ class RoomAccountStore(
         val existingOps = dao.getOutboxByRowId(todo.id)
         val latestExistingOp = existingOps.lastOrNull()
 
-        // Calculate schedule token rotation
-        val existingDeadlineDate = existingDraft?.deadlineDate ?: latestExistingOp?.deadlineDate ?: existingBase?.deadlineDate
-        val existingDeadlineZone = existingDraft?.deadlineZone ?: latestExistingOp?.deadlineZone ?: existingBase?.deadlineZone
-        val existingOffset = existingDraft?.deadlineOffsetSeconds ?: latestExistingOp?.deadlineOffsetSeconds ?: existingBase?.deadlineOffsetSeconds
-        val existingAnchor = existingDraft?.deadlineAnchorEpochMs ?: latestExistingOp?.deadlineAnchorEpochMs ?: existingBase?.deadlineAnchorEpochMs
-        val existingOverdue = existingDraft?.deadlineOverdueEpochMs ?: latestExistingOp?.deadlineOverdueEpochMs ?: existingBase?.deadlineOverdueEpochMs
-
-        val existingDeadline = if (existingDeadlineDate != null && existingDeadlineZone != null && existingOffset != null && existingAnchor != null && existingOverdue != null) {
-            TaskDeadline(
-                date = existingDeadlineDate,
-                time = existingDraft?.deadlineTime ?: latestExistingOp?.deadlineTime ?: existingBase?.deadlineTime,
-                zone = existingDeadlineZone,
-                offsetSeconds = existingOffset,
-                reminderAnchorTime = existingDraft?.reminderAnchorTime ?: latestExistingOp?.reminderAnchorTime ?: existingBase?.reminderAnchorTime,
-                anchorEpochMs = existingAnchor,
-                overdueEpochMs = existingOverdue
-            )
-        } else null
-
-        val existingRule = if (existingDeadline != null) {
-            ReminderRule(
-                enabled = existingDraft?.reminderEnabled ?: latestExistingOp?.reminderEnabled ?: existingBase?.reminderEnabled ?: false,
-                leadMinutes = existingDraft?.reminderLeadMinutes ?: latestExistingOp?.reminderLeadMinutes ?: existingBase?.reminderLeadMinutes ?: 0L,
-                intervalMinutes = existingDraft?.reminderIntervalMinutes ?: latestExistingOp?.reminderIntervalMinutes ?: existingBase?.reminderIntervalMinutes,
-                count = existingDraft?.reminderCount ?: latestExistingOp?.reminderCount ?: existingBase?.reminderCount ?: 1L
-            )
-        } else {
-            ReminderRule.DISABLED
-        }
-
-        val existingToken = existingDraft?.scheduleToken ?: latestExistingOp?.scheduleToken ?: existingBase?.scheduleToken
+        // Calculate schedule token rotation from authoritative existing snapshot
+        val existingTemporalProj = resolveTemporalProjection(existingDraft, latestExistingOp, existingBase)
+        val existingDeadline = toTaskDeadline(existingTemporalProj)
+        val existingRule = toReminderRule(existingTemporalProj, existingDeadline != null)
+        val existingToken = existingTemporalProj.scheduleToken
 
         val finalScheduleToken: String? = if (todo.deadline == null) {
             null
@@ -697,6 +636,11 @@ class RoomAccountStore(
         }
     }
 
+    suspend fun isAccountV2(): Boolean = mutex.withLock {
+        val s = getOrCreateMeta().syncStatus
+        s == "ready-v2" || s == "READY_V2"
+    }
+
     private fun generateUuid(): String {
         val bytes = ByteArray(16)
         Random.nextBytes(bytes)
@@ -704,5 +648,112 @@ class RoomAccountStore(
         bytes[8] = ((bytes[8].toInt() and 0x3f) or 0x80).toByte() // RFC 4122 variant
         val hex = bytes.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
         return "${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}"
+    }
+
+    private data class TemporalProjection(
+        val deadlineDate: String?,
+        val deadlineTime: String?,
+        val deadlineZone: String?,
+        val deadlineOffsetSeconds: Long?,
+        val reminderAnchorTime: String?,
+        val deadlineAnchorEpochMs: Long?,
+        val deadlineOverdueEpochMs: Long?,
+        val reminderEnabled: Boolean,
+        val reminderLeadMinutes: Long,
+        val reminderIntervalMinutes: Long?,
+        val reminderCount: Long,
+        val scheduleToken: String?
+    )
+
+    private fun resolveTemporalProjection(
+        draft: EditorDraftEntity?,
+        op: OutboxEntity?,
+        base: ServerBaseEntity?
+    ): TemporalProjection {
+        return when {
+            draft != null -> TemporalProjection(
+                deadlineDate = draft.deadlineDate,
+                deadlineTime = draft.deadlineTime,
+                deadlineZone = draft.deadlineZone,
+                deadlineOffsetSeconds = draft.deadlineOffsetSeconds,
+                reminderAnchorTime = draft.reminderAnchorTime,
+                deadlineAnchorEpochMs = draft.deadlineAnchorEpochMs,
+                deadlineOverdueEpochMs = draft.deadlineOverdueEpochMs,
+                reminderEnabled = draft.reminderEnabled,
+                reminderLeadMinutes = draft.reminderLeadMinutes,
+                reminderIntervalMinutes = draft.reminderIntervalMinutes,
+                reminderCount = draft.reminderCount,
+                scheduleToken = draft.scheduleToken
+            )
+            op != null && op.contractVersion != OutboxEntity.CONTRACT_VERSION_V1 -> TemporalProjection(
+                deadlineDate = op.deadlineDate,
+                deadlineTime = op.deadlineTime,
+                deadlineZone = op.deadlineZone,
+                deadlineOffsetSeconds = op.deadlineOffsetSeconds,
+                reminderAnchorTime = op.reminderAnchorTime,
+                deadlineAnchorEpochMs = op.deadlineAnchorEpochMs,
+                deadlineOverdueEpochMs = op.deadlineOverdueEpochMs,
+                reminderEnabled = op.reminderEnabled,
+                reminderLeadMinutes = op.reminderLeadMinutes,
+                reminderIntervalMinutes = op.reminderIntervalMinutes,
+                reminderCount = op.reminderCount,
+                scheduleToken = op.scheduleToken
+            )
+            base != null -> TemporalProjection(
+                deadlineDate = base.deadlineDate,
+                deadlineTime = base.deadlineTime,
+                deadlineZone = base.deadlineZone,
+                deadlineOffsetSeconds = base.deadlineOffsetSeconds,
+                reminderAnchorTime = base.reminderAnchorTime,
+                deadlineAnchorEpochMs = base.deadlineAnchorEpochMs,
+                deadlineOverdueEpochMs = base.deadlineOverdueEpochMs,
+                reminderEnabled = base.reminderEnabled,
+                reminderLeadMinutes = base.reminderLeadMinutes,
+                reminderIntervalMinutes = base.reminderIntervalMinutes,
+                reminderCount = base.reminderCount,
+                scheduleToken = base.scheduleToken
+            )
+            else -> TemporalProjection(
+                deadlineDate = null,
+                deadlineTime = null,
+                deadlineZone = null,
+                deadlineOffsetSeconds = null,
+                reminderAnchorTime = null,
+                deadlineAnchorEpochMs = null,
+                deadlineOverdueEpochMs = null,
+                reminderEnabled = false,
+                reminderLeadMinutes = 0L,
+                reminderIntervalMinutes = null,
+                reminderCount = 1L,
+                scheduleToken = null
+            )
+        }
+    }
+
+    private fun toTaskDeadline(p: TemporalProjection): TaskDeadline? {
+        return if (p.deadlineDate != null && p.deadlineZone != null && p.deadlineOffsetSeconds != null && p.deadlineAnchorEpochMs != null && p.deadlineOverdueEpochMs != null) {
+            TaskDeadline(
+                date = p.deadlineDate,
+                time = p.deadlineTime,
+                zone = p.deadlineZone,
+                offsetSeconds = p.deadlineOffsetSeconds,
+                reminderAnchorTime = p.reminderAnchorTime,
+                anchorEpochMs = p.deadlineAnchorEpochMs,
+                overdueEpochMs = p.deadlineOverdueEpochMs
+            )
+        } else null
+    }
+
+    private fun toReminderRule(p: TemporalProjection, hasDeadline: Boolean): ReminderRule {
+        return if (hasDeadline) {
+            ReminderRule(
+                enabled = p.reminderEnabled,
+                leadMinutes = p.reminderLeadMinutes,
+                intervalMinutes = p.reminderIntervalMinutes,
+                count = p.reminderCount
+            )
+        } else {
+            ReminderRule.DISABLED
+        }
     }
 }

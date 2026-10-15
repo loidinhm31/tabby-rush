@@ -257,12 +257,13 @@ private fun VersionCard(
                 )
             }
 
-            if (todo.deadline != null) {
+            val dl = todo.deadline
+            if (dl != null) {
                 Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingXSmall))
-                val deadlineText = if (todo.deadline.time != null) {
-                    "Deadline: ${todo.deadline.date} ${todo.deadline.time} (${todo.deadline.zone})"
+                val deadlineText = if (dl.time != null) {
+                    "Deadline: ${dl.date} ${dl.time} (${dl.zone})"
                 } else {
-                    "Deadline: ${todo.deadline.date} (date-only, ${todo.deadline.zone})"
+                    "Deadline: ${dl.date} (date-only, anchor ${dl.reminderAnchorTime ?: "09:00"}, ${dl.zone})"
                 }
                 Text(
                     text = deadlineText,
@@ -271,7 +272,10 @@ private fun VersionCard(
                 )
 
                 val reminderText = if (todo.reminderRule.enabled) {
-                    "Reminder: ${todo.reminderRule.leadMinutes}m before (${todo.reminderRule.count}x)"
+                    val repeatDesc = if (todo.reminderRule.count > 1L) {
+                        ", repeat ${todo.reminderRule.count}x every ${todo.reminderRule.intervalMinutes}m"
+                    } else " (1 alert)"
+                    "Reminder: ${todo.reminderRule.leadMinutes}m before anchor$repeatDesc"
                 } else {
                     "Reminder: Disabled"
                 }
@@ -280,6 +284,14 @@ private fun VersionCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = DoggoThemeTokens.customColors.muted
                 )
+
+                if (todo.scheduleToken != null) {
+                    Text(
+                        text = "Schedule Token: ${todo.scheduleToken.take(8)}…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DoggoThemeTokens.customColors.muted
+                    )
+                }
             } else {
                 Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingXSmall))
                 Text(

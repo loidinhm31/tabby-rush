@@ -3,6 +3,58 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 10] - 2026-10-15: Shared Deadline Editor, Task List and Local Settings (Implementation Delivered; Platform Acceptance & Windows Bridge Pending Phase 11; Code Review Score 9.2/10 Approved)
+
+*Note: Part of the 2026-10-15 Task Deadlines, Reminders & Strict Upgrades initiative; distinct from the historical 2026-10-14 Phase 10 Windows desktop MSI release.*
+
+### Added
+- Shared Compose Multiplatform UI components for task deadlines and reminders:
+  - `dev.doggo.shared.ui.DeadlineCalculatorHelpers`: Pure immutable calculation engine (`validateAndComputeDeadline`, `computeNextCalendarDayStartEpochMs`, `computeCalendarDayStartEpochMs`, `formatOffset`). Resolves local dates and times via `StrictTimeZoneResolver`. Explicitly separates DST gaps (non-existent local times rejected with validation error) from DST overlaps (ambiguous times resolved via explicit offset selection). Defensive parsing catches `IllegalArgumentException` on impossible calendar dates (Feb 30/31, April 31, non-leap Feb 29) to prevent Compose recomposition crashes.
+  - `dev.doggo.shared.ui.DeadlineEditorSection`: Shared Compose UI section providing date input, time toggle, explicit timezone and offset disambiguation filter chips, reminder rule enablement, lead minutes picker, repeat interval and count bounds (1..10, count > 1 requires interval >= 15m, non-repeating interval null, last occurrence <= anchor), and live calculated reminder opportunity preview.
+  - `dev.doggo.shared.ui.ReminderSettingsDialog`: Modal settings dialog displaying platform reminder capabilities card (`Exact`, `BestEffort`, `NotificationDenied`, `ChannelDisabled`), default reminder rule toggles, lead minutes, repeat count/interval, and date-only default anchor time picker (09:00 default).
+- UI state and actions in `:shared`:
+  - `EditorState`: Immutable state container capturing task identity, title, deadline date/time/zone/offset, reminder rule, original schedule token, and validation error messages.
+  - `ReminderSettingsState`: Immutable state container for local reminder defaults, dialog visibility, and platform capabilities.
+  - `TodoAction`: Added `UpdateEditorState`, settings actions (`OpenReminderSettings`, `DismissReminderSettings`, `SaveReminderSettingsDefaults`, `RequestReminderPermission`, `OpenPlatformReminderSettings`), and periodic `ClockTick` action.
+- Common Compose string resources in `shared/src/commonMain/composeResources/values/strings.xml` for deadline inputs, timezone selectors, reminder intervals, overdue labels, and settings descriptions.
+- Automated test suites:
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/ui/todo-semantics-test.kt`: 6 new tests added in Phase 10 QA (`testDeadlineValidationValidTimedAndDateOnly`, `testDeadlineValidationDstGapAndOverlap`, `testDeadlineValidationBoundsAndLastOccurrenceLimit`, `testOverdueLogicDateOnlyVsTimedAndCompleted`, `testReminderSettingsStateDefaultsAndCapabilities`, `testConflictReviewDetailedParameters`) plus 1 regression test added during code review (`testDeadlineValidationImpossibleCalendarDates`), totaling 15 tests.
+  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt`: Added `testClearingDeadlineToServerBaseDoesNotResurrect` verifying that clearing deadlines against a populated server base does not resurrect deleted schedules.
+
+### Changed
+- `RoomAccountStore` in `:shared`:
+  - Refactored `resolveTemporalProjection` hierarchy: evaluates local drafts and outbox mutations as a complete unit. Explicit null deadline fields in local state are treated as an intentional clearing of the deadline rather than falling back field-by-field to `server_base` (verified by `testClearingDeadlineToServerBaseDoesNotResurrect`).
+  - Enforced `hasScheduleSemanticChange()`: editing task title or description preserves the existing `scheduleToken`; editing deadline date, time, zone, offset, or reminder rule generates a new UUID `scheduleToken`. (Task completion acts as an independent cancellation barrier in `PersistedScheduleProjector`).
+  - Added `isAccountV2()` guard: verifies active account has completed transition to `strict-v2`.
+- `TodoEditor` in `:shared`:
+  - Integrated `DeadlineEditorSection`, submit validation, and strict-v2 upgrade requirement guard (`isUpgradeBlocked` disables submit with Hub admin upgrade message on strict-v1 accounts while permitting title and completion editing).
+- `TodoList` and `TodoRow` in `:shared`:
+  - Added date-only and timed deadline badges.
+  - Overdue status is conveyed via non-color indicators: explicit "Overdue" text badge, distinct background styling, and accessibility `contentDescription = "Task is overdue"`.
+  - Date-only tasks at anchor 09:00 do not become overdue during that morning; overdue boundary is strictly the start of the next calendar day in the captured timezone. Completed tasks never render as overdue.
+  - Evaluates overdue status against periodic 15s `ClockTick` events without SQLite mutations or network sync.
+- `ConflictReview` in `:shared`:
+  - Extended comparison card displaying full side-by-side comparison of local vs remote deadline date, time, zone, offset, reminder rule parameters, and schedule-token preview.
+- `SessionViewModel` in `:androidApp`:
+  - Routed notification task selection through `openEdit(task)` to fully hydrate deadline and reminder fields from stored snapshot.
+  - Added reminder settings dialog flow and 15s `ClockTick` ticker flow.
+- `DesktopController` / `main.kt` in `:desktopApp`:
+  - Added reminder settings actions, submit validation, and 15s `ClockTick` ticker flow.
+
+### Critical Remediations Applied During Code Review
+1. **[CRITICAL / DATA LOSS] Android Notification Selection Bypassed Deadline Hydration**:
+   - `dispatchTaskSelection(accountKey, taskId)` previously constructed an unhydrated `EditorState(id = task.id, rawTitle = task.title)` with default null deadlines. Opening a task from an OS notification and saving title changes wiped all scheduled deadlines and alarms.
+   - Remediated by changing `dispatchTaskSelection` to a suspend function routing through `openEdit(task)`, which fully populates temporal fields from the stored snapshot before opening the editor.
+2. **[HIGH / RUNTIME CRASH] Impossible Calendar Dates Crashed Compose Recomposition**:
+   - Typing invalid calendar days (e.g. Feb 30/31, April 31, non-leap Feb 29) passed `DATE_REGEX` but caused `LocalDate.parse()` to throw uncaught `IllegalArgumentException` during Compose `remember` recomposition in `TodoEditor`.
+   - Remediated by wrapping date/time operations in try-catch in `DeadlineCalculatorHelpers.kt` returning validation errors. Added regression test `testDeadlineValidationImpossibleCalendarDates`.
+
+### Verification and Delivery Status
+- QA test execution report (`plans/reports/qa-261015-2245-phase-10-validation.md`) records 306 automated test/check assertions across 7 test suites, plus 2 packaging assembly builds (`:desktopApp:createDistributable` standalone bundle and `:androidApp:assembleDebug` APK build), totaling 308 checks (189 shared JVM tests across 26 classes, 49 desktop tests across 10 classes, 12 Android unit tests across 4 classes, 23 strict-v2 vectors/fingerprints, 18 Hub offline fixture smoke checks, 6 static release security checks, 9 Hub strict upgrade CLI tests).
+- Code review report (`plans/reports/code-review-261015-2300-phase-10-compose-deadline-editor-list.md`) approved at **9.2 / 10**, adding 1 regression test (`testDeadlineValidationImpossibleCalendarDates`) in `TodoSemanticsTest` to bring shared JVM tests to 190 and total passing checks to 309 when executed.
+- Gate G2 / Platform Acceptance: Compose UI, contracts, and platform controller integrations delivered in source and verified via unit tests; connected physical device / emulator execution, TalkBack/Orca accessibility verification, and live notification delivery remain scheduled for Phase 11 platform acceptance.
+
+---
 ## [Phase 09] - 2026-10-15: Process-Scoped Desktop Scheduler, Native Adapters & Strict Quiescence (Gate G2 Desktop Logic Delivered; Physical Notification Display Pending Phase 11)
 
 *Note: Part of the 2026-10-15 Task Deadlines, Reminders & Strict Upgrades initiative; distinct from the historical 2026-10-14 Phase 09 Linux desktop distribution release.*

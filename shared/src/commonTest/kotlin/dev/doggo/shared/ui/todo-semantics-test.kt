@@ -17,6 +17,10 @@ import dev.doggo.shared.contract.TodoAction
 import dev.doggo.shared.contract.TodoCounts
 import dev.doggo.shared.contract.TodoFilter
 import dev.doggo.shared.contract.TodoUiState
+import dev.doggo.shared.contract.ReminderSettingsState
+import dev.doggo.shared.contract.ReminderCapabilities
+import dev.doggo.shared.ui.DeadlineCalculatorHelpers
+import dev.doggo.shared.ui.DeadlineValidationResult
 import dev.doggo.shared.theme.DoggoCoral
 import dev.doggo.shared.theme.DoggoCoralSurface
 import dev.doggo.shared.theme.DoggoCream
@@ -316,6 +320,286 @@ class TodoSemanticsTest {
             updatedAt = 4000L
         )
         assertEquals("quarantined", unknownInfo.status)
+    }
+
+    @Test
+    fun testDeadlineValidationValidTimedAndDateOnly() {
+        // Timed deadline in UTC
+        val timedEditor = EditorState(
+            id = null,
+            rawTitle = "Timed task",
+            hasDeadline = true,
+            deadlineDate = "2026-10-20",
+            hasTime = true,
+            deadlineTime = "15:00",
+            deadlineZone = "UTC",
+            reminderEnabled = true,
+            reminderLeadMinutes = 30L,
+            reminderCount = 1L
+        )
+        val timedResult = DeadlineCalculatorHelpers.validateAndComputeDeadline(timedEditor)
+        assertTrue(timedResult is DeadlineValidationResult.Valid, "Timed deadline must be valid")
+        assertEquals("2026-10-20", timedResult.deadline.date)
+        assertEquals("15:00", timedResult.deadline.time)
+        assertEquals("UTC", timedResult.deadline.zone)
+        assertEquals(0L, timedResult.deadline.offsetSeconds)
+        assertEquals(timedResult.deadline.anchorEpochMs, timedResult.deadline.overdueEpochMs)
+        assertEquals(1, timedResult.preview.occurrences.size)
+        assertEquals(timedResult.deadline.anchorEpochMs - 30 * 60_000L, timedResult.preview.occurrences[0].dueEpochMs)
+
+        // Date-only deadline
+        val dateOnlyEditor = EditorState(
+            id = null,
+            rawTitle = "Date-only task",
+            hasDeadline = true,
+            deadlineDate = "2026-10-20",
+            hasTime = false,
+            deadlineZone = "UTC",
+            reminderAnchorTime = "09:00",
+            reminderEnabled = true,
+            reminderLeadMinutes = 0L,
+            reminderCount = 1L
+        )
+        val dateOnlyResult = DeadlineCalculatorHelpers.validateAndComputeDeadline(dateOnlyEditor)
+        assertTrue(dateOnlyResult is DeadlineValidationResult.Valid, "Date-only deadline must be valid")
+        assertNull(dateOnlyResult.deadline.time)
+        assertEquals("09:00", dateOnlyResult.deadline.reminderAnchorTime)
+        assertTrue(dateOnlyResult.deadline.overdueEpochMs > dateOnlyResult.deadline.anchorEpochMs,
+            "Date-only overdue must be after anchor time (next day start)")
+    }
+
+    @Test
+    fun testDeadlineValidationDstGapAndOverlap() {
+        // Gap in America/New_York on 2026-03-08 at 02:30 (spring forward skips 02:00-03:00)
+        val gapEditor = EditorState(
+            id = null,
+            rawTitle = "Spring forward gap",
+            hasDeadline = true,
+            deadlineDate = "2026-03-08",
+            hasTime = true,
+            deadlineTime = "02:30",
+            deadlineZone = "America/New_York"
+        )
+        val gapResult = DeadlineCalculatorHelpers.validateAndComputeDeadline(gapEditor)
+        assertTrue(gapResult is DeadlineValidationResult.Invalid, "DST gap must be invalid")
+        assertTrue(gapResult.isGap, "Result must flag isGap = true")
+
+        // Overlap in America/New_York on 2026-11-01 at 01:30 (fall back repeats 01:00-02:00)
+        val overlapEditorWithoutChoice = EditorState(
+            id = null,
+            rawTitle = "Fall back overlap",
+            hasDeadline = true,
+            deadlineDate = "2026-11-01",
+            hasTime = true,
+            deadlineTime = "01:30",
+            deadlineZone = "America/New_York",
+            chosenOffsetSeconds = null
+        )
+        val overlapResult = DeadlineCalculatorHelpers.validateAndComputeDeadline(overlapEditorWithoutChoice)
+        assertTrue(overlapResult is DeadlineValidationResult.Invalid, "Ambiguous DST overlap must require offset")
+        assertNotNull(overlapResult.overlap, "Overlap result must be present")
+        assertEquals(-14400L, overlapResult.overlap.earlierOffsetSeconds) // EDT -04:00
+        assertEquals(-18000L, overlapResult.overlap.laterOffsetSeconds)   // EST -05:00
+
+        // Resolving with chosen earlier offset
+        val resolvedEditor = overlapEditorWithoutChoice.copy(chosenOffsetSeconds = -14400L)
+        val resolvedResult = DeadlineCalculatorHelpers.validateAndComputeDeadline(resolvedEditor)
+        assertTrue(resolvedResult is DeadlineValidationResult.Valid, "Resolved overlap must be valid")
+        assertEquals(-14400L, resolvedResult.deadline.offsetSeconds)
+    }
+
+    @Test
+    fun testDeadlineValidationImpossibleCalendarDates() {
+        // Feb 30, Feb 31, April 31, and non-leap Feb 29 (2025) must fail cleanly without throwing uncaught exceptions
+        val impossibleDates = listOf("2026-02-30", "2026-02-31", "2026-04-31", "2025-02-29")
+        for (date in impossibleDates) {
+            val editor = EditorState(
+                id = null,
+                rawTitle = "Impossible date task",
+                hasDeadline = true,
+                deadlineDate = date,
+                hasTime = true,
+                deadlineTime = "12:00",
+                deadlineZone = "UTC"
+            )
+            val result = DeadlineCalculatorHelpers.validateAndComputeDeadline(editor)
+            assertTrue(result is DeadlineValidationResult.Invalid, "Date $date must be rejected as Invalid without throwing")
+
+            // Date-only variant as well
+            val dateOnlyEditor = editor.copy(hasTime = false)
+            val dateOnlyResult = DeadlineCalculatorHelpers.validateAndComputeDeadline(dateOnlyEditor)
+            assertTrue(dateOnlyResult is DeadlineValidationResult.Invalid, "Date-only $date must be rejected as Invalid without throwing")
+        }
+    }
+
+    @Test
+    fun testDeadlineReminderBoundsAndLastOccurrenceLimit() {
+        // Negative lead minutes rejected
+        val invalidLead = EditorState(
+            id = null,
+            rawTitle = "Negative lead",
+            hasDeadline = true,
+            deadlineDate = "2026-10-20",
+            hasTime = true,
+            deadlineTime = "12:00",
+            deadlineZone = "UTC",
+            reminderEnabled = true,
+            reminderLeadMinutes = -5L
+        )
+        assertTrue(DeadlineCalculatorHelpers.validateAndComputeDeadline(invalidLead) is DeadlineValidationResult.Invalid)
+
+        // Count > 1 requires interval >= 15
+        val invalidInterval = EditorState(
+            id = null,
+            rawTitle = "Short interval",
+            hasDeadline = true,
+            deadlineDate = "2026-10-20",
+            hasTime = true,
+            deadlineTime = "12:00",
+            deadlineZone = "UTC",
+            reminderEnabled = true,
+            reminderLeadMinutes = 60L,
+            reminderCount = 3L,
+            reminderIntervalMinutes = 10L
+        )
+        assertTrue(DeadlineCalculatorHelpers.validateAndComputeDeadline(invalidInterval) is DeadlineValidationResult.Invalid)
+
+        // Last occurrence exceeds anchor: lead 30m, count 3, interval 20m -> offsets: -30m, -10m, +10m > anchor!
+        val exceedsAnchor = EditorState(
+            id = null,
+            rawTitle = "Exceeds anchor",
+            hasDeadline = true,
+            deadlineDate = "2026-10-20",
+            hasTime = true,
+            deadlineTime = "12:00",
+            deadlineZone = "UTC",
+            reminderEnabled = true,
+            reminderLeadMinutes = 30L,
+            reminderCount = 3L,
+            reminderIntervalMinutes = 20L
+        )
+        val exceedResult = DeadlineCalculatorHelpers.validateAndComputeDeadline(exceedsAnchor)
+        assertTrue(exceedResult is DeadlineValidationResult.Invalid, "Last occurrence > anchor must be rejected")
+    }
+
+    @Test
+    fun testOverdueLogicDateOnlyVsTimedAndCompleted() {
+        val anchorMs = 1700000000000L
+        val overdueMs = 1700086400000L // 24h later
+
+        val timedDeadline = TaskDeadline(
+            date = "2026-10-20",
+            time = "12:00",
+            zone = "UTC",
+            offsetSeconds = 0L,
+            anchorEpochMs = anchorMs,
+            overdueEpochMs = anchorMs
+        )
+        val timedTodo = Todo(
+            id = "t-1",
+            title = "Timed Todo",
+            completed = false,
+            createdAt = 1000L,
+            deadline = timedDeadline,
+            scheduleToken = "tok-1"
+        )
+        // Not overdue before anchor
+        assertFalse(timedTodo.completed || (anchorMs - 1000L >= timedDeadline.overdueEpochMs))
+        // Overdue at/after anchor
+        assertTrue(!timedTodo.completed && (anchorMs >= timedDeadline.overdueEpochMs))
+
+        // Date-only task
+        val dateOnlyDeadline = TaskDeadline(
+            date = "2026-10-20",
+            time = null,
+            zone = "UTC",
+            offsetSeconds = 0L,
+            reminderAnchorTime = "09:00",
+            anchorEpochMs = anchorMs,
+            overdueEpochMs = overdueMs
+        )
+        val dateOnlyTodo = Todo(
+            id = "t-2",
+            title = "Date-only Todo",
+            completed = false,
+            createdAt = 1000L,
+            deadline = dateOnlyDeadline,
+            scheduleToken = "tok-2"
+        )
+        // At anchor time (09:00), NOT overdue!
+        assertFalse(!dateOnlyTodo.completed && (anchorMs >= dateOnlyDeadline.overdueEpochMs),
+            "Date-only task must not be overdue at reminder anchor time")
+        // Overdue at next calendar day start
+        assertTrue(!dateOnlyTodo.completed && (overdueMs >= dateOnlyDeadline.overdueEpochMs),
+            "Date-only task is overdue at next day start")
+
+        // Completed task is NEVER overdue
+        val completedTodo = dateOnlyTodo.copy(completed = true)
+        val isCompletedOverdue = !completedTodo.completed && (overdueMs + 10000L >= dateOnlyDeadline.overdueEpochMs)
+        assertFalse(isCompletedOverdue, "Completed task must never be considered overdue")
+    }
+
+    @Test
+    fun testReminderSettingsStateDefaultsAndCapabilities() {
+        val caps = ReminderCapabilities(
+            canScheduleExactAlarms = true,
+            canPostNotifications = true,
+            areNotificationsEnabled = true
+        )
+        assertTrue(caps.isDeliveryPermitted)
+
+        val settings = ReminderSettingsState(
+            notificationsEnabled = true,
+            defaultReminderEnabled = true,
+            defaultReminderLeadMinutes = 15L,
+            defaultReminderIntervalMinutes = 15L,
+            defaultReminderCount = 2L,
+            defaultDateOnlyAnchorTime = "09:00",
+            capabilities = caps,
+            platformName = "Linux"
+        )
+        assertEquals("Linux", settings.platformName)
+        assertTrue(settings.notificationsEnabled)
+        assertEquals(15L, settings.defaultReminderLeadMinutes)
+        assertEquals(2L, settings.defaultReminderCount)
+        assertEquals("09:00", settings.defaultDateOnlyAnchorTime)
+    }
+
+    @Test
+    fun testConflictReviewDetailedParameters() {
+        val deadline = TaskDeadline(
+            date = "2026-10-20",
+            time = "14:00",
+            zone = "UTC",
+            offsetSeconds = 0L,
+            anchorEpochMs = 1700000000000L,
+            overdueEpochMs = 1700000000000L
+        )
+        val rule = ReminderRule(
+            enabled = true,
+            leadMinutes = 30L,
+            intervalMinutes = 15L,
+            count = 2L
+        )
+        val todo = Todo(
+            id = "c-1",
+            title = "Conflicted task",
+            completed = false,
+            createdAt = 1000L,
+            deadline = deadline,
+            reminderRule = rule,
+            scheduleToken = "sched-token-1234"
+        )
+        val conflictState = ConflictState(
+            rowId = "c-1",
+            localTodo = todo,
+            remoteTodo = null,
+            isUnknownSuperseded = true
+        )
+        assertTrue(conflictState.isUnknownSuperseded)
+        assertEquals("c-1", conflictState.rowId)
+        assertEquals("sched-token-1234", conflictState.localTodo?.scheduleToken)
+        assertEquals(2L, conflictState.localTodo?.reminderRule?.count)
     }
 
     private fun calculateContrastRatio(foreground: Color, background: Color): Double {

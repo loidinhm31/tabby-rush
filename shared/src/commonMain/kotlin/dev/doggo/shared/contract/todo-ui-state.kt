@@ -3,7 +3,33 @@ package dev.doggo.shared.contract
 data class EditorState(
     val id: String?,
     val rawTitle: String,
-    val error: String? = null
+    val error: String? = null,
+    val hasDeadline: Boolean = false,
+    val deadlineDate: String = "",
+    val hasTime: Boolean = false,
+    val deadlineTime: String = "",
+    val deadlineZone: String = "UTC",
+    val chosenOffsetSeconds: Long? = null,
+    val reminderAnchorTime: String = "09:00",
+    val reminderEnabled: Boolean = false,
+    val reminderLeadMinutes: Long = 0L,
+    val reminderIntervalMinutes: Long? = null,
+    val reminderCount: Long = 1L,
+    val isAccountV2: Boolean = true,
+    val originalDeadline: TaskDeadline? = null,
+    val originalReminderRule: ReminderRule = ReminderRule.DISABLED,
+    val originalScheduleToken: String? = null
+)
+
+data class ReminderSettingsState(
+    val notificationsEnabled: Boolean = false,
+    val defaultReminderEnabled: Boolean = false,
+    val defaultReminderLeadMinutes: Long = 0L,
+    val defaultReminderIntervalMinutes: Long? = null,
+    val defaultReminderCount: Long = 1L,
+    val defaultDateOnlyAnchorTime: String = "09:00",
+    val capabilities: ReminderCapabilities? = null,
+    val platformName: String = ""
 )
 
 data class ConflictState(
@@ -29,8 +55,11 @@ data class TodoUiState(
     val loading: Boolean = false,
     val syncProgress: SyncProgress = SyncProgress(),
     val editor: EditorState? = null,
+    val settings: ReminderSettingsState? = null,
     val conflict: ConflictState? = null,
     val deleteCandidate: Todo? = null,
     val leaveGuard: LeaveGuardState? = null,
-    val safeError: SafeError? = null
+    val safeError: SafeError? = null,
+    val isAccountV2: Boolean = true,
+    val nowEpochMs: Long = 0L
 )

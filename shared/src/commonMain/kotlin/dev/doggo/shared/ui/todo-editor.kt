@@ -49,6 +49,26 @@ fun TodoEditor(
     }
     val isValid = validation is ApiResult.Success
 
+    val deadlineValidation = remember(
+        editor.hasDeadline,
+        editor.deadlineDate,
+        editor.hasTime,
+        editor.deadlineTime,
+        editor.deadlineZone,
+        editor.chosenOffsetSeconds,
+        editor.reminderAnchorTime,
+        editor.reminderEnabled,
+        editor.reminderLeadMinutes,
+        editor.reminderIntervalMinutes,
+        editor.reminderCount
+    ) {
+        DeadlineCalculatorHelpers.validateAndComputeDeadline(editor)
+    }
+
+    val isDeadlineValid = !editor.hasDeadline || (deadlineValidation is DeadlineValidationResult.Valid)
+    val isUpgradeBlocked = editor.hasDeadline && !editor.isAccountV2
+    val canSubmit = isValid && isDeadlineValid && !isUpgradeBlocked
+
     val validationError = when (validation) {
         is ApiResult.Failure -> {
             if (editor.rawTitle.isEmpty()) null
@@ -130,7 +150,7 @@ fun TodoEditor(
                 ),
                 keyboardActions = KeyboardActions(
                     onDone = {
-                        if (isValid) {
+                        if (canSubmit) {
                             onAction(TodoAction.SubmitEditor)
                         }
                     }
@@ -141,6 +161,14 @@ fun TodoEditor(
                     .defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)
                     .focusRequester(focusRequester)
             )
+
+            DeadlineEditorSection(
+                editor = editor,
+                validationResult = deadlineValidation,
+                onAction = onAction
+            )
+
+            Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingMedium))
 
             Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingLarge))
 
@@ -165,7 +193,7 @@ fun TodoEditor(
 
                 Button(
                     onClick = { onAction(TodoAction.SubmitEditor) },
-                    enabled = isValid,
+                    enabled = canSubmit,
                     modifier = Modifier
                         .weight(1f)
                         .defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize),

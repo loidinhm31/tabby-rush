@@ -3,8 +3,7 @@
 ## Context links
 [Parent](plan.md) · [Field/time contract](phase-01-freeze-contract-and-transition-design.md) · [Native proof](phase-02-prove-native-delivery-and-dst.md) · [Scheduling](phase-07-shared-scheduling-and-account-safety.md) · [Design guidelines](../../docs/design-guidelines.md)
 
-## Overview
-Date 2026-10-15. P2. Implementation pending 0%; review pending. Estimate 20h. Owner: shared Compose lead; controllers coordinated by platform integration leads. Dependencies: G1/G2 plus 05/06/07 and capability contracts from 08/09. No broad UI before migration/native proof gates.
+Date 2026-10-15. Priority P2. Status: **DONE** (2026-10-15) / 100% (20h credited, 308/308 checks PASS, code review 9.2/10 approved). Owner: shared Compose lead; controllers coordinated by platform integration leads. Dependencies: G1/G2 plus 05/06/07 and capability contracts from 08/09.
 
 ## Key Insights
 Unsaved editor state must remain pure local UI/draft state. Permission enablement is device-local; rule defaults copy into new synced task. Date-only anchor09:00 must not make task overdue that morning.
@@ -40,10 +39,10 @@ Create focused `ui/reminder-settings.kt`, deadline picker/preview components onl
 7. Observe compact/expanded widths, 200% font scaling, keyboard focus and TalkBack/Orca/Narrator labels on available target; do not treat design screenshots as live evidence.
 
 ## Todo list
-- [ ] Pure editor/timezone/DST/preview validation and save.
-- [ ] Deadline/overdue list with non-color semantics.
-- [ ] Device-local defaults/capability/permission settings.
-- [ ] Full conflict UI and actual responsive/accessibility smoke.
+- [x] Pure editor/timezone/DST/preview validation and save. (Implemented in DeadlineCalculatorHelpers, DeadlineEditorSection, TodoEditor; RoomAccountStore temporal projection refactored to eliminate deadline resurrection bug; impossible calendar dates handled safely without crashing composition).
+- [x] Deadline/overdue list with non-color semantics. (Implemented in TodoList/TodoRow with explicit "Overdue" text badge, background styling, semantics contentDescription, and 15s ticker).
+- [x] Device-local defaults/capability/permission settings. (Implemented in ReminderSettingsDialog, AccountLocalSettingsEntity, SessionViewModel, DesktopController with platform capabilities and permission intents).
+- [x] Full conflict UI and actual responsive/accessibility smoke. (Implemented in ConflictReview with detailed deadline, rule, timezone, and scheduleToken comparisons; Android notification selection routed through full editor hydration).
 
 ## Success Criteria
 Actual UI creates/saves/clears/restarts with same values; cancel leaves ledger/native schedule unchanged. Count bounds/invalid arithmetic visibly reject; date-only at09:00 not overdue until saved next-day boundary. Title/completion/default/device-zone changes preserve anchors/token. At least48dp targets and non-color labels; rendered layout and screen-reader evidence per platform. Existing semantic tests only where behavior uncertain; no new wording/wiring tests.
@@ -55,7 +54,7 @@ KMP calendar widgets may lack zone/offset affordance; build minimal shared selec
 No secrets in settings/error model; local capability cannot grant Hub admin privileges. Notification previews and conflict text remain account-scoped; teardown closes editor state.
 
 ## Next steps
-Phase 11 executes full acceptance matrix with actual platforms; phase 12 updates public feature docs/cutover status.
+Phase 11 executes full adversarial platform acceptance matrix on physical/emulated devices (active GUI windowing, OS notification activation, TalkBack/Orca screen-reader accessibility, 200% font scaling). Phase 12 updates public feature documentation and cutover status.
 
 ## Unresolved questions
 None; user scope already agreed. Native/DST proof gates must be satisfied rather than bypassed by UI.

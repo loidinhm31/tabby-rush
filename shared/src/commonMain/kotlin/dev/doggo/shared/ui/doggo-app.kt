@@ -156,6 +156,17 @@ fun DoggoApp(
                     )
                 }
             }
+            if (state.settings != null) {
+                Dialog(
+                    onDismissRequest = { onAction(TodoAction.CloseSettings) },
+                    properties = DialogProperties(dismissOnClickOutside = false)
+                ) {
+                    ReminderSettingsDialog(
+                        settings = state.settings,
+                        onAction = onAction
+                    )
+                }
+            }
         }
     }
 }
@@ -217,6 +228,17 @@ private fun AuthenticatedWorkspace(
                     Column(
                         verticalArrangement = Arrangement.spacedBy(DoggoThemeTokens.SpacingSmall)
                     ) {
+                        TextButton(
+                            onClick = { onAction(TodoAction.OpenSettings) },
+                            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)
+                        ) {
+                            Text(
+                                text = "Reminder Settings",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = DoggoThemeTokens.customColors.mintSurface
+                            )
+                        }
+
                         TextButton(
                             onClick = { showNotices = true },
                             modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)
@@ -305,7 +327,8 @@ private fun AuthenticatedWorkspace(
                             counts = state.counts,
                             filter = state.filter,
                             deleteCandidate = state.deleteCandidate,
-                            onAction = onAction
+                            onAction = onAction,
+                            nowEpochMs = state.nowEpochMs
                         )
                     }
                 }
@@ -354,6 +377,17 @@ private fun AuthenticatedWorkspace(
                                     modifier = Modifier.defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)
                                 ) {
                                     Text("Add", style = MaterialTheme.typography.labelLarge)
+                                }
+
+                                TextButton(
+                                    onClick = { onAction(TodoAction.OpenSettings) },
+                                    modifier = Modifier.defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)
+                                ) {
+                                    Text(
+                                        text = "Settings",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = DoggoThemeTokens.customColors.primaryDeep
+                                    )
                                 }
 
                                 TextButton(
@@ -416,7 +450,8 @@ private fun AuthenticatedWorkspace(
                         counts = state.counts,
                         filter = state.filter,
                         deleteCandidate = state.deleteCandidate,
-                        onAction = onAction
+                        onAction = onAction,
+                        nowEpochMs = state.nowEpochMs
                     )
                 }
             }

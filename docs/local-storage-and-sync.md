@@ -1,7 +1,7 @@
 # Doggo Local Storage and Strict Synchronization Specification
 
 Date: 2026-10-15  
-Phase: Phase 07 Shared Scheduling, Persisted Eligibility and Account Safety Delivered (Gate G5 Passed; Physical Native Delivery Adapters Deferred to Phases 08–10; Instrumented Platform Acceptance Pending Phase 11)  
+Phase: Phase 10 Shared Deadline Editor, Task List and Local Settings Delivered (Phases 08–10 Native Adapters & Editor Delivered in Logic; Gate G2 Physical Native Delivery & Platform Acceptance Pending Phase 11)  
 Plan: `plans/261015-0752-task-deadlines-reminders-strict-upgrades` (and `plans/261013-1540-doggo-glean-hub-reuse`)  
 Related Docs: [System Architecture](./system-architecture.md) · [API Contract](./api-contract.md) · [Code Standards](./code-standards.md) · [Sync Acceptance](./sync-acceptance.md)
 
@@ -477,3 +477,30 @@ Encapsulates the reminder lifecycle for an active account runtime:
   7. On success, records platform notification ID via `occurrenceStore.recordPosted()`. On failure, the occurrence remains claimed/attempted with no unconstrained retry loop.
 - **Opportunity Delivery Semantics**: Cross-process OS notification posting and SQLite commits cannot achieve two-phase atomic commit; claim-before-post enforces at most one posting attempt per durable occurrence identity (assuming atomic claims and preserved ledger state; crashes after claim may forfeit alerts to avoid double posting). Failed native posting is recorded as claimed/attempted with no retry loop.
 - **Teardown Cancellation Gate**: Implements `LeaveSchedulerCancelGate`, cancelling all alarms and posted notifications on account teardown via `adapter.cancelAllForAccount(accountKey)`.
+
+---
+
+## 9. Shared Deadline Editor State, Authoritative Temporal Projection & Local Settings (Phase 10 Delivered)
+
+### 9.1 Authoritative Temporal Snapshot Projection & Resurrection Prevention (`RoomAccountStore`)
+In `RoomAccountStore.resolveTemporalProjection`:
+- **Unit Precedence Hierarchy**: Local state resolution evaluates stored entities as a complete unit rather than falling back field-by-field:
+  `editor_drafts` -> `outbox` (latest by `localRevision`) -> `server_base`.
+- **Resurrection Prevention**: When an active local draft or outbox mutation explicitly clears deadline fields (`hasDeadline = false`, null temporal fields), the projection treats the temporal parameters as intentionally absent rather than falling back field-by-field to `server_base` or prior outbox operations (verified by `testClearingDeadlineToServerBaseDoesNotResurrect` preventing the fallback pattern where `draft.deadlineDate ?: base.deadlineDate` resurrected deleted deadlines against a populated server base).
+- **Separation of Concerns**: This local UI/editing snapshot projection is strictly distinct from the background scheduling projection (`PersistedScheduleProjector`). The scheduling projection remains completely draft-free (reading only confirmed `server_base` overlaid with submitted `outbox` records), ensuring uncommitted editor drafts never schedule or cancel native alarms.
+
+### 9.2 Schedule Token Semantic Invariance (`hasScheduleSemanticChange`)
+In `RoomAccountStore.saveTodoLocally`:
+- **Temporal Edit Rotation**: A new UUID `scheduleToken` is generated whenever a semantic temporal change occurs: modifying `deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, or any field of `ReminderRule` (enabled, lead, interval, count).
+- **Non-Temporal Edit Preservation**: Editing non-temporal attributes (task title or description) preserves the existing `scheduleToken`. This prevents native alarm reconciliation from flapping alarm IDs, re-allocating AlarmManager intents, or dropping active notifications on simple title edits. (Note: while schedule tokens are also preserved on completion status edits, completing a task acts as an independent cancellation barrier in `PersistedScheduleProjector`).
+
+### 9.3 Strict-v2 Account Enforcement (`isAccountV2`)
+In `RoomAccountStore.isAccountV2()`:
+- Inspects active account synchronization status via `ContractTransitionCoordinator` and `account_sync_meta`.
+- Verifies that the active account has completed transition to `strict-v2`. On strict-v1 accounts, `isUpgradeBlocked` in `TodoEditor` disables deadline and reminder submission with a clear Hub administrator upgrade requirement message, while permitting normal title and completion edits.
+
+### 9.4 Device-Local Account Settings (`AccountLocalSettingsEntity`)
+In `RoomAccountStore.getAccountLocalSettings()` and `updateAccountLocalSettings()`:
+- Manages singleton per-account settings in `account_local_settings`: `notificationsEnabled` (boolean), `defaultReminderEnabled` (boolean), `defaultReminderLeadMinutes` (Long), `defaultReminderIntervalMinutes` (Long?), `defaultReminderCount` (Long), and `defaultDateOnlyAnchorTime` (String, defaulting to `"09:00"`).
+- **Strictly Device- and Account-Local**: Defaults are applied to newly created tasks on the local device only. Settings changes do not rewrite existing stored tasks or sync across devices over the wire.
+- **Teardown Scrubbing**: Settings are wiped during account sign-out/leave alongside all account-partitioned SQLite databases.

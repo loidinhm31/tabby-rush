@@ -41,4 +41,14 @@
     <string name="admin_warning_title">Admin Account Warning</string>
     <string name="admin_warning_desc">You are logged in with an administrator account. For daily task management, a dedicated non-admin account is recommended.</string>
     <string name="notices_title">Open Source Licenses</string>
+    <string name="deadline_label">Deadline</string>
+    <string name="enable_deadline">Set deadline</string>
+    <string name="enable_time">Specific time</string>
+    <string name="enable_reminders">Reminder notification</string>
+    <string name="overdue_badge">Overdue</string>
+    <string name="settings_title">Reminder Settings</string>
+    <string name="settings_notifications_enabled">Allow notifications</string>
+    <string name="settings_default_reminder">Default reminder for new tasks</string>
+    <string name="settings_date_only_anchor">Date-only reminder time</string>
+    <string name="v2_upgrade_required">Strict-v2 account required for deadlines</string>
 </resources>

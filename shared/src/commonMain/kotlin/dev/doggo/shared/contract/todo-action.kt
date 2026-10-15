@@ -20,4 +20,11 @@ sealed interface TodoAction {
     data object RequestLeave : TodoAction
     data object ConfirmLeave : TodoAction
     data object CancelLeave : TodoAction
+    data class UpdateEditorState(val editor: EditorState) : TodoAction
+    data object OpenSettings : TodoAction
+    data object CloseSettings : TodoAction
+    data class SaveSettings(val settings: ReminderSettingsState) : TodoAction
+    data object RequestExactAlarmPermission : TodoAction
+    data object OpenNotificationSettings : TodoAction
+    data class ClockTick(val nowEpochMs: Long) : TodoAction
 }

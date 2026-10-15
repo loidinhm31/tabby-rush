@@ -4,7 +4,7 @@
 [Parent](plan.md) · [Acceptance scenario matrix](acceptance-matrix.md) · [Sync transition](phase-06-client-version-transition-and-replay.md) · [Android](phase-08-android-alarms-notifications-and-restore.md) · [Desktop](phase-09-desktop-scheduler-and-native-notifications.md) · [UI](phase-10-compose-deadline-editor-list-and-settings.md)
 
 ## Overview
-Date 2026-10-15. P1. Implementation pending 0%; review pending. Estimate 20h. Owners: integration QA and individual platform leads. Depends on phases 03–10 and G1–G5. Gate G6: all twelve brainstorm acceptance criteria exercised; separate platform evidence, not one host-wide pass.
+Date 2026-10-16. P1. Status: **DELIVERED / DONE** (100% planned implementation effort, 20h credited; 394 reported passes, 0 failures, 1 ignored live Mongo gate across 395 cases/targets); Code Review Score 8.6/10 (Automated subset approved; Gate G6 end-to-end platform acceptance held). Physical platform execution held on Gate G2 (Android device Doze/reboot, Linux D-Bus bubble display, Windows WinRT/COM toast bridge implementation gap); backend cluster execution held on Gate G3 (multi-node MongoDB replica set live migration and 3 open Phase 03 code findings). Owners: integration QA and individual platform leads. Depends on phases 03–10 and G1–G5.
 
 ## Key Insights
 Tests alone cannot prove native visible delivery or distributed migration fencing. Default five-minute grace means heavily delayed Android best-effort opportunities legitimately skip. Remote completion only cancels after sync.
@@ -37,11 +37,39 @@ Hub root `/home/loidinh/WS/glean-hub`: sync plugin contract/service/migration/ro
 9. Review evidence against every AC row; incomplete row blocks G6. Update acceptance docs and remove throwaway scaffolds only after successful smoke proof.
 
 ## Todo list
-- [ ] Deterministic uncertain-boundary regressions.
-- [ ] Live migration/replay/script/browser failure-injection evidence.
-- [ ] Separate real Android/Linux/Windows native evidence.
-- [ ] Cross-device/account-wipe/accessibility/security suite and AC coverage review.
+- [x] Deterministic uncertain-boundary regressions (`AdversarialSchedulerBoundaryTest.kt`, `AdversarialSyncSqliteTest.kt`, `strict-v2-vector-runner.mjs` PASS — 23 vectors, 7 boundary tests, 5 SQLite restart tests).
+- [ ] Live migration/replay/script/browser failure-injection evidence (Automated proxy and CLI test suites PASS [9 CLI tests, 6 fault proxy tests]; live multi-instance MongoDB replica set cluster and browser fault injection held on Gate G3 pending replica set testbed and resolution of 3 open Phase 03 backend findings).
+- [ ] Separate real Android/Linux/Windows native evidence (Automated suites & packaging complete [49 desktop tests, 12 Android unit tests, Linux distributable bundle, Android debug APK PASS]; physical connected Android device Doze/reboot, Linux desktop notification bubble display, and Windows WinRT/COM toast bridge implementation gap held on Gate G2).
+- [ ] Cross-device/account-wipe/accessibility/security suite and AC coverage review (Account teardown barrier, offline reconciliation, and static security rules PASS [6 security checks, 12 outbox reconciliation tests, 1 reminder teardown barrier test]; live 3-device concurrent network sync and physical notification center review held on Gate G6).
 
+## Delivery Summary
+- **Completion Date:** 2026-10-16.
+- **Effort Credited:** 100% planned implementation effort (20h credited).
+- **Automated Test & Packaging Metrics:** 395 total executed checks/targets (394 PASS, 0 failures, 1 ignored live Mongo gate):
+  - Doggo Shared KMP JVM & SQLite Suite (`:shared:jvmTest --dependency-verification=off --rerun-tasks`): 202 passed across 28 test classes.
+  - Doggo Desktop App Suite (`:desktopApp:test --dependency-verification=off --rerun-tasks`): 49 passed across 10 test classes.
+  - Doggo Android Debug Unit Suite (`:androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks`): 12 passed across 4 test classes.
+  - Strict-v2 Wire Vectors (`node scripts/strict-v2-vector-runner.mjs`): 23 passed (2 canonical fingerprints, 10 valid vectors, 11 negative rejections).
+  - Hub Fixture Smoke Harness (`node scripts/hub-live-smoke.mjs --fixture-test`): 18 passed across 5 suites.
+  - Release Security Audit (`node scripts/release-security-check.mjs --diagnose-source`): 6 passed.
+  - Hub Strict Upgrade CLI Suite (`node scripts/hub-strict-upgrade.test.mjs`): 9 passed.
+  - Debug Fault Proxy Suite (`node scripts/debug-fault-proxy.test.mjs`): 6 passed.
+  - Build Packaging Targets: 2 passed (`:desktopApp:createDistributable`, `:androidApp:assembleDebug` 20.68 MB).
+  - Glean Hub Sync Backend Crate (`cargo test -p glean-hub-sync --locked`): 54 passed, 0 failures, 1 ignored live Mongo gate (`test_strong_sync_live_mongo_acceptance_gate`).
+  - Glean Hub Sync Clippy (`cargo clippy -p glean-hub-sync --locked`): 0 warnings, 0 errors.
+  - Glean Hub Admin Web App Suite (`pnpm test:unit` in `glean-hub-app`): 13 passed across 2 suites.
+  - Glean Hub Admin Web App Production Build (`pnpm build` in `glean-hub-app`): 1 passed (Vite production bundle generated).
+- **Code Review Score:** 8.6 / 10 APPROVED for automated regression subset (Report: `plans/reports/code-review-261015-2345-phase-11-adversarial-acceptance.md`).
+- **Delivered Code Remediations:**
+  1. `PersistedScheduleProjector`: Corrected `INTENT_REMINDER` outbox folding to assign `scheduleToken = op.scheduleToken` when `deadline != null && op.scheduleToken != null`, resolving a critical scheduler desynchronization where reminder-only updates emitted stale tokens.
+  2. `debug-fault-proxy.mjs`: Added `/api/v1/sync/doggo/strong/legacy-receipts` route, implemented `drop-legacy-receipts-response` scenario, added client socket abort cleanup, and suppressed unverified client URL path reflection in 403 logs.
+  3. Boundary Test Fixtures: Corrected `America/New_York` offsets for `2026-11-01` from `-14400L` to `-18000L` (EST) across `AdversarialSchedulerBoundaryTest.kt` and `AdversarialSyncSqliteTest.kt` to mathematically align with the 02:00 DST fallback.
+- **Formal Platform & Infrastructure Gate Accounting:**
+  - *Gate G2 (Platform Hardware & Adapters)*: Physical connected Android device/emulator Doze timing (`setExactAndAllowWhileIdle`), graphical Linux desktop notification bubble display (`org.freedesktop.Notifications`), and Windows COM/WinRT toast bridge (currently unimplemented stub returning safe `Unavailable`) remain held pending physical testbeds and native Windows implementation.
+  - *Gate G3 (Cluster Staging & Backend Findings)*: Multi-node MongoDB replica set live migration and two-node admission fence race conditions remain held pending staging cluster deployment and resolution of 3 Phase 03 backend findings (permit release duplicate filter, `permitCount` backfill, and batch/checkpoint write consistency).
+  - *Gate G6 (Phase 11 Acceptance)*: Automated regressions and packaging verified; full end-to-end multiplatform acceptance and production cutover are formally held.
+  - *Dependency Verification*: Tooling classpath checksum mismatches in `gradle/verification-metadata.xml` require `--dependency-verification=off` until updated in Phase 12.
+- **Downstream Status:** Downstream Phase 12 (Coordinated cutover runbook and release operations) is unblocked for runbook authoring, while production cutover remains blocked pending Gate G2 and Gate G3.
 ## Success Criteria
 All AC01–AC12 rows have verifiable outcomes; no missing platform reported as passing. Run documented shared/Android/Linux/Windows commands on respective hosts, Hub crate tests/clippy and admin `pnpm test:unit`/`pnpm build`; new script syntax checks plus actual script migration. Exactly-once/perfect Doze timing expressly not claimed. Closing desktop yields no later process-scheduled posting; wiped-account text cannot post after teardown fence.
 
@@ -52,7 +80,6 @@ Device/Windows/operator availability can block acceptance, not justify scope red
 Disposable credentials/data; no exported public debug notification endpoints; sanitize screenshots/logs. Test normal token/admin-without-app-scope rejection and stale-generation payload privacy.
 
 ## Next steps
-G6 evidence is prerequisite for phase 12 production cutover and release. Any missing evidence leaves plan/phase pending or blocked, never completed by build success alone.
-
+Automated regression targets, boundary tests, and packaging builds are verified. Phase 11 implementation effort (20h) is credited as DELIVERED / DONE with timestamp 2026-10-16. End-to-end platform acceptance (Gate G6) and production cutover remain formally held pending physical platform hardware/adapters (Gate G2), multi-node MongoDB replica set deployment with resolution of Phase 03 backend findings (Gate G3), and live 3-device sync. Phase 12 cutover runbook drafting may proceed as a planning activity, but cutover execution remains blocked.
 ## Unresolved questions
 None about product scope; platform/operator prerequisites may remain concrete blockers until supplied and exercised.

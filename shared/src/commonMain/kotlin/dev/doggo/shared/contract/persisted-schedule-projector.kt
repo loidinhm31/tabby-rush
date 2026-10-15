@@ -135,6 +135,9 @@ object PersistedScheduleProjector {
                                         count = op.reminderCount
                                     )
                                 } else ReminderRule.DISABLED
+                                if (deadline != null && op.scheduleToken != null) {
+                                    scheduleToken = op.scheduleToken
+                                }
                             }
                         } else {
                             if (op.title != null) title = op.title

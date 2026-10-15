@@ -1,14 +1,14 @@
 # Codebase Summary
 
 Generated on: 2026-10-15
-Based on Repomix compaction snapshot: `repomix-output.xml` (point-in-time partial snapshot: 408 files packed, 5 excluded for security check, 893,524 tokens, 3,879,088 chars, generated during Phase 10 documentation updates on 2026-10-15)
+Based on Repomix compaction snapshot: `repomix-output.xml` (point-in-time partial snapshot taken prior to Phase 11 documentation updates: 413 files packed, 5 excluded for security check, 921,949 tokens, 3,998,169 chars)
 ---
 
 ## 1. Repository Overview
 
 The `doggo` repository contains the implementation, build configuration, domain contracts, and architectural specifications for Doggo, an Android-first shared Compose Multiplatform task management application with secure multi-device synchronization against Glean Hub.
 
-Following Phases 01–10, the repository contains the Android and shared Compose Multiplatform clients, Linux desktop source/distribution tooling, and the delivered Windows desktop DPAPI provider, isolated build, distributable, MSI artifact, and package-verification harness:
+Following Phases 01–11, the repository contains the Android and shared Compose Multiplatform clients, Linux desktop source/distribution tooling, Windows desktop DPAPI provider, and comprehensive adversarial integration and SQLite crash invariance test harnesses:
 1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
 2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models (`TaskDeadline`, `ReminderRule`, `Todo`), UI state/actions (`EditorState`, `ReminderSettingsState`, `TodoUiState`, `TodoAction`, `ClockTick`), identity/authentication contracts, strict sync canonical framing (`strict-v1` and `strict-v2`), `StrictV2Constants`, `StrictV2TodoData`, `StrictV2SyncOp`, `LegacyReceiptStatus`, `LegacyReceiptResult`, checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`), `StrictSyncV2Digest` binary preimage engine, `StrictTimeZoneResolver` and `StrictZoneOffsetResult` (`Single`, `Overlap`, `Gap`) with `ZoneRules` platform actuals, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 2, 7 entities, `DatabaseMigrations.MIGRATION_1_2`), BundledSQLiteDriver, local outbox mutation engine with intent masks and provenance tracking, staged full scan reconciler, fail-closed account leave protocol, `RoomAccountStore` authoritative temporal snapshot projection hierarchy (preventing cleared deadline resurrection) and schedule-token rotation on semantic temporal changes, shared Compose UI components (`DeadlineEditorSection`, `DeadlineCalculatorHelpers`, `ReminderSettingsDialog`, `TodoEditor`, `TodoList`, `ConflictReview`), accessible light theme tokens, and comprehensive unit/instrumented/semantics/vector tests.
 3. **Android Application Module (`androidApp/`)**: Native Android client hosting shared Compose UI, `DoggoApplication` process container, `SessionViewModel` reactive UI state orchestration with cold-start `pendingTarget` routing, notification deep-link selection routed through `openEdit(task)` full hydration, reminder settings flow, periodic 15s `ClockTick` emission, `AccountRuntime` / `AccountRuntimeFactory` runtime isolation, `AndroidSyncScheduler` WorkManager scheduling, `DoggoSyncWorker` background sync worker with generation/auth fencing, `AndroidNotificationAdapter` exact/inexact AlarmManager scheduling and private notification delivery, `AndroidAlarmRegistry` synchronized alarm tracking, `DoggoAlarmReceiver` and `ReminderRestoreReceiver` direct-boot/wipe-first receivers, `CompositeLeaveSchedulerCancelGate` 4-stage teardown, `ReminderPermissionController` sealed capability evaluations, debug network security configuration with strict loopback cleartext whitelist, backup/extraction security exclusions, release signing task-graph enforcement, and authored unit/instrumented test suites.
@@ -486,18 +486,17 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 ## 3. Repomix Compaction Metrics (Dated Generation Snapshot: 2026-10-15)
 
 - **Compaction Artifact:** Generated on 2026-10-15 at `repomix-output.xml` in repository root.
-- **Total Files Packed:** 402 files
-- **Total Character Count:** 3,754,925 characters
-- **Total Token Count:** 868,103 tokens
+- **Total Files Packed:** 413 files
+- **Total Character Count:** 3,998,169 characters
+- **Total Token Count:** 921,949 tokens
 - **Top 5 Files by Token Count:**
-  1. `docs/project-roadmap.md` (25,979 tokens, 112,204 chars, 3%)
-  2. `docs/codebase-summary.md` (21,018 tokens, 90,934 chars, 2.4%)
-  3. `docs/system-architecture.md` (19,446 tokens, 86,417 chars, 2.2%)
-  4. `docs/project-changelog.md` (16,729 tokens, 73,183 chars, 1.9%)
-  5. `docs/project-overview-pdr.md` (11,783 tokens, 51,327 chars, 1.4%)
+  1. `docs/project-roadmap.md` (27,829 tokens, 120,739 chars, 3%)
+  2. `docs/codebase-summary.md` (22,231 tokens, 96,932 chars, 2.4%)
+  3. `docs/system-architecture.md` (20,437 tokens, 91,083 chars, 2.2%)
+  4. `docs/project-changelog.md` (18,450 tokens, 81,216 chars, 2%)
+  5. `plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md` (13,004 tokens, 56,358 chars, 1.4%)
 - **Security Check:** Repomix security scanner flagged 5 suspicious files that were excluded from the compaction output by default filter heuristics: `docs/security-and-recovery.md`, `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md`, `plans/reports/code-reviewer-261014-1638-phase-08-release-operations-cycle3.md`, `plans/reports/docs-manager-261014-1643-phase-08-docs-verification.md`, and `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`. These exclusions represent heuristic scanner flags and are not an affirmative clean security adjudication of those files.
-- **Snapshot Scope:** These counts describe a single point-in-time 2026-10-15 Repomix generation.
----
+- **Snapshot Scope:** These counts describe a single point-in-time Repomix generation taken prior to Phase 11 documentation updates.
 
 ## 4. Current State & Invariants
 
@@ -590,3 +589,10 @@ Following Phases 01–10, the repository contains the Android and shared Compose
     - Schedule Token Semantic Rotation: `saveTodoLocally` enforces `hasScheduleSemanticChange()`. Editing task title or description preserves the existing `scheduleToken`; editing deadline date, time, zone, offset, or reminder rule generates a new UUID `scheduleToken`. (Task completion acts as an independent cancellation barrier in `PersistedScheduleProjector`).
     - Platform Controller Integrations: `SessionViewModel` on Android routes notification deep links through `openEdit(task)` ensuring full deadline hydration, preventing accidental schedule wipe on edit; emits 15s `ClockTick` flow. `DesktopController` on Desktop coordinates settings actions, submit validation, and 15s `ClockTick` flow.
     - Verification: QA test execution report records 306 automated test/check assertions across 7 test suites, plus 2 packaging assembly builds (`:desktopApp:createDistributable` & `:androidApp:assembleDebug`), totaling 308 checks (189 shared JVM tests across 26 classes, 49 desktop tests across 10 classes, 12 Android unit tests across 4 classes, 23 strict-v2 vectors, 18 fixture smoke checks, 6 static security checks, 9 CLI tests). Code review added 1 regression test (`testDeadlineValidationImpossibleCalendarDates`), raising shared JVM tests to 190 and total checks to 309 when executed, with a quality score of 9.2/10 approved. Connected physical device/emulator execution, TalkBack/Orca accessibility verification, live notification delivery, and native Windows toast bridge remain pending Phase 11 platform acceptance.
+49. **Phase 11 Adversarial Integration and Platform Acceptance Boundaries (Gate G6 Logic Delivered / Deployment Held)**: Delivered on 2026-10-15. Implements adversarial scheduler boundary tests, file-backed SQLite close/reopen persistence, fault-injection proxy hardening, and packaging verification:
+    - `AdversarialSchedulerBoundaryTest`: Multiplatform test suite (7 tests in `dev.doggo.shared.contract`) verifying repetition bounds (1..10, count > 1 requires interval >= 15m), checked 64-bit integer arithmetic overflow prevention, date-only 09:00 anchor vs next-day start overdue boundary (tested across DST fall-back transitions via production `DeadlineCalculatorHelpers.validateAndComputeDeadline`), strict 5-minute grace window compliance (due + 300,000ms eligible, 300,001ms skipped, no retroactive burst delivery), uncommitted editor draft isolation (`editor_drafts` excluded from projection), completion/deletion cancellation barriers, and schedule token preservation across non-temporal edits and rotation on reminder edits.
+    - `AdversarialSyncSqliteTest`: BundledSQLite disk persistence test suite (5 tests in `dev.doggo.shared.data`) verifying state survival across physical database close and reopen cycles against local files (distinct from abrupt OS process kill or power-loss fault models): restart durability of outbox and confirmed base, frozen retry idempotence across network timeouts, strict-v1 title-only rebase over strict-v2 remote deadline via intent masking, and `UNKNOWN_SUPERSEDED` conflict locking.
+    - Loopback Fault-Injection Proxy Hardening: `scripts/debug-fault-proxy.mjs` and `scripts/debug-fault-proxy.test.mjs` (6 tests) providing route allowlisting (`/push`, `/pull`, `/legacy-receipts`), client socket termination on dropped responses (`drop-push-response`, `drop-legacy-receipts-response`), and complete suppression of sensitive URL path strings from 403 rejection logs.
+    - Projector Token Fold Bug Remediation: In `persisted-schedule-projector.kt`, assigned `scheduleToken = op.scheduleToken` in the outbox fold under `INTENT_REMINDER`, eliminating scheduler desynchronization on reminder-only modifications.
+    - Automated Verification: Total 397 reported verification targets across 14 verification groups (393 automated test and contract checks: 392 passed, 0 failures, 1 ignored live Mongo test: `test_strong_sync_live_mongo_acceptance_gate` in `glean-hub-sync` when `MONGO_TEST_URI` is unset; plus 4 build, lint, and packaging targets passed). Both packaging targets passed (`:desktopApp:createDistributable`, `:androidApp:assembleDebug`). Code review approved at 8.6/10 (`plans/reports/code-review-261015-2345-phase-11-adversarial-acceptance.md`).
+    - Platform Accounting & Honest Boundaries: Gate G6 logic delivered; end-to-end multiplatform acceptance (Gate G2 connected Android device Doze timing, live desktop D-Bus visual notification display, Windows COM/WinRT toast bridge) and live cluster execution (Gate G3 staging replica set and 3 open Phase 03 code findings) remain formally held pending respective implementation/remediation and testbed acceptance.

@@ -71,8 +71,8 @@ async function main() {
     if (token && apiKey) {
       if (res.status === 200) {
         const body = await res.json();
-        if (body.protocol === 'strict-v1' && body.epoch) {
-          return { passed: true, details: `200 OK, epoch=${body.epoch}` };
+        if ((body.protocol === 'strict-v1' || body.protocol === 'strict-v2') && body.epoch) {
+          return { passed: true, details: `200 OK, protocol=${body.protocol}, epoch=${body.epoch}` };
         }
       }
       return { passed: false, details: `expected 200 with credentials, got ${res.status}` };
@@ -173,6 +173,42 @@ async function main() {
     return { passed: false, details: `unexpected status ${res.status}` };
   });
   if (!gate4) allPassed = false;
+
+  // Gate 5: Strict contract discovery route accessibility and validation
+  const gate5 = await runCheck('Strict contract route returns canonical contract metadata', async () => {
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${origin}/api/v1/apps/${encodeURIComponent(appId)}/strict-contract`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (token) {
+      if (res.status === 200) {
+        const body = await res.json();
+        if (
+          (body.syncMode === 'strict-v1' || body.syncMode === 'strict-v2') &&
+          body.epoch &&
+          body.schemaFingerprint &&
+          Array.isArray(body.tables) &&
+          body.tables.includes('todos')
+        ) {
+          return { passed: true, details: `200 OK, mode=${body.syncMode}, fingerprint=${body.schemaFingerprint.slice(0, 16)}...` };
+        }
+        return { passed: false, details: 'invalid strict-contract payload structure' };
+      }
+      if (res.status === 403) {
+        return { passed: true, details: '403 Forbidden (verified app-scoped admin fence)' };
+      }
+      return { passed: false, details: `expected 200 or 403, got ${res.status}` };
+    }
+    if (res.status === 401) {
+      return { passed: true, details: '401 Unauthorized (unauthenticated call rejected)' };
+    }
+    return { passed: false, details: `unexpected status ${res.status}` };
+  });
+  if (!gate5) allPassed = false;
 
   console.log(`[Smoke] Summary: ${allPassed ? 'ALL CHECKS PASSED' : 'SOME CHECKS FAILED'}`);
   process.exit(allPassed ? 0 : 1);

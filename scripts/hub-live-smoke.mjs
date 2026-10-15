@@ -424,22 +424,25 @@ async function runLiveSmoke(options) {
   });
 
   let activeEpoch = null;
-  await execCheck('Admission', `GET /api/v1/apps/${options['app-id']} echoes strict-v1 mode and schema`, async () => {
+  let activeSyncMode = 'strict-v1';
+  await execCheck('Admission', `GET /api/v1/apps/${options['app-id']} echoes strict admission mode and schema`, async () => {
     const res = await client.get(`/api/v1/apps/${options['app-id']}`);
     if (res.status !== 200) return { passed: false, detail: `status ${res.status}` };
     const syncMode = res.data?.syncMode;
     activeEpoch = res.data?.strictEpoch;
-    if (syncMode !== 'strict-v1') {
-      return { passed: false, detail: `unexpected syncMode '${syncMode}', expected 'strict-v1'` };
+    if (syncMode !== 'strict-v1' && syncMode !== 'strict-v2') {
+      return { passed: false, detail: `unexpected syncMode '${syncMode}', expected 'strict-v1' or 'strict-v2'` };
     }
+    activeSyncMode = syncMode;
     if (!activeEpoch || typeof activeEpoch !== 'string') {
       return { passed: false, detail: 'missing or invalid strictEpoch in admission read-back' };
     }
     const todosCols = res.data?.schema?.todos?.columns;
-    if (!Array.isArray(todosCols) || todosCols.length !== 4) {
-      return { passed: false, detail: `expected 4 columns in todos schema, found ${todosCols?.length}` };
+    const expectedCols = activeSyncMode === 'strict-v2' ? 16 : 4;
+    if (!Array.isArray(todosCols) || todosCols.length !== expectedCols) {
+      return { passed: false, detail: `expected ${expectedCols} columns in todos schema for ${activeSyncMode}, found ${todosCols?.length}` };
     }
-    return { passed: true, detail: `syncMode=strict-v1, epoch=${activeEpoch}` };
+    return { passed: true, detail: `syncMode=${activeSyncMode}, epoch=${activeEpoch}` };
   });
 
   // --- Suite 2: Security & Negative Route Isolation ---
@@ -542,11 +545,11 @@ async function runLiveSmoke(options) {
     if (res.status === 200) {
       serverEpoch = res.data?.epoch;
       const protocol = res.data?.protocol;
-      if (protocol !== 'strict-v1') return { passed: false, detail: `invalid protocol '${protocol}'` };
+      if (protocol !== activeSyncMode) return { passed: false, detail: `invalid protocol '${protocol}', expected '${activeSyncMode}'` };
       if (activeEpoch && serverEpoch !== activeEpoch) {
         return { passed: false, detail: `bootstrap epoch '${serverEpoch}' does not match admission epoch '${activeEpoch}'` };
       }
-      return { passed: true, detail: `protocol=strict-v1, epoch=${serverEpoch}` };
+      return { passed: true, detail: `protocol=${protocol}, epoch=${serverEpoch}` };
     }
     return { passed: false, detail: `bootstrap failed with status ${res.status}` };
   });
@@ -559,7 +562,7 @@ async function runLiveSmoke(options) {
       'Authorization': 'Bearer invalid_tampered_jwt_token'
     };
     const res = await client.post(`/api/v1/sync/${options['app-id']}/strong/push`, {
-      protocol: 'strict-v1',
+      protocol: activeSyncMode,
       epoch: effectiveEpoch,
       operations: []
     }, { headers: badAuthHeaders });
@@ -569,7 +572,7 @@ async function runLiveSmoke(options) {
 
   await execCheck('Sync', 'Epoch mismatch negative test (POST /push with invalid epoch returns 409)', async () => {
     const res = await client.post(`/api/v1/sync/${options['app-id']}/strong/push`, {
-      protocol: 'strict-v1',
+      protocol: activeSyncMode,
       epoch: '00000000-0000-0000-0000-000000000000',
       operations: []
     }, { headers: testHeaders });
@@ -586,17 +589,33 @@ async function runLiveSmoke(options) {
     rowId: testRowId,
     kind: 'create',
     expectedRevision: 0,
-    data: {
+    data: activeSyncMode === 'strict-v2' ? {
+      id: testRowId,
+      title: `Smoke test task ${runId}`,
+      completed: false,
+      createdAt: Date.now(),
+      deadlineDate: null,
+      deadlineTime: null,
+      deadlineZone: null,
+      deadlineOffsetSeconds: null,
+      reminderAnchorTime: null,
+      deadlineAnchorEpochMs: null,
+      deadlineOverdueEpochMs: null,
+      reminderEnabled: false,
+      reminderLeadMinutes: 0,
+      reminderIntervalMinutes: null,
+      reminderCount: 1,
+      scheduleToken: null,
+    } : {
       id: testRowId,
       title: `Smoke test task ${runId}`,
       completed: false,
       createdAt: Date.now()
     }
   };
-
   await execCheck('Sync', 'Push create operation: Insert-only create (expectedRevision: 0) accepted', async () => {
     const res = await client.post(`/api/v1/sync/${options['app-id']}/strong/push`, {
-      protocol: 'strict-v1',
+      protocol: activeSyncMode,
       epoch: effectiveEpoch,
       operations: [insertOp]
     }, { headers: testHeaders });
@@ -614,7 +633,7 @@ async function runLiveSmoke(options) {
 
   await execCheck('Sync', 'Idempotent frozen retry: identical opId + digest returns replayed', async () => {
     const res = await client.post(`/api/v1/sync/${options['app-id']}/strong/push`, {
-      protocol: 'strict-v1',
+      protocol: activeSyncMode,
       epoch: effectiveEpoch,
       operations: [insertOp]
     }, { headers: testHeaders });
@@ -645,7 +664,7 @@ async function runLiveSmoke(options) {
       }
     };
     const res = await client.post(`/api/v1/sync/${options['app-id']}/strong/push`, {
-      protocol: 'strict-v1',
+      protocol: activeSyncMode,
       epoch: effectiveEpoch,
       operations: [conflictingOp]
     }, { headers: testHeaders });
@@ -662,7 +681,7 @@ async function runLiveSmoke(options) {
 
   await execCheck('Sync', 'Pull operation retrieves the specific created record and validates schema', async () => {
     const res = await client.post(`/api/v1/sync/${options['app-id']}/strong/pull`, {
-      protocol: 'strict-v1',
+      protocol: activeSyncMode,
       epoch: effectiveEpoch,
       tableName: 'todos',
       cursor: null,
@@ -676,6 +695,11 @@ async function runLiveSmoke(options) {
       const d = found.data;
       if (!d || typeof d.title !== 'string' || typeof d.completed !== 'boolean' || typeof d.createdAt !== 'number') {
         return { passed: false, detail: 'record data does not match todos schema columns' };
+      }
+      if (activeSyncMode === 'strict-v2') {
+        if (typeof d.reminderEnabled !== 'boolean' || typeof d.reminderCount !== 'number' || typeof d.reminderLeadMinutes !== 'number') {
+          return { passed: false, detail: 'v2 record data does not match canonical v2 schema columns' };
+        }
       }
       return { passed: true, detail: `retrieved record '${found.rowId}' at revision ${found.revision}` };
     }
@@ -698,7 +722,7 @@ async function runLiveSmoke(options) {
         data: {}
       };
       const res = await client.post(`/api/v1/sync/${options['app-id']}/strong/push`, {
-        protocol: 'strict-v1',
+        protocol: activeSyncMode,
         epoch: effectiveEpoch,
         operations: [deleteOp]
       }, { headers: testHeaders });
@@ -716,7 +740,7 @@ async function runLiveSmoke(options) {
 
     await execCheck('Cleanup', 'Pull confirms specific tombstone preservation (rowId match, deleted: true, data: {})', async () => {
       const res = await client.post(`/api/v1/sync/${options['app-id']}/strong/pull`, {
-        protocol: 'strict-v1',
+        protocol: activeSyncMode,
         epoch: effectiveEpoch,
         tableName: 'todos',
         cursor: null,

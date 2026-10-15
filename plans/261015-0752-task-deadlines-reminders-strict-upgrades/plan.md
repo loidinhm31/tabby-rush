@@ -12,7 +12,7 @@ created: 2026-10-15
 # Task deadlines, reminders, and strict-contract upgrades
 
 ## Scope and status
-Phase 01 contract freeze and transition design marked DONE on 2026-10-15 (100%, Gate G1 passed); Phase 02 logic/contracts DELIVERED on 2026-10-15 (Gate G2 physical native delivery formally BLOCKED on missing host prerequisites); Phase 03 Hub v2 admission, fencing and migration DELIVERED (Contracts/Logic/Tests) on 2026-10-15 (Gate G3 physical multi-instance Mongo cluster execution formally ON HOLD pending live replica set testbed; Code Review: ADMISSION ON HOLD 8.0/10 with 3 open code findings); subsequent implementation phases 04–12 pending. Source: [agreed brainstorm](../reports/brainstorm-261015-0354-task-deadlines-reminders-strict-upgrades.md). Effort is a rough sum of phase estimates, not a release date; recalibrate after design/native proof.
+Phase 01 contract freeze and transition design marked DONE on 2026-10-15 (100%, Gate G1 passed); Phase 02 logic/contracts DELIVERED on 2026-10-15 (Gate G2 physical native delivery formally BLOCKED on missing host prerequisites); Phase 03 Hub v2 admission, fencing and migration DELIVERED (Contracts/Logic/Tests) on 2026-10-15 (Gate G3 physical multi-instance Mongo cluster execution formally ON HOLD pending live replica set testbed; Code Review: ADMISSION ON HOLD 8.0/10 with 3 open code findings); Phase 04 Hub admin UI and API-only upgrade script marked DONE on 2026-10-15 (100%, automated test pass 237/237, code review 8.5/10; Gate G3 live cluster execution ON HOLD); subsequent implementation phases 05–12 pending. Source: [agreed brainstorm](../reports/brainstorm-261015-0354-task-deadlines-reminders-strict-upgrades.md). Effort is a rough sum of phase estimates, not a release date; recalibrate after design/native proof.
 
 Optional date-only/timed deadline and synced task reminder rules; offline saved changes; Android OS delivery without UI; Linux/Windows delivery while process runs visible/minimized. Coordinated Room and strict Hub upgrade preserves data/revisions/tombstones/receipts. UI and script use one app-authorized server operation.
 
@@ -24,7 +24,7 @@ No recurring tasks/snooze/push/daemon/tray/autostart/macOS/iOS/arbitrary schema 
 | 01 | [Freeze temporal/contract/legacy transition](phase-01-freeze-contract-and-transition-design.md) | **DONE** (2026-10-15) / 100% (Gate G1 passed) | 16h |
 | 02 | [Prove native notifications and strict DST](phase-02-prove-native-delivery-and-dst.md) | **DELIVERED (Contracts/Logic)** (2026-10-15) / Partial (Gate G2 physical delivery BLOCKED on host prerequisites) | 16h |
 | 03 | [Hub v2 admission, fencing and migration](phase-03-hub-versioned-contract-and-migration.md) | **DELIVERED (Contracts/Logic/Tests)** (2026-10-15) / Credited 32h (Gate G3 live cluster execution ON HOLD pending replica set testbed) | 32h |
-| 04 | [Hub admin UI and API-only upgrade script](phase-04-hub-admin-ui-and-upgrade-script.md) | Pending / 0% | 12h |
+| 04 | [Hub admin UI and API-only upgrade script](phase-04-hub-admin-ui-and-upgrade-script.md) | **DONE** (2026-10-15) / 100% | 12h |
 | 05 | [Shared model and explicit Room1→2](phase-05-shared-model-and-room-migration.md) | Pending / 0% | 20h |
 | 06 | [Client version transition and safe replay](phase-06-client-version-transition-and-replay.md) | Pending / 0% | 24h |
 | 07 | [Saved-state scheduling and account fences](phase-07-shared-scheduling-and-account-safety.md) | Pending / 0% | 20h |
@@ -37,7 +37,7 @@ No recurring tasks/snooze/push/daemon/tray/autostart/macOS/iOS/arbitrary schema 
 ## Execution and design access points
 - [Dependency graph, gate/ownership rules](execution-map.md): phase numbering is navigation, not a false serial requirement. Begin 01+02; no broad UI until design/native proof. Backend and storage may proceed independently after G1.
 - [All twelve acceptance scenarios](acceptance-matrix.md): evidence requirements and exact coverage; all pending.
-- Phase 01 contract freeze (Gate G1 passed), Phase 02 strict DST resolution & candidate notification adapters (Gate G2 physical delivery BLOCKED on host prerequisites: Android SDK/device, desktop notification daemon, Windows runtime), and Phase 03 Hub v2 admission, fencing and migration (Gate G3 physical multi-instance Mongo cluster execution ON HOLD pending live replica set testbed) are delivered; runtime Room migration (Phase 05), operator tooling (Phase 04), and physical native execution (Phases 08/09) remain in subsequent phases.
+- Phase 01 contract freeze (Gate G1 passed), Phase 02 strict DST resolution & candidate notification adapters (Gate G2 physical delivery BLOCKED on host prerequisites: Android SDK/device, desktop notification daemon, Windows runtime), Phase 03 Hub v2 admission, fencing and migration (Gate G3 physical multi-instance Mongo cluster execution ON HOLD pending live replica set testbed), and Phase 04 Hub admin UI and API-only upgrade script (Gate G3 live cluster execution ON HOLD pending replica set testbed) are delivered; runtime Room migration (Phase 05) and physical native execution (Phases 08/09) remain in subsequent phases.
 - [Strict upgrade source findings](research/strict-upgrade-research.md) · [Reminder/platform source findings and primary API links](research/reminder-platform-research.md).
 - [Proposed architecture section](../../docs/system-architecture.md#6-proposed-deadlines-reminders-and-strict-upgrade-design--pending) is explicitly unimplemented; earlier sections remain current code.
 
@@ -100,6 +100,28 @@ Source/document inspection and two completed read-only research reports; officia
   5. Physical collection `app_<appId>` and protected-field fingerprint preservation under real DB storage.
 - **Residual Scope & Downstream Phases:** Downstream Phase 04 (Hub admin UI & upgrade script) and Phase 05 (Shared Room migration) can proceed on logic and contract foundations under Gate G1/Phase 03 logic delivery (Phase 06 implementation remains dependent on Phase 05), while Gate G3 live cluster execution and 3 open code remediations remain prerequisites for production admission.
 
+## Phase 04 Delivery & Verification Evidence
+- **Completion Date:** 2026-10-15 (100% / DONE).
+- **Scope Delivered:**
+  - **Hub Web Admin UI (`glean-hub-app`):** Strict-v2 version/contract discovery card (`StrictContractCard`), preflight migration status/precondition panel (`StrictAppUpgradePanel`), safe confirmation controls with dry-run support (`StrictUpgradeControls`), read-only strict schema guard in `edit-app.tsx` forbidding legacy arbitrary PUT operations, Vite asset preload crash recovery (`registerVitePreloadRecovery`), and typed API client methods in `sync-admin-service.ts`.
+  - **CLI Upgrade Runner (`scripts/hub-strict-upgrade.mjs`):** Standalone zero-runtime-dependency Node.js CLI script for automated or headless upgrades. Features `--help` usage, argument validation, token redaction in logs/errors, non-mutating `--dry-run` preflight, deterministic resume with active `migrationId`, `--status-only` inspection, bounded status polling, and mandatory read-back assertion verifying `syncMode === 'strict-v2'`, canonical SHA-256 schema fingerprint (`5f539551...`), and all 16 columns.
+  - **Integration & Tooling Support:** Version-aware provisioning in `scripts/hub-schema-provision.mjs` (`--v1` / `--v2`), compatibility smoke checks in `scripts/hub-compatibility-smoke.mjs`, protocol verification in `scripts/hub-live-smoke.mjs` (patched critical `reminderCount: 1` contract invariant), and unit test harness `scripts/hub-strict-upgrade.test.mjs`.
+- **Automated Test Pass Counts:** 237/237 automated tests passing across all components (0 failures, 1 ignored live Mongo test; [QA Test Report](../reports/qa-261015-1420-phase-04-validation.md)):
+  - `glean-hub-app` (`pnpm test:unit`): 13/13 Node unit tests PASS (120ms).
+  - `glean-hub-app` (`pnpm build`): 10,411 modules transformed cleanly, TypeScript `tsc` 0 errors.
+  - `doggo` CLI suite (`node scripts/hub-strict-upgrade.test.mjs`): 7/7 CLI test scenarios PASS (10.74s, including mock network interruption and resume).
+  - `doggo` offline fixture smoke (`node scripts/hub-live-smoke.mjs --fixture-test`): 18/18 checks PASS.
+  - `doggo` strict-v2 vector runner (`node scripts/strict-v2-vector-runner.mjs`): 23/23 checks PASS (2 fingerprints, 10 valid, 11 rejection vectors).
+  - `doggo` diagnostic security check (`node scripts/release-security-check.mjs --diagnose-source`): 6/6 static checks PASS (0 findings).
+  - `doggo` shared JVM suite (`./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks`): 116/116 JVM tests PASS.
+  - `glean-hub-sync` backend suite (`cargo test --locked`): 54/54 executed Rust tests PASS (1 live Mongo test ignored).
+- **Code Review Score:** **8.5 / 10** (Approved by `Phase04Reviewer`; [Code Review Report](../reports/code-review-261015-1422-phase-04-hub-admin-ui-and-upgrade-script.md)). Critical invariant `reminderCount: 1` remediated; non-blocking warnings documented for CLI 4xx polling shortcut and UI error preservation.
+- **Residual Gate G3 Replica-Set Hold & Production Blockers:**
+  - All Phase 04 CLI and UI verification executed successfully against mock HTTP servers, offline fixtures, and isolated components.
+  - Physical execution of live multi-instance cluster migration, concurrent read/write permit fence draining, network dropped-packet recovery, and cross-entrypoint resume (initiating via Browser UI and resuming via CLI, or vice versa) on a multi-node MongoDB replica set remains formally **ON HOLD** pending provisioning of the live replica set testbed under Gate G3.
+  - Production admission remains blocked by Gate G3 live cluster validation and resolution of Phase 03 code review findings (permit release duplicate filter, `permitCount` backfill, and batch/checkpoint write consistency); no production upgrade without separate approved runbook.
+- **Downstream Phases:** With Phase 04 operator tooling and UI complete, storage implementation proceeds with Phase 05 (Shared Model and Explicit Room 1→2 Migration).
+
 ## Validation Summary
 Validated: 2026-10-15. Three substantive questions; two clarified before final answers.
 - **Legacy uncertainty:** block the affected task only; preserve its frozen operation for explicit review, let unrelated tasks transition/sync.
@@ -112,4 +134,4 @@ Validated: 2026-10-15. Three substantive questions; two clarified before final a
 1. Selected Windows binding/native helper and installed AUMID identity remain an open implementation decision pending Phase 09 Windows testbed (candidate stub returns safe `Unavailable`). Physical native delivery across Android API 26 (Phase 08), Linux session notification daemon (Phase 09), and Windows MSI host (Phase 09) remain open prerequisites to clear Gate G2.
 2. Prove distributed permit-drain/orphan recovery and Gate G3 two-Hub cluster migration on physical Mongo replica set testbed before production cutover; address open code review findings (permit release filter, permitCount backfill, batch/checkpoint write atomicity).
 3. App-scoped admin model, all-node deployment inventory, disposable Mongo, Android device/permissions, Linux notification daemon/session, installed Windows runtime and signing/operator access required before their gates.
-Phase 01 (Gate G1 passed), Phase 02 logic/contracts DELIVERED (Gate G2 physical delivery BLOCKED on host prerequisites), and Phase 03 DELIVERED (Contracts/Logic/Tests; Gate G3 physical cluster execution ON HOLD pending live replica set testbed); subsequent phases pending until approved/executed.
+Phase 01 (Gate G1 passed), Phase 02 logic/contracts DELIVERED (Gate G2 physical delivery BLOCKED on host prerequisites), Phase 03 DELIVERED (Contracts/Logic/Tests; Gate G3 physical cluster execution ON HOLD pending live replica set testbed), and Phase 04 marked DONE (100%, automated test pass 237/237, code review 8.5/10; Gate G3 live cluster execution ON HOLD); subsequent phases pending until approved/executed.

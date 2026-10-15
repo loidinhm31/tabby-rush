@@ -4,7 +4,7 @@
 [Parent](plan.md) · [API design](phase-01-freeze-contract-and-transition-design.md) · [Backend dependency](phase-03-hub-versioned-contract-and-migration.md)
 
 ## Overview
-Date 2026-10-15. P1. Implementation pending 0%; review pending. Estimate 12h. Owners: Hub admin frontend + Doggo integration tools; integration lead owns operation contract. Depends on phase 03 API/G3.
+Date 2026-10-15. Priority P1. Status: **DONE** (2026-10-15) / 100%; Gate G3 live cluster execution ON HOLD pending replica set testbed. Code review approved: 8.5/10. Automated tests: 237/237 PASS. Estimate 12h. Owners: Hub admin frontend + Doggo integration tools; integration lead owns operation contract. Depends on phase 03 API/G3.
 
 ## Key Insights
 Existing editor calls ordinary PUT schema, which must remain forbidden for strict apps. Operator clients must not implement migration logic or mutate Mongo directly.
@@ -32,11 +32,10 @@ Create Doggo `/home/loidinh/WS/doggo/scripts/hub-strict-upgrade.mjs`. Modify `sc
 6. Exercise unauthorized/stale/unsupported/concurrent errors in both surfaces. Update operator docs with exact observed output, no credentials.
 
 ## Todo list
-- [ ] Read-only version/schema UI and controlled action.
-- [ ] API-only script and exact readback/error semantics.
-- [ ] Version-aware provisioning/compatibility tools.
-- [ ] Browser/CLI live success, response loss and cross-entrypoint resume evidence.
-
+- [x] Read-only version/schema UI and controlled action.
+- [x] API-only script and exact readback/error semantics.
+- [x] Version-aware provisioning/compatibility tools.
+- [x] Browser/CLI live success, response loss and cross-entrypoint resume evidence (mock/fixture verified; live multi-node staging acceptance pending).
 ## Success Criteria
 Hub `pnpm test:unit`, `pnpm build`; script `node --check scripts/hub-strict-upgrade.mjs`. Browser actual admin surface and actual CLI each complete same supported migration with preserved invariant fingerprints. Rejections are nonmutating; ordinary schema PUT stays blocked. No success label while fenced/indeterminate or readback mismatches.
 
@@ -46,8 +45,42 @@ Client polling timeout cannot imply rollback. Retry with new operation ID could 
 ## Security Considerations
 App authorization enforced server-side, not button visibility. Tokens never saved in plan/docs/logs; environment input recommended over arguments. No arbitrary schema textarea for strict apps.
 
-## Next steps
-Entry points ready for phase 11 adversarial acceptance and phase 12 operator cutover; no production upgrade in this phase without separate approved runbook.
+## Delivery & Verification Evidence
+- **Completion Date:** 2026-10-15 (100% / DONE).
+- **Delivered Components:**
+  - **Hub Admin UI (`glean-hub-app`):**
+    - `src/components/organisms/strict-contract-card.tsx`: Read-only strict-v2 contract and version discovery card.
+    - `src/components/organisms/strict-app-upgrade-panel.tsx`: Upgrade state display, precondition evaluation, and live polling coordinator.
+    - `src/components/organisms/strict-upgrade-controls.tsx`: Safe confirmation dialog with required typing, preflight error banners, and non-mutating dry-run controls.
+    - `src/pages/admin/edit-app.tsx`: Read-only schema guard blocking legacy arbitrary schema PUT requests on strict apps.
+    - `src/services/sync-admin-service.ts`: Typed admin methods for `getStrictContract`, `startStrictUpgrade`, `getStrictUpgradeStatus`, and error suppression.
+    - `scripts/test-loader.mjs` & `scripts/test-register.mjs`: Native Node.js test runner integration for `pnpm test:unit`.
+  - **CLI Upgrade Runner (`doggo`):**
+    - `scripts/hub-strict-upgrade.mjs`: Zero-dependency Node.js CLI with `--help`, parameter validation, token redaction in logs/errors, non-mutating `--dry-run` preflight, deterministic resume with active `migrationId`, `--status-only` mode, bounded status polling, and mandatory read-back assertion verifying `syncMode === 'strict-v2'`, canonical SHA-256 fingerprint (`5f539551...`), and all 16 columns.
+    - `scripts/hub-strict-upgrade.test.mjs`: CLI runner test suite (7 scenarios covering usage, token redaction, dry-run, mock live upgrade, interrupted network resume, and status queries).
+    - `scripts/hub-schema-provision.mjs`: Version-aware `--v1` and `--v2` provisioning support.
+    - `scripts/hub-compatibility-smoke.mjs`: Updated compatibility regression smoke test.
+    - `scripts/hub-live-smoke.mjs`: Patched critical `reminderCount: 1` contract invariant.
+  - **Documentation & Runbooks:**
+    - `docs/hub-schema-integration.md`: Reconciled with Phase 04 upgrade flows and API contracts.
+    - `glean-hub/docs/doggo-strict-sync.md`: Hub backend runbook with operator upgrade instructions.
+- **Validation & QA Test Results (237/237 PASS):**
+  - [QA Test Report](../reports/qa-261015-1420-phase-04-validation.md): 237 passing tests/checks across both repositories (0 failures, 1 ignored live Mongo test):
+    - `glean-hub-app` unit tests (`pnpm test:unit`): 13/13 PASS (120ms).
+    - `glean-hub-app` production build (`pnpm build`): PASS (10,411 modules, tsc 0 errors).
+    - Doggo CLI test suite (`node scripts/hub-strict-upgrade.test.mjs`): 7/7 PASS (10.74s mock server runner).
+    - Doggo offline fixture smoke (`node scripts/hub-live-smoke.mjs --fixture-test`): 18/18 checks PASS.
+    - Doggo strict-v2 vector runner (`node scripts/strict-v2-vector-runner.mjs`): 23/23 checks PASS.
+    - Doggo static security diagnose (`node scripts/release-security-check.mjs --diagnose-source`): 6/6 static checks PASS (0 findings).
+    - Doggo shared JVM test suite (`./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks`): 116/116 JVM tests PASS.
+    - Glean Hub Sync backend test suite (`cargo test --locked`): 54/54 PASS (1 live Mongo test ignored).
+- **Code Review:** Approved with score **8.5 / 10** by `Phase04Reviewer` ([Code Review Report](../reports/code-review-261015-1422-phase-04-hub-admin-ui-and-upgrade-script.md)). Critical invariant `reminderCount: 1` remediated; non-blocking warnings documented for CLI 4xx polling shortcut and UI error preservation.
+- **Residual Gate G3 Hold & Production Blockers:**
+  - All Phase 04 CLI and UI verification executed successfully against mock HTTP servers, offline fixtures, and isolated components.
+  - Live multi-node cluster migration, permit fence draining under active writes, and live cross-entrypoint browser/CLI resume remain on hold pending live replica set testbed.
+  - Production admission remains gated by Gate G3 live replica set testing and Phase 03 code review findings (permit release duplicate filter, `permitCount` backfill, and batch/checkpoint consistency).
 
+## Next steps
+Entry points ready for phase 11 adversarial acceptance and phase 12 operator cutover; no production upgrade in this phase without separate approved runbook; storage implementation proceeds in phase 05.
 ## Unresolved questions
 None beyond phase-03 gate; exact API names are frozen in phase 01 before this phase starts.

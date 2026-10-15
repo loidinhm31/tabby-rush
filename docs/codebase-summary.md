@@ -1,7 +1,7 @@
 # Codebase Summary
 
 Generated on: 2026-10-15
-Based on Repomix compaction snapshot: `repomix-output.xml` (340 files packed, 5 excluded for security check, 656,907 tokens, 2,813,952 chars, dated 2026-10-15)
+Based on Repomix compaction snapshot: `repomix-output.xml` (partial snapshot: 345 files packed, 5 excluded for security check, 688,128 tokens, 2,940,667 chars, dated 2026-10-15)
 ---
 
 ## 1. Repository Overview
@@ -192,7 +192,9 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 │   ├── linux-package-smoke.sh          # Linux desktop package/distributable/RPM audit runner
 │   ├── windows-package-smoke.ps1       # Windows distributable/MSI audit and COM metadata inspection
 │   ├── strict-v2-vector-runner.mjs     # Strict-v2 vector & schema fingerprint verification runner
-│   └── generate-strict-v2-vectors.mjs  # Strict-v2 vector reference generator
+│   ├── generate-strict-v2-vectors.mjs  # Strict-v2 vector reference generator
+│   ├── hub-strict-upgrade.mjs          # Strict-v1 to strict-v2 CLI upgrade runner with bounded polling & read-back
+│   └── hub-strict-upgrade.test.mjs     # Unit test suite for CLI upgrade runner (mock HTTP server)
 ├── tests/                              # Automated test suites
 └── docs/                               # Developer documentation and operational runbooks
     ├── android-acceptance.md           # Android composition, security invariants, and acceptance spec
@@ -492,3 +494,4 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
 39. **In-Place Strict Migration State Machine & Resumption**: Strict upgrade transitions through an 8-state machine (`ready-v1` -> `fencing` -> `transforming` -> `validating` -> `publishing` -> `ready-v2`, `operatorRequired`, or `rolledBack`) under an exclusive coordination fence. Resuming interrupted migrations skips the initial purity preflight, passes prior recorded counts, and updates `_schemas` via CAS with majority journaled write concern; exact cumulative accounting across mid-batch crash interruptions remains an open correctness item awaiting formal revalidation.
 40. **Strict-v1 Protocol Validation on Legacy Receipts**: Legacy receipt reconciliation (`POST /api/v1/sync/:app_id/strong/legacy-receipts`) enforces bounded batches (`<= 100`) and strictly validates `request.protocol == "strict-v1"`. Matching receipts execute durable replay confirmation nonces without mutating payload records or applying legacy mutations.
 41. **Phase 03 Hub Versioned Admission & Staging Gate Status**: Phase 03 backend contracts, admission guards, and in-place migration engine are delivered in `glean-hub-sync` with passing unit/contract checks. Production admission remains on hold: (1) Gate G3 live multi-instance Mongo replica-set acceptance is unexecuted pending staging testbed, (2) coordination-document compatibility/backfill for documents missing `permitCount` requires live verification, and (3) exact cumulative accounting across mid-batch crash interruption requires formal revalidation.
+42. **Phase 04 Hub Admin UI and API-Only Upgrade Tooling**: Operator tooling is delivered across both Glean Hub Web Admin UI (`glean-hub-app`) and Doggo CLI runner (`scripts/hub-strict-upgrade.mjs`). The CLI runner enforces precondition verification, preflight dry-run checks, same-migration-ID resumption upon network interruption, fail-fast on 4xx rejections, complete token redaction, bounded polling, and mandatory final read-back assertions against `GET /strict-contract` verifying `strict-v2` mode, canonical SHA-256 fingerprint (`5f539551...`), and 16 table columns. The Web Admin UI guards strict apps against arbitrary schema PUT requests, checks app-scoped authorization, persists active migration IDs in `sessionStorage`, and asserts final schema read-back. Tooling is verified via unit test suites (`hub-strict-upgrade.test.mjs` 7/7 pass, `glean-hub-app` 13 unit tests across 2 suites pass: 8 in `sync-admin-service.test.ts` and 5 in preload recovery, `pnpm build` clean); production admission remains strictly on hold pending Gate G3 live multi-node replica-set staging validation and remediation of Phase 03 backend findings (`permitCount` coordination backfill, mid-batch crash resumption consistency, and duplicate permit release filtering).

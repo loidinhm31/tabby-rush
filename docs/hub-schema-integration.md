@@ -1,7 +1,7 @@
 # Doggo Hub Schema Integration
 
 Date: 2026-10-15  
-Phase: Phase 03 Hub v2 Admission, Fencing, and Migration (Backend Contracts & Logic Delivered; Gate G3 Live Multi-Instance Staging Pending)  
+Phase: Phase 04 Hub Admin UI and Upgrade Script Delivered (Phase 03 Backend Contracts & Logic Delivered; Gate G3 Live Multi-Instance Staging Pending)  
 Related Docs: [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [API Contract](./api-contract.md) · [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Evidence Summary](./evidence/hub-compatibility-summary.md)
 
 ---
@@ -130,3 +130,96 @@ Provides client outbox reconciliation during protocol migration without mutating
   - Live smoke offline fixture: 18/18 checks passed (`node scripts/hub-live-smoke.mjs --fixture-test`).
   - Shared JVM tests: 116 tests passed (`./gradlew :shared:jvmTest --dependency-verification=off`).
 - **Production Admission Hold**: Phase 03 backend contracts and logic are delivered with passing unit/contract checks. Production admission remains on hold: (1) Gate G3 live multi-instance replica-set acceptance is unexecuted pending staging testbed, (2) coordination-document compatibility/backfill for documents missing `permitCount` requires live verification, and (3) exact cumulative accounting across mid-batch crash interruption requires formal revalidation.
+
+---
+
+## Operator Surfaces: Admin UI and Upgrade CLI (Phase 04 Delivered)
+
+Phase 04 delivers administrative operator tooling to discover strict contracts, evaluate migration preconditions, run dry-run preflight checks, execute in-place upgrades from `strict-v1` to `strict-v2`, and monitor/resume operations safely across both browser and CLI surfaces.
+
+### 1. Glean Hub Admin Web Interface (`glean-hub-app`)
+- **Location**: `/admin/apps/:appId/edit` (`src/pages/admin/edit-app.tsx`).
+- **Component Structure**:
+  - `StrictContractCard` (`src/components/organisms/strict-contract-card.tsx`): Renders active sync mode, strict epoch UUID, canonical SHA-256 schema fingerprint, and read-only column specifications (4 columns for `strict-v1`, 16 columns for `strict-v2`).
+  - `StrictAppUpgradePanel` (`src/components/organisms/strict-app-upgrade-panel.tsx`): Orchestrates preflight dry-run discovery, operator confirmation modals, bounded status polling, same-migration-ID resumption, and mandatory post-upgrade read-back assertion.
+  - `StrictUpgradeControls` (`src/components/organisms/strict-upgrade-controls.tsx`): Provides action controls for Dry Run Preflight, Execute Upgrade, and Manual Resume.
+- **Strict Application Guarding**: Strict applications (`syncMode: strict-v1` or `strict-v2`) automatically suppress the editable legacy schema builder and sharing configuration editor. The save handler is guarded against arbitrary `PUT /api/v1/apps/:appId/schema` calls as defense in depth.
+- **Scope Authorization Guard**: If the admin JWT lacks the target `appId` in `claims.apps`, the UI displays a scope warning and disables mutation buttons while preserving read-only schema display.
+- **Operator Migration Panel Capabilities**:
+  - **Impact Notice**: Outlines safety invariants and migration consequences (zero task payload loss, revision sequence continuity, legacy receipt reconciliation preservation, temporary synchronization pause under exclusive fence, incompatibility of unmigrated client versions).
+  - **Preflight Dry Run**: Issues non-mutating `POST /api/v1/apps/:appId/strict-upgrades` with `dryRun: true` to discover eligible live records and tombstones without modifying data, advancing schema version, or consuming a migration ID.
+  - **Controlled Upgrade Execution**: Requires explicit operator confirmation typing the application name before initiating the live transition with a freshly minted UUIDv4 migration ID.
+  - **Safe Resumption**: Persists the active migration ID in `sessionStorage` (scoped to `strict_upgrade_mig_${appId}`). Operators can reload the page or navigate away without losing the active migration ID or minting orphan migrations. A manual resumption input allows querying and tracking any existing migration UUID.
+  - **Bounded Status Polling**: Queries `GET /api/v1/apps/:appId/strict-upgrades/:migrationId` every 1500ms until reaching a terminal state (`ready-v2`, `operatorRequired`, or `rolledBack`). Note: Interactive browser UI behavior, modal confirmation input, and browser session-storage recovery across page reloads remain manually verified; they are not covered by automated headless browser tests.
+  - **Mandatory Read-Back**: Upon reaching `ready-v2`, automatically asserts `syncMode: strict-v2` and canonical v2 fingerprint via fresh GET contract query before rendering completion.
+
+### 2. Dedicated CLI Upgrade Runner (`scripts/hub-strict-upgrade.mjs`)
+- **Usage Synopsis**:
+  ```bash
+  # 1. Preflight dry-run check (non-mutating)
+  node scripts/hub-strict-upgrade.mjs --app-id doggo --dry-run
+
+  # 2. Execute full migration (automated bounded polling and final read-back assertion)
+  node scripts/hub-strict-upgrade.mjs --app-id doggo
+
+  # 3. Resume interrupted execution with explicit migration ID (resumes server transform)
+  node scripts/hub-strict-upgrade.mjs --app-id doggo --migration-id <UUID>
+
+  # 4. Passive status inspection (queries current state without initiating mutations)
+  node scripts/hub-strict-upgrade.mjs --app-id doggo --migration-id <UUID> --status-only
+  ```
+- **CLI Flags & Options**:
+  | Flag | Default | Description |
+  |---|---|---|
+  | `--origin <URL>` | `$APPROVED_HUB_ORIGIN` / `$GLEAN_ORIGIN` / `http://127.0.0.1:3000` | Glean Hub server origin URL |
+  | `--app-id <ID>` | `doggo` (or `$DOGGO_APP_ID`) | Target strict application identifier |
+  | `--token <JWT>` | `$GLEAN_ADMIN_TOKEN` | Admin JWT bearer token scoped to target app |
+  | `--expected-version <VER>` | `strict-v1` | Source protocol version expected on server |
+  | `--expected-fingerprint <HEX>` | `3361a80f...` | Canonical schema fingerprint of source version |
+  | `--target-version <VER>` | `strict-v2` | Target protocol version |
+  | `--target-fingerprint <HEX>` | `5f539551...` | Canonical schema fingerprint of target version |
+  | `--expected-epoch <UUID>` | `null` | Optional epoch assertion |
+  | `--migration-id <UUID>` | Auto-generated UUIDv4 | Explicit migration ID to execute or resume |
+  | `--dry-run` | `false` | Non-mutating preflight validation only |
+  | `--status-only` | `false` | Query status of existing migration ID without initiating transform |
+  | `--poll-interval <MS>` | `1500` | Status polling interval in milliseconds |
+  | `--timeout <MS>` | `60000` | Execution timeout in milliseconds |
+  | `-h, --help` | `false` | Print CLI usage instructions and exit |
+- **Exit Code Contract**:
+  | Code | Status | Meaning |
+  |:---:|---|---|
+  | `0` | Success | Migration confirmed with final read-back assertion, dry-run passed, app already upgraded, or `--help` displayed |
+  | `1` | Error | Precondition mismatch, HTTP 4xx rejection, authentication failure, terminal error state (`operatorRequired`, `rolledBack`), or read-back assertion failed |
+  | `2` | Timeout | Polling loop exceeded timeout before terminal state reached. Fence may remain active on server; resume via `--migration-id <UUID> --status-only` |
+- **Operational Invariants**:
+  - **Precondition Verification**: Queries `GET /api/v1/apps/:appId/strict-contract`, verifying active sync mode, canonical v1 schema fingerprint, and matching epoch prior to dispatching mutations.
+  - **Idempotent Already-Upgraded Handling**: If the app is already on `strict-v2` with matching target fingerprint, exits 0 safely.
+  - **Same-Migration-ID Invariant**: If a network drop or interruption occurs during the initial `POST`, the script re-uses the active migration ID for status polling; never blindly mints duplicate IDs.
+  - **Definitive 4xx Fail-Fast**: HTTP 400 (`invalidRequest`), 403 (`forbidden`), and 409 (`epochMismatch` / `preconditionFailed`) rejections exit immediately with code 1 instead of polling 404s.
+  - **Complete Secret Redaction**: Scrubs `Bearer <token>` patterns and bare token substrings from all stdout and stderr log outputs.
+  - **Mandatory Final Read-Back Assertion**: Upon reaching `ready-v2`, queries `GET /strict-contract` and asserts `syncMode === 'strict-v2'`, canonical SHA-256 fingerprint (`5f539551...`), and all 16 columns active prior to exiting 0.
+
+### 3. Version-Aware Tooling Updates
+- `scripts/hub-schema-provision.mjs`: Supports dual-schema validation (4 columns for `strict-v1`, 16 columns for `strict-v2`), and handles idempotent provisioning of already-upgraded v2 apps without failure.
+- `scripts/hub-compatibility-smoke.mjs`: Accepts both `strict-v1` and `strict-v2` bootstrap protocols, and adds Gate 5 strict contract metadata validation (`GET /api/v1/apps/:appId/strict-contract`).
+- `scripts/hub-live-smoke.mjs`: Dynamically adapts to active admitted protocol (`strict-v1` or `strict-v2`) in live mode, emitting compliant strict-v2 task payloads (`reminderCount: 1`), while preserving strict-v1 offline fixture coverage (`--fixture-test`).
+
+### 4. Phase 04 Automated Verification Matrix & Gate Status
+
+| Scope / Test Suite | Runner / Command | Units / Checks | Result | Execution Note |
+|---|---|:---:|:---:|---|
+| Hub Admin Service & Preload Unit Tests | `pnpm --prefix ../glean-hub/glean-hub-app test:unit` | 13 tests (2 suites) | **PASS** | 120 ms, Node native runner (8 service contract tests + 5 preload tests; browser UI interactions unexercised) |
+| Hub Admin Web Production Build | `pnpm --prefix ../glean-hub/glean-hub-app build` | 10,411 modules | **PASS** | `tsc` clean, 9.87s Vite bundle |
+| Doggo Strict Upgrade CLI Test Suite | `node scripts/hub-strict-upgrade.test.mjs` | 7 tests (1 suite) | **PASS** | 10.8s, local mock HTTP server; exercises dry-run, interrupted POST recovery, polling, and read-back |
+| Hub Live Smoke Offline Fixture Suite | `node scripts/hub-live-smoke.mjs --fixture-test` | 18 checks (5 suites) | **PASS** | Strict-v1 protocol fixtures against in-process mock server |
+| Strict-v2 Vector Runner | `node scripts/strict-v2-vector-runner.mjs` | 23 checks (2 fp + 21 vectors) | **PASS** | Preimage framing & SHA-256 digests |
+| Release Security Static Audit | `node scripts/release-security-check.mjs --diagnose-source` | 6 static checks | **PASS** | 0 findings / 0 violations under script's static rules |
+| Shared JVM Multiplatform Tests | `./gradlew :shared:jvmTest --dependency-verification=off` | 15 tasks | **PASS** | 15 Gradle tasks executed (exit 0) under `--dependency-verification=off` |
+| Glean Hub Rust Backend Unit Tests | `cargo test --manifest-path ../glean-hub/.../Cargo.toml --locked` | 54 tests (+1 ignored) | **PASS** | 30.7s, admission & upgrade unit routes (1 ignored: live Mongo gate) |
+
+**Production Admission Blockers & Gate G3 Status**:
+Phase 04 operator tooling and script suites are verified in unit tests and against mock HTTP fixtures. Production admission remains strictly on hold pending resolution of:
+1. **Gate G3 Multi-Node Replica-Set Testbed**: Physical multi-instance cluster migration, exclusive fence draining under concurrent client writes, and live cross-entrypoint resumption between browser and CLI are unexecuted pending the live staging environment.
+2. **Phase 03 Coordination Document Compatibility**: Backfill and handling for pre-existing `_coordination` documents lacking `permitCount` require live cluster verification.
+3. **Phase 03 Crash Resumption Accounting**: Formal validation of exact cumulative accounting and idempotency across arbitrary mid-batch crash interruptions during document transformation.
+4. **Phase 03 Duplicate Permit Release Filter**: Remediation of permit release filtering to guard against multiple decrements on repeated release calls.

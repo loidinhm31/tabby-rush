@@ -3,6 +3,51 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 04] - 2026-10-15: Hub Admin UI and Shared-Operation Upgrade Script (Gate G3 Operator Tooling Delivered; Staging Acceptance Pending)
+
+### Added
+- Dedicated CLI upgrade runner `scripts/hub-strict-upgrade.mjs`:
+  - Implements administrative migration runner for `strict-v1` -> `strict-v2` transitions via Glean Hub Admin API.
+  - Preconditions verification querying `GET /api/v1/apps/:appId/strict-contract`, verifying active `syncMode`, canonical v1 schema fingerprint (`3361a80f...`), and matching epoch UUID.
+  - Non-mutating preflight dry-run mode (`--dry-run`) issuing `dryRun: true` to discover eligible live records and tombstones without modifying data or schema version.
+  - Automated bounded status polling against `GET /api/v1/apps/:appId/strict-upgrades/:migrationId` with configurable intervals and timeouts (default: 1500ms poll, 60s timeout).
+  - Single migration ID invariant: interrupted initial POST requests never mint a new ID; recovers status using the active ID.
+  - Explicit HTTP 4xx rejection fail-fast preventing misleading polling loops on definitive client errors.
+  - Exit code contracts: 0 (success / dry-run / already upgraded), 1 (precondition failure / rejected / terminal error), 2 (polling timeout with resume guidance).
+  - Secret redaction scrubbing `Bearer <token>` patterns and bare token substrings from all stdout and stderr logs.
+  - Mandatory read-back assertion: verifies `syncMode: strict-v2`, canonical v2 fingerprint (`5f539551...`), and all 16 columns active before reporting completion.
+- Automated CLI test suite `scripts/hub-strict-upgrade.test.mjs`:
+  - 7 unit/contract tests using local mock HTTP server verifying `--help`, missing token validation, secret log redaction, dry-run preflights, full live upgrade with bounded polling and read-back assertions, network interruption recovery with same-ID polling, and `--status-only` queries.
+- Admin Web UI components in `glean-hub-app`:
+  - `StrictAppUpgradePanel` (`src/components/organisms/strict-app-upgrade-panel.tsx`): Manages upgrade lifecycle, preflight dry-run discovery, operator confirmation modals, bounded polling, `sessionStorage` resumption (`strict_upgrade_mig_${appId}`), manual migration ID input, and mandatory post-upgrade read-back assertions.
+  - `StrictContractCard` (`src/components/organisms/strict-contract-card.tsx`): Read-only view displaying active sync mode, strict epoch UUID, canonical SHA-256 fingerprint, and active column definitions.
+  - `StrictUpgradeControls` (`src/components/organisms/strict-upgrade-controls.tsx`): Action buttons for Dry Run Preflight, Execute Upgrade, and Manual Resume.
+- Frontend Admin Services & Unit Tests in `glean-hub-app`:
+  - `sync-admin-service.ts`: Extended with `getStrictContract`, `startStrictUpgrade`, `getStrictUpgradeStatus`, and `updateAppSchema` guard, with URL encoding for `appId`.
+  - `sync-admin-service.test.ts`: 8 unit tests verifying parameter encoding, contract fetching, dry-run payload construction, status queries, and 403 Forbidden handling.
+  - Native test runner scripts `scripts/test-loader.mjs` and `scripts/test-register.mjs` supporting TypeScript stripping via Node.js native test runner (`node --test`).
+- Gate 5 strict contract metadata validation in `scripts/hub-compatibility-smoke.mjs`.
+
+### Changed
+- `glean-hub-app/src/pages/admin/edit-app.tsx`: Added strict application detection and guarding: hides editable legacy schema builder and sharing editor for `strict-v1` and `strict-v2` applications, blocks arbitrary `PUT /api/v1/apps/:appId/schema` calls, and embeds `StrictContractCard` and `StrictAppUpgradePanel`.
+- `scripts/hub-schema-provision.mjs`: Updated to support dual-version schema validation (4 columns for `strict-v1`, 16 columns for `strict-v2`), and handles idempotent provisioning of already-upgraded v2 apps without failure.
+- `scripts/hub-compatibility-smoke.mjs`: Updated bootstrap protocol assertion to accept both `strict-v1` and `strict-v2`, and added Gate 5 strict contract endpoint verification.
+- `scripts/hub-live-smoke.mjs`: Updated to dynamically detect active admitted protocol (`strict-v1` or `strict-v2`), emit schema-compliant payloads for strict-v2 (including `reminderCount: 1`), and retain strict-v1 offline fixture coverage (`--fixture-test`).
+- `docs/hub-schema-integration.md`: Updated to Phase 04 Delivered, documenting Operator Surfaces (Admin UI and Upgrade CLI), CLI parameters, exit code contracts, and test verification matrix.
+- `../glean-hub/docs/doggo-strict-sync.md`: Sibling runbook updated with Phase 04 Admin UI and CLI upgrade instructions, and same-ID resumption procedures.
+
+### Verification and Production Admission Status
+- `glean-hub-app` unit tests pass 13/13 tests across 2 suites (`pnpm test:unit` in 120ms): 8 tests covering `sync-admin-service.ts` HTTP contract methods and parameter encoding, 5 tests covering Vite preload chunk recovery. Interactive browser UI actions and session-storage reload recovery remain unexercised by automated tests.
+- `glean-hub-app` production build succeeds with zero TypeScript errors and complete Vite production bundle (`pnpm build`).
+- Doggo strict upgrade CLI test suite passes 7/7 tests (`node scripts/hub-strict-upgrade.test.mjs` in 10.8s) against in-process mock HTTP server, exercising `--help`, auth guards, bearer redaction, dry-run, live upgrade, interrupted POST recovery, and `--status-only` queries.
+- Doggo live smoke protocol fixture self-test passes 18/18 checks (`node scripts/hub-live-smoke.mjs --fixture-test`).
+- Doggo strict-v2 vector suite passes 23/23 checks (`node scripts/strict-v2-vector-runner.mjs`).
+- Doggo release security check passes 6/6 static checks (`node scripts/release-security-check.mjs --diagnose-source`).
+- Doggo shared Kotlin Multiplatform JVM tests execute 15 tasks successfully with exit 0 (`./gradlew :shared:jvmTest --dependency-verification=off`).
+- Rust Hub backend unit tests pass 54 tests (+1 ignored for live Mongo gate) in `glean-hub-sync` (`cargo test --locked`).
+- Documentation internal links validated cleanly (163 links working, 0 broken via `validate-docs.cjs`).
+- Production Admission Hold: Phase 04 operator tooling and script suites are verified in unit tests and against local mock fixtures. Production admission remains on hold pending resolution of: (1) Gate G3 physical multi-instance replica-set staging deployment, concurrent client write fence draining, and cross-entrypoint browser/CLI resume, (2) coordination document `permitCount` backfill/compatibility for pre-existing records, (3) exact cumulative accounting across mid-batch crash interruptions during document transformation, and (4) duplicate permit release filtering.
+---
 ## [Phase 03] - 2026-10-15: Hub v2 Admission, Fencing and Migration (Gate G3 Backend Logic & Tests Delivered; Staging Gate Pending)
 
 ### Added

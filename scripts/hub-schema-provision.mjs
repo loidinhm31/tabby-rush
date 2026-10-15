@@ -35,7 +35,33 @@ function parseArgs() {
   return options;
 }
 
-function validateSchemaColumns(schema) {
+const V1_COLUMNS = [
+  { name: 'id', type: 'string', nullable: false },
+  { name: 'title', type: 'string', nullable: false },
+  { name: 'completed', type: 'boolean', nullable: false },
+  { name: 'createdAt', type: 'integer', nullable: false },
+];
+
+const V2_COLUMNS = [
+  { name: 'id', type: 'string', nullable: false },
+  { name: 'title', type: 'string', nullable: false },
+  { name: 'completed', type: 'boolean', nullable: false },
+  { name: 'createdAt', type: 'integer', nullable: false },
+  { name: 'deadlineDate', type: 'string', nullable: true },
+  { name: 'deadlineTime', type: 'string', nullable: true },
+  { name: 'deadlineZone', type: 'string', nullable: true },
+  { name: 'deadlineOffsetSeconds', type: 'integer', nullable: true },
+  { name: 'reminderAnchorTime', type: 'string', nullable: true },
+  { name: 'deadlineAnchorEpochMs', type: 'integer', nullable: true },
+  { name: 'deadlineOverdueEpochMs', type: 'integer', nullable: true },
+  { name: 'reminderEnabled', type: 'boolean', nullable: false },
+  { name: 'reminderLeadMinutes', type: 'integer', nullable: false },
+  { name: 'reminderIntervalMinutes', type: 'integer', nullable: true },
+  { name: 'reminderCount', type: 'integer', nullable: false },
+  { name: 'scheduleToken', type: 'string', nullable: true },
+];
+
+function validateSchemaColumns(schema, expectedVersion = 'strict-v1') {
   const todos = schema?.todos;
   if (!todos) {
     throw new Error("Missing 'todos' table in schema definition");
@@ -44,24 +70,19 @@ function validateSchemaColumns(schema) {
     throw new Error(`Invalid primaryKey '${todos.primaryKey}', expected 'id'`);
   }
 
-  const expectedColumns = [
-    { name: 'id', type: 'string', nullable: false },
-    { name: 'title', type: 'string', nullable: false },
-    { name: 'completed', type: 'boolean', nullable: false },
-    { name: 'createdAt', type: 'integer', nullable: false },
-  ];
+  const expectedColumns = expectedVersion === 'strict-v2' ? V2_COLUMNS : V1_COLUMNS;
 
   if (!Array.isArray(todos.columns) || todos.columns.length !== expectedColumns.length) {
-    throw new Error(`Expected exactly 4 columns in 'todos', found ${todos.columns?.length}`);
+    throw new Error(`Expected exactly ${expectedColumns.length} columns in 'todos' for ${expectedVersion}, found ${todos.columns?.length}`);
   }
 
   for (const expected of expectedColumns) {
     const col = todos.columns.find(c => c.name === expected.name);
     if (!col) {
-      throw new Error(`Missing expected column '${expected.name}'`);
+      throw new Error(`Missing expected column '${expected.name}' for ${expectedVersion}`);
     }
     if (col.type !== expected.type || Boolean(col.nullable) !== expected.nullable) {
-      throw new Error(`Column '${expected.name}' mismatch: type=${col.type}, nullable=${col.nullable}`);
+      throw new Error(`Column '${expected.name}' mismatch: type=${col.type} (expected ${expected.type}), nullable=${col.nullable} (expected ${expected.nullable})`);
     }
   }
 }
@@ -83,7 +104,8 @@ async function main() {
     process.exit(1);
   }
 
-  validateSchemaColumns(schemaPayload.schema);
+  const expectedVersion = schemaPayload.syncMode || 'strict-v1';
+  validateSchemaColumns(schemaPayload.schema, expectedVersion);
 
   console.log(`[Provision] Registering strict app '${schemaPayload.appId}' at ${origin}/api/v1/strict-apps...`);
 
@@ -147,8 +169,9 @@ async function main() {
 
   const readBackData = await readBackRes.json();
 
-  if (readBackData.syncMode !== 'strict-v1') {
-    console.error(`[Provision] Read-back validation failure: syncMode is '${readBackData.syncMode}', expected 'strict-v1'`);
+  const isAlreadyUpgraded = regRes.status === 409 && readBackData.syncMode === 'strict-v2';
+  if (readBackData.syncMode !== expectedVersion && !isAlreadyUpgraded) {
+    console.error(`[Provision] Read-back validation failure: syncMode is '${readBackData.syncMode}', expected '${expectedVersion}'`);
     process.exit(1);
   }
 
@@ -163,7 +186,7 @@ async function main() {
   }
   strictEpoch = readBackData.strictEpoch;
 
-  validateSchemaColumns(readBackData.schema);
+  validateSchemaColumns(readBackData.schema, readBackData.syncMode);
 
   console.log('[Provision] Read-back verified successfully. App is admitted and ready.');
 

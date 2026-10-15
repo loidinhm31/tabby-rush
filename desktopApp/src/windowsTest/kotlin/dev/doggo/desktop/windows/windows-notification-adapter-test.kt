@@ -12,6 +12,7 @@ class FakeWindowsToastBridge(
     val dispatched = mutableListOf<Triple<String, String, String>>()
     val cleared = mutableListOf<Pair<String, String>>()
     var clearedAllCount = 0
+    val clearedGroups = mutableListOf<String>()
 
     override fun isAvailable(): Boolean = available
 
@@ -36,6 +37,13 @@ class FakeWindowsToastBridge(
         if (shouldFail) return WindowsNotificationStatus.Error("Simulated clear failure")
         cleared.add(Pair(tag, group))
         return WindowsNotificationStatus.Cleared(tag, group)
+    }
+
+    override fun clearGroup(aumid: String, group: String): WindowsNotificationStatus {
+        if (!available) return WindowsNotificationStatus.Unavailable("Bridge not available")
+        if (shouldFail) return WindowsNotificationStatus.Error("Simulated clear group failure")
+        clearedGroups.add(group)
+        return WindowsNotificationStatus.Cleared("", group)
     }
 
     override fun clearAllToasts(aumid: String): WindowsNotificationStatus {

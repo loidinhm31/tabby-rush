@@ -1,0 +1,141 @@
+package dev.doggo.desktop
+
+import dev.doggo.shared.contract.AccountKey
+import dev.doggo.shared.contract.NativeReminderAdapter
+import dev.doggo.shared.contract.ReminderCapabilities
+import dev.doggo.shared.contract.ScheduledAlarmHandle
+import dev.doggo.shared.data.ReminderOccurrenceStore
+import dev.doggo.shared.data.RoomAccountStore
+import dev.doggo.shared.data.createInMemoryJvmDatabaseBuilder
+import dev.doggo.shared.sync.LeaveSchedulerCancelGate
+import dev.doggo.shared.sync.ReminderDeliveryGate
+import dev.doggo.shared.sync.ReminderSchedulingCoordinator
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class CompositeDesktopLeaveCancelGateTest {
+
+    private val accountKey = AccountKey("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
+
+    private class RecordingNativeAdapter : NativeReminderAdapter {
+        override suspend fun queryCapabilities(): ReminderCapabilities = ReminderCapabilities(true, true, true)
+        override suspend fun reconcileSchedule(accountKey: AccountKey, generation: Long, desiredAlarms: List<ScheduledAlarmHandle>) {}
+        override suspend fun postOwnedNotification(accountKey: AccountKey, generation: Long, taskId: String, scheduleToken: String, occurrenceIndex: Int, title: String, dueEpochMs: Long): String? = "id"
+        override suspend fun removeOwnedNotification(accountKey: AccountKey, platformNotificationId: String) {}
+        override suspend fun cancelAllForAccount(accountKey: AccountKey) {}
+    }
+
+    @Test
+    fun testSequentialQuiescenceExecution() = runTest {
+        val executionOrder = mutableListOf<String>()
+
+        val deliveryGate = ReminderDeliveryGate(accountKey, { 1L }, { false })
+
+        val observerJob = launch {
+            delay(Long.MAX_VALUE)
+        }
+        observerJob.invokeOnCompletion {
+            executionOrder.add("observer_cancelled")
+        }
+
+        val db = createInMemoryJvmDatabaseBuilder().build()
+        val store = RoomAccountStore(accountKey, "user", db, "doggo")
+        val occStore = ReminderOccurrenceStore(accountKey, db.doggoDao())
+        val coord = ReminderSchedulingCoordinator(
+            accountKey, store, occStore, RecordingNativeAdapter(), deliveryGate, { 1L }, { false }
+        )
+
+        val reminderScheduler = DesktopReminderScheduler(accountKey, coord, this)
+        reminderScheduler.start()
+
+        val syncCancelGate = object : LeaveSchedulerCancelGate {
+            override suspend fun cancelAndAwait(accountKey: AccountKey) {
+                executionOrder.add("sync_cancelled")
+            }
+        }
+
+        val reminderCancelGate = object : LeaveSchedulerCancelGate {
+            override suspend fun cancelAndAwait(accountKey: AccountKey) {
+                executionOrder.add("reminders_cancelled")
+            }
+        }
+
+        val compositeGate = CompositeDesktopLeaveCancelGate(
+            deliveryGate = deliveryGate,
+            scheduleObserverJob = observerJob,
+            reminderScheduler = reminderScheduler,
+            syncCancelGate = syncCancelGate,
+            reminderCancelGate = reminderCancelGate
+        )
+
+        compositeGate.cancelAndAwait(accountKey)
+
+        assertEquals("observer_cancelled", executionOrder[0])
+        assertEquals("sync_cancelled", executionOrder[1])
+        assertEquals("reminders_cancelled", executionOrder[2])
+
+        db.close()
+    }
+
+    @Test
+    fun testDrainFailureFailsClosedWithoutProceeding() = runTest {
+        // Create delivery gate with admission held open
+        val deliveryGate = ReminderDeliveryGate(accountKey, { 1L }, { false })
+
+        // Acquire an admission and hold it
+        val admissionAcquired = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val admissionHoldJob = launch {
+            deliveryGate.withDeliveryAdmission(1L) {
+                admissionAcquired.complete(Unit)
+                delay(Long.MAX_VALUE)
+            }
+        }
+        admissionAcquired.await()
+
+        val observerJob = Job()
+        val db = createInMemoryJvmDatabaseBuilder().build()
+        val store = RoomAccountStore(accountKey, "user", db, "doggo")
+        val occStore = ReminderOccurrenceStore(accountKey, db.doggoDao())
+        val coord = ReminderSchedulingCoordinator(
+            accountKey, store, occStore, RecordingNativeAdapter(), deliveryGate, { 1L }, { false }
+        )
+        val reminderScheduler = DesktopReminderScheduler(accountKey, coord, this)
+
+        var syncCancelled = false
+        val syncCancelGate = object : LeaveSchedulerCancelGate {
+            override suspend fun cancelAndAwait(accountKey: AccountKey) {
+                syncCancelled = true
+            }
+        }
+
+        val reminderCancelGate = object : LeaveSchedulerCancelGate {
+            override suspend fun cancelAndAwait(accountKey: AccountKey) {}
+        }
+
+        val compositeGate = CompositeDesktopLeaveCancelGate(
+            deliveryGate = deliveryGate,
+            scheduleObserverJob = observerJob,
+            reminderScheduler = reminderScheduler,
+            syncCancelGate = syncCancelGate,
+            reminderCancelGate = reminderCancelGate,
+            drainTimeoutMs = 50L
+        )
+
+        assertFailsWith<IllegalStateException> {
+            compositeGate.cancelAndAwait(accountKey)
+        }
+
+        assertTrue(!syncCancelled)
+
+        admissionHoldJob.cancel()
+        db.close()
+    }
+}

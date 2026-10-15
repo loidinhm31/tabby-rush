@@ -32,6 +32,10 @@ import dev.doggo.shared.data.createJvmDatabaseBuilder
 import dev.doggo.shared.sync.AccountLeaveProtocol
 import dev.doggo.shared.sync.AccountSyncCoordinator
 import dev.doggo.shared.theme.DoggoTheme
+import dev.doggo.shared.data.ReminderOccurrenceStore
+import dev.doggo.shared.sync.ReminderDeliveryGate
+import dev.doggo.shared.sync.ReminderSchedulingCoordinator
+import kotlinx.coroutines.cancelAndJoin
 import dev.doggo.shared.ui.AuthSubmitAction
 import dev.doggo.shared.ui.DoggoApp
 import kotlinx.coroutines.CancellationException
@@ -60,6 +64,10 @@ class DesktopAccountRuntime(
     val database: DoggoDatabase,
     val store: RoomAccountStore,
     val coordinator: AccountSyncCoordinator,
+    val reminderCoordinator: ReminderSchedulingCoordinator,
+    val deliveryGate: ReminderDeliveryGate,
+    val reminderScheduler: DesktopReminderScheduler,
+    val scheduleObserverJob: Job,
     val leaveProtocol: AccountLeaveProtocol
 )
 
@@ -89,6 +97,7 @@ class DesktopController(
     )
     val vault = PlatformVaultDispatcher.createVault(accountFiles)
     val authSession = HubAuthSession(config = hubConfig, vault = vault)
+    val reminderAdapter = PlatformReminderDispatcher.createAdapter()
     val syncScheduler = DesktopSyncScheduler(scope) { key ->
         activeRuntime?.takeIf { it.accountKey == key }?.coordinator?.triggerSync()
     }
@@ -117,6 +126,11 @@ class DesktopController(
                 val key = AccountKey(dir.name)
                 if (accountFiles.hasPendingWipe(key)) {
                     syncScheduler.cancel(key)
+                    try {
+                        runBlocking(Dispatchers.IO) { reminderAdapter.cancelAllForAccount(key) }
+                    } catch (_: Exception) {
+                        return@forEach // Fail-closed: retain wipe marker if reminder cancellation fails
+                    }
                     if (accountFiles.deleteDatabaseAndArtifacts(key)) {
                         runBlocking(Dispatchers.IO) { vault.clear(key) }
                         accountFiles.clearWipeMarker(key)
@@ -166,6 +180,55 @@ class DesktopController(
 
         val db = createJvmDatabaseBuilder(accountFiles.getDatabaseFile(accountKey)).build()
         val store = RoomAccountStore(accountKey, authSession.currentIdentity.value?.userId ?: "default", db, hubConfig.appId)
+
+        val deliveryGate = ReminderDeliveryGate(
+            accountKey = accountKey,
+            getPersistedGeneration = { accountFiles.readGeneration(accountKey) },
+            hasPendingWipeMarker = { accountFiles.hasPendingWipe(accountKey) }
+        )
+        val occurrenceStore = ReminderOccurrenceStore(accountKey = accountKey, dao = db.doggoDao())
+        val reminderCoord = ReminderSchedulingCoordinator(
+            accountKey = accountKey,
+            store = store,
+            occurrenceStore = occurrenceStore,
+            adapter = reminderAdapter,
+            deliveryGate = deliveryGate,
+            getGeneration = { accountFiles.readGeneration(accountKey) },
+            hasWipeMarker = { accountFiles.hasPendingWipe(accountKey) }
+        )
+        val reminderSched = DesktopReminderScheduler(
+            accountKey = accountKey,
+            reminderCoordinator = reminderCoord,
+            scope = scope,
+            ioDispatcher = Dispatchers.IO
+        )
+        if (reminderAdapter is DesktopReminderAdapter) {
+            reminderAdapter.setScheduleListener { k, _, desiredAlarms ->
+                if (k == accountKey) {
+                    reminderSched.updateDesiredAlarms(desiredAlarms)
+                }
+            }
+        }
+        reminderSched.start()
+
+        val scheduleObserverJob = scope.launch(Dispatchers.IO) {
+            store.observePersistedSchedule().collect {
+                try {
+                    reminderCoord.reconcile()
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (_: Exception) {}
+            }
+        }
+
+        val compositeCancelGate = CompositeDesktopLeaveCancelGate(
+            deliveryGate = deliveryGate,
+            scheduleObserverJob = scheduleObserverJob,
+            reminderScheduler = reminderSched,
+            syncCancelGate = syncScheduler,
+            reminderCancelGate = reminderCoord
+        )
+
         lateinit var leaveProto: AccountLeaveProtocol
         val coord = AccountSyncCoordinator(store = store, session = authSession, leaveProtocolProvider = { leaveProto }).apply { setGeneration(gen) }
         leaveProto = AccountLeaveProtocol(
@@ -178,13 +241,34 @@ class DesktopController(
                 try { db.close() } catch (_: Exception) {}
                 accountFiles.deleteDatabaseAndArtifacts(k)
             },
-            schedulerCancelGate = syncScheduler
+            schedulerCancelGate = compositeCancelGate
         )
-        DesktopAccountRuntime(accountKey, gen, db, store, coord, leaveProto).also { activeRuntime = it }
+        DesktopAccountRuntime(
+            accountKey = accountKey,
+            generation = gen,
+            database = db,
+            store = store,
+            coordinator = coord,
+            reminderCoordinator = reminderCoord,
+            deliveryGate = deliveryGate,
+            reminderScheduler = reminderSched,
+            scheduleObserverJob = scheduleObserverJob,
+            leaveProtocol = leaveProto
+        ).also { activeRuntime = it }
+    }
+
+    private suspend fun closeRuntimeInternalSuspend(r: DesktopAccountRuntime) {
+        try { r.deliveryGate.closeAndDrain() } catch (_: Exception) {}
+        try { r.scheduleObserverJob.cancelAndJoin() } catch (_: Exception) {}
+        try { r.reminderScheduler.cancelAndAwait(r.accountKey) } catch (_: Exception) {}
+        try { r.reminderCoordinator.cancelAndAwait(r.accountKey) } catch (_: Exception) {}
+        try { r.store.isFrozen = true; r.database.close() } catch (_: Exception) {}
     }
 
     private fun closeRuntimeInternal(r: DesktopAccountRuntime) {
-        try { r.store.isFrozen = true; r.database.close() } catch (_: Exception) {}
+        runBlocking(Dispatchers.IO) {
+            closeRuntimeInternalSuspend(r)
+        }
     }
 
     private fun onAuthenticated() {
@@ -375,7 +459,7 @@ class DesktopController(
     }
 
     private suspend fun closeActiveRuntime() = runtimeMutex.withLock {
-        activeRuntime?.let { closeRuntimeInternal(it) }
+        activeRuntime?.let { closeRuntimeInternalSuspend(it) }
         activeRuntime = null
     }
 
@@ -404,16 +488,20 @@ class DesktopController(
         else if (res is ApiResult.Success) _uiState.value = _uiState.value.copy(accessRequest = res.value as? AccessRequestInfo)
     }
 
-    fun dispose() {
+    suspend fun disposeSuspend() {
         syncJob?.cancel()
         syncJob = null
-        runBlocking {
-            syncScheduler.disposeAndAwait()
-        }
-        activeRuntime?.let { closeRuntimeInternal(it) }
+        syncScheduler.disposeAndAwait()
+        activeRuntime?.let { closeRuntimeInternalSuspend(it) }
         activeRuntime = null
         scope.cancel()
         instanceGuard.close()
+    }
+
+    fun dispose() {
+        runBlocking(Dispatchers.IO) {
+            disposeSuspend()
+        }
     }
 }
 

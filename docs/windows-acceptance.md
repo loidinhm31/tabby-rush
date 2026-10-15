@@ -1,9 +1,9 @@
 # Windows Desktop & Installed MSI Acceptance Specification
 
-**Document Version**: 1.0.0
-**Phase**: 10 — Native Windows DPAPI and installed MSI
-**Status**: Phase 10 implementation delivered / 100% (2026-10-14); technical acceptance blocked by root-level strict dependency verification, interactive MSI installation, and Narrator verification, pending operator prerequisites
-**Related Documents**: [Plan](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
+**Document Version**: 1.1.0
+**Phase**: 10 (Historical) — Native Windows DPAPI & Installed MSI; Phase 09 (Current) — Process-scoped desktop scheduler and Windows reminder adapter
+**Status**: Desktop Multiplatform Scheduler & Windows Candidate Adapter Delivered; Native WinRT/COM Toast Bridge Unimplemented (Stub); Gate G2 Live Installed MSI & Toast Verification Blocked on Windows Host Runner
+**Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
 
 ---
 
@@ -63,6 +63,25 @@ Status cells are transcribed from `docs/evidence/windows-test-summary.md`; comma
 |---|---|---|---|
 | **Toast Adapter Candidate** | XML escaping, toast structure, tag/group history clearance, and `WindowsToastBridge` interface | `WindowsNotificationAdapterTest` (tested with fake bridge) | SOURCE INSPECTED / UNEXECUTED (XML escaping, structure, and safe unavailability verified; native toast delivery and Action Center history clearance unexecuted pending Windows runner in Phase 09) |
 | **Live Windows AUMID & Toast Execution** | Installed MSI shortcut AUMID registration and Action Center toast observation | Windows test environment | BLOCKED (Workstation is Linux x86_64; Windows runtime and MSI tools absent; adapter remains Candidate / Unproven until installed Windows verification; G2 gate prerequisite remaining) |
+---
+### 2.2 Phase 09 — Process-Scoped Desktop Scheduler & Windows Toast Candidate Status
+
+| Gate | Requirement | Suggested Verification / Reported Result | Status |
+|---|---|---|---|
+| **Windows Reminder Adapter Candidate** | XML escaping, toast formatting, group/tag generation, error collection, and SPI provider discovery | `WindowsReminderAdapterTest` (6 unit tests in `windowsTest` with fake bridge) | AUTHORED CANDIDATE (Authored unit tests in `windowsTest` with fake bridge; not compiled or executed on Linux host runner) |
+| **Desktop Reminder Scheduler Integration** | Process-scoped wake loop, replace-based deadline wake, cancel quiescence | JVM Desktop tests (`DesktopReminderSchedulerTest`) | PASS (5/5 tests passing in shared desktop suite) |
+| **Multi-Account Toast Isolation** | Account-scoped clearance by group (`d_<accountKey>`) and tag (`t_<taskId>_<index>`), without global toast wipe | `WindowsReminderAdapterTest.testCancelAllForAccountClearsToasts` | AUTHORED CANDIDATE (Authored test against fake bridge in `windowsTest`; unexecuted on Linux host) |
+| **Error Propagation on Cancellation Failure** | Bridge cancellation failure collects errors and throws `IllegalStateException` | `WindowsReminderAdapterTest.testCancelAllForAccountPropagatesErrorsOnBridgeFailure` | AUTHORED CANDIDATE (Authored test against fake bridge in `windowsTest`; unexecuted on Linux host) |
+| **ServiceLoader SPI Provider** | `WindowsReminderAdapterProvider` resolves under target `windows` | ServiceLoader configuration in `META-INF/services` | DELIVERED (Source declared) |
+| **Native WinRT/COM Toast Bridge** | Native toast posting via `Windows.UI.Notifications.ToastNotificationManager` | JNA / COM bridge execution | UNIMPLEMENTED STUB (`JnaWindowsToastBridge` returns `WindowsNotificationStatus.Unavailable`; deferred to Phase 11) |
+| **Live Windows AUMID & Toast Delivery** | Installed MSI shortcut AUMID registration and Action Center toast observation | Windows test environment | BLOCKED (Requires physical Windows testbed; Gate G2 prerequisite remaining) |
+
+#### Disclosed Limitations for Phase 09 Windows Reminders
+1. **Native Toast Bridge Unimplemented**: `JnaWindowsToastBridge` is an unintegrated candidate stub that returns `WindowsNotificationStatus.Unavailable` for all operations. Windows toast display is not functional on any platform yet. Wrapper classes and fake-bridge unit tests verify API shape and account isolation only. Real COM/WinRT native delivery is deferred to Phase 11 on a physical Windows testbed.
+2. **Process-Memory Tracking Limitation**: Active toast references are tracked in an in-memory map (`ConcurrentHashMap<String, MutableSet<String>>`). If the application exits or crashes while toasts are active in Action Center, subsequent startup wipe recovery cannot discover or remove those orphaned toasts through this adapter.
+3. **Truncated Identity Scoping**: Windows group identifier `d_${accountKey.value.take(12)}` truncates the 64-hex account key to 12 characters, and tag `t_${taskId.take(16)}_$occurrenceIndex` truncates the task UUID to 16 characters while omitting generation and schedule token. These identifiers are not globally collision-free.
+4. **Individual Removal Status**: `removeOwnedNotification()` calls `windowsAdapter.cancelNotification()` and immediately removes the local tracking entry without evaluating whether the bridge succeeded.
+
 ---
 
 ## 3. UI Evidence Matrix

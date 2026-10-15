@@ -3,6 +3,86 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 09] - 2026-10-15: Process-Scoped Desktop Scheduler, Native Adapters & Strict Quiescence (Gate G2 Desktop Logic Delivered; Physical Notification Display Pending Phase 11)
+
+*Note: Part of the 2026-10-15 Task Deadlines, Reminders & Strict Upgrades initiative; distinct from the historical 2026-10-14 Phase 09 Linux desktop distribution release.*
+
+### Added
+- Desktop reminder adapter Service Provider Interface (SPI) and dispatcher in `:desktopApp`:
+  - `DesktopReminderAdapterProvider`: Service Provider Interface allowing target-specific native reminder adapter implementations (`linux` and `windows`) to be packaged in `desktopApp/src/<target>Main` and discovered via Java `ServiceLoader`.
+  - `DesktopReminderAdapter`: Extension interface of shared `NativeReminderAdapter` providing `setScheduleListener()` for the desktop coroutine scheduler to receive reconciled desired alarms.
+  - `PlatformReminderDispatcher`: Dispatches and initializes native reminder adapters based on detected host OS. Enforces strict target isolation: exactly one matching provider must be registered; zero, multiple, or foreign providers fail closed with an explicit `IllegalStateException`.
+- Process-scoped desktop reminder scheduler (`dev.doggo.desktop.DesktopReminderScheduler`):
+  - Manages reminder scheduling while desktop window is visible or minimized without requiring background daemons or system tray processes.
+  - Time-bounded 15,000ms wake loop (`withTimeoutOrNull`) on `Dispatchers.IO`: immune to backward wall-clock adjustments and system suspend/resume sleep without polling full task lists.
+  - Replace-based alarm updates: desired alarm updates replace prior lists and wake the loop immediately via a conflated channel (`Channel.CONFLATED`).
+  - Grace window evaluation: due alarms claim through `ReminderSchedulingCoordinator.deliverReminder()`, enforcing the durable 5-minute grace window check in SQLite before attempting native notification posting.
+  - Cancellation quiescence: implements `LeaveSchedulerCancelGate`, cancelling the wake loop and awaiting job completion on account leave or wipe.
+- Composite desktop cancellation gate (`dev.doggo.desktop.CompositeDesktopLeaveCancelGate`):
+  - Strict 5-step ordered quiescence during account leave (`AccountLeaveProtocol`): (1) closes `ReminderDeliveryGate` and drains in-flight delivery admissions with a 5,000ms timeout (fails closed with `IllegalStateException` on timeout), (2) cancels and joins reactive Room schedule observation, (3) cancels and awaits `DesktopReminderScheduler` wake loop, (4) cancels and awaits active `DesktopSyncScheduler` sync jobs, and (5) cancels and clears platform notifications.
+  - Fail-closed invariant: any cancellation step failure aborts teardown, retaining `wipe.marker` and database files.
+- Linux Freedesktop D-Bus reminder adapter (`dev.doggo.desktop.linux.LinuxNativeReminderAdapter`):
+  - Bridges shared `NativeReminderAdapter` to `org.freedesktop.Notifications` via `DbusLinuxNotificationAdapter` over `Dispatchers.IO` to protect Swing EDT responsiveness.
+  - Capability tolerance: probes daemon capabilities and treats successful query as enabling notifications even if the capabilities array is empty, supporting minimal notification daemons (dunst, mako).
+  - Account-scoped tracking: maps platform uint32 notification IDs to account keys in an in-memory set (`ConcurrentHashMap<String, MutableSet<Long>>`).
+  - Close error propagation: `cancelAllForAccount()` aggregates daemon close errors and throws an explicit `IllegalStateException` on failure.
+- Windows candidate toast adapter (`dev.doggo.desktop.windows.WindowsNativeReminderAdapter`):
+  - Candidate adapter configuring AUMID `dev.doggo.desktop`, group prefix `d_${accountKey.value.take(12)}`, and tag `t_${taskId.take(16)}_$occurrenceIndex` with XML entity escaping on title and message text.
+  - Multi-account isolation: `cancelAllForAccount()` iterates account-scoped identifiers and cancels group notifications rather than performing a global toast wipe.
+  - Disclosed stub status: `JnaWindowsToastBridge` is an unintegrated candidate stub returning `WindowsNotificationStatus.Unavailable` for all operations; native WinRT/COM toast posting is deferred to Phase 11 on a Windows testbed.
+- Automated test suites:
+  - `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-reminder-scheduler-test.kt`: 5 tests for wake loop, backward clock jump protection, replace-based updates, and clean cancellation.
+  - `desktopApp/src/test/kotlin/dev/doggo/desktop/composite-desktop-leave-cancel-gate-test.kt`: 2 tests for strict 5-stage quiescence and drain timeout failure.
+  - `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-reminder-controller-lifecycle-test.kt`: 3 tests for reminder subsystem init, delivery gate state, and fail-closed wipe marker retention on notification cancellation error.
+  - `desktopApp/src/linuxTest/kotlin/dev/doggo/desktop/linux/linux-reminder-adapter-test.kt`: 6 tests for capabilities, account-scoped tracking, replace ID mapping, and error propagation.
+  - `desktopApp/src/windowsTest/kotlin/dev/doggo/desktop/windows/windows-reminder-adapter-test.kt`: authored candidate unit test suite with fake bridge for toast formatting, multi-account isolation, and error propagation (unexecuted on Linux host).
+
+### Changed
+- `DesktopController` and `main.kt` in `:desktopApp`:
+  - Integrated `ReminderDeliveryGate`, `ReminderSchedulingCoordinator`, `DesktopReminderScheduler`, and `CompositeDesktopLeaveCancelGate` into `DesktopAccountRuntime`.
+  - Fail-closed startup wipe recovery: in `completePendingWipesOnStartup()`, exceptions during `reminderAdapter.cancelAllForAccount()` trigger `return@forEach`, retaining `wipe.marker` and database files fail-closed.
+  - Single-window close lifecycle: `dispose()` executes `disposeSuspend()`, cooperatively cancelling observers, draining runtime gates, closing database files, and releasing `SingleInstanceGuard` file lock with zero surviving background daemon or tray processes.
+
+### Verification and Delivery Status
+- QA report records 298 passing automated checks across 7 test/check groups, plus 1 standalone packaging assembly task:
+  1. `:desktopApp:test` (48 Linux/JVM unit & platform tests PASS across 10 classes, executed with `--dependency-verification=off`).
+  2. `:shared:jvmTest` (182 unit/SQLite tests PASS across 26 classes, executed with `--dependency-verification=off`).
+  3. `:androidApp:testDebugUnitTest` (12 unit tests PASS across 4 classes, executed with `--dependency-verification=off`).
+  4. `node scripts/strict-v2-vector-runner.mjs` (23/23 vector runner checks PASS).
+  5. `node scripts/hub-live-smoke.mjs --fixture-test` (18/18 offline smoke fixture checks PASS).
+  6. `node scripts/release-security-check.mjs --diagnose-source` (6/6 static source security checks PASS).
+  7. `node scripts/hub-strict-upgrade.test.mjs` (9/9 CLI tests PASS).
+  - *Separate Packaging Build*: `:desktopApp:createDistributable` (1 standalone application bundle assembly verified).
+  - *Platform Test Scope Note*: `WindowsReminderAdapterTest` is an authored candidate test suite with fake bridge in `windowsTest`, but was not compiled or executed on this Linux host runner.
+- Cycle 2 code review score **8.9 / 10** conditionally approved with remediations verified.
+- Gate G2 Status: Logic, scheduler, SPI dispatcher, and native adapters delivered; physical notification bubble display on active desktop session and installed Windows MSI execution remain pending Gate G2 / Phase 11.
+
+---
+## [Phase 08] - 2026-10-15: Android Alarms, Private Notifications & Device Restoration (Gate G2 Android Logic Delivered; Physical Connected Device Acceptance Pending Phase 11)
+
+*Note: Part of the 2026-10-15 Task Deadlines, Reminders & Strict Upgrades initiative; distinct from the historical 2026-10-14 Phase 08 release operations release.*
+
+### Added
+- Android native reminder and alarm scheduling infrastructure in `:androidApp`:
+  - `AndroidNotificationAdapter`: Implements `NativeReminderAdapter`, managing the `doggo_reminders` high-importance notification channel with `VISIBILITY_PRIVATE`, generic public lockscreen fallback (`VISIBILITY_PUBLIC`, text: "Task reminder"), exact alarms via `AlarmManager.setExactAndAllowWhileIdle` (falling back to `setAndAllowWhileIdle`), and notification clearing.
+  - `AndroidAlarmRegistry`: Synchronized SharedPreferences storage (`doggo_alarms_<accountKey>`) tracking active alarm keys (`generation:taskId:scheduleToken:occurrenceIndex`) and active notification IDs via synchronous `commit()` writes.
+  - `DoggoAlarmReceiver`: Non-exported (`android:exported="false"`) receiver handling explicit `ACTION_DELIVER_REMINDER` intents with direct-boot unlock verification, identity-only extras (no user text in alarm PendingIntent extras or URIs), wipe marker absence check, and 9s cooperative timeout via `ReminderSchedulingCoordinator`.
+  - `ReminderRestoreReceiver`: Non-exported receiver handling system lifecycle events (`BOOT_COMPLETED`, `USER_UNLOCKED`, `MY_PACKAGE_REPLACED`, `TIME_SET`, `TIMEZONE_CHANGED`, `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`), completing pending wipes before reconciling active account reminders.
+  - `CompositeLeaveSchedulerCancelGate`: Coordinates strict 4-stage teardown: (1) delivery gate drain -> (2) schedule observer cancel -> (3) WorkManager sync cancel -> (4) AlarmManager/notification cancel.
+  - `ReminderPermissionController`: Sealed capability hierarchy (`Exact`, `BestEffort`, `NotificationDenied`, `ChannelDisabled`) and settings intent factories.
+  - Cold-start deep linking in `MainActivity` and `SessionViewModel.selectTaskFromNotification`.
+- Automated test suites:
+  - `androidApp/src/test/kotlin/dev/doggo/android/AndroidNotificationAdapterTest.kt`: 6 unit tests for request code determinism, capabilities model, tag formatting, registry serialization, and restore actions.
+  - `androidApp/src/test/kotlin/dev/doggo/android/CompositeLeaveSchedulerCancelGateTest.kt`: 3 unit tests for drain timeout, sync cancel failure, and ordered quiescence.
+  - `androidApp/src/test/kotlin/dev/doggo/android/ReminderPermissionControllerTest.kt`: 2 unit tests for permission state representations.
+  - `androidApp/src/test/kotlin/dev/doggo/android/BuildConfigTest.kt`: 1 unit test for configuration loading.
+
+### Verification and Delivery Status
+- Automated test suites pass 282 executed checks across reported test suites (12 Android unit tests in `:androidApp:testDebugUnitTest`, 182 shared JVM tests, 32 desktop tests, 23 strict-v2 vectors, 18 offline smoke fixture checks, 6 static security checks, 9 CLI tests; `:androidApp:assembleDebug` APK build verified separately).
+- Code review score **9.2 / 10** approved.
+- Gate G2 Status: Logic and native adapters delivered; connected physical device / emulator execution, Doze mode testing, live broadcast receipt across reboot, and platform acceptance remain formally pending Gate G2 / Phase 11.
+
+---
 ## [Phase 07] - 2026-10-15: Shared Scheduling, Persisted Eligibility & Account Safety (Gate G5 Passed; Native Adapters Unlocked for Phases 08/09)
 
 ### Added

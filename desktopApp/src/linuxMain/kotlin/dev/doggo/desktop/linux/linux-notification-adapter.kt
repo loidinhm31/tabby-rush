@@ -8,6 +8,16 @@ import org.freedesktop.dbus.interfaces.DBusInterface
 import org.freedesktop.dbus.types.UInt32
 import org.freedesktop.dbus.types.Variant
 
+import dev.doggo.desktop.DesktopReminderAdapter
+import dev.doggo.desktop.DesktopReminderAdapterProvider
+import dev.doggo.shared.contract.AccountKey
+import dev.doggo.shared.contract.NativeReminderAdapter
+import dev.doggo.shared.contract.ReminderCapabilities
+import dev.doggo.shared.contract.ScheduledAlarmHandle
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 @DBusInterfaceName("org.freedesktop.Notifications")
 interface FreedesktopNotifications : DBusInterface {
     fun GetCapabilities(): List<String>
@@ -128,4 +138,103 @@ class DbusLinuxNotificationAdapter(
             LinuxNotificationStatus.Error("Close notification error: ${e.message}")
         }
     }
+}
+
+/**
+ * Linux desktop native reminder adapter bridging shared NativeReminderAdapter to
+ * the session bus Freedesktop Notifications service.
+ * Dispatches IPC operations on Dispatchers.IO to prevent blocking the UI/Swing thread.
+ */
+class LinuxNativeReminderAdapter(
+    val dbusAdapter: LinuxNotificationAdapter = DbusLinuxNotificationAdapter(),
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+) : DesktopReminderAdapter {
+
+    private val postedNotificationIds = ConcurrentHashMap<String, MutableSet<Long>>()
+    private var scheduleListener: ((AccountKey, Long, List<ScheduledAlarmHandle>) -> Unit)? = null
+
+    override fun setScheduleListener(listener: ((AccountKey, Long, List<ScheduledAlarmHandle>) -> Unit)?) {
+        scheduleListener = listener
+    }
+
+    override suspend fun queryCapabilities(): ReminderCapabilities = withContext(ioDispatcher) {
+        val (status, _) = dbusAdapter.checkCapabilities()
+        val canPost = status is LinuxNotificationStatus.Success
+        ReminderCapabilities(
+            canScheduleExactAlarms = true,
+            canPostNotifications = canPost,
+            areNotificationsEnabled = canPost
+        )
+    }
+
+    override suspend fun reconcileSchedule(
+        accountKey: AccountKey,
+        generation: Long,
+        desiredAlarms: List<ScheduledAlarmHandle>
+    ) {
+        scheduleListener?.invoke(accountKey, generation, desiredAlarms)
+    }
+
+    override suspend fun postOwnedNotification(
+        accountKey: AccountKey,
+        generation: Long,
+        taskId: String,
+        scheduleToken: String,
+        occurrenceIndex: Int,
+        title: String,
+        dueEpochMs: Long
+    ): String? = withContext(ioDispatcher) {
+        val safeTitle = title.ifBlank { "Task Reminder" }
+        val status = dbusAdapter.postNotification(
+            replacesId = 0L,
+            title = safeTitle,
+            body = "Task reminder is due"
+        )
+        when (status) {
+            is LinuxNotificationStatus.Success -> {
+                val id = status.notificationId
+                postedNotificationIds.computeIfAbsent(accountKey.value) { ConcurrentHashMap.newKeySet() }.add(id)
+                id.toString()
+            }
+            else -> null
+        }
+    }
+
+    override suspend fun removeOwnedNotification(
+        accountKey: AccountKey,
+        platformNotificationId: String
+    ) = withContext(ioDispatcher) {
+        val id = platformNotificationId.toLongOrNull() ?: return@withContext
+        val accountIds = postedNotificationIds[accountKey.value]
+        if (accountIds?.contains(id) == true) {
+            dbusAdapter.closeNotification(id)
+            accountIds.remove(id)
+        }
+    }
+
+    override suspend fun cancelAllForAccount(accountKey: AccountKey) = withContext(ioDispatcher) {
+        val accountIds = postedNotificationIds.remove(accountKey.value) ?: return@withContext
+        val errors = mutableListOf<String>()
+        for (id in accountIds) {
+            try {
+                val status = dbusAdapter.closeNotification(id)
+                if (status is LinuxNotificationStatus.Error) {
+                    errors.add("Failed to close notification $id: ${status.message}")
+                }
+            } catch (e: Exception) {
+                errors.add("Exception closing notification $id: ${e.message}")
+            }
+        }
+        if (errors.isNotEmpty()) {
+            throw IllegalStateException("Failed to cancel notifications for ${accountKey.value}: ${errors.joinToString("; ")}")
+        }
+    }
+}
+
+/**
+ * ServiceLoader provider for Linux desktop reminder adapter.
+ */
+class LinuxReminderAdapterProvider : DesktopReminderAdapterProvider {
+    override val target: String = "linux"
+    override fun createAdapter(): NativeReminderAdapter = LinuxNativeReminderAdapter()
 }

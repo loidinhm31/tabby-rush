@@ -1,7 +1,7 @@
 # Codebase Summary
 
 Generated on: 2026-10-15
-Based on Repomix compaction snapshot: `repomix-output.xml` (point-in-time partial snapshot: 388 files packed, 5 excluded for security check, 833,996 tokens, 3,601,203 chars, generated during Phase 08 documentation updates on 2026-10-15)
+Based on Repomix compaction snapshot: `repomix-output.xml` (point-in-time partial snapshot: 402 files packed, 5 excluded for security check, 868,103 tokens, 3,754,925 chars, generated during Phase 09 documentation updates on 2026-10-15)
 ---
 
 ## 1. Repository Overview
@@ -399,7 +399,7 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 | `release-security-check.mjs` | `runReleaseSecurityAudit()`, `diagnoseSource()` | Fail-closed security auditor inspecting release APK signatures (v2/v3), explicit `allowBackup="false"`, `debuggable="false"`, `usesCleartextTraffic="false"`, non-main exported components rejection, networkSecurityConfig stripping, and static source secret scanning. |
 | `hub-strict-recovery.js` | `executeRecovery()`, `validateTodoRecord()` | Maintenance disaster recovery script for `mongosh` requiring `CONFIRM_MAINTENANCE_QUIESCENCE=true`, generating fresh UUID v4 epoch, targeting target collection `app_<appId>`, resetting records to revision 1 with `lastOp = null`, maintaining permanent empty tombstones, and executing journaled Compare-And-Swap on `_schemas`. |
 
-### 2.9 Desktop Application Module & Packaging Tooling (Phases 09–10)
+### 2.10 Desktop Application Module, Scheduler & Native Adapters (Phases 09–10)
 
 | Component File | Primary Types & Functions | Architectural Role |
 |---|---|---|
@@ -407,24 +407,35 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 | `gradle-linux.lockfile` | Dependency locking definition | Linux desktop dependency lockfile (161 locked artifacts). |
 | `gradle-windows.lockfile` | Dependency locking definition | Windows desktop target lockfile, independently resolved from Linux. |
 | `credential-vault-provider.kt` | `CredentialVaultProvider` | OS credential-vault Service Provider Interface for desktop targets. |
-| `platform-vault-dispatcher.kt` | `PlatformVaultDispatcher` | Uses Java `ServiceLoader`; requires exactly one provider matching the active target and fails closed for zero or duplicate matches. |
+| `platform-vault-dispatcher.kt` | `PlatformVaultDispatcher` | Uses Java `ServiceLoader`; requires exactly one vault provider matching the active target and fails closed for zero or duplicate matches. |
+| `desktop-reminder-adapter.kt` | `DesktopReminderAdapter` | Interface extending `NativeReminderAdapter` providing `setScheduleListener()` for desktop coroutine scheduler. |
+| `desktop-reminder-adapter-provider.kt` | `DesktopReminderAdapterProvider` | Service Provider Interface for desktop native reminder adapters. |
+| `platform-reminder-dispatcher.kt` | `PlatformReminderDispatcher` | ServiceLoader dispatcher enforcing exactly one matching native reminder adapter provider per desktop target. |
+| `desktop-reminder-scheduler.kt` | `DesktopReminderScheduler` | Process-scoped scheduler with bounded 15s wake loop on `Dispatchers.IO`, conflated update channel, backward clock jump protection, and grace window evaluation. |
+| `composite-desktop-leave-cancel-gate.kt` | `CompositeDesktopLeaveCancelGate` | Strict 5-stage ordered quiescence gate for account leave (delivery gate drain -> observer cancel -> reminder scheduler cancel -> sync cancel -> notification cancel). |
 | `single-instance-guard.kt` | `SingleInstanceGuard` | Acquires the OS file-channel lock before vault/database initialization to prevent concurrent launch and profile races. |
 | `desktop-sync-scheduler.kt` | `DesktopSyncScheduler` | Window-scoped immediate/15-minute sync and `LeaveSchedulerCancelGate` quiescence. |
-| `main.kt` | `MainKt`, `DevelopmentLauncher`, `DesktopController`, `DesktopAccountRuntime` | Desktop Compose entrypoints and runtime; production launcher uses RELEASE mode, while `runDebug` enables loopback development mode. |
+| `main.kt` | `MainKt`, `DevelopmentLauncher`, `DesktopController`, `DesktopAccountRuntime` | Desktop Compose entrypoints and runtime; wires reminder coordinator, delivery gate, scheduler, and composite leave gate; single-window close disposal without lingering tray/daemon. |
 | `linux-secret-service-vault.kt` | `LinuxSecretServiceVault`, provider, client | Linux Secret Service credential provider over D-Bus; no plaintext token fallback. |
+| `linux-notification-adapter.kt` | `LinuxNativeReminderAdapter`, `LinuxReminderAdapterProvider`, `DbusLinuxNotificationAdapter` | Linux Freedesktop D-Bus reminder adapter and ServiceLoader provider over `Dispatchers.IO`; probes capabilities with empty list tolerance, tracks IDs in process memory, aggregates errors on cancel. |
 | `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-dpapi-vault.kt` | `WindowsDpapiVault`, `WindowsDpapiVaultProvider`, `JnaWindowsDpapiProtector` | Windows user-scoped DPAPI credential bundle with temporary-file/atomic replacement and plaintext byte-buffer clearing. `applyRestrictiveUserAcl()` is best-effort; ACL failures are suppressed. |
-| `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` | ServiceLoader descriptors | Target-specific registrations select the Linux or Windows provider; Windows packaging contains one Windows provider and excludes Linux D-Bus classes. |
+| `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-notification-adapter.kt` | `WindowsNativeReminderAdapter`, `WindowsReminderAdapterProvider`, `JnaWindowsToastBridge` | Windows candidate adapter with AUMID `dev.doggo.desktop`, group `d_<accountKey>`, tag `t_<taskId>_<index>`, and XML escaping. Bridge stub returns `Unavailable`. |
+| `META-INF/services/` | ServiceLoader descriptors | Registrations for `CredentialVaultProvider` and `DesktopReminderAdapterProvider` under Linux and Windows targets. |
 | `linux-package-smoke.sh` / `windows-package-smoke.ps1` | Platform package audits | Inspect target-specific distributable contents; Windows runner also computes MSI SHA-256, reports signature status, and inspects MSI metadata using COM. |
 
 | Test Suite File | Scope & Tested Invariants | Status |
 |---|---|---|
-| `platform-vault-dispatcher-test.kt` | Host target and ServiceLoader provider resolution; zero-match, duplicate-match, and mismatch fail-closed cases. | **PASSED** (5/5 in the Windows suite) |
-| `desktop-lifecycle-test.kt` | Single-instance lock, scheduler/quiescence behavior, and RELEASE/DEBUG origin policies. | **PASSED** (8/8 in the Windows suite) |
-| `linux-secret-service-vault-test.kt` | Linux Secret Service status, atomic storage/replacement, corruption handling, and clear. | **PASSED** (Linux, 6/6 per Phase 09 evidence) |
+| `platform-vault-dispatcher-test.kt` | Host target and ServiceLoader vault provider resolution; zero-match, duplicate-match, and mismatch fail-closed cases. | **PASSED** (5/5) |
+| `desktop-lifecycle-test.kt` | Single-instance lock, sync scheduler quiescence, and RELEASE/DEBUG origin policies. | **PASSED** (8/8) |
+| `linux-secret-service-vault-test.kt` | Linux Secret Service status, atomic storage/replacement, corruption handling, and clear. | **PASSED** (Linux, 6/6) |
 | `windows-dpapi-vault-test.kt` | DPAPI vault status, store/load, replacement/deletion, corrupt payload handling, provider discovery, target isolation, native DPAPI round-trip, and stored-file ACL check on ACL-capable filesystems. | **PASSED** (Windows, 12/12 per Phase 10 evidence; ACL failure paths are not covered) |
-
-Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summary reports 25/25 Windows desktop tests and 96/96 shared JVM tests passing (121/121 combined), a verified `Doggo.exe` bundle, and a generated unsigned 100.68 MB MSI. Technical acceptance is blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification; package metadata inspection is not installed-runtime acceptance.
-### 2.10 Strict Timezone & DST Resolution Subsystem (`shared/`)
+| `desktop-reminder-scheduler-test.kt` | Bounded 15s wake loop, backward clock jump protection, replace-based updates, clean cancel-and-await quiescence. | **PASSED** (5/5) |
+| `composite-desktop-leave-cancel-gate-test.kt` | 5-stage ordered quiescence execution, delivery drain timeout fail-closed abort. | **PASSED** (2/2) |
+| `desktop-reminder-controller-lifecycle-test.kt` | Reminder subsystem init, delivery gate linkage, startup wipe recovery notification cleanup, fail-closed marker retention on cancellation error. | **PASSED** (3/3) |
+| `linux-reminder-adapter-test.kt` | Capabilities reporting, empty capability tolerance, account-scoped tracking, replace ID mapping, account cleanup, close error propagation. | **PASSED** (Linux, 6/6) |
+| `linux-notification-adapter-test.kt` | Low-level Freedesktop D-Bus session communication, missing daemon/session error mapping. | **PASSED** (Linux, 4/4) |
+| `windows-reminder-adapter-test.kt` | Toast XML escaping, tag/group formatting, multi-account isolation, error propagation on bridge failure, provider discovery. | **AUTHORED, UNEXECUTED** (Authored candidate test suite with fake bridge; not compiled or executed on Linux host) |
+### 2.11 Strict Timezone & DST Resolution Subsystem (`shared/`)
 
 | Component File | Primary Types & Functions | Architectural Role |
 |---|---|---|
@@ -436,7 +447,7 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
 |---|---|---|
 | `strict-timezone-resolver-test.kt` | 7 DST and boundary vectors: NY Spring gap (0 valid offsets, instant throws `IllegalArgumentException`), NY Fall overlap (2 offsets separated by 3600s, explicit offset required), standard time, 23h spring boundary, 25h fall boundary, zone/bounds validation, midnight gap transition. | **RECORDED PASSED** (Recorded in Phase 02 QA report, 7/7 JVM tests under `--dependency-verification=off`; API 26 device pending SDK) |
 
-### 2.11 Native Candidate Notification Adapters (`androidApp/` & `desktopApp/`)
+### 2.12 Native Candidate Notification Adapters (`androidApp/` & `desktopApp/`)
 
 | Component File | Primary Types & Functions | Architectural Role |
 |---|---|---|
@@ -444,7 +455,7 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
 | `android-reminder-capabilities.kt` | `AndroidReminderCapabilitiesChecker` | Capability checker decoupling runtime `POST_NOTIFICATIONS` from `SCHEDULE_EXACT_ALARM` permissions. |
 | `doggo-alarm-receiver.kt` | `DoggoAlarmReceiver` | Non-exported `BroadcastReceiver` (`android:exported="false"`) handling offline alarm delivery with extras validation. |
 | `linux-notification-adapter.kt` | `DbusLinuxNotificationAdapter`, `SessionBusNotificationTransport` | Freedesktop `/org/freedesktop/Notifications` D-Bus adapter mapping missing daemon (`ServiceUnknown`) to `LinuxNotificationStatus.Unavailable`. |
-| `windows-notification-adapter.kt` | `WindowsNotificationAdapter`, `WindowsToastBridge`, `JnaWindowsToastBridge` | Windows toast candidate configuring AUMID `dev.doggo.desktop` and XML escaping; native COM/WinRT bridge is **unimplemented** (`isAvailable() = false`, returns `Unavailable`). Native implementation and MSI runtime acceptance pending Phase 09. |
+| `windows-notification-adapter.kt` | `WindowsNotificationAdapter`, `WindowsToastBridge`, `JnaWindowsToastBridge` | Windows toast candidate configuring AUMID `dev.doggo.desktop` and XML escaping; native COM/WinRT bridge is **unimplemented** (`isAvailable() = false`, returns `Unavailable`). Native implementation and MSI runtime acceptance deferred to Phase 11. |
 
 | Test Suite File | Scope & Tested Invariants | Status |
 |---|---|---|
@@ -452,7 +463,7 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
 | `linux-notification-adapter-test.kt` | Capabilities query, missing D-Bus daemon graceful unavailability, missing session bus handling, environment probe. | **RECORDED PASSED** (Recorded in Phase 02 QA report, 4/4 tests under `--dependency-verification=off`) |
 | `windows-notification-adapter-test.kt` | XML attribute/entity escaping, toast XML construction, explicit bridge unavailability stub test. | **RECORDED PASSED** (Recorded in Phase 02 code review, 3/3 tests under `--dependency-verification=off`; candidate stub only) |
 
-### 2.12 Glean Hub Strict Backend Modules & Services (`glean-hub-sync/`)
+### 2.13 Glean Hub Strict Backend Modules & Services (`glean-hub-sync/`)
 
 | Component File | Primary Types & Functions | Architectural Role |
 |---|---|---|
@@ -472,17 +483,17 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
 ## 3. Repomix Compaction Metrics (Dated Generation Snapshot: 2026-10-15)
 
 - **Compaction Artifact:** Generated on 2026-10-15 at `repomix-output.xml` in repository root.
-- **Total Files Packed:** 340 files
-- **Total Character Count:** 2,813,952 characters
-- **Total Token Count:** 656,907 tokens
+- **Total Files Packed:** 402 files
+- **Total Character Count:** 3,754,925 characters
+- **Total Token Count:** 868,103 tokens
 - **Top 5 Files by Token Count:**
-  1. `docs/codebase-summary.md` (14,962 tokens, 64,339 chars, 2.3%)
-  2. `docs/project-roadmap.md` (14,266 tokens, 59,798 chars, 2.2%)
-  3. `docs/project-overview-pdr.md` (11,783 tokens, 51,327 chars, 1.8%)
-  4. `integration/glean-hub/strict-v2-vectors.json` (10,932 tokens, 32,971 chars, 1.7%)
-  5. `docs/system-architecture.md` (9,485 tokens, 40,946 chars, 1.4%)
+  1. `docs/project-roadmap.md` (25,979 tokens, 112,204 chars, 3%)
+  2. `docs/codebase-summary.md` (21,018 tokens, 90,934 chars, 2.4%)
+  3. `docs/system-architecture.md` (19,446 tokens, 86,417 chars, 2.2%)
+  4. `docs/project-changelog.md` (16,729 tokens, 73,183 chars, 1.9%)
+  5. `docs/project-overview-pdr.md` (11,783 tokens, 51,327 chars, 1.4%)
 - **Security Check:** Repomix security scanner flagged 5 suspicious files that were excluded from the compaction output by default filter heuristics: `docs/security-and-recovery.md`, `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md`, `plans/reports/code-reviewer-261014-1638-phase-08-release-operations-cycle3.md`, `plans/reports/docs-manager-261014-1643-phase-08-docs-verification.md`, and `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`. These exclusions represent heuristic scanner flags and are not an affirmative clean security adjudication of those files.
-- **Snapshot Scope:** These counts describe a single 2026-10-15 Repomix generation.
+- **Snapshot Scope:** These counts describe a single point-in-time 2026-10-15 Repomix generation.
 ---
 
 ## 4. Current State & Invariants
@@ -533,7 +544,7 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
 34. **Strict DST Gap and Overlap Resolution**: `StrictTimeZoneResolver` rejects non-existent spring-forward gap instants (`IllegalArgumentException`), requires explicit offset disambiguation for fall-back overlap hours, and calculates calendar day boundaries with calendar arithmetic (23h/25h), never fixed +24h additions. (Reported 7/7 tests passing in `:shared:jvmTest` under `--dependency-verification=off`).
 35. **Non-Exported Android Alarm Receiver**: `DoggoAlarmReceiver` declares `android:exported="false"` in `AndroidManifest.xml` and validates identity-only intent extras (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`; zero user text in OS payload) and asserts direct-boot unlock, absence of wipe markers, generation alignment, and active account matching before dispatching offline reminders via `ReminderSchedulingCoordinator` under `ReminderDeliveryGate`.
 36. **Decoupled Mobile Reminder Capabilities**: `AndroidReminderCapabilitiesChecker` decouples runtime `POST_NOTIFICATIONS` permission from `SCHEDULE_EXACT_ALARM` exact alarm permission (`AlarmManager.canScheduleExactAlarms()` on API 31+).
-37. **Safe Desktop Notification Absence & Windows Stub**: `DbusLinuxNotificationAdapter` maps `DBusExecutionException` / `ServiceUnknown` to `LinuxNotificationStatus.Unavailable` without crashing; `WindowsToastBridge` explicitly returns `isAvailable() = false` and `WindowsNotificationStatus.Unavailable` pending native WinRT/COM implementation and Windows testbed in Phase 09.
+37. **Safe Desktop Notification Absence & Windows Stub**: `DbusLinuxNotificationAdapter` maps `DBusExecutionException` / `ServiceUnknown` to `LinuxNotificationStatus.Unavailable` without crashing. Windows candidate adapter `WindowsNativeReminderAdapter` is delivered, but its underlying `JnaWindowsToastBridge` explicitly returns `isAvailable() = false` and `WindowsNotificationStatus.Unavailable` pending native WinRT/COM implementation and Windows testbed deferred to Phase 11.
 38. **Bounded Coordination Permits & Atomic CAS Gate**: Strict sync data operations acquire an identifiable permit in `_coordination` (`permit:<appId>`), enforcing a strict 1,000 active permit ceiling (`MAX_CONCURRENT_PERMITS`) via atomic CAS update checking `fenced: false` and `permitCount: { $lt: 1000 }` with `$inc: { permitCount: 1 }`. Release operations verify the permit ID exists in `activePermits` before decrementing.
 39. **In-Place Strict Migration State Machine & Resumption**: Strict upgrade transitions through an 8-state machine (`ready-v1` -> `fencing` -> `transforming` -> `validating` -> `publishing` -> `ready-v2`, `operatorRequired`, or `rolledBack`) under an exclusive coordination fence. Resuming interrupted migrations skips the initial purity preflight, passes prior recorded counts, and updates `_schemas` via CAS with majority journaled write concern; exact cumulative accounting across mid-batch crash interruptions remains an open correctness item awaiting formal revalidation.
 40. **Strict-v1 Protocol Validation on Legacy Receipts**: Legacy receipt reconciliation (`POST /api/v1/sync/:app_id/strong/legacy-receipts`) enforces bounded batches (`<= 100`) and strictly validates `request.protocol == "strict-v1"`. Matching receipts execute durable replay confirmation nonces without mutating payload records or applying legacy mutations.
@@ -556,3 +567,12 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
     - Cold-Start Deep Linking: `MainActivity` routes `ACTION_VIEW_TASK` click intents to `SessionViewModel.selectTaskFromNotification`, buffering targets in `pendingTarget` until auth and todos load, then validating account matching and wipe status before opening task editor.
     - Automated Verification: Total 282 executed checks passed with 0 failures across reported test suites (12 Android unit tests in `:androidApp:testDebugUnitTest`, 182 shared JVM tests in `:shared:jvmTest`, 32 desktop tests in `:desktopApp:test`, 23 strict-v2 vectors, 18 offline smoke-fixture self-checks in `hub-live-smoke.mjs --fixture-test`, 9 CLI tests, and 6 static source security checks; `:androidApp:assembleDebug` APK assembly verified separately as a passing build artifact).
     - Gate G2 Status: Logic and native adapters delivered; connected physical device / emulator execution, Doze mode testing, live broadcast receipt across reboot, and platform acceptance remain formally pending Gate G2 / Phase 11.
+47. **Phase 09 Process-Scoped Desktop Scheduler, Native Adapters & Strict Quiescence (Gate G2 Desktop Logic Delivered)**: Delivered on 2026-10-15. Implements process-scoped reminder scheduling, ServiceLoader SPI provider discovery, native desktop adapters, and composite leave cancel gate:
+    - `PlatformReminderDispatcher`: singleton resolving `DesktopReminderAdapterProvider` SPI implementations by target platform (`linux` or `windows`), enforcing exactly one provider per target and failing closed with `IllegalStateException` on missing or duplicate providers.
+    - `DesktopReminderScheduler`: manages reminders while application window is visible or minimized. Bounded 15s wake loop (`withTimeoutOrNull`) on `Dispatchers.IO` provides bounded re-evaluation against backward clock drift without polling; conflated channel (`Channel.CONFLATED`) handles replace-based desired alarm updates; due reminders claim through `ReminderSchedulingCoordinator.deliverReminder()` with SQLite 5-minute grace window claim check before native posting.
+    - `CompositeDesktopLeaveCancelGate`: coordinates strict 5-stage ordered quiescence during account leave (`AccountLeaveProtocol`): (1) closes `ReminderDeliveryGate` and drains in-flight delivery admissions with a 5,000ms timeout (fails closed with `IllegalStateException` on timeout), (2) cancels schedule observer job, (3) cancels `DesktopReminderScheduler` wake loop, (4) cancels `DesktopSyncScheduler` sync jobs, and (5) cancels platform notifications.
+    - `LinuxNativeReminderAdapter`: bridges `org.freedesktop.Notifications` over `Dispatchers.IO`; probes daemon capabilities with tolerance for empty capability lists on minimal daemons (dunst, mako); tracks notification IDs in process memory; aggregates close errors on `cancelAllForAccount()` to throw `IllegalStateException`.
+    - `WindowsNativeReminderAdapter`: candidate adapter with AUMID `dev.doggo.desktop`, group `d_${accountKey.value.take(12)}`, and tag `t_${taskId.take(16)}_$occurrenceIndex` with XML escaping. Clears group and tag notifications rather than global toast wipe. `JnaWindowsToastBridge` remains an unintegrated candidate stub returning `WindowsNotificationStatus.Unavailable`; real COM/WinRT native delivery is deferred to Phase 11.
+    - `DesktopController` Integration: in `completePendingWipesOnStartup()`, notification cancellation errors trigger `return@forEach`, retaining `wipe.marker` and database files fail-closed. On window close, `dispose()` executes `disposeSuspend()`, cooperatively cancelling observers, draining runtime gates, closing database files, and releasing `SingleInstanceGuard` file lock with no background daemon or tray process left running.
+    - Limitations & Residual Risks: In-memory tracking cannot discover or cancel active notifications across process restarts (retaining wipe markers does not clean up orphaned OS banners from prior sessions); individual removals drop local tracking without verifying native close status; truncated Windows identifiers (12-char account key, 16-char task ID, missing generation/token) pose collision risks across multiple accounts or long IDs; ordinary window close cooperative disposal catches exceptions to ensure clean exit.
+    - Verification: QA and code review reports record 298 passing automated checks across 7 test/check groups (48 Linux/JVM desktop tests in `:desktopApp:test`, 182 shared JVM tests, 12 Android unit tests, 23 strict-v2 vectors, 18 fixture smoke checks, 6 static security rules, 9 CLI tests) plus 1 separate packaging assembly build (`:desktopApp:createDistributable`). Cycle 2 code review approved at 8.9/10 with qualifications; Gate G2 physical desktop notification bubble display and installed Windows MSI execution remain pending Phase 11.

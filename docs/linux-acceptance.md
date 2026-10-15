@@ -1,9 +1,9 @@
 # Linux Desktop & Installed RPM Acceptance Specification
 
-**Document Version**: 1.1.0
-**Phase**: 09 — Linux desktop and installed RPM
-**Status**: Tooling & Desktop Multiplatform Implementation Delivered; Live RPM Build/Install Pending Operator Tooling
-**Related Documents**: [Plan](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
+**Document Version**: 1.2.0
+**Phase**: 09 — Linux desktop distribution & Process-scoped reminder scheduler
+**Status**: Desktop Multiplatform Implementation, Process-Scoped Scheduler, and D-Bus Adapter Delivered; Gate G2 Live Desktop Visual Display & RPM Package Installation Pending Operator/Testbed Prerequisites
+**Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
 
 ---
 
@@ -51,7 +51,7 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 | **Installed RPM Test** | System installation via `dnf install` | `sudo dnf install` | Pending operator sudo credentials |
 
 
-### Phase 02 — Native Delivery & Notification Proof Status
+### 2.1 Phase 02 — Native Delivery & Notification Proof Status
 
 | Gate | Requirement | Verification Method | Status |
 |---|---|---|---|
@@ -59,6 +59,25 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 | **Workstation Bus Probe** | Introspect user D-Bus at `/run/user/1000/bus` for `org.freedesktop.Notifications` | `busctl --user introspect org.freedesktop.Notifications /org/freedesktop/Notifications` | Safely caught: `org.freedesktop.DBus.Error.ServiceUnknown` (Returns `LinuxNotificationStatus.Unavailable` without crash) |
 | **Dependency Locking** | Reconciled `desktopApp/gradle-linux.lockfile` without Windows JNA dependencies | `./gradlew :desktopApp:test` (without `--write-locks`) | PASS (23/23 tests passing) |
 | **Live Visual Notification Bubble** | Native notification bubble display and removal in active desktop session | Live desktop session notification | BLOCKED (Headless Fedora host has no active notification daemon; G2 gate prerequisite remaining) |
+---
+### 2.2 Phase 09 — Process-Scoped Desktop Scheduler & Native D-Bus Reminders
+
+| Gate | Requirement | Verification Method | Status |
+|---|---|---|---|
+| **Desktop Reminder Scheduler** | Bounded 15s wake loop, bounded re-evaluation against backward clock drift, replace-based deadline wake, cancel-and-await quiescence | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.DesktopReminderSchedulerTest"` | PASS (5/5 tests passing) |
+| **Composite Leave Cancel Gate** | Strict 5-step ordered quiescence: drain delivery gate -> cancel observer -> cancel reminder scheduler -> cancel sync scheduler -> cancel notifications | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.CompositeDesktopLeaveCancelGateTest"` | PASS (2/2 tests passing) |
+| **Linux Reminder Adapter** | D-Bus notification posting, account-scoped tracking, capabilities probe tolerance for minimal daemons, close error propagation (`IllegalStateException`) | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.linux.LinuxReminderAdapterTest"` | PASS (6/6 tests passing) |
+| **Low-Level D-Bus Notifications** | Low-level Freedesktop D-Bus session communication and missing daemon/session error mapping | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.linux.LinuxNotificationAdapterTest"` | PASS (4/4 tests passing) |
+| **Controller Reminder Lifecycle** | Subsystem initialization, delivery gate linkage, startup wipe recovery notification cleanup, and fail-closed marker retention on cancellation error | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.DesktopReminderControllerLifecycleTest"` | PASS (3/3 tests passing) |
+| **ServiceLoader SPI Provider** | Target-specific discovery of `LinuxReminderAdapterProvider` under Linux host | `PlatformReminderDispatcher.createAdapter("linux")` | PASS (Discovered and instantiated) |
+| **Distributable Application Assembly** | Self-contained bundled application packaging with Linux reminder classes | `./gradlew -PdesktopTarget=linux :desktopApp:createDistributable` | PASS (Application bundle generated at `desktopApp/build/compose/binaries/main/app`) |
+| **Live Visual Notification Bubble** | Native notification bubble display and removal in active desktop session | Live desktop session notification | BLOCKED (Headless workstation lacks active notification daemon; Gate G2 physical execution pending Phase 11) |
+
+#### Disclosed Limitations for Phase 09 Linux Reminders
+1. **Process-Memory Notification Tracking**: `LinuxNativeReminderAdapter` tracks posted notification IDs in an in-memory set (`ConcurrentHashMap<String, MutableSet<Long>>`). If the desktop process is killed or crashes with active notifications displayed in the notification center, subsequent startup wipe recovery cannot discover or remove those orphaned notifications through this adapter.
+2. **Individual Removal Status**: `removeOwnedNotification()` sends a close call to the D-Bus daemon but drops the in-memory tracking ID without checking whether the daemon succeeded, meaning removal failures are not surfaced to the caller.
+3. **Host Notification Daemon Prerequisite**: On headless Linux installations lacking an active D-Bus session notification daemon (e.g., dunst, mako, or gnome-shell), `queryCapabilities()` safely reports `canPostNotifications = false` and `areNotificationsEnabled = false` without crashing. Live notification bubbles require an active desktop session (Gate G2, scheduled for Phase 11).
+
 ---
 
 ## 3. Disclosed Limitations & Operator Prerequisites

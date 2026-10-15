@@ -1,7 +1,7 @@
 # Codebase Summary
 
-Generated on: 2026-10-14
-Based on Repomix compaction snapshot: `repomix-output.xml` (268 files, 498,743 tokens, 2,148,581 chars, dated 2026-10-14)
+Generated on: 2026-10-15
+Based on Repomix compaction snapshot: `repomix-output.xml` (322 files, 607,311 tokens, 2,607,341 chars, dated 2026-10-15)
 ---
 
 ## 1. Repository Overview
@@ -10,11 +10,11 @@ The `doggo` repository contains the implementation, build configuration, domain 
 
 Following Phases 01–10, the repository contains the Android and shared Compose Multiplatform clients, Linux desktop source/distribution tooling, and the delivered Windows desktop DPAPI provider, isolated build, distributable, MSI artifact, and package-verification harness:
 1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
-2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state/actions, identity/authentication contracts, strict sync canonical framing, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 1), BundledSQLiteDriver, local outbox mutation engine, staged full scan reconciler, fail-closed account leave protocol, shared Compose UI components (app shell, responsive layout, account form, access request panel, todo list/editor, sync feedback, conflict review, leave guard, license notices), accessible light theme tokens (WCAG 2.1 AA verified), and comprehensive unit/instrumented/semantics tests.
+2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state/actions, identity/authentication contracts, strict sync canonical framing (`strict-v1` and `strict-v2`), `StrictV2Constants`, `StrictV2TodoData`, `StrictV2SyncOp`, `LegacyReceiptStatus`, `LegacyReceiptResult`, checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`), `StrictSyncV2Digest` binary preimage engine, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 1), BundledSQLiteDriver, local outbox mutation engine, staged full scan reconciler, fail-closed account leave protocol, shared Compose UI components, accessible light theme tokens (WCAG 2.1 AA verified), and comprehensive unit/instrumented/semantics/vector tests.
 3. **Android Application Module (`androidApp/`)**: Native Android client hosting shared Compose UI, `DoggoApplication` process container, `SessionViewModel` reactive UI state orchestration, `AndroidSyncScheduler` WorkManager scheduling, `DoggoSyncWorker` background sync worker with generation/auth fencing, debug network security configuration with strict loopback cleartext whitelist, backup/extraction security exclusions, release signing task-graph enforcement, and authored instrumented test suites.
 4. **Desktop Application Module (`desktopApp/`)**: Compose Multiplatform JVM app with target-isolated Linux and Windows source sets; shared `CredentialVaultProvider` SPI, fail-closed `PlatformVaultDispatcher`, `SingleInstanceGuard`, `DesktopSyncScheduler`, Linux Secret Service provider, and Windows current-user DPAPI provider.
-5. **Host Virtualization, Security & Operations Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub schema provisioning (`hub-schema-provision.mjs`), live Hub strict smoke harness (`hub-live-smoke.mjs`), release security and integrity auditor (`release-security-check.mjs`), maintenance recovery script (`hub-strict-recovery.js`), device smoke runner (`android-smoke.sh`), loopback sync fault-injection proxy (`debug-fault-proxy.mjs`), and Linux/Windows package smoke runners.
-6. **Hub Integration Artifacts (`integration/`)**: Canonical strict-v1 JSON schema specification matching backend admission rules.
+5. **Host Virtualization, Security & Operations Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub schema provisioning (`hub-schema-provision.mjs`), live Hub strict smoke harness (`hub-live-smoke.mjs`), release security and integrity auditor (`release-security-check.mjs`), maintenance recovery script (`hub-strict-recovery.js`), device smoke runner (`android-smoke.sh`), loopback sync fault-injection proxy (`debug-fault-proxy.mjs`), Linux/Windows package smoke runners, strict-v2 vector runner (`strict-v2-vector-runner.mjs`), and vector generator (`generate-strict-v2-vectors.mjs`).
+6. **Hub Integration Artifacts (`integration/`)**: Canonical JSON schema definitions for `strict-v1` (`doggo-schema-v1.json`) and `strict-v2` (`doggo-schema-v2.json`), active schema (`doggo-schema.json`), and cryptographic reference test vector fixture (`strict-v2-vectors.json`).
 7. **Automated Verification Harness (`tests/`)**: Automated shell suites validating scripts, Gradle contracts, Kotlin sources, and cryptographic digest vectors.
 8. **Technical Documentation & Evidence (`docs/`)**: Architecture specifications, API contracts, deployment and disaster recovery guides, release acceptance specifications, toolchain evidence, operational runbooks, compatibility criteria, auth/credential specifications, local storage and sync specifications, design guidelines, coding standards, Android/Linux/Windows desktop guides and acceptance specifications, test summaries, and UI design mockups.
 9. **Planning & Roadmap (`plans/`)**: Phased execution plans, architectural decisions, and verification reports.
@@ -95,6 +95,8 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 │       │       └── strings.xml             # UI string resource catalog
 │       ├── commonMain/kotlin/dev/doggo/shared/
 │       │   ├── contract/               # Pure domain contracts & validation policies
+│       │   │   ├── strict-sync-v2-contract.kt # Strict-v2 models, checked arithmetic, error enums
+│       │   │   └── strict-sync-v2-digest.kt   # Strict-v2 binary preimage framing and SHA-256
 │       │   ├── auth/                   # Hub authentication, HTTP client, and session state machine
 │       │   ├── data/                   # Room entities, DAO, Database, and RoomAccountStore
 │       │   │   ├── server-base-entity.kt       # Confirmed server base and permanent compact tombstones
@@ -138,6 +140,8 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 │       │       └── jvm-account-files.kt        # Desktop account directory partitioning and wipe markers
 │       ├── commonTest/kotlin/dev/doggo/shared/
 │       │   ├── contract/               # Contract unit tests (digest, policy, keys)
+│       │   │   ├── strict-v2-digest-vector-test.kt   # Strict-v2 vector fixtures (5 tests)
+│       │   │   └── strict-v2-digest-extended-test.kt # Strict-v2 edge cases & checked overflow (5 tests)
 │       │   ├── auth/                   # Auth client, session, and refresh tests
 │       │   └── sync/                   # Phase 05 sync test suites
 │       │       ├── hub-sync-client-test.kt     # Push, pull, bootstrap, and batch bounds tests
@@ -155,7 +159,10 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 │               └── room-account-store-test.kt  # Android Room instrumented tests
 ├── integration/                         # Integration schemas and specifications
 │   └── glean-hub/
-│       └── doggo-schema.json             # Exact strict-v1 todos schema specification
+│       ├── doggo-schema.json             # Exact strict-v1 todos schema specification
+│       ├── doggo-schema-v1.json          # Canonical strict-v1 schema (fingerprint: 3361a80f...)
+│       ├── doggo-schema-v2.json          # Canonical strict-v2 schema (fingerprint: 5f539551...)
+│       └── strict-v2-vectors.json        # 20 cross-stack cryptographic test vectors (9 valid, 11 rejections)
 ├── scripts/                            # Host automation, operations, security and integration scripts
 │   ├── start-xpra.sh                   # Headless Xpra virtual display runner
 │   ├── android-sdk-env.sh              # Android SDK and JDK environment configuration
@@ -168,7 +175,9 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 │   ├── android-smoke.sh                # Device smoke runner with reverse port forwarding and screenshot capture
 │   ├── debug-fault-proxy.mjs           # Loopback sync fault-injection proxy (drop-push-response, drop-refresh-response)
 │   ├── linux-package-smoke.sh          # Linux desktop package/distributable/RPM audit runner
-│   └── windows-package-smoke.ps1       # Windows distributable/MSI audit and COM metadata inspection
+│   ├── windows-package-smoke.ps1       # Windows distributable/MSI audit and COM metadata inspection
+│   ├── strict-v2-vector-runner.mjs     # Strict-v2 vector & schema fingerprint verification runner
+│   └── generate-strict-v2-vectors.mjs  # Strict-v2 vector reference generator
 ├── tests/                              # Automated test suites
 └── docs/                               # Developer documentation and operational runbooks
     ├── android-acceptance.md           # Android composition, security invariants, and acceptance spec
@@ -410,3 +419,4 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
 30. **Windows Credential File Replacement**: DPAPI-protected JSON credential pairs are written to a temporary file and atomically moved into place; plaintext byte buffers are cleared after cryptographic operations. The implementation attempts an owner ACL but suppresses ACL-view/owner errors, so ACL enforcement is not guaranteed when unavailable or failed.
 31. **Windows MSI Provenance**: The recorded MSI is unsigned; its hash/metadata inspection does not establish Authenticode trust or successful interactive installation.
 32. **Windows Acceptance Status**: Phase 10 implementation is recorded at 100% (2026-10-14), but technical acceptance is blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not fail-closed and clean-user runtime/sync plus uninstall/reinstall evidence remain open. The seven Windows PNGs are design mockups; they are not live application captures.
+33. **Phase 01 Temporal Model & Strict Transition Frozen (Gate G1 Approved)**: Contract, binary digest framing, and transition design frozen on 2026-10-15 ([Gate G1 review approved](../plans/reports/code-review-261015-0951-phase-01-freeze-temporal-model.md)). Strict-v2 wire format introduces 12 fields (16 total columns) with canonical JSON schema fingerprints `3361a80f...` (v1) and `5f539551...` (v2). Binary SHA-256 preimages and checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) pass across recorded test suites in Kotlin (:shared:jvmTest, 10 tests across 2 files), Rust (`strong_sync_v2_tests`, 1 test / 20 vector cases), and Node.js (`strict-v2-vector-runner.mjs`, 20 vectors: 9 valid + 11 boundary/overflow rejections). Wire validation rejects non-null interval when `reminderCount == 1` and requires interval >= 15m for repeating count 2..10. *Planned design for subsequent phases (Phases 03–06, pending implementation)*: In-place Hub migration will use app-scoped admin coordination lease, request permit drain, and journaled schema update; Room v1->v2 evolution will default migrated records to null deadlines and disabled rules; unprovable legacy outbox operations will enter `UNKNOWN_SUPERSEDED` for explicit review; safe v1 intentions will rebase only changed fields over remote v2 base.

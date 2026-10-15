@@ -111,6 +111,14 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
 - **Non-Color Conveyance**: Completion, error, conflict, and leave states must not be communicated by color alone. Checkboxes must provide visual checkmarks and `stateDescription` semantics; error banners must provide explicit textual guidance.
 - **Transient Credential Privacy**: Passwords in UI forms must use `PasswordVisualTransformation` visual masking, emit `semantics { password() }`, and be dereferenced from memory upon form submission, mode toggling, or composable disposal. Password strings in `AuthSubmitAction.toString()` must be redacted with `[REDACTED]`. (JVM string immutability precludes guaranteed memory erasure; device screen-reader behavior unverified).
 - **Responsive Hierarchy**: UI must adapt cleanly across breakpoints (<840dp compact vertical stack, >=840dp two-column desktop sidebar).
+
+### 3.6 Strict-v2 Temporal Model & Checked Arithmetic Standards
+- **Checked 64-bit Integer Arithmetic**: All time and duration conversions (e.g. lead minutes to milliseconds, repeat count interval offsets, first/last occurrence anchors) must use checked arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd` in Kotlin; `checked_mul`, `checked_sub`, `checked_add` in Rust; boundary range checks in Node.js). Integer overflow wrapping at intermediate or terminal calculations must fail closed and reject the record.
+- **Strict Validation Over Normalization**: Wire payloads must reject malformed, out-of-bounds, or contradictory states (e.g. non-repeating `reminderCount == 1` with non-null `reminderIntervalMinutes`, repeating `reminderCount > 1` with null or interval < 15 minutes, negative `createdAt` or `reminderLeadMinutes`, last scheduled reminder exceeding deadline anchor). Implementations must never silently normalize or coerce invalid wire values.
+- **Canonical Binary Digest Preimages**:
+  - Framed identity prefix: 8 length-prefixed strings (domain `strict-v2`, appId, userId, epoch, tableName, rowId, opId, kind) + 8-byte big-endian signed 64-bit revision.
+  - Data payload: Exactly 0 bytes for `DELETE` operations. For `CREATE` and `UPDATE`, 4 base fields followed by 12 strict-v2 fields in canonical table order with explicit 1-byte presence tags (`0x00`/`0x01`).
+- **Automated Schema Fingerprint Parity**: Automated test runners across all platforms must assert that SHA-256 digests derived from canonical JSON schema definitions match frozen constants (`3361a80f...` for v1, `5f539551...` for v2) preventing unreviewed schema drift.
 ---
 
 ## 4. Node.js Integration Script Standards

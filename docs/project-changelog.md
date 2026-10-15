@@ -3,6 +3,32 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 01] - 2026-10-15: Freeze Temporal Model and Strict Transition (Gate G1 Frozen)
+
+### Added
+- Canonical schema specifications:
+  - `integration/glean-hub/doggo-schema-v1.json`: Canonical `strict-v1` schema with 4 columns (`id`, `title`, `completed`, `createdAt`), SHA-256 fingerprint `3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec`.
+  - `integration/glean-hub/doggo-schema-v2.json`: Canonical `strict-v2` target schema with 16 columns (adding `deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`), SHA-256 fingerprint `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`.
+- Binary test vectors:
+  - `integration/glean-hub/strict-v2-vectors.json`: 20 cross-stack cryptographic reference test cases (9 valid vector preimages + SHA-256 digests; 11 boundary and overflow rejection vectors).
+- Kotlin Multiplatform domain contracts and digest engine:
+  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/strict-sync-v2-contract.kt`: `StrictV2Constants`, `StrictV2TodoData`, `StrictV2OpKind`, `StrictV2SyncOp`, `LegacyReceiptStatus`, `LegacyReceiptResult`, with checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) rejecting overflow wrapping at intermediate and terminal operations.
+  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/strict-sync-v2-digest.kt`: `StrictSyncV2Digest` calculating SHA-256 binary preimages with framed identity prefix (8 length-prefixed strings + big-endian 8-byte signed expected revision), 0 bytes for DELETE, and canonical presence-tagged field framing for CREATE/UPDATE.
+- Test suites & verification runners:
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/strict-v2-digest-vector-test.kt`: 5 vector tests verifying migrated null, date-only, timed DST overlap, repeating count 10, and disabled rule preimages against fixture.
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/strict-v2-digest-extended-test.kt`: 5 extended tests exercising cleared deadlines, Unicode strings, zero-byte DELETE, negative epochs, and all boundary/overflow rejection cases.
+  - `scripts/strict-v2-vector-runner.mjs`: Independent Node.js test runner verifying preimage framing, SHA-256 digests, boundary rejections, and automated schema fingerprint derivation.
+  - `scripts/generate-strict-v2-vectors.mjs`: Vector generation utility producing canonical fixture vectors.
+
+### Changed
+- `docs/system-architecture.md`: Added Section 6 documenting `strict-v2` wire schema, bit-level binary digest framing, and planned management endpoints (`/strict-contract`, `/strict-upgrades`), app-scoped admin fencing, and legacy receipt reconciliation.
+- `docs/local-storage-and-sync.md`: Added Section 7 detailing planned Room v1 -> v2 schema evolution, migrated default policies, outbox provenance fields (`protocolVersion`, `dispatchedOnce`, `changedFieldsMask`), legacy operation receipt reconciliation states (`PROVEN_ACCEPTED`, `PROVEN_NOT_ACCEPTED`, `UNKNOWN_SUPERSEDED`, `INTEGRITY_FAILURE`), intent rebase invariants, and Section 7.3 mathematical invariants.
+- `docs/hub-schema-integration.md`: Added versioned schema upgrade specification, canonical schema fingerprints, planned management endpoints, and admin fencing lifecycle.
+- `docs/code-standards.md`: Added coding standards for strict-v2 preimages, checked 64-bit integer arithmetic, temporal model representations, and error code conventions.
+- `docs/codebase-summary.md`: Updated codebase inventory, Repomix metrics, directory structure, and architectural invariants for strict-v2 contracts and scripts.
+- `docs/project-overview-pdr.md`: Updated PDR to Version 1.8.0 reflecting Phase 01 / Gate G1 freeze specifications and deliverables.
+
+---
 ## [2026-10-15] - Direct Target Collection Migration (FR-STRICT-02)
 
 ### Changed

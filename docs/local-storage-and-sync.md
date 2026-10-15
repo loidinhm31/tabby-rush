@@ -245,3 +245,33 @@ On application startup, before opening any database or initializing an account, 
 - Clears vault credentials.
 - Clears `wipe.marker`.
 If file deletion fails, it returns `false`, preventing the account from being reopened in a corrupted state.
+
+---
+
+## 7. Strict-v2 Schema Evolution & Outbox Reconciliation (Gate G1 Frozen Specification)
+
+*Note: Sections 7.1 and 7.2 define the frozen architecture and transition rules designed in Phase 01 (Gate G1 Approved) for implementation in Phase 05 (Room 1 -> 2 migration) and Phase 06 (client transition and replay). Section 7.3 defines the mathematical invariants and binary preimage rules implemented in Phase 01 contracts (`strict-sync-v2-contract.kt`, `strict-sync-v2-digest.kt`).*
+
+### 7.1 Room Database Migration (1 -> 2) [Planned Phase 05]
+In Room database version 2, `ServerBaseEntity`, `OutboxEntity`, `EditorDraftEntity`, and `ScanStagingEntity` are expanded to store strict-v2 deadline and reminder rule attributes:
+- Deadlines: `deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `scheduleToken`.
+- Reminders: `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`.
+- Migration rule: All migrated version 1 records default to `deadlineDate = null` (all deadline/token fields null) and `reminderEnabled = false` (lead=0, count=1, interval=null).
+- Outbox provenance: Version 2 `OutboxEntity` adds `protocolVersion` (`strict-v1` vs `strict-v2`), `dispatchedOnce: Boolean`, and `changedFieldsMask: String?`.
+
+### 7.2 Outbox Replay & Reconciliation Safety [Planned Phase 06]
+- Unprovable legacy outbox: In Room v1 databases, existing `OutboxEntity` records lack dispatch history and intent diff masks. If an outbox operation cannot be proven (via server monotonic revision, missing row for expected0 create, or matching receipt from `POST /api/v1/sync/:app_id/strong/legacy-receipts`), it enters `UNKNOWN_SUPERSEDED` for explicit user review; it is never automatically rehashed or re-applied.
+- Safe Intent Rebase: Whole-row v1 mutations must never overwrite newly introduced remote v2 fields. When rebasing a safe v1 pending intention over a newly scanned v2 record, only the explicitly changed fields (title, completed) are applied over the remote base.
+
+### 7.3 Strict-v2 Mathematical Invariants & Checked Arithmetic
+- **Preimage Framing**: Domain `strict-v2` with 8 length-prefixed identity strings followed by 8-byte big-endian signed revision. Data payload is 0 bytes for DELETE; CREATE/UPDATE serialize 4 base fields followed by 12 strict-v2 fields in table order with explicit presence tags (`0x00`/`0x01`).
+- **Rule Opportunity Bounds**: `reminderCount` is strictly constrained to `1..10`. For non-repeating reminders (`reminderCount == 1`), `reminderIntervalMinutes` MUST be null. For repeating reminders (`reminderCount > 1`), `reminderIntervalMinutes` MUST be non-null and `>= 15`.
+- **Non-Negative Constraints**: `createdAt >= 0` and `reminderLeadMinutes >= 0`.
+- **Checked 64-bit Arithmetic**: All time computations use checked 64-bit integer operations (`safeMultiply`, `safeSubtract`, `safeAdd`), preventing integer overflow wrapping at all intermediate steps:
+  - Lead conversion: `reminderLeadMinutes * 60_000L`
+  - First anchor: `deadlineAnchorEpochMs - leadMs`
+  - Interval conversion: `reminderIntervalMinutes * 60_000L`
+  - Last repeat offset: `(reminderCount - 1L) * intervalMs`
+  - Last anchor: `firstAnchor + lastOffset`
+  - Occurrence boundary: `lastAnchor <= deadlineAnchorEpochMs`
+- **Deadline Alignment**: Timed deadline requires `deadlineOverdueEpochMs == deadlineAnchorEpochMs`. Date-only deadline requires non-null `reminderAnchorTime`. Deadline removal clears all deadline and schedule token attributes and resets reminder preferences to default (`reminderEnabled = false`, `lead = 0`, `count = 1`, `interval = null`).

@@ -1,10 +1,11 @@
 # Doggo Project Roadmap
 
-**Current Status:** In Progress — implementation delivered; technical and operator acceptance gates remain open
-**Last Updated:** 2026-10-14
-**Target Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Authoritative Evolution Plan)
+**Current Status:** In Progress — foundational strict-v1 multiplatform delivered; Phase 01 of Deadlines, Reminders & Strict Upgrades DONE (Gate G1 passed)
+**Last Updated:** 2026-10-15
+**Target Plan:** [plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md) (Task Deadlines, Reminders & Strict Upgrades)
+**Foundational Plan:** [plans/261013-1540-doggo-glean-hub-reuse/plan.md](../plans/261013-1540-doggo-glean-hub-reuse/plan.md) (Strict-v1 Hub Reuse Baseline — 100% Implementation Delivered)
 **Historical Plan:** [plans/261013-0914-doggo-compose-todos/plan.md](../plans/261013-0914-doggo-compose-todos/plan.md) (Superseded)
-**Overall Progress:** 100% planned-effort-weighted implementation-delivery status (148h / 148h allocated; a phase-status roll-up, not measured effort or technical acceptance). The project remains In Progress: root-level strict dependency verification, Phase 10 interactive MSI/Narrator, and earlier-phase technical findings remain open.
+**Overall Progress:** Foundational baseline: 100% planned-effort implementation delivered (148h / 148h allocated; technical and operator acceptance gates remain open). Evolution plan (Deadlines & Reminders): 6.8% planned-effort progress (16h / 236h, Phase 01 DONE, Gate G1 passed; Phases 02–12 pending).
 
 ---
 
@@ -16,8 +17,11 @@ Phase 01 (Headless Tooling and Android Environment) was executed and marked comp
 
 Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 2026-10-14, establishing the Gradle multiplatform root and `:shared` library baseline, pinned version catalog, 16 core Kotlin contract files, 4 commonTest suites, foundational documentation, and 57/57 passing QA assertions.
 
+Phase 01 of the Task Deadlines, Reminders, and Strict-Contract Upgrades plan (`plans/261015-0752-task-deadlines-reminders-strict-upgrades/`) was executed and marked DONE on 2026-10-15 with Gate G1 passed. This defines the 12-field strict-v2 wire contract framing, checked 64-bit integer arithmetic, SHA-256 binary digest parity across Kotlin, Rust, and Node.js reference implementations (20 cross-stack contract/digest vectors), canonical JSON schema fingerprints, and version/outbox transition invariants; runtime Room persistence, backend admission, and native alarm delivery remain pending in subsequent phases.
+
 ## 2. Phase Progress & Status
 
+### 2.1 Foundational Multiplatform Baseline (Plan 261013-1540 — 148h)
 | Phase | Description | Group | Effort | Status | Completed Date | Progress |
 |:---|:---|:---:|---:|:---:|:---:|---:|
 | **01** | [Headless Tooling & Android Environment](../plans/261013-1540-doggo-glean-hub-reuse/phase-01-headless-tooling.md) | A | 6h | **DONE** | 2026-10-13 | 100% |
@@ -40,6 +44,24 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 \*\*Phase 08 tooling and operational readiness delivered across 20 exclusive files (scripts, deployment runbooks, security checklist, and release UI state design mockups; node syntax clean, offline fixture smoke 18/18 PASS, source audit CLEAN); marked complete administratively (100% effort); technical review scored 6/10 NOT ACCEPTED with implementation defects (mongosh BSON Int64 import and security checker cert verification) and live environment gates (mongosh on mongod, apksigner on SDK 35 release APK, live Hub verification) remaining release blockers.
 ††Phase 09 desktop tooling, SPI architecture, Linux dependency locking, distributable packaging, and unit test suites delivered across 23 exclusive files (19/19 desktop unit tests PASS and 96/96 shared JVM tests PASS per QA report under `--dependency-verification=off`); marked complete administratively (100% effort); technical review scored 3/10 NOT ACCEPTED with implementation defects (single-instance guard ordering in `main.kt`, vault subprocess vs D-Bus binding, hardcoded release key, untested multiple-provider assertions) and live environment gates (rpmbuild for RPM package, installed package verification, and live Secret Service daemon in Xpra) remaining release blockers.
 †††Phase 10 implementation delivered / 100% on 2026-10-14 per supplied Windows evidence (121/121 combined desktop/shared tests reported passing; Windows lockfile, Doggo.exe distributable, unsigned 100.68 MB MSI, and target isolation reported verified). Technical acceptance is blocked by root-level strict dependency verification, interactive MSI installation, and Narrator verification; clean-user runtime/sync and uninstall/reinstall remain open. Current source fails closed on Windows ACL errors; the reported ACL test checks the stored-file owner ALLOW entry. Mockups are design evidence, not live UI captures.
+
+### 2.2 Task Deadlines, Reminders & Strict Upgrades (Plan 261015-0752 — 236h)
+
+| Phase | Description | Group | Effort | Status | Completed Date | Progress |
+|:---|:---|:---:|---:|:---:|:---:|---:|
+| **01** | [Freeze temporal model and strict transition](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-01-freeze-contract-and-transition-design.md) | Contract | 16h | **DONE** | 2026-10-15 | 100% (G1 passed) |
+| **02** | [Prove native notifications and strict DST](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-02-prove-native-delivery-and-dst.md) | Native | 16h | Pending | - | 0% |
+| **03** | [Hub v2 admission, fencing and migration](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-03-hub-versioned-contract-and-migration.md) | Backend | 32h | Pending | - | 0% |
+| **04** | [Hub admin UI and API-only upgrade script](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-04-hub-admin-ui-and-upgrade-script.md) | Admin/Ops | 12h | Pending | - | 0% |
+| **05** | [Shared model and explicit Room1→2](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-05-shared-model-and-room-migration.md) | Database | 20h | Pending | - | 0% |
+| **06** | [Client version transition and safe replay](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-06-client-version-transition-and-replay.md) | Sync | 24h | Pending | - | 0% |
+| **07** | [Saved-state scheduling and account fences](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-07-shared-scheduling-and-account-safety.md) | Shared | 20h | Pending | - | 0% |
+| **08** | [Android alarms, private alerts and restore](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-08-android-alarms-notifications-and-restore.md) | Android | 20h | Pending | - | 0% |
+| **09** | [Desktop scheduler and native adapters](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) | Desktop | 24h | Pending | - | 0% |
+| **10** | [Shared editor, list and local settings](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-10-compose-deadline-editor-list-and-settings.md) | UI | 20h | Pending | - | 0% |
+| **11** | [Adversarial and platform acceptance](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-11-adversarial-integration-and-platform-acceptance.md) | QA | 20h | Pending | - | 0% |
+| **12** | [Coordinated cutover, recovery and release](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-12-coordinated-cutover-runbook-and-release.md) | Release | 12h | Pending | - | 0% |
+| **Total** | | | **236h** | | | **6.8% (16h/236h)** |
 
 ---
 
@@ -134,9 +156,30 @@ Phase 02 (Frozen Foundation & Contracts) was executed and marked complete on 202
 
 All phase allocations are marked delivered (148h/148h planned-effort roll-up, not measured effort); the project remains in progress for root-level strict dependency verification, Phase 10 native acceptance, and cross-phase technical findings.
 
+### Milestone 5: Task Deadlines, Reminders & Strict Upgrades (Plan 261015-0752) — IN PROGRESS
+- **Phase 01 (COMPLETED 2026-10-15; Gate G1 passed):** Freeze temporal model, strict-v2 wire shape, SHA-256 binary digest framing, checked 64-bit integer arithmetic, and transition design (16h effort delivered, 100%).
+  - **Key Deliverables:**
+    - Schemas & Vectors: `integration/glean-hub/doggo-schema-v1.json`, `integration/glean-hub/doggo-schema-v2.json`, `integration/glean-hub/strict-v2-vectors.json` (20 test vectors: 9 valid + 11 boundary/overflow rejections).
+    - Shared Multiplatform Contracts: `shared/src/commonMain/kotlin/dev/doggo/shared/contract/strict-sync-v2-contract.kt`, `shared/src/commonMain/kotlin/dev/doggo/shared/contract/strict-sync-v2-digest.kt`.
+    - Glean Hub Sync Server Models & Vectors: `glean-hub-plugin/glean-hub-sync/src/models/strong_sync_v2.rs`, `glean-hub-plugin/glean-hub-sync/src/models/strong_sync_v2_tests.rs`, `glean-hub-plugin/glean-hub-sync/tests/fixtures/strict-v2-vectors.json`.
+    - Scripting & Verification Tools: `scripts/strict-v2-vector-runner.mjs`, `scripts/generate-strict-v2-vectors.mjs`.
+    - Unit & Integration Test Suites: `shared/src/commonTest/kotlin/dev/doggo/shared/contract/strict-v2-digest-vector-test.kt` (5 tests), `shared/src/commonTest/kotlin/dev/doggo/shared/contract/strict-v2-digest-extended-test.kt` (5 tests), Rust `strong_sync_v2_tests` (1 test / 20 vectors), Node vector runner (20/20 checks passed).
+    - Architecture & Specs: `docs/system-architecture.md`, `docs/local-storage-and-sync.md`, `docs/hub-schema-integration.md`.
+  - *Note on Gate G1:* 108/108 KMP JVM tests (under `--dependency-verification=off`), 20/20 Node vector checks, 37/37 Rust unit/route tests (1 live-Mongo test ignored), and 18/18 offline Hub fixture smoke assertions pass per QA validation report (`plans/reports/qa-261015-0938-phase-01-freeze-temporal-model.md`). Bit-level digest parity verified across Kotlin, Rust, and Node.js. Unlocks downstream phases 02 (native alarm proof), 03 (backend migration), 05 (Room migration), and 06 (client replay).
+
 ---
 
 ## 4. Changelog
+
+### [Phase 01] — 2026-10-15: Freeze Temporal Model and Strict Transition (Plan 261015-0752)
+#### Completed
+- **Phase 01 Contract Freeze & Transition Design**:
+  - Defined strict-v2 wire format framing and big-endian binary preimage serialization across Kotlin, Node.js, and Rust reference implementations.
+  - Specified 12 task metadata fields with strict nullability, bounds, and defaults (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`); runtime persistence and backend admission remain pending.
+  - Enforced checked 64-bit integer arithmetic rejecting intermediate and terminal overflow wrap across Kotlin, Rust, and Node.js.
+  - Defined version/outbox transition decision matrix handling unprovable legacy operations as `UNKNOWN_SUPERSEDED` and preventing stale title edits from clearing remote deadline metadata.
+  - Published canonical schemas `doggo-schema-v1.json` (fingerprint `3361a80f...`) and `doggo-schema-v2.json` (fingerprint `5f539551...`) with 20 cross-stack contract/digest test vectors.
+  - Validated with 108/108 KMP JVM tests (under `--dependency-verification=off`), 20/20 Node vector checks, 37/37 Rust package tests (1 ignored live-Mongo test), and 18/18 offline Hub fixture smoke assertions. Passed Gate G1 review (score 9.5/10; [QA report](../plans/reports/qa-261015-0938-phase-01-freeze-temporal-model.md), [code review](../plans/reports/code-review-261015-0951-phase-01-freeze-temporal-model.md)).
 
 ### [1.0.0-alpha.1] — 2026-10-14
 #### Completed

@@ -1,7 +1,7 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
-Last Updated: 2026-10-14
-Document Version: 1.7.0
+Last Updated: 2026-10-15
+Document Version: 1.8.0
 Status: Active
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
@@ -30,6 +30,8 @@ The project prioritizes a clean multiplatform architecture, where the core domai
 | **FR-04** | Cloud Synchronization | Client syncs tasks with the backend service according to the contracts frozen in Phase 02. |
 | **FR-05** | Local State Handling | Task mutations update local state; pending drafts survive transient network faults. |
 | **FR-06** | Secure Authentication | Reuses Glean Hub auth service with single-flight refresh, generation fencing, no automatic POST replays, and platform OS credential custody (Android Keystore on mobile, Freedesktop Secret Service on Linux, and current-user DPAPI on Windows). |
+| **FR-07** | Task Deadlines & Reminders | Users can assign optional date-only or timed deadlines to tasks, with captured IANA timezone, explicit DST offset, overdue boundaries, and configurable local reminder rules (lead minutes, count 1..10, interval >= 15m). |
+| **FR-08** | Strict-v2 Protocol & Atomic Schema Evolution | End-to-end data synchronization supports versioned `strict-v2` wire contracts with cryptographic preimages, checked 64-bit integer arithmetic, in-place app-scoped migration fencing, legacy receipt durability verification, and safe intent rebasing without data loss. |
 
 ### 2.2 Non-Functional Requirements (NFR)
 
@@ -288,9 +290,34 @@ Phase 10 implementation was delivered and is recorded at **100% (2026-10-14)**. 
 
 Windows review cycle 2 was approved with a score of 8.5/10. This review status does not replace pending interactive acceptance or the Phase 09 installed-RPM gate.
 
+## 12. Task Deadlines, Reminders & Strict Protocol Upgrades: Phase 01 Requirements & Acceptance
+
+Phase 01 delivers the frozen data contract, temporal model, and safe transition design for task deadlines, reminders, and strict-protocol upgrades (Gate G1 Approved on 2026-10-15).
+
+### 12.1 Phase 01 Requirements
+- **FR-TMP-01 (16-Column Strict-v2 Schema)**: 12 new fields added (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`). Payloads require full replacement with explicit presence/nullability.
+- **FR-TMP-02 (Canonical Digests & Preimages)**: Domain `strict-v2` with length-prefixed 8-string identity framing, 8-byte big-endian signed 64-bit revision, and zero data bytes for `DELETE`.
+- **FR-TMP-03 (Checked 64-bit Integer Arithmetic)**: Reject arithmetic overflow wrap at all conversions (`safeMultiply`, `safeSubtract`, `safeAdd`), including lead duration, repeating offsets, and intermediate anchor points.
+- **FR-TMP-04 (Opportunity Bounds & Interval Constraints)**: `reminderCount` in `1..10`. Non-repeating count = 1 requires null interval. Repeating count 2..10 requires interval >= 15 min. Nonnegative `createdAt` and `reminderLeadMinutes`.
+- **FR-TMP-05 (App-Scoped Admin Migration Fencing)**: In-place migration (`POST /api/v1/apps/:app_id/strict-upgrades`) requires global admin role and app-scoped authorization. Acquires coordination lease, drains in-flight requests, transforms documents in-place, verifies schema, and atomically updates `_schemas`.
+- **FR-TMP-06 (Outbox Replay & Reconciliation Safety)**: Legacy outbox operations lacking verified dispatch provenance enter `UNKNOWN_SUPERSEDED` for explicit user review via `POST /api/v1/sync/:app_id/strong/legacy-receipts`; safe intent rebasing preserves remote v2 fields.
+
+### 12.2 Phase 01 Deliverables & Verification Status
+
+| Deliverable | Implementation Scope | Verification Status |
+|---|---|---|
+| Canonical Schemas | `integration/glean-hub/doggo-schema-v1.json`, `doggo-schema-v2.json` | Schemas defined; SHA-256 fingerprints `3361a80f...` and `5f539551...` verified. |
+| Cryptographic Vectors | `integration/glean-hub/strict-v2-vectors.json` | 20 reference test vectors (9 valid + 11 rejections) verified across Kotlin, Rust, and Node.js test runners. |
+| Kotlin Domain Contracts | `shared/src/commonMain/kotlin/dev/doggo/shared/contract/strict-sync-v2-contract.kt` | Implemented; `StrictV2TodoData`, checked 64-bit arithmetic, validation invariants. |
+| Binary Preimage Engine | `shared/src/commonMain/kotlin/dev/doggo/shared/contract/strict-sync-v2-digest.kt` | Implemented; `StrictSyncV2Digest` SHA-256 framing and encoding verified. |
+| Unit & Vector Tests | `shared/src/commonTest/kotlin/dev/doggo/shared/contract/strict-v2-digest-*.kt` | 10 tests across 2 test files (`StrictV2DigestVectorTest`, `StrictV2DigestExtendedTest`) passing in `:shared:jvmTest`. |
+| Node.js Vector Runner | `scripts/strict-v2-vector-runner.mjs` | Node.js test runner verifying vectors and schema fingerprint hashing (20/20 PASS). |
+| Vector Generator | `scripts/generate-strict-v2-vectors.mjs` | Reference fixture generator script implemented. |
+| Documentation & Review | `docs/system-architecture.md`, `local-storage-and-sync.md`, `hub-schema-integration.md` | Documented; QA report ([QA Report](../plans/reports/qa-261015-0938-phase-01-freeze-temporal-model.md)) and Code Review ([Review Report](../plans/reports/code-review-261015-0951-phase-01-freeze-temporal-model.md)) approved (Gate G1 passed; subsequent implementation phases 02–12 pending). |
+
 ---
 
-## 12. Technical Constraints & Dependencies
+## 13. Technical Constraints & Dependencies
 10. **Windows Desktop Toolchain**: Windows x64 build and packaging require JDK 21 with `jpackage`; `packageMsi` requires WiX tooling (the Compose plugin provisioned WiX for the recorded build). The distributable bundle does not require WiX.
 11. **Windows Installer Trust**: The recorded MSI is unsigned. Production distribution requires an approved Authenticode signing certificate and verification; the current package build is not a signed public release.
 
@@ -306,7 +333,7 @@ Windows review cycle 2 was approved with a score of 8.5/10. This review status d
 
 ---
 
-## 13. Traceability & Phased Roadmap
+## 14. Traceability & Phased Roadmap
 
 Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
@@ -319,3 +346,4 @@ Progress across the Doggo project is tracked in the living [Project Roadmap](./p
 - **Phase 08 Authorized Hub Operations & Signed Android Release**: Operational tooling, release security auditor (`scripts/release-security-check.mjs`), live strict smoke runner (`scripts/hub-live-smoke.mjs`), mongosh recovery script (`scripts/hub-strict-recovery.js`), deployment guide, security & recovery architecture, release acceptance specification, and evidence reports implemented across 20 artifacts (Tooling & harnesses operational; live bytecode compilation, binary signing verification, and live device acceptance gated on host SDK provisioning and Phase 07 defect remediation).
 - **Phase 09 Linux Desktop & Installed RPM Distribution**: Native Linux desktop module (`:desktopApp`), Secret Service hardware/OS vault SPI (`CredentialVaultProvider`), ServiceLoader dispatcher (`PlatformVaultDispatcher`), `SingleInstanceGuard` file-channel lock, `DesktopSyncScheduler` foreground sync coordination, packaging smoke runner (`scripts/linux-package-smoke.sh`), and unit test suites implemented across 23 artifacts (19/19 desktop tests PASS; standalone distributable assembled and inspected; live RPM packaging, installed smoke test, and interactive D-Bus session pending operator prerequisites).
 **Phase 10 Windows Desktop & MSI Distribution**: DPAPI vault, Windows SPI, target lock/isolation, smoke harness, `Doggo.exe` distributable and MSI artifacts delivered; test/package evidence recorded. Interactive MSI installation, runtime/accessibility checks, uninstall/reinstall, and upstream Phase 09 acceptance remain pending.
+- **Task Deadlines, Reminders & Strict Protocol Upgrades (Phase 01)**: Phase 01 contract freeze and transition design complete (100%, Gate G1 passed); wire schema, binary digests, checked 64-bit arithmetic, and migration/reconciliation contracts verified across Kotlin, Rust, and Node.js. Subsequent implementation phases 02–12 pending.

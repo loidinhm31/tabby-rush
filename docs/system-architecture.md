@@ -335,3 +335,39 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 26. **Windows DPAPI Scope**: Windows credentials use DPAPI user scope; machine-wide protection and plaintext token fallback are not used. JSON credentials are written as one encrypted bundle and atomically replaced.
 27. **Windows ACL Caveat**: The vault attempts to apply an owner ACL, but the current implementation suppresses ACL-view/owner errors; restricted ACLs are not guaranteed when that operation fails or is unavailable.
 28. **Windows MSI Release Status**: The recorded MSI is unsigned and has only been generated and inspected. Authenticode signing and interactive installer/runtime acceptance are separate release gates.
+
+## 6. Deadlines, reminders, and strict upgrade design — Phase 01 Frozen (Gate G1 Approved)
+
+Phase 01 Contract and Transition Design frozen on 2026-10-15 ([Gate G1 review approved](../plans/reports/code-review-261015-0951-phase-01-freeze-temporal-model.md)). Binary preimages and checked 64-bit integer arithmetic pass across recorded test suites in Kotlin, Rust, and Node.js. Execution plan: [phased plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md). Subsequent implementation phases 02–12 remain pending.
+
+### 6.1 Wire Schema & Fingerprints
+- Target sync protocol: `strict-v2`. Full replacement payloads, absent fields rejected, nulls explicit.
+- Canonical schema files:
+  - `strict-v1`: `integration/glean-hub/doggo-schema-v1.json` (fingerprint: `3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec`).
+  - `strict-v2`: `integration/glean-hub/doggo-schema-v2.json` (fingerprint: `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`).
+  - Active `integration/glean-hub/doggo-schema.json` remains strictly on v1 until cutover.
+- Table columns (16): `id` (string), `title` (string), `completed` (boolean), `createdAt` (integer), `deadlineDate` (nullable string), `deadlineTime` (nullable string), `deadlineZone` (nullable string), `deadlineOffsetSeconds` (nullable integer), `reminderAnchorTime` (nullable string), `deadlineAnchorEpochMs` (nullable integer), `deadlineOverdueEpochMs` (nullable integer), `reminderEnabled` (boolean), `reminderLeadMinutes` (integer), `reminderIntervalMinutes` (nullable integer), `reminderCount` (integer), `scheduleToken` (nullable string). Primary key: `id`.
+
+### 6.2 Strict Binary Digest Specification
+- Domain: `strict-v2`.
+- Framed identity prefix: 8 strings (domain, appId, userId, epoch, tableName, rowId, opId, kind.wireName) each encoded as u32 big-endian length + UTF-8 bytes, followed by `expectedRevision` as 8-byte big-endian signed 64-bit integer.
+- Data encoding: 0 bytes for DELETE operations. For CREATE/UPDATE, base 4 fields followed by 12 v2 fields in table order:
+  - Strings: 1 byte presence tag (`0x00`=null, `0x01`=present) + u32 big-endian length + UTF-8 bytes.
+  - Booleans: 1 byte (`0x00`=false, `0x01`=true).
+  - Integers: 8-byte big-endian two's complement signed 64-bit integers (`createdAt`, `reminderLeadMinutes`, `reminderCount`). Nullable integers use 1 byte presence tag (`0x00`=null, `0x01`=present + 8 bytes).
+- Validation rules: Wire input with `reminderCount == 1` MUST have `reminderIntervalMinutes: null`; wire input with non-null interval is rejected (`invalidRecord`), never silently normalized. Repeating count 2..10 requires interval >= 15m. Last scheduled occurrence cannot exceed anchor instant.
+- Reference vectors: `integration/glean-hub/strict-v2-vectors.json` stores 9 valid vectors with explicit preimage hex and SHA-256 hashes, and 11 boundary/overflow rejection vectors. Validated across Kotlin (`dev.doggo.shared.contract.StrictSyncV2Digest`), Rust (`glean_hub_sync::models::strong_sync_v2`), and Node (`scripts/strict-v2-vector-runner.mjs`) per Phase 01 QA report ([QA report](../plans/reports/qa-261015-0938-phase-01-freeze-temporal-model.md)).
+
+### 6.3 Management API & Fencing Contract [Planned Phase 03]
+- Endpoints:
+  - `GET /api/v1/apps/:app_id/strict-contract`: returns syncMode, active epoch, and schema fingerprint.
+  - `POST /api/v1/apps/:app_id/strict-upgrades`: initiates migration with body `{ migrationId, expectedVersion, expectedSchemaFingerprint, expectedEpoch, targetVersion, targetSchemaFingerprint }`.
+  - `GET /api/v1/apps/:app_id/strict-upgrades/:migrationId`: queries migration status.
+- Authorization: Requires global admin role AND explicit app-scope authorization.
+- Fencing: Readers AND writers acquire durable server-enforced app permits. Fence acquisition atomically blocks new permits; migration begins only after admitted requests definitively drain. Orphan permits require proving complete operations on supported Mongo topology before clearing; lease expiry alone never clears permits.
+
+### 6.4 Legacy-Receipt Reconciliation & Outbox Replay [Planned Phase 03 / Phase 06]
+- Endpoint: `POST /api/v1/sync/:app_id/strong/legacy-receipts`: app-scoped and user-scoped dual-auth, bounded batch size <= 100.
+- Inputs: original v1 preimage + digest.
+- Outputs: per-operation status: `provenAccepted` (returns original acceptedRevision), `provenNotAccepted`, `unknownSuperseded`, or `integrityFailure`.
+- Outbox transition: Legacy Room v1 databases lack original contract version, dispatch history flag, and changed-field mask. Where dispatch provenance or intention history cannot be proven, the record is flagged as `UNKNOWN_SUPERSEDED` for explicit user review; it is never auto-reapplied or auto-rehashed.

@@ -44,3 +44,39 @@ Strict apps register with an immutable, strict schema containing exclusively the
    - Server registers `AppSchema` in `_schemas` collection only after storage and indexes pass admission.
 5. **Mandatory Read-Back**:
    - Operator and provisioning scripts must verify `GET /api/v1/apps/doggo` echoing `syncMode: "strict-v1"` and matching `strictEpoch`.
+
+---
+
+## Versioned Schema Upgrades & Fingerprints (Gate G1 Frozen Specification)
+
+*Note: The contracts, endpoints, and invariants in this section represent the frozen architecture and wire specification designed in Phase 01 (Gate G1 Approved). Implementation of server-side upgrade endpoints and migration fencing is scheduled for Phase 03; client legacy-receipt reconciliation is scheduled for Phase 06. Glean Hub currently operates strictly on `strict-v1`.*
+
+Glean Hub's planned migration design supports controlled in-place schema upgrades from `strict-v1` to `strict-v2` under an app-scoped administrative fence:
+
+### Canonical Schemas & Fingerprints
+1. **`strict-v1` (Current Active)**:
+   - File: `integration/glean-hub/doggo-schema-v1.json`
+   - Fingerprint: `3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec`
+   - 4 columns: `id`, `title`, `completed`, `createdAt`.
+2. **`strict-v2` (Target Version)**:
+   - File: `integration/glean-hub/doggo-schema-v2.json`
+   - Fingerprint: `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`
+   - 16 columns: adds `deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`.
+
+### Upgrade Invariants
+- **Planned Management Endpoints (Scheduled for Phase 03 Implementation)**:
+  - `GET /api/v1/apps/:app_id/strict-contract`: Echoes `syncMode`, active `strictEpoch`, and canonical `schemaFingerprint`.
+  - `POST /api/v1/apps/:app_id/strict-upgrades`: Initiates atomic in-place migration. Payload: `{ migrationId, expectedVersion, expectedSchemaFingerprint, expectedEpoch, targetVersion, targetSchemaFingerprint }`. Requires global admin role plus app-scoped authorization.
+  - `GET /api/v1/apps/:app_id/strict-upgrades/:migrationId`: Queries transition state (`ready-v1` -> `fencing` -> `transforming` -> `validating` -> `publishing` -> `ready-v2`, or `operatorRequired`).
+- **Planned Legacy-Receipt Reconciliation Endpoint (Scheduled for Phase 03/06 Implementation)**:
+  - `POST /api/v1/sync/:app_id/strong/legacy-receipts`: Ordinary app-scoped dual-auth endpoint with bounded batch (<= 100). Accepts original v1 preimage + digest. Returns per-operation verification status (`provenAccepted`, `provenNotAccepted`, `unknownSuperseded`, `integrityFailure`). Confirms receipt durability without applying legacy mutations.
+- **Fingerprint Verification**: `POST /api/v1/apps/:app_id/strict-upgrades` validates that the app's current schema fingerprint matches `expectedSchemaFingerprint` and the target schema matches `targetSchemaFingerprint`.
+- **Fencing**: Acquires exclusive migration lease in `_coordination` collection, drains in-flight reader/writer requests, transforms MongoDB documents in `app_<appId>` in-place without changing collection name or epoch, verifies collection documents against target schema, and atomically updates `_schemas`.
+- **Standard Error Mapping**:
+  - `400 invalidRequest` (malformed schema, invalid parameters)
+  - `401 unauthorized` (missing or invalid authentication credentials)
+  - `403 forbidden` (admin role present but missing explicit app-scoped authorization)
+  - `404 appNotFound` (unknown application ID)
+  - `409 epochMismatch` / `preconditionFailed` (stale schema fingerprint or active epoch conflict)
+  - `426 protocolUnsupported` (client protocol version mismatch)
+  - `503 migrationInProgress` / `indeterminateStorage` (active fence drain or unresolvable storage state)

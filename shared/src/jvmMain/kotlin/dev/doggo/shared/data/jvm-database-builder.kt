@@ -27,4 +27,5 @@ fun createJvmDatabaseBuilder(dbFile: File): RoomDatabase.Builder<DoggoDatabase> 
 fun createInMemoryJvmDatabaseBuilder(): RoomDatabase.Builder<DoggoDatabase> {
     return Room.inMemoryDatabaseBuilder<DoggoDatabase>()
         .setDriver(BundledSQLiteDriver())
+        .addMigrations(*DatabaseMigrations.ALL)
 }

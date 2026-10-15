@@ -16,15 +16,18 @@ import androidx.room.RoomDatabaseConstructor
         OutboxEntity::class,
         EditorDraftEntity::class,
         ScanStagingEntity::class,
-        AccountSyncMetaEntity::class
+        AccountSyncMetaEntity::class,
+        AccountLocalSettingsEntity::class,
+        ReminderDeliveryLedgerEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @ConstructedBy(DoggoDatabaseConstructor::class)
 abstract class DoggoDatabase : RoomDatabase() {
     abstract fun doggoDao(): DoggoDao
 }
+
 
 @Suppress("NO_ACTUAL_FOR_EXPECT")
 expect object DoggoDatabaseConstructor : RoomDatabaseConstructor<DoggoDatabase>

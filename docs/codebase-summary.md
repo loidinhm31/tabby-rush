@@ -1,7 +1,7 @@
 # Codebase Summary
 
 Generated on: 2026-10-15
-Based on Repomix compaction snapshot: `repomix-output.xml` (partial snapshot: 345 files packed, 5 excluded for security check, 688,128 tokens, 2,940,667 chars, dated 2026-10-15)
+Based on Repomix compaction snapshot: `repomix-output.xml` (partial snapshot: 352 files packed, 5 excluded for security check, 723,573 tokens, 3,093,780 chars, dated 2026-10-15)
 ---
 
 ## 1. Repository Overview
@@ -10,7 +10,7 @@ The `doggo` repository contains the implementation, build configuration, domain 
 
 Following Phases 01–10, the repository contains the Android and shared Compose Multiplatform clients, Linux desktop source/distribution tooling, and the delivered Windows desktop DPAPI provider, isolated build, distributable, MSI artifact, and package-verification harness:
 1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
-2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models, UI state/actions, identity/authentication contracts, strict sync canonical framing (`strict-v1` and `strict-v2`), `StrictV2Constants`, `StrictV2TodoData`, `StrictV2SyncOp`, `LegacyReceiptStatus`, `LegacyReceiptResult`, checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`), `StrictSyncV2Digest` binary preimage engine, `StrictTimeZoneResolver` and `StrictZoneOffsetResult` (`Single`, `Overlap`, `Gap`) with `ZoneRules` platform actuals, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 1), BundledSQLiteDriver, local outbox mutation engine, staged full scan reconciler, fail-closed account leave protocol, shared Compose UI components, accessible light theme tokens (WCAG 2.1 AA verified), and comprehensive unit/instrumented/semantics/vector tests.
+2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models (`TaskDeadline`, `ReminderRule`, `Todo`), UI state/actions, identity/authentication contracts, strict sync canonical framing (`strict-v1` and `strict-v2`), `StrictV2Constants`, `StrictV2TodoData`, `StrictV2SyncOp`, `LegacyReceiptStatus`, `LegacyReceiptResult`, checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`), `StrictSyncV2Digest` binary preimage engine, `StrictTimeZoneResolver` and `StrictZoneOffsetResult` (`Single`, `Overlap`, `Gap`) with `ZoneRules` platform actuals, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 2, 7 entities, `DatabaseMigrations.MIGRATION_1_2`), BundledSQLiteDriver, local outbox mutation engine with intent masks and provenance tracking, staged full scan reconciler, fail-closed account leave protocol, shared Compose UI components, accessible light theme tokens (WCAG 2.1 AA verified), and comprehensive unit/instrumented/semantics/vector tests.
 3. **Android Application Module (`androidApp/`)**: Native Android client hosting shared Compose UI, `DoggoApplication` process container, `SessionViewModel` reactive UI state orchestration, `AndroidSyncScheduler` WorkManager scheduling, `DoggoSyncWorker` background sync worker with generation/auth fencing, `AndroidNotificationAdapter` channel/scheduling candidate, `AndroidReminderCapabilitiesChecker` decoupling notification and exact alarm permissions, non-exported `DoggoAlarmReceiver`, debug network security configuration with strict loopback cleartext whitelist, backup/extraction security exclusions, release signing task-graph enforcement, and authored instrumented test suites.
 4. **Desktop Application Module (`desktopApp/`)**: Compose Multiplatform JVM app with target-isolated Linux and Windows source sets; shared `CredentialVaultProvider` SPI, fail-closed `PlatformVaultDispatcher`, `SingleInstanceGuard`, `DesktopSyncScheduler`, Linux Secret Service provider, Windows current-user DPAPI provider, `DbusLinuxNotificationAdapter` with safe unavailability fallback, and candidate `WindowsNotificationAdapter` with XML escaping and explicit unavailable stub bridge.
 5. **Host Virtualization, Security & Operations Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub schema provisioning (`hub-schema-provision.mjs`), live Hub strict smoke harness (`hub-live-smoke.mjs`), release security and integrity auditor (`release-security-check.mjs`), maintenance recovery script (`hub-strict-recovery.js`), device smoke runner (`android-smoke.sh`), loopback sync fault-injection proxy (`debug-fault-proxy.mjs`), Linux/Windows package smoke runners, strict-v2 vector runner (`strict-v2-vector-runner.mjs`), and vector generator (`generate-strict-v2-vectors.mjs`).
@@ -97,7 +97,8 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 │   ├── gradle.lockfile                 # Dependency locking definition
 │   ├── schemas/                        # Exported Room database schemas
 │   │   └── dev.doggo.shared.data.DoggoDatabase/
-│   │       └── 1.json                  # Canonical Room schema version 1 export
+│   │       ├── 1.json                  # Canonical Room schema version 1 export
+│   │       └── 2.json                  # Canonical Room schema version 2 export
 │   └── src/
 │       ├── commonMain/composeResources/
 │       │   └── values/
@@ -114,10 +115,12 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 │       │   │   ├── editor-draft-entity.kt      # Uncommitted local user edits
 │       │   │   ├── scan-staging-entity.kt      # Cursor pagination staging table
 │       │   │   ├── account-sync-meta-entity.kt # Account sync metadata and active epoch
-│       │   │   ├── doggo-dao.kt                # Atomic @Transaction DAO methods and queries
-│       │   │   ├── doggo-database.kt           # RoomDatabase definition (version 1)
-│       │   │   ├── database-migrations.kt      # Migration registry (empty for v1)
-│       │   │   └── room-account-store.kt       # Mutex-guarded AccountStore with SQLite persistence
+│   │   │   ├── doggo-dao.kt                # Atomic @Transaction DAO methods and queries
+│   │   │   ├── doggo-database.kt           # RoomDatabase definition (version 2, 7 entities)
+│   │   │   ├── database-migrations.kt      # Migration registry (DatabaseMigrations.MIGRATION_1_2)
+│   │   │   ├── account-local-settings-entity.kt # Account/device reminder and notification defaults
+│   │   │   ├── reminder-delivery-ledger-entity.kt # Durable native reminder delivery ledger and claims
+│   │   │   └── room-account-store.kt       # Mutex-guarded AccountStore with SQLite persistence
 │       │   └── sync/                   # Strict synchronization protocol orchestration
 │       │       ├── hub-sync-dtos.kt            # Wire DTOs for bootstrap, push, and pull
 │       │       ├── hub-sync-client.kt          # HTTP transport adapter for sync routes
@@ -153,10 +156,11 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 │       │       ├── jvm-database-builder.kt     # Desktop BundledSQLiteDriver Room database builder
 │       │       └── jvm-account-files.kt        # Desktop account directory partitioning and wipe markers
 │       ├── commonTest/kotlin/dev/doggo/shared/
-│       │   ├── contract/               # Contract unit tests (digest, policy, keys)
-│       │   │   ├── strict-v2-digest-vector-test.kt   # Strict-v2 vector fixtures (5 tests)
-│       │   │   ├── strict-v2-digest-extended-test.kt # Strict-v2 edge cases & checked overflow (5 tests)
-│       │   │   └── strict-timezone-resolver-test.kt  # 7 timezone & DST transition vectors (gap, overlap, boundaries)
+│   │   ├── contract/               # Contract unit tests (digest, policy, keys)
+│   │   │   ├── task-deadline-reminder-models-test.kt # Temporal domain models and overflow arithmetic tests
+│   │   │   ├── strict-v2-digest-vector-test.kt   # Strict-v2 vector fixtures (5 tests)
+│   │   │   ├── strict-v2-digest-extended-test.kt # Strict-v2 edge cases & checked overflow (5 tests)
+│   │   │   └── strict-timezone-resolver-test.kt  # 7 timezone & DST transition vectors (gap, overlap, boundaries)
 │       │   ├── auth/                   # Auth client, session, and refresh tests
 │       │   └── sync/                   # Phase 05 sync test suites
 │       │       ├── hub-sync-client-test.kt     # Push, pull, bootstrap, and batch bounds tests
@@ -167,7 +171,8 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 │       │   └── ui/                     # Phase 06 UI semantics & theme test suites
 │       │       └── todo-semantics-test.kt      # Contrast calculations, password redaction, UI invariants
 │       ├── jvmTest/kotlin/dev/doggo/shared/data/
-│       │   └── room-account-store-test.kt      # BundledSQLite driver temporary database tests
+│   │   ├── room-migration-v1-to-v2-test.kt     # Explicit v1->v2 SQLite migration verification
+│   │   └── room-account-store-test.kt      # BundledSQLite driver temporary database tests
 │       └── androidInstrumentedTest/kotlin/dev/doggo/shared/
 │           ├── auth/                   # Keystore vault instrumented tests
 │           └── data/
@@ -275,9 +280,12 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 | `editor-draft-entity.kt` | `EditorDraftEntity` | Uncommitted local user edits table (`editor_drafts`); preserved on ack if `draft.localRevision > outbox.localRevision`. |
 | `scan-staging-entity.kt` | `ScanStagingEntity` | Cursor pull pagination staging table (`scan_staging`); promoted atomically upon reaching terminal page. |
 | `account-sync-meta-entity.kt` | `AccountSyncMetaEntity` | Account partition metadata (`account_sync_meta`); tracks `activeEpoch`, `localRevisionCounter`, `syncStatus`. |
-| `doggo-dao.kt` | `DoggoDao` | Room DAO with atomic `@Transaction` methods: `saveTodoAtomic`, `deleteTodoAtomic`, `cancelUnsentCreateAtomic`, `reconcileAcceptedAtomic`, `promoteStagingAtomic`, `replaceOutboxAtomic`, `discardConflictAtomic`, `freezeOutboxAtomic`. |
-| `doggo-database.kt` | `DoggoDatabase` | Room database definition (version 1) backed by `BundledSQLiteDriver`. |
-| `room-account-store.kt` | `RoomAccountStore` | Implementation of `AccountStore` with mutex-serialized edits, outbox coalescing, unsent cancellation, and dispatch recovery. |
+| `doggo-dao.kt` | `DoggoDao` | Room DAO with atomic `@Transaction` methods: `saveTodoAtomic`, `deleteTodoAtomic`, `cancelUnsentCreateAtomic`, `reconcileAcceptedAtomic`, `promoteStagingAtomic`, `replaceOutboxAtomic`, `discardConflictAtomic`, `freezeOutboxAtomic`, `wipeAllTablesAtomic`. |
+| `doggo-database.kt` | `DoggoDatabase` | Room database definition (version 2, 7 entities) backed by `BundledSQLiteDriver`. |
+| `database-migrations.kt` | `DatabaseMigrations.MIGRATION_1_2` | Explicit SQLite migration upgrading Room schema 1 to 2; registered in `DatabaseMigrations.ALL`. |
+| `account-local-settings-entity.kt` | `AccountLocalSettingsEntity` | Account/device reminder and notification defaults table (`account_local_settings`); singleton `id = 'singleton'`. |
+| `reminder-delivery-ledger-entity.kt` | `ReminderDeliveryLedgerEntity` | Durable occurrence state and claim outcomes for native reminders (`reminder_delivery_ledger`); composite PK 5-tuple; tracks `claimOutcome` and `cancellationState`. |
+| `room-account-store.kt` | `RoomAccountStore` | Implementation of `AccountStore` with mutex-serialized edits, outbox coalescing, unsent cancellation, intent mask derivation, and dispatch recovery. |
 | `android-database-builder.kt` | `createAndroidDoggoDatabase()` | Platform Room database builder for Android with `BundledSQLiteDriver`. |
 | `jvm-database-builder.kt` | `createJvmDoggoDatabase()` | Platform Room database builder for Desktop JVM with `BundledSQLiteDriver`. |
 | `android-account-files.kt` | `AndroidAccountFiles` | Android app-private storage partitioner by `AccountKey` SHA-256, path traversal guard, and `wipe.marker` manager. |
@@ -296,8 +304,10 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 | `outbox-reconciliation-test.kt` | FIFO row-head dispatch, head blocking on conflicts, dispatch freezing, exact CAS ack matching, newer draft preservation, UnknownSuperseded, retries. | **PASSED** (JVM) |
 | `account-sync-coordinator-test.kt` | 3-stage sync loop, mutex serialization, generation fencing, conflict workflows, push cancellation safety. | **PASSED** (JVM) |
 | `account-leave-protocol-test.kt` | 5-category review guard, freeze-before-review, marker write failure abort, scheduler cancel rollback, database deletion fail-closed, completePendingWipe. | **PASSED** (JVM) |
-| `room-account-store-test.kt` (JVM) | Real SQLite temporary database: schema v1, atomic saves, unsent create-delete cancel, FIFO outbox, monotonic base advancement, crash recovery, wipe. | **PASSED** (JVM) |
-| `room-account-store-test.kt` (Android) | Android instrumented Room tests with app-private storage and Keystore integration. | **DEFERRED** (Phase 07) |
+| `task-deadline-reminder-models-test.kt` | `TaskDeadline`, `ReminderRule`, `Todo` models, checked 64-bit integer arithmetic, occurrence bounds. | **PASSED** (JVM) |
+| `room-migration-v1-to-v2-test.kt` (JVM) | Explicit Room v1->v2 migration on BundledSQLite: schema alteration, legacy outbox intent derivation, table creation. | **PASSED** (JVM) |
+| `room-account-store-test.kt` (JVM) | Real SQLite temporary database: schema v2, atomic saves, v2 schedule tokens, unsent create-delete cancel, FIFO outbox, monotonic base advancement, crash recovery, wipe. | **PASSED** (JVM) |
+| `room-account-store-test.kt` (Android) | Android instrumented Room tests with app-private storage and Keystore integration. | **DEFERRED** (Phase 08) |
 
 ### 2.5 Shared Compose UI & Theme Subsystem (Phase 06)
 
@@ -485,7 +495,7 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
 30. **Windows Credential File Replacement**: DPAPI-protected JSON credential pairs are written to a temporary file and atomically moved into place; plaintext byte buffers are cleared after cryptographic operations. The implementation attempts an owner ACL but suppresses ACL-view/owner errors, so ACL enforcement is not guaranteed when unavailable or failed.
 31. **Windows MSI Provenance**: The recorded MSI is unsigned; its hash/metadata inspection does not establish Authenticode trust or successful interactive installation.
 32. **Windows Acceptance Status**: Phase 10 implementation is recorded at 100% (2026-10-14), but technical acceptance is blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not fail-closed and clean-user runtime/sync plus uninstall/reinstall evidence remain open. The seven Windows PNGs are design mockups; they are not live application captures.
-33. **Phase 01 Temporal Model & Strict Transition Frozen (Gate G1 Approved)**: Contract, binary digest framing, and transition design frozen on 2026-10-15 ([Gate G1 review approved](../plans/reports/code-review-261015-0951-phase-01-freeze-temporal-model.md)). Strict-v2 wire format introduces 12 fields (16 total columns) with canonical JSON schema fingerprints `3361a80f...` (v1) and `5f539551...` (v2). Binary SHA-256 preimages and checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) pass across recorded test suites in Kotlin (:shared:jvmTest, 10 tests across 2 files), Rust (`strong_sync_v2_tests`, 1 test / 20 vector cases), and Node.js (`strict-v2-vector-runner.mjs`, 20 vectors: 9 valid + 11 boundary/overflow rejections). Wire validation rejects non-null interval when `reminderCount == 1` and requires interval >= 15m for repeating count 2..10. *Planned design for subsequent phases (Phases 03–06, pending implementation)*: In-place Hub migration will use app-scoped admin coordination lease, request permit drain, and journaled schema update; Room v1->v2 evolution will default migrated records to null deadlines and disabled rules; unprovable legacy outbox operations will enter `UNKNOWN_SUPERSEDED` for explicit review; safe v1 intentions will rebase only changed fields over remote v2 base.
+33. **Phase 01 Temporal Model & Strict Transition (Delivered Through Phase 05)**: Contract, binary digest framing, and transition design frozen on 2026-10-15 (Gate G1 approved); Room v1->v2 evolution delivered in Phase 05 defaulting migrated records to null deadlines and disabled rules. Strict-v2 wire format introduces 12 fields (16 total columns) with canonical JSON schema fingerprints `3361a80f...` (v1) and `5f539551...` (v2). Binary SHA-256 preimages and checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) pass across recorded test suites in Kotlin (:shared:jvmTest), Rust (`strong_sync_v2_tests`), and Node.js (`strict-v2-vector-runner.mjs`). Wire validation rejects non-null interval when `reminderCount == 1` and requires interval >= 15m for repeating count 2..10. Subsequent client sync transition in Phase 06 will address unprovable legacy outbox operations (`UNKNOWN_SUPERSEDED`), intent-masked safe rebasing over remote v2 base, and non-destructive legacy reconciliation.
 34. **Strict DST Gap and Overlap Resolution**: `StrictTimeZoneResolver` rejects non-existent spring-forward gap instants (`IllegalArgumentException`), requires explicit offset disambiguation for fall-back overlap hours, and calculates calendar day boundaries with calendar arithmetic (23h/25h), never fixed +24h additions. (Reported 7/7 tests passing in `:shared:jvmTest` under `--dependency-verification=off`).
 35. **Non-Exported Android Alarm Receiver**: `DoggoAlarmReceiver` declares `android:exported="false"` in `AndroidManifest.xml` and validates `taskId`, `scheduleToken`, `notificationId`, and `title` before dispatching offline notifications via `AndroidNotificationAdapter`.
 36. **Decoupled Mobile Reminder Capabilities**: `AndroidReminderCapabilitiesChecker` decouples runtime `POST_NOTIFICATIONS` permission from `SCHEDULE_EXACT_ALARM` exact alarm permission (`AlarmManager.canScheduleExactAlarms()` on API 31+).
@@ -495,3 +505,5 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**. The evidence summa
 40. **Strict-v1 Protocol Validation on Legacy Receipts**: Legacy receipt reconciliation (`POST /api/v1/sync/:app_id/strong/legacy-receipts`) enforces bounded batches (`<= 100`) and strictly validates `request.protocol == "strict-v1"`. Matching receipts execute durable replay confirmation nonces without mutating payload records or applying legacy mutations.
 41. **Phase 03 Hub Versioned Admission & Staging Gate Status**: Phase 03 backend contracts, admission guards, and in-place migration engine are delivered in `glean-hub-sync` with passing unit/contract checks. Production admission remains on hold: (1) Gate G3 live multi-instance Mongo replica-set acceptance is unexecuted pending staging testbed, (2) coordination-document compatibility/backfill for documents missing `permitCount` requires live verification, and (3) exact cumulative accounting across mid-batch crash interruption requires formal revalidation.
 42. **Phase 04 Hub Admin UI and API-Only Upgrade Tooling**: Operator tooling is delivered across both Glean Hub Web Admin UI (`glean-hub-app`) and Doggo CLI runner (`scripts/hub-strict-upgrade.mjs`). The CLI runner enforces precondition verification, preflight dry-run checks, same-migration-ID resumption upon network interruption, fail-fast on 4xx rejections, complete token redaction, bounded polling, and mandatory final read-back assertions against `GET /strict-contract` verifying `strict-v2` mode, canonical SHA-256 fingerprint (`5f539551...`), and 16 table columns. The Web Admin UI guards strict apps against arbitrary schema PUT requests, checks app-scoped authorization, persists active migration IDs in `sessionStorage`, and asserts final schema read-back. Tooling is verified via unit test suites (`hub-strict-upgrade.test.mjs` 7/7 pass, `glean-hub-app` 13 unit tests across 2 suites pass: 8 in `sync-admin-service.test.ts` and 5 in preload recovery, `pnpm build` clean); production admission remains strictly on hold pending Gate G3 live multi-node replica-set staging validation and remediation of Phase 03 backend findings (`permitCount` coordination backfill, mid-batch crash resumption consistency, and duplicate permit release filtering).
+
+43. **Phase 05 Shared Task Model & Room v2 Migration (Gate G4 Storage Migration Delivered)**: Delivered on 2026-10-15. Room database version 2 transitions from schema 1 via explicit step-by-step migration `DatabaseMigrations.MIGRATION_1_2` without destructive fallback, registered on JVM and Android builders via `DatabaseMigrations.ALL`. 7 entities: `server_base`, `outbox`, `editor_drafts`, and `scan_staging` expanded with 12 temporal columns; `outbox` augmented with `contractVersion`, `dispatchHistory`, `intentMask`, and `transitionCheckpoint`; plus new entities `AccountLocalSettingsEntity` (singleton local reminder/notification defaults) and `ReminderDeliveryLedgerEntity` (5-tuple PK for durable native reminder claims and cancellation). Shared models `TaskDeadline`, `ReminderRule`, and `Todo` enforce schedule token presence and checked 64-bit arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) guaranteeing `last <= anchor`. Verified via 128 JVM unit/integration tests (`:shared:jvmTest`), 23 strict-v2 vector checks, 18 offline smoke-fixture self-checks (`hub-live-smoke.mjs --fixture-test`), and 6 static source security diagnostics (`release-security-check.mjs --diagnose-source`), with 0 failures in single test execution. Crucially, storage migration delivery does NOT establish safe end-to-end mixed-version synchronization, which remains gated to Phase 06 intent-masked reconciliation and regressive-revision cleanup; Android instrumented execution (`:shared:connectedAndroidTest`) remains pending Phase 08 device/emulator availability, and production admission remains on hold.

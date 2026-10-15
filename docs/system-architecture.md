@@ -1,7 +1,7 @@
 # Doggo System Architecture
 
 Last Updated: 2026-10-15
-Phase: Phase 01 frozen (Gate G1 approved); Phase 02 strict timezone/DST contracts and platform candidate adapters delivered, with Gate G2 native delivery formally blocked pending platform testbed environments (Android SDK/device, active Linux notification daemon, Windows host runtime); earlier-phase operator/runtime acceptance also remains pending
+Phase: Phase 01 frozen (Gate G1 approved); Phase 02 strict timezone/DST contracts and platform candidate adapters delivered, with Gate G2 native delivery formally blocked pending platform testbed environments (Android SDK/device, active Linux notification daemon, Windows host runtime); Phase 03 backend contracts, admission guards, and in-place migration engine delivered (Gate G3 staging hold pending replica set acceptance); Phase 04 operator tooling delivered; Phase 05 Room database version 2 migration and shared temporal task model delivered (Gate G4 storage migration delivered; connected platform & sync acceptance pending)
 Related Docs: [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
@@ -112,7 +112,7 @@ flowchart TD
     subgraph LocalPersistence["Local Persistence & Sync (Phase 05)"]
       Coordinator["AccountSyncCoordinator\n(3-Stage Sync / Mutex)"]
       Store["RoomAccountStore\n(Store Mutex & Atomic Ops)"]
-      RoomDB[("DoggoDatabase (Room v1)\nserver_base | outbox\neditor_drafts | scan_staging\naccount_sync_meta")]
+      RoomDB[("DoggoDatabase (Room v2)\nserver_base | outbox\neditor_drafts | scan_staging\naccount_sync_meta\naccount_local_settings\nreminder_delivery_ledger")]
       Reconciliation["OutboxReconciliation\n(FIFO Dispatch / CAS Ack)"]
       Scan["StagedFullScan\n(Pre-Scan Check / Promotion)"]
       LeaveProtocol["AccountLeaveProtocol\n(Fail-Closed Teardown)"]
@@ -212,31 +212,44 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
 ### 4.6 Local Storage & Strict Synchronization Subsystem (Phase 05)
 
 1. **Room KMP Persistence (`DoggoDatabase`)**:
-   - Backed by `BundledSQLiteDriver`. Destructive migration is strictly forbidden; schema version 1 is validated against exported artifact `shared/schemas/.../1.json`.
-   - Five stores: `server_base` (authoritative base & tombstones), `outbox` (queued/frozen strict mutations), `editor_drafts` (uncommitted local edits), `scan_staging` (cursor pagination staging), `account_sync_meta` (account sync metadata and active epoch).
-2. **Account Directory Partitioning & Filesystem Model**:
+   - Backed by `BundledSQLiteDriver`. Destructive migration is strictly forbidden; explicit step-by-step migration `DatabaseMigrations.MIGRATION_1_2` upgrades schema version 1 (`shared/schemas/.../1.json`) to schema version 2 (`shared/schemas/.../2.json`, identity hash `06a93ffbac4a0570d56446f47e0e3e4c`). Both Android (`createAndroidDatabaseBuilder`) and JVM (`createJvmDatabaseBuilder`) builders register `DatabaseMigrations.ALL`.
+   - Seven stores: `server_base` (authoritative base & tombstones with 12 temporal fields), `outbox` (queued/frozen strict mutations with 12 temporal fields and provenance tracking), `editor_drafts` (uncommitted local edits with 12 temporal fields), `scan_staging` (cursor pagination staging with 12 temporal fields), `account_sync_meta` (account sync metadata and active epoch), `account_local_settings` (device- and account-local reminder defaults), and `reminder_delivery_ledger` (durable native reminder claim outcomes and cancellation).
+2. **Domain Models & Strict Invariants (`dev.doggo.shared.contract`)**:
+   - `TaskDeadline`: Immutable value class (`date`, nullable `time`, `zone`, `offsetSeconds`, nullable `reminderAnchorTime`, `anchorEpochMs`, `overdueEpochMs`). Enforces non-empty date and zone. Date-only deadlines require non-null `reminderAnchorTime`. Timed deadlines require null `reminderAnchorTime` and `overdueEpochMs == anchorEpochMs`.
+   - `ReminderRule`: Immutable value class (`enabled`, non-negative `leadMinutes`, nullable `intervalMinutes`, `count` in 1..10). When `count == 1`, `intervalMinutes` must be null; when `count > 1`, `intervalMinutes` must be non-null and `>= 15`. Provides `ReminderRule.DISABLED`.
+   - `Todo`: Integrates `TaskDeadline?`, `ReminderRule`, and `scheduleToken: String?`. Validates schedule consistency: when deadline is null, reminders must be disabled (lead 0, count 1, interval null) and token null; when deadline is present, non-empty `scheduleToken` is required and checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) verifies `last <= anchor` (last scheduled reminder occurrence cannot exceed deadline anchor).
+3. **Outbox Provenance & Versioning**:
+   - `contractVersion`: `"strict-v1"` (legacy or migrated mutation) or `"strict-v2"` (new strict-v2 mutation). Frozen or uncertain operations retain their original contract version and digest; they are never automatically rehashed across versions.
+   - `transitionCheckpoint`: Migration marker (e.g. `'MIGRATED_FROM_ROOM_V1'`). Coalescing and unsent create-delete cancellation require `transitionCheckpoint == null`, preventing corruption of migrated entries.
+   - `intentMask`: Bitwise/pipe-delimited string representing mutated fields (`TITLE`, `COMPLETED`, `DEADLINE`, `REMINDER`, `DELETE`, `REQUIRES_REVIEW`). Dynamically derived in `RoomAccountStore` by diffing against `server_base` (defaulting to `INTENT_TITLE` if no field differences are observed).
+   - Legacy outbox rows migrated via SQL receive conservative classification (`'TITLE|COMPLETED'` for create/complete update, `'DELETE'` for delete, `'REQUIRES_REVIEW'` otherwise) with migration event recorded in `dispatchHistory`.
+4. **Account Partitioning & New Entities**:
+   - `AccountLocalSettingsEntity`: Stores device- and account-local reminder and notification defaults (singleton `id = 'singleton'`). Strictly account-partitioned, wiped on logout, and never sent to Hub.
+   - `ReminderDeliveryLedgerEntity`: Durable occurrence state and claim outcomes for native reminders. Composite PK: 5-tuple (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`). Indices on `[accountKey, generation, taskId]` and `[dueEpochMs]`. Status values: `PENDING`, `CLAIMED`, `POSTED`, `MISSED`, `CANCELLED`, `SKIPPED`. Cancellation: `ACTIVE`, `CANCELLED`. Account-partitioned, wiped on logout, never sent over wire.
+   - `DoggoDao.wipeAllTablesAtomic()` transactionally clears all 7 tables in a single SQLite transaction, distinct from the multi-step external filesystem/credential teardown protocol in `AccountLeaveProtocol`.
+5. **Account Directory Partitioning & Filesystem Model**:
    - Partitioned strictly by canonical `AccountKey` SHA-256 string.
    - `AndroidAccountFiles` and `JvmAccountFiles` verify `canonicalFile.toPath().startsWith(canonicalBase.toPath())` to reject path traversal outside the base root (intra-tree symlinks and TOCTOU races are outside this check).
    - Critical metadata writes (`wipe.marker`, `generation.dat`) flush file bytes via `fsync()` before atomic rename (`StandardCopyOption.ATOMIC_MOVE`).
-3. **Local Mutation Lifecycle & FIFO Dispatch**:
+6. **Local Mutation Lifecycle & FIFO Dispatch**:
    - Atomic local saves (`saveTodoAtomic`, `deleteTodoAtomic`) persist drafts and outbox entries under the store mutex before returning.
    - Only never-dispatched `PENDING` outbox operations coalesce; unsent create-delete cancels locally without network traffic.
    - Per-row FIFO: Outbox operations dispatch at most one operation per `rowId` in FIFO order (`localRevision`). If the head operation on a row is `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED`, all successor operations on that row are blocked.
    - Dispatch freezing: `prepareAndFreezeBatch` recomputes digest and expectedRevision from current base and executes `freezeOutboxAtomic` CAS transaction. `UNCERTAIN` retries strictly preserve original frozen fields.
-4. **Staged Full Scan & Monotonic Promotion**:
+7. **Staged Full Scan & Monotonic Promotion**:
    - 3-stage sync loop: Initial scan -> Push eligible outbox -> Final scan.
    - Pagination stages rows in SQLite `scan_staging`; detects loops, batch overflow, non-progressing cursors, and epoch mismatches.
    - Pre-scan identity check: All confirmed records in `server_base` sharing the `activeEpoch` must appear in staging; missing records trigger `SafeError.ResetRequired("CONSISTENCY_ERROR")`.
    - Monotonic promotion: Higher revisions promote; equal revisions check logical equivalence (divergent data triggers `SafeError.ProtocolIncompatible("DIVERGENT_REVISION")`); lower revisions retain higher local base. Promoted atomically via `promoteStagingAtomic`.
-5. **Exact CAS-Ack Matching & Draft Preservation**:
+8. **Exact CAS-Ack Matching & Draft Preservation**:
    - Acknowledges an outbox op if and only if `opId`, `rowId`, and `digest` match, status is in `[accepted, replayed]`, and `acceptedRevision == expectedRevision + 1`.
    - Monotonically advances `server_base`. Retains `editor_drafts` if `draft.localRevision > outbox.localRevision`.
-6. **UnknownSuperseded Disambiguation**:
+9. **UnknownSuperseded Disambiguation**:
    - Conflicts returned for operations with prior uncertain delivery history are classified as `UNKNOWN_SUPERSEDED` (the mutation may have committed remotely before being superseded). User workflows: `discardConflict`, `reapplyConflict`, `copyAsNew`.
-7. **Crash Recovery & Interrupted Dispatches**:
+10. **Crash Recovery & Interrupted Dispatches**:
    - `recoverInterruptedDispatches()` resets leftover `DISPATCHING` operations to `UNCERTAIN` on startup or round start.
    - Coroutine push cancellation uses `withContext(NonCancellable)` to mark dispatched batches `UNCERTAIN`.
-8. **Fail-Closed Account Leave & Wipe Protocol**:
+11. **Fail-Closed Account Leave & Wipe Protocol**:
    - Teardown checks 5 unresolved work categories (`drafts`, `pending`, `uncertain`, `conflict`, `unknownSuperseded`).
    - Strict 7-step sequence: freeze store -> write generation and `wipe.marker` outside DB -> cancel/await schedulers -> close Room -> delete DB files -> clear vault -> clear marker.
    - Startup recovery (`completePendingWipe`) inspects `wipe.marker` and finishes teardown fail-closed before any account opens.
@@ -342,7 +355,7 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 10. **Prohibited Automatic POST Replays**: The HTTP auth layer never automatically replays mutating POST requests across 401 refresh cycles; coordinator controls retry idempotency.
 11. **Cryptographic AAD Binding & Nonce Freshness**: Android Keystore vault generates a fresh 12-byte random nonce per write and cryptographically binds ciphertext to the account key via Authenticated Additional Data (AAD).
 12. **Strict Origin & Route Allowlisting**: Outbound requests are bound to `canonicalOrigin` and classified into public, bearer-only, and dual-auth strict routes; non-allowlisted and legacy endpoints fail closed locally.
-13. **Zero Destructive Migration**: Room database version 1 uses explicit migrations; `fallbackToDestructiveMigration()` is forbidden.
+13. **Zero Destructive Migration**: Room database version 2 uses explicit step-by-step migrations (`DatabaseMigrations.MIGRATION_1_2`); `fallbackToDestructiveMigration()` is forbidden. Both JVM and Android builders register `DatabaseMigrations.ALL`.
 14. **Per-Row FIFO Queueing & Head Blocking**: Outbox operations dispatch at most one operation per `rowId` in FIFO order. A head operation in `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED` state blocks all successors on that row.
 15. **Exact CAS-Ack Matching & Monotonic Promotion**: Acknowledgements require exact 5-tuple verification. Staged scans verify pre-scan confirmed identity presence; promotion monotonically advances confirmed base without regressing.
 16. **Fail-Closed Teardown & External Marker**: Account leave freezes edits, writes generation and `wipe.marker` outside SQLite before deleting files, and requires startup recovery to complete any interrupted wipe before reopening an account.
@@ -369,9 +382,9 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 36. **Strict-v1 Legacy Receipt Replay Verification**: Legacy receipt reconciliation (`POST /api/v1/sync/:app_id/strong/legacy-receipts`) enforces bounded batches (`<= 100`) and strictly validates `request.protocol == "strict-v1"`. Matching receipts execute durable replay confirmation nonces without mutating payload records or applying legacy mutations.
 
 
-## 6. Deadlines, Reminders & Strict Upgrade Design (Phases 01–03 Status)
+## 6. Deadlines, Reminders & Strict Upgrade Design (Phases 01–05 Status)
 
-Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved). Phase 02 logic contracts and platform candidate adapters delivered on 2026-10-15 (Gate G2 physical native delivery formally recorded as BLOCKED pending missing host prerequisites). Phase 03 backend contracts, admission guards, and in-place migration engine delivered on 2026-10-15 with passing unit/contract checks; production admission remains on hold with Gate G3 live multi-instance replica-set acceptance unexecuted pending staging testbed, coordination-document compatibility/backfill for documents missing `permitCount` requiring live verification, and exact cumulative accounting across mid-batch crash interruption requiring formal revalidation.
+Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved). Phase 02 logic contracts and platform candidate adapters delivered on 2026-10-15 (Gate G2 physical native delivery formally recorded as BLOCKED pending missing host prerequisites). Phase 03 backend contracts, admission guards, and in-place migration engine delivered on 2026-10-15 with passing unit/contract checks; production admission remains on hold with Gate G3 live multi-instance replica-set acceptance unexecuted pending staging testbed, coordination-document compatibility/backfill for documents missing `permitCount` requiring live verification, and exact cumulative accounting across mid-batch crash interruption requiring formal revalidation. Phase 04 operator tooling delivered on 2026-10-15. Phase 05 Shared Task Model & Explicit Room v2 Migration delivered on 2026-10-15: Room database version 2 schema, explicit `MIGRATION_1_2`, shared temporal models (`TaskDeadline`, `ReminderRule`, checked 64-bit arithmetic in `Todo`), and new entities (`AccountLocalSettingsEntity`, `ReminderDeliveryLedgerEntity`) verified via `:shared:jvmTest` (128 passing tests); instrumented Android device testing and cross-version outbox reconciliation remain pending Phase 06/08.
 
 ### 6.1 Wire Schema & Fingerprints
 - Target sync protocol: `strict-v2`. Full replacement payloads, absent fields rejected, nulls explicit.

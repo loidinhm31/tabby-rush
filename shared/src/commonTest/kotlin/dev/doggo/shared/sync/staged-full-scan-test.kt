@@ -11,9 +11,11 @@ import dev.doggo.shared.contract.CredentialBundle
 import dev.doggo.shared.contract.HubConfig
 import dev.doggo.shared.contract.SafeError
 import dev.doggo.shared.data.AccountSyncMetaEntity
+import dev.doggo.shared.data.AccountLocalSettingsEntity
 import dev.doggo.shared.data.DoggoDao
 import dev.doggo.shared.data.EditorDraftEntity
 import dev.doggo.shared.data.OutboxEntity
+import dev.doggo.shared.data.ReminderDeliveryLedgerEntity
 import dev.doggo.shared.data.RoomAccountStore
 import dev.doggo.shared.data.ScanStagingEntity
 import dev.doggo.shared.data.ServerBaseEntity
@@ -31,6 +33,8 @@ class FakeDoggoDao : DoggoDao {
     val drafts = mutableMapOf<String, EditorDraftEntity>()
     val staging = mutableMapOf<String, ScanStagingEntity>()
     var meta: AccountSyncMetaEntity? = null
+    var localSettings: AccountLocalSettingsEntity? = null
+    val ledger = mutableMapOf<String, ReminderDeliveryLedgerEntity>()
 
     override suspend fun getServerBase(rowId: String): ServerBaseEntity? = serverBase[rowId]
     override suspend fun getActiveServerBase(): List<ServerBaseEntity> = serverBase.values.filter { !it.deleted }
@@ -139,6 +143,13 @@ class FakeDoggoDao : DoggoDao {
         }
     }
 
+    override suspend fun purgeStaleOutboxAtomic(opId: String, rowId: String, clearDraft: Boolean) {
+        if (clearDraft) {
+            deleteDraft(rowId)
+        }
+        deleteOutbox(opId)
+    }
+
     override suspend fun freezeOutboxAtomic(
         opId: String,
         expectedLocalRevision: Long,
@@ -161,6 +172,78 @@ class FakeDoggoDao : DoggoDao {
             }
         }
         return count
+    }
+
+    override suspend fun getLocalSettings(id: String): AccountLocalSettingsEntity? = localSettings
+    override suspend fun upsertLocalSettings(settings: AccountLocalSettingsEntity) { this.localSettings = settings }
+    override suspend fun clearLocalSettings() { this.localSettings = null }
+
+    override suspend fun getLedgerEntry(
+        accountKey: String,
+        generation: Long,
+        taskId: String,
+        scheduleToken: String,
+        occurrenceIndex: Int
+    ): ReminderDeliveryLedgerEntity? {
+        val key = "$accountKey:$generation:$taskId:$scheduleToken:$occurrenceIndex"
+        return ledger[key]
+    }
+
+    override suspend fun getLedgerEntriesForTask(
+        accountKey: String,
+        generation: Long,
+        taskId: String
+    ): List<ReminderDeliveryLedgerEntity> =
+        ledger.values.filter { it.accountKey == accountKey && it.generation == generation && it.taskId == taskId }
+            .sortedBy { it.occurrenceIndex }
+
+    override suspend fun getDueLedgerEntries(dueBeforeEpochMs: Long): List<ReminderDeliveryLedgerEntity> =
+        ledger.values.filter { it.dueEpochMs <= dueBeforeEpochMs && it.claimOutcome == "PENDING" && it.cancellationState == "ACTIVE" }
+            .sortedBy { it.dueEpochMs }
+
+    override suspend fun getAllLedgerEntries(): List<ReminderDeliveryLedgerEntity> =
+        ledger.values.sortedBy { it.dueEpochMs }
+
+    override suspend fun upsertLedgerEntry(entry: ReminderDeliveryLedgerEntity) {
+        val key = "${entry.accountKey}:${entry.generation}:${entry.taskId}:${entry.scheduleToken}:${entry.occurrenceIndex}"
+        ledger[key] = entry
+    }
+
+    override suspend fun upsertLedgerEntries(entries: List<ReminderDeliveryLedgerEntity>) {
+        entries.forEach { upsertLedgerEntry(it) }
+    }
+
+    override suspend fun cancelLedgerEntriesForTask(
+        accountKey: String,
+        generation: Long,
+        taskId: String,
+        updatedAtEpochMs: Long
+    ) {
+        for ((k, v) in ledger.toList()) {
+            if (v.accountKey == accountKey && v.generation == generation && v.taskId == taskId && v.cancellationState == "ACTIVE") {
+                ledger[k] = v.copy(cancellationState = "CANCELLED", updatedAtEpochMs = updatedAtEpochMs)
+            }
+        }
+    }
+
+    override suspend fun deleteLedgerForAccount(accountKey: String) {
+        val toRemove = ledger.values.filter { it.accountKey == accountKey }.map {
+            "${it.accountKey}:${it.generation}:${it.taskId}:${it.scheduleToken}:${it.occurrenceIndex}"
+        }
+        toRemove.forEach { ledger.remove(it) }
+    }
+
+    override suspend fun clearLedger() { ledger.clear() }
+    override suspend fun countLedgerEntries(): Int = ledger.size
+
+    override suspend fun wipeAllTablesAtomic() {
+        clearDrafts()
+        clearOutbox()
+        clearStaging()
+        clearServerBase()
+        clearMeta()
+        clearLocalSettings()
+        clearLedger()
     }
 }
 

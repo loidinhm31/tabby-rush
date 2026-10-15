@@ -1,15 +1,15 @@
 # Doggo Local Storage and Strict Synchronization Specification
 
-Date: 2026-10-14  
-Phase: Phase 05 Durable Local State and Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)  
-Plan: `plans/261013-1540-doggo-glean-hub-reuse`  
+Date: 2026-10-15  
+Phase: Phase 05 Shared Task Model & Explicit Room v2 Migration (Storage Migration Delivered; Connected Platform & Sync Acceptance Pending)  
+Plan: `plans/261015-0752-task-deadlines-reminders-strict-upgrades` (and `plans/261013-1540-doggo-glean-hub-reuse`)  
 Related Docs: [System Architecture](./system-architecture.md) · [API Contract](./api-contract.md) · [Code Standards](./code-standards.md) · [Sync Acceptance](./sync-acceptance.md)
 
 ---
 
 ## 1. Storage Architecture & Partitioning
 
-Doggo persists all local application state using **AndroidX Room KMP** (version 2.7.0-alpha12) backed by SQLite via `BundledSQLiteDriver`. Destructive migration fallback is strictly prohibited. Schema evolution uses explicit migrations, and schema version 1 is validated against exported schema artifact `shared/schemas/dev.doggo.shared.data.DoggoDatabase/1.json`.
+Doggo persists all local application state using **AndroidX Room KMP** (version 2.7.0-alpha12) backed by SQLite via `BundledSQLiteDriver`. Destructive migration fallback is strictly prohibited. Schema evolution uses explicit step-by-step migrations: schema version 1 (`shared/schemas/dev.doggo.shared.data.DoggoDatabase/1.json`) upgrades to schema version 2 (`shared/schemas/dev.doggo.shared.data.DoggoDatabase/2.json`, identity hash `06a93ffbac4a0570d56446f47e0e3e4c`) via `DatabaseMigrations.MIGRATION_1_2`. Both JVM (`createJvmDatabaseBuilder`) and Android (`createAndroidDatabaseBuilder`) database builders register this migration via `DatabaseMigrations.ALL`.
 
 ### 1.1 Account-Level Isolation
 - **Storage Partitioning**: Each account directory is keyed exclusively by the 64-character lowercase hexadecimal string of the canonical `AccountKey`:
@@ -20,25 +20,27 @@ Doggo persists all local application state using **AndroidX Room KMP** (version 
   - Windows Desktop: `%LOCALAPPDATA%/doggo/accounts/<accountKey>/`
 - **Path Traversal Protection & Filesystem Model**: Both `AndroidAccountFiles` and `JvmAccountFiles` verify `canonicalFile.toPath().startsWith(canonicalBase.toPath())` to ensure the resolved directory stays contained within the canonical base root (mitigating path traversal via `..` or symlink escapes outside the accounts root; intra-tree symlinks and TOCTOU races are outside this model). Critical metadata files (`wipe.marker`, `generation.dat`) write to temporary files, flush to disk via `FileOutputStream.fd.sync()`, and replace atomically via `StandardCopyOption.ATOMIC_MOVE` (note: directory metadata fsync is filesystem-dependent).
 
-### 1.2 The Five Room Entities (Database Version 1)
+### 1.2 The Seven Room Entities (Database Version 2)
 
-`DoggoDatabase` defines five entities under `dev.doggo.shared.data`:
+`DoggoDatabase` defines seven entities under `dev.doggo.shared.data`:
 
 | Entity | Table Name | Primary Key | Description & Invariants |
 |---|---|---|---|
-| `ServerBaseEntity` | `server_base` | `rowId: String` | Authoritative confirmed server state. Monotonically advancing `serverRevision: Long`. Tombstones retain `deleted = true`, empty `title`, `completed = false`, `createdAt`, `updatedAt`, `epoch`. |
-| `OutboxEntity` | `outbox` | `opId: String` | Queued, in-flight, or conflicted strict mutations. Holds frozen `epoch`, `tableName`, `rowId`, `kind` (`create`/`update`/`delete`), `expectedRevision`, payload (`title`, `completed`, `createdAt`), `digest`, `localRevision`, `deliveryState`, `createdAtEpochMs`, `errorMessage`, `consecutiveFailures`. |
-| `EditorDraftEntity` | `editor_drafts` | `rowId: String` | Uncommitted local modifications distinct from confirmed base and frozen outbox. Fields: `draftTitle`, `draftCompleted`, `localRevision: Long`, `updatedAt: Long`, `isDeleted: Boolean`. |
-| `ScanStagingEntity` | `scan_staging` | `rowId: String` | Temporary records accumulated across pull pagination pages during a full scan. Fields: `tableName`, `serverRevision: Long`, `deleted: Boolean`, `title`, `completed: Boolean`, `createdAt: Long`, `epoch`. Promoted atomically upon reaching terminal page. |
+| `ServerBaseEntity` | `server_base` | `rowId: String` | Authoritative confirmed server state. Monotonically advancing `serverRevision: Long`. Tombstones retain `deleted = true`, empty `title`, `completed = false`, `createdAt`, `updatedAt`, `epoch`. Extended in Room v2 with 12 temporal fields (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`). |
+| `OutboxEntity` | `outbox` | `opId: String` | Queued, in-flight, or conflicted strict mutations. Holds frozen `epoch`, `tableName`, `rowId`, `kind` (`create`/`update`/`delete`), `expectedRevision`, payload (`title`, `completed`, `createdAt`), `digest`, `localRevision`, `deliveryState`, `createdAtEpochMs`, `errorMessage`, `consecutiveFailures`. Extended in Room v2 with the 12 temporal fields plus outbox provenance and versioning: `contractVersion` (`strict-v1` vs `strict-v2`), `dispatchHistory`, `intentMask`, `transitionCheckpoint`. |
+| `EditorDraftEntity` | `editor_drafts` | `rowId: String` | Uncommitted local modifications distinct from confirmed base and frozen outbox. Fields: `draftTitle`, `draftCompleted`, `localRevision: Long`, `updatedAt: Long`, `isDeleted: Boolean`, plus the 12 temporal fields. |
+| `ScanStagingEntity` | `scan_staging` | `rowId: String` | Temporary records accumulated across pull pagination pages during a full scan. Fields: `tableName`, `serverRevision: Long`, `deleted: Boolean`, `title`, `completed: Boolean`, `createdAt: Long`, `epoch`, plus the 12 temporal fields. Promoted atomically upon reaching terminal page. |
 | `AccountSyncMetaEntity` | `account_sync_meta` | `id: String` (singleton) | Account partition metadata. Fields: `activeEpoch`, `lastSyncTime`, `localRevisionCounter: Long`, `syncStatus`, `safeErrorCode`, `safeErrorMessage`, `consecutiveFailedRounds: Int`, `credentialPersistencePending: Boolean`. |
+| `AccountLocalSettingsEntity` | `account_local_settings` | `id: String` (singleton) | Device- and account-local reminder and notification defaults. Fields: `notificationsEnabled: Boolean` (false), `defaultReminderEnabled: Boolean` (false), `defaultReminderLeadMinutes: Long` (0), `defaultReminderIntervalMinutes: Long?` (null), `defaultReminderCount: Long` (1), `defaultDateOnlyAnchorTime: String` ("09:00"). Strictly account-local, wiped on logout, never synced to Hub. |
+| `ReminderDeliveryLedgerEntity` | `reminder_delivery_ledger` | `accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex` | Durable occurrence state and claim outcomes for native reminders. Composite PK: 5-tuple. Indices: `[accountKey, generation, taskId]` and `[dueEpochMs]`. Fields: `dueEpochMs: Long`, `claimOutcome: String` (`PENDING`, `CLAIMED`, `POSTED`, `MISSED`, `CANCELLED`, `SKIPPED`), `claimedAtEpochMs: Long?`, `postedPlatformId: String?`, `cancellationState: String` (`ACTIVE`, `CANCELLED`), `updatedAtEpochMs: Long`. Wiped on logout, never sent over wire. |
 
-#### Delivery States for `OutboxEntity`
-- `PENDING`: Queued locally, never dispatched to network. May coalesce with newer local edits on the same row.
+#### Delivery States & Protocol Versions for `OutboxEntity`
+- `PENDING`: Queued locally, never dispatched to network. May coalesce with newer local edits on the same row (only when `transitionCheckpoint == null`).
 - `DISPATCHING`: Currently frozen and in-flight over network socket.
 - `UNCERTAIN`: Dispatch was interrupted, socket timed out, request cancelled, response omitted the op, or result payload/digest mismatched. **Not a server rejection.** Retains identical frozen payload, epoch, revision, and digest for retry.
 - `CONFLICT`: Server explicitly rejected the mutation with `revisionConflict`, `missingRecord`, `deletedRecord`, `opIdReuse`, or `invalidRecord` when the operation had no prior uncertain history.
 - `UNKNOWN_SUPERSEDED`: Server returned a conflict for an operation that had previously entered `UNCERTAIN` state. The earlier attempt may have committed remotely before a subsequent edit bumped the revision.
-
+- `contractVersion`: `"strict-v1"` (legacy or migrated mutation) or `"strict-v2"` (new strict-v2 mutation). Frozen or uncertain operations must not be automatically rehashed into another protocol.
 ---
 
 ## 2. Local Mutation Lifecycle & FIFO Dispatch
@@ -239,6 +241,8 @@ sequenceDiagram
 6. **Clear Credentials**: Removes tokens and identity from `CredentialVault` and resets `HubAuthSession`.
 7. **Clear Wipe Marker**: Removes `wipe.marker`.
 
+*Table vs Filesystem Wipe*: `store.wipeLocalData()` invokes `dao.wipeAllTablesAtomic()`, which transactionally clears all 7 tables in a single SQLite transaction (`editor_drafts`, `outbox`, `scan_staging`, `server_base`, `account_sync_meta`, `account_local_settings`, `reminder_delivery_ledger`). This database transaction is distinct from the 7-step fail-closed filesystem and credential teardown protocol managed by `AccountLeaveProtocol`, which operates on external files, WorkManager schedulers, and Keystore credentials.
+
 ### 6.2 Startup Crash Recovery
 On application startup, before opening any database or initializing an account, `AccountLeaveProtocol.completePendingWipe()` inspects `hasPendingWipe(accountKey)`. If `wipe.marker` exists:
 - Deletes remaining database files (`doggo.db`, `doggo.db-wal`, `doggo.db-shm`).
@@ -248,20 +252,83 @@ If file deletion fails, it returns `false`, preventing the account from being re
 
 ---
 
-## 7. Strict-v2 Schema Evolution & Outbox Reconciliation (Gate G1 Frozen Specification)
+## 7. Strict-v2 Schema Evolution & Outbox Reconciliation (Room v2 Delivered; Client Replay Pending Phase 06)
 
-*Note: Sections 7.1 and 7.2 define the frozen architecture and transition rules designed in Phase 01 (Gate G1 Approved) for implementation in Phase 05 (Room 1 -> 2 migration) and Phase 06 (client transition and replay). Section 7.3 defines the mathematical invariants and binary preimage rules implemented in Phase 01 contracts (`strict-sync-v2-contract.kt`, `strict-sync-v2-digest.kt`).*
+*Note: Section 7.1 documents the Room database version 2 schema, explicit `MIGRATION_1_2`, and shared models delivered in Phase 05. Section 7.2 defines the cross-version outbox reconciliation and client transition rules scheduled for Phase 06. Section 7.3 defines the mathematical invariants and checked 64-bit arithmetic implemented in `dev.doggo.shared.contract`.*
 
-### 7.1 Room Database Migration (1 -> 2) [Planned Phase 05]
-In Room database version 2, `ServerBaseEntity`, `OutboxEntity`, `EditorDraftEntity`, and `ScanStagingEntity` are expanded to store strict-v2 deadline and reminder rule attributes:
-- Deadlines: `deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `scheduleToken`.
-- Reminders: `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`.
-- Migration rule: All migrated version 1 records default to `deadlineDate = null` (all deadline/token fields null) and `reminderEnabled = false` (lead=0, count=1, interval=null).
-- Outbox provenance: Version 2 `OutboxEntity` adds `protocolVersion` (`strict-v1` vs `strict-v2`), `dispatchedOnce: Boolean`, and `changedFieldsMask: String?`.
+### 7.1 Room Database Migration (1 -> 2) [Phase 05 Delivered]
+In Room database version 2, `DoggoDatabase` executes explicit step-by-step migration `DatabaseMigrations.MIGRATION_1_2`. Both `createAndroidDatabaseBuilder` and `createJvmDatabaseBuilder` consume `DatabaseMigrations.ALL`, which registers `MIGRATION_1_2`. Destructive migration fallback is strictly forbidden.
+
+- **Expanded Tables (12 Temporal Columns)**:
+  `server_base`, `editor_drafts`, `scan_staging`, and `outbox` are altered using SQLite `ALTER TABLE ADD COLUMN`:
+  - `deadlineDate TEXT DEFAULT NULL`
+  - `deadlineTime TEXT DEFAULT NULL`
+  - `deadlineZone TEXT DEFAULT NULL`
+  - `deadlineOffsetSeconds INTEGER DEFAULT NULL`
+  - `reminderAnchorTime TEXT DEFAULT NULL`
+  - `deadlineAnchorEpochMs INTEGER DEFAULT NULL`
+  - `deadlineOverdueEpochMs INTEGER DEFAULT NULL`
+  - `reminderEnabled INTEGER NOT NULL DEFAULT 0`
+  - `reminderLeadMinutes INTEGER NOT NULL DEFAULT 0`
+  - `reminderIntervalMinutes INTEGER DEFAULT NULL`
+  - `reminderCount INTEGER NOT NULL DEFAULT 1`
+  - `scheduleToken TEXT DEFAULT NULL`
+  - **Fail-Closed Defaults**: All migrated version 1 records default to `deadlineDate = null` (all deadline/token fields null) and `reminderEnabled = false` (lead=0, count=1, interval=null), eliminating phantom notification triggers on upgrade.
+
+- **Outbox Provenance & Versioning Columns**:
+  `outbox` table is altered with 4 provenance columns:
+  - `contractVersion TEXT NOT NULL DEFAULT 'strict-v1'`: Distinguishes legacy `"strict-v1"` mutations from `"strict-v2"`.
+  - `dispatchHistory TEXT DEFAULT NULL`: JSON log tracking dispatch and migration events.
+  - `intentMask TEXT DEFAULT NULL`: Intent mask indicating field mutations (`TITLE`, `COMPLETED`, `DEADLINE`, `REMINDER`, `DELETE`, `REQUIRES_REVIEW`).
+  - `transitionCheckpoint TEXT DEFAULT NULL`: Migration checkpoint marker (`MIGRATED_FROM_ROOM_V1`).
+
+- **Conservative SQL Intent Derivation for Legacy Outbox Rows**:
+  During `MIGRATION_1_2`, existing uncheckpointed `outbox` rows are updated:
+  ```sql
+  UPDATE outbox SET 
+      transitionCheckpoint = 'MIGRATED_FROM_ROOM_V1',
+      intentMask = CASE
+          WHEN kind = 'delete' THEN 'DELETE'
+          WHEN kind = 'create' THEN 'TITLE|COMPLETED'
+          WHEN kind = 'update' AND title IS NOT NULL AND completed IS NOT NULL THEN 'TITLE|COMPLETED'
+          ELSE 'REQUIRES_REVIEW'
+      END,
+      dispatchHistory = '{"event":"ROOM_V1_MIGRATION","priorState":"' || deliveryState || '"}'
+  WHERE transitionCheckpoint IS NULL
+  ```
+  *Provenance Caveat*: This SQL migration assigns conservative classifications; it does not reconstruct true user intent from historical sessions. Any ambiguous update missing title or completed fields is categorized as `REQUIRES_REVIEW`.
+
+- **Newly Recorded Outbox Provenance (`RoomAccountStore`)**:
+  When saving mutations in `strict-v2` mode, `RoomAccountStore` writes `contractVersion = CONTRACT_VERSION_V2` and dynamically derives `intentMask` by diffing against confirmed `server_base`:
+  - `CREATE`: `TITLE|COMPLETED` + `DEADLINE` (if deadline present) + `REMINDER` (if reminder enabled).
+  - `UPDATE`: Diffing against `server_base` assigns `INTENT_TITLE`, `INTENT_COMPLETED`, `INTENT_DEADLINE`, and `INTENT_REMINDER`. If no field differences are detected (e.g. resave), it defaults to `INTENT_TITLE`.
+  - **Frozen Operation Invariant**: Frozen (`DISPATCHING`) and uncertain (`UNCERTAIN`) operations retain their original frozen payload, digest, and contract version; they are never automatically rehashed or upgraded across protocol versions.
+  - **Tombstone Non-Mutation**: Deleting an already-deleted record throws `IllegalStateException`. Unsent create-delete cancellation and outbox coalescing require `transitionCheckpoint == null`, preventing corruption of migrated entries.
+
+- **New Tables in Version 2**:
+  1. `account_local_settings`: Stores per-device reminder/notification defaults (singleton `id = 'singleton'`, initialized with `09:00` date-only anchor time and disabled reminders). Account-partitioned, wiped on logout, never sent to Hub.
+  2. `reminder_delivery_ledger`: Durable occurrence state and claim outcomes for native reminders. Composite primary key: `[accountKey, generation, taskId, scheduleToken, occurrenceIndex]`. Indices: `[accountKey, generation, taskId]` and `[dueEpochMs]`. Status values: `PENDING`, `CLAIMED`, `POSTED`, `MISSED`, `CANCELLED`, `SKIPPED`. Cancellation states: `ACTIVE`, `CANCELLED`. Account-partitioned, wiped on logout, never transmitted to Hub.
+
+- **Transactional Database Wipe**:
+  `DoggoDao.wipeAllTablesAtomic()` incorporates both new tables:
+  ```kotlin
+  @Transaction
+  suspend fun wipeAllTablesAtomic() {
+      clearDrafts()
+      clearOutbox()
+      clearStaging()
+      clearServerBase()
+      clearMeta()
+      clearLocalSettings()
+      clearLedger()
+  }
+  ```
 
 ### 7.2 Outbox Replay & Reconciliation Safety [Planned Phase 06]
-- Unprovable legacy outbox: In Room v1 databases, existing `OutboxEntity` records lack dispatch history and intent diff masks. If an outbox operation cannot be proven (via server monotonic revision, missing row for expected0 create, or matching receipt from `POST /api/v1/sync/:app_id/strong/legacy-receipts`), it enters `UNKNOWN_SUPERSEDED` for explicit user review; it is never automatically rehashed or re-applied.
-- Safe Intent Rebase: Whole-row v1 mutations must never overwrite newly introduced remote v2 fields. When rebasing a safe v1 pending intention over a newly scanned v2 record, only the explicitly changed fields (title, completed) are applied over the remote base.
+- **Unprovable Legacy Outbox**: In Room v1 databases, existing `OutboxEntity` records lacked dispatch history and intent diff masks. If an outbox operation cannot be proven (via server monotonic revision, missing row for expected0 create, or matching receipt from `POST /api/v1/sync/:app_id/strong/legacy-receipts`), it enters `UNKNOWN_SUPERSEDED` for explicit user review; it is never automatically rehashed or re-applied.
+- **Safe Intent Rebase**: Whole-row v1 mutations must never overwrite newly introduced remote v2 fields. When rebasing a safe v1 pending intention over a newly scanned v2 record, only the explicitly changed fields (title, completed) are applied over the remote base.
+- **Cross-Version Base Reconciliation Risk**: In `RoomAccountStore.reconcileAccepted()`, acknowledging a legacy strict-v1 outbox operation (`op.contractVersion == CONTRACT_VERSION_V1`) must be safeguarded in Phase 06 so that `updatedBase` copies don't overwrite remote v2 deadline fields on equal/higher revisions.
+- **Atomic Cleanup on Regressive Server Revision**: Deferring `discardRegressiveReconcileAtomic` means `deleteDraft` and `deleteOutbox` on regressive server revisions currently execute non-atomically; a crash between calls leaves partially reconciled state until Phase 06 transaction wrapping lands.
 
 ### 7.3 Strict-v2 Mathematical Invariants & Checked Arithmetic
 - **Preimage Framing**: Domain `strict-v2` with 8 length-prefixed identity strings followed by 8-byte big-endian signed revision. Data payload is 0 bytes for DELETE; CREATE/UPDATE serialize 4 base fields followed by 12 strict-v2 fields in table order with explicit presence tags (`0x00`/`0x01`).

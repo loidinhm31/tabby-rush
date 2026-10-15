@@ -15,5 +15,17 @@ data class EditorDraftEntity(
     val draftCompleted: Boolean,
     val localRevision: Long,
     val updatedAt: Long,
-    val isDeleted: Boolean = false
+    val isDeleted: Boolean = false,
+    val deadlineDate: String? = null,
+    val deadlineTime: String? = null,
+    val deadlineZone: String? = null,
+    val deadlineOffsetSeconds: Long? = null,
+    val reminderAnchorTime: String? = null,
+    val deadlineAnchorEpochMs: Long? = null,
+    val deadlineOverdueEpochMs: Long? = null,
+    val reminderEnabled: Boolean = false,
+    val reminderLeadMinutes: Long = 0L,
+    val reminderIntervalMinutes: Long? = null,
+    val reminderCount: Long = 1L,
+    val scheduleToken: String? = null
 )

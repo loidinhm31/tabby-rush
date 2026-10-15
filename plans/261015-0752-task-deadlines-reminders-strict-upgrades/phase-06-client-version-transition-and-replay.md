@@ -12,9 +12,10 @@ Old clients cannot be globally drained. Frozen accepted/uncertain requests canno
 ## Requirements
 - Explicit supported version negotiation and incompatibility preserving local data.
 - Exact legacy receipt reconciliation; safe never-sent intention translation only; durable restart/checkpoints/FIFO.
+- Non-destructive intent-masked rebasing in `RoomAccountStore.reconcileAccepted`: acknowledging legacy strict-v1 outbox operations must never erase remote v2 deadline metadata when local base has equal or higher revision.
+- Atomic transactional cleanup on regressive server revision reconciliation via `DoggoDao.discardRegressiveReconcileAtomic` (wrapping `deleteDraft` and `deleteOutbox` in a single SQLite transaction).
 - Full v2 round-trip across nullable/removal, conflicts, scans, tombstones and account leave.
 - Historical v1 support limited to required transition/reconciliation, not default alias/shim or permissive payload fallback.
-
 ## Architecture
 State: ready-v1→upgrade-detected→dispatch-quiesced→legacy-reconciling→v2-base-scanning→safe-intents-translating→ready-v2. Per-row unknown heads can remain blocked with explicit conflict UI while other rows progress safely. Any crash resumes from durable phase/provenance, never guesses based on network timeout.
 - Bootstrap precedes scan/push; operation protocol version explicit. An app still on v1 accepts only representable v1 edits; editor clearly disables deadline save with upgrade-required explanation until activation.
@@ -42,9 +43,9 @@ Create narrow sync contract-transition coordinator if existing coordinator would
 ## Todo list
 - [ ] Version negotiation/wire/digest/receipt client.
 - [ ] Durable transition and exact legacy outcome matching.
-- [ ] Safe mask-based rebasing and per-row uncertain conflicts.
+- [ ] Safe mask-based rebasing and per-row uncertain conflicts (including `reconcileAccepted` v1-to-v2 base deadline preservation).
+- [ ] Atomic transactional DAO cleanup for regressive server revisions (`discardRegressiveReconcileAtomic`).
 - [ ] Cross-version lost-response/restart/live round-trip evidence.
-
 ## Success Criteria
 Target existing reconciliation/coordinator/staged-scan JVM tests plus behavior regressions for uncertain/superseded outcomes and stale title edit preserving remote deadline. Live smoke proves no duplicate create, no lost local intention, unchanged original digest and explicit conflicts; Rust/Kotlin/Node v2 bytes agree. New fields including clear/null/completion/deletion round-trip both directions. Deadline save never silently strips metadata on a v1 app.
 

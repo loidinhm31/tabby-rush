@@ -3,6 +3,67 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 05] - 2026-10-15: Shared Task Model & Explicit Room v2 Migration (Gate G4 Storage Migration Delivered; Instrumented Platform Acceptance Pending)
+
+### Added
+- Shared task scheduling models and invariants in `:shared` (`dev.doggo.shared.contract.todo-models.kt`):
+  - `TaskDeadline`: Immutable data class (`date`, nullable `time`, `zone`, `offsetSeconds`, nullable `reminderAnchorTime`, `anchorEpochMs`, `overdueEpochMs`). Enforces non-empty date/zone; date-only deadline requires non-null `reminderAnchorTime`; timed deadline requires null `reminderAnchorTime` and `overdueEpochMs == anchorEpochMs`.
+  - `ReminderRule`: Immutable data class (`enabled`, non-negative `leadMinutes`, nullable `intervalMinutes`, `count` in 1..10). When `count == 1`, `intervalMinutes` must be null; when `count > 1`, `intervalMinutes` must be non-null and `>= 15`. Provides `ReminderRule.DISABLED`.
+  - `Todo` domain entity extensions: Integrates `deadline: TaskDeadline?`, `reminderRule: ReminderRule`, and `scheduleToken: String?`. Validates schedule consistency: null deadline requires disabled reminder (lead 0, count 1, interval null) and null token; present deadline requires non-empty `scheduleToken` and checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) verifying `last <= anchor` (last scheduled reminder occurrence cannot exceed deadline anchor).
+  - Model mapping extensions: `Todo.toStrictV2TodoData()`, `StrictV2TodoData.toDeadline()`, `StrictV2TodoData.toReminderRule()`, and `hasScheduleSemanticChange()`.
+- Room database version 2 schema and explicit step-by-step migration (`DatabaseMigrations.kt`):
+  - `DatabaseMigrations.MIGRATION_1_2`: Explicit SQLite migration upgrading schema version 1 to 2 without destructive fallback. Registered across both JVM and Android database builders via `DatabaseMigrations.ALL`.
+  - Exported Room schema artifact: `shared/schemas/dev.doggo.shared.data.DoggoDatabase/2.json` (`identityHash: 06a93ffbac4a0570d56446f47e0e3e4c`).
+- New Room entities in `dev.doggo.shared.data`:
+  - `AccountLocalSettingsEntity` (`account_local_settings`): Partition-local notification and reminder preferences (singleton `id = 'singleton'`, `notificationsEnabled`, `defaultReminderEnabled`, `defaultReminderLeadMinutes`, `defaultReminderIntervalMinutes`, `defaultReminderCount`, `defaultDateOnlyAnchorTime = "09:00"`). Strictly account-local, wiped on logout, never sent to Hub.
+  - `ReminderDeliveryLedgerEntity` (`reminder_delivery_ledger`): Durable occurrence state and claim outcomes for native reminders. Composite primary key: 5-tuple (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`). Composite index on `[accountKey, generation, taskId]` and index on `[dueEpochMs]`. Tracks `claimOutcome` (`PENDING`, `CLAIMED`, `POSTED`, `MISSED`, `CANCELLED`, `SKIPPED`) and `cancellationState` (`ACTIVE`, `CANCELLED`). Durable across restarts, wiped on logout, never sent over wire.
+- New DAO methods in `DoggoDao`:
+  - `getLocalSettings()`, `upsertLocalSettings()`, `clearLocalSettings()` for `AccountLocalSettingsEntity`.
+  - `getLedgerEntry()`, `getLedgerEntriesForTask()`, `getDueLedgerEntries()`, `getAllLedgerEntries()`, `upsertLedgerEntry()`, `upsertLedgerEntries()`, `cancelLedgerEntriesForTask()`, `deleteLedgerForAccount()`, `clearLedger()`, `countLedgerEntries()` for `ReminderDeliveryLedgerEntity`.
+  - Updated `wipeAllTablesAtomic()` clearing all 7 tables in a single SQLite transaction.
+- Automated test suites:
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/task-deadline-reminder-models-test.kt`: 6 unit tests covering valid date-only/timed deadlines, last reminder bounds, tokens, overflow arithmetic, and schedule consistency invariants.
+  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-migration-v1-to-v2-test.kt`: Migration test asserting schema upgrade from v1 to v2, verifying column addition, conservative intent mask derivation, default value population, and table creation on BundledSQLite.
+
+### Changed
+- `dev.doggo.shared.data.DoggoDatabase`: Upgraded to database `version = 2` with 7 registered entities (`ServerBaseEntity`, `OutboxEntity`, `EditorDraftEntity`, `ScanStagingEntity`, `AccountSyncMetaEntity`, `AccountLocalSettingsEntity`, `ReminderDeliveryLedgerEntity`).
+- Expanded existing entities with 12 strict-v2 temporal columns (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`):
+  - `ServerBaseEntity` (`server_base`)
+  - `EditorDraftEntity` (`editor_drafts`)
+  - `ScanStagingEntity` (`scan_staging`)
+  - `OutboxEntity` (`outbox`)
+- `OutboxEntity` provenance and versioning fields:
+  - `contractVersion: String = CONTRACT_VERSION_V1`: Distinguishes legacy `"strict-v1"` mutations from `"strict-v2"`.
+  - `dispatchHistory: String? = null`: JSON log tracking dispatch events and migration provenance.
+  - `intentMask: String? = null`: Mutation mask (`TITLE`, `COMPLETED`, `DEADLINE`, `REMINDER`, `DELETE`, `REQUIRES_REVIEW`).
+  - `transitionCheckpoint: String? = null`: Migration checkpoint marker (`MIGRATED_FROM_ROOM_V1`).
+- `DatabaseMigrations.MIGRATION_1_2` legacy outbox provenance SQL:
+  - Updates existing legacy outbox rows to set `transitionCheckpoint = 'MIGRATED_FROM_ROOM_V1'`, `dispatchHistory = '{"event":"ROOM_V1_MIGRATION","priorState":"' || deliveryState || '"}'`, and conservative `intentMask` (`'DELETE'` for deletes, `'TITLE|COMPLETED'` for creates and complete updates, `'REQUIRES_REVIEW'` for partial/ambiguous updates).
+- `RoomAccountStore`:
+  - `saveTodoLocally`: Dynamically derives `intentMask` by comparing edited fields against `server_base` (defaults to `INTENT_TITLE` when no differences detected), binds `contractVersion = CONTRACT_VERSION_V2`, and computes SHA-256 digest via `StrictSyncV2Digest` for v2 vs `StrictSyncDigest` for v1.
+  - Guards unsent create-delete cancellation and outbox coalescing with `transitionCheckpoint == null` to prevent mutating migrated operations.
+  - Enforces tombstone non-mutation with `IllegalStateException`.
+  - Exposes `getLocalSettings()`, `updateLocalSettings()`, `getLedgerEntriesForTask()`, `upsertLedgerEntry()`, `cancelLedgerEntriesForTask()`.
+- `jvm-database-builder.kt`: Verified migration registration through `DatabaseMigrations.ALL`.
+- Expanded unit test coverage in `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt` (14 tests covering BundledSQLite persistence, v2 schedule tokens, and draft recovery).
+
+### Verification and Delivery Status
+- Shared Kotlin Multiplatform JVM test suite passes 128 tests across 19 classes (`./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` in 6.46s):
+  - `RoomMigrationV1ToV2Test` (1/1 PASS): Validates explicit v1->v2 SQLite schema migration and data preservation.
+  - `RoomAccountStoreTest` (14/14 PASS): Validates BundledSQLite persistence, draft recovery, and v2 token survival.
+  - `TaskDeadlineReminderModelsTest` (6/6 PASS): Validates temporal domain models and checked 64-bit arithmetic.
+- Strict-v2 vector runner passes 23/23 checks (`node scripts/strict-v2-vector-runner.mjs`):
+  - Schema fingerprints verified: v1 (`3361a80f...`) and v2 (`5f539551...`).
+  - 10 valid vectors + 11 boundary/rejection vectors PASS.
+- Hub offline smoke fixture self-test passes 18/18 checks (`node scripts/hub-live-smoke.mjs --fixture-test`).
+- Static source security diagnostics passes 6/6 checks (`node scripts/release-security-check.mjs --diagnose-source`).
+- Total: 175 executed automated checks passed cleanly in a single test run with 0 failures.
+- **Coverage Boundaries & Remaining Holds**:
+  1. Room v2 schema, explicit migration, and temporal models are delivered and verified on JVM BundledSQLite. Android instrumented execution (`:shared:connectedAndroidTest`) remains pending Phase 08 device/emulator availability.
+  2. Storage migration delivery does NOT establish safe end-to-end mixed-version synchronization. Cross-version outbox reconciliation and client sync migration remain scheduled for Phase 06 (`phase-06-client-version-transition-and-replay`). In particular, non-destructive intent-masked rebasing in `reconcileAccepted` (safeguarding remote v2 deadline fields from legacy v1 acknowledgements) and atomic cleanup on regressive server revision (`discardRegressiveReconcileAtomic`) are Phase 06 dependencies.
+  3. Production admission and live staging acceptance remain on hold per earlier phase gates (G2 native platform environments, G3 live replica-set cluster).
+
+---
 ## [Phase 04] - 2026-10-15: Hub Admin UI and Shared-Operation Upgrade Script (Gate G3 Operator Tooling Delivered; Staging Acceptance Pending)
 
 ### Added

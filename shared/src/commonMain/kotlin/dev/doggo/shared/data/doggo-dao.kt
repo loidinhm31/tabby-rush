@@ -134,6 +134,79 @@ interface DoggoDao {
     suspend fun clearMeta()
 
     // -------------------------------------------------------------------------
+    // Account Local Settings
+    // -------------------------------------------------------------------------
+
+    @Query("SELECT * FROM account_local_settings WHERE id = :id")
+    suspend fun getLocalSettings(id: String = AccountLocalSettingsEntity.SINGLETON_ID): AccountLocalSettingsEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLocalSettings(settings: AccountLocalSettingsEntity)
+
+    @Query("DELETE FROM account_local_settings")
+    suspend fun clearLocalSettings()
+
+    // -------------------------------------------------------------------------
+    // Reminder Delivery Ledger
+    // -------------------------------------------------------------------------
+
+    @Query("SELECT * FROM reminder_delivery_ledger WHERE accountKey = :accountKey AND generation = :generation AND taskId = :taskId AND scheduleToken = :scheduleToken AND occurrenceIndex = :occurrenceIndex")
+    suspend fun getLedgerEntry(
+        accountKey: String,
+        generation: Long,
+        taskId: String,
+        scheduleToken: String,
+        occurrenceIndex: Int
+    ): ReminderDeliveryLedgerEntity?
+
+    @Query("SELECT * FROM reminder_delivery_ledger WHERE accountKey = :accountKey AND generation = :generation AND taskId = :taskId ORDER BY occurrenceIndex ASC")
+    suspend fun getLedgerEntriesForTask(
+        accountKey: String,
+        generation: Long,
+        taskId: String
+    ): List<ReminderDeliveryLedgerEntity>
+
+    @Query("SELECT * FROM reminder_delivery_ledger WHERE dueEpochMs <= :dueBeforeEpochMs AND claimOutcome = 'PENDING' AND cancellationState = 'ACTIVE' ORDER BY dueEpochMs ASC")
+    suspend fun getDueLedgerEntries(dueBeforeEpochMs: Long): List<ReminderDeliveryLedgerEntity>
+
+    @Query("SELECT * FROM reminder_delivery_ledger ORDER BY dueEpochMs ASC")
+    suspend fun getAllLedgerEntries(): List<ReminderDeliveryLedgerEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLedgerEntry(entry: ReminderDeliveryLedgerEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLedgerEntries(entries: List<ReminderDeliveryLedgerEntity>)
+
+    @Query("UPDATE reminder_delivery_ledger SET cancellationState = 'CANCELLED', updatedAtEpochMs = :updatedAtEpochMs WHERE accountKey = :accountKey AND generation = :generation AND taskId = :taskId AND cancellationState = 'ACTIVE'")
+    suspend fun cancelLedgerEntriesForTask(
+        accountKey: String,
+        generation: Long,
+        taskId: String,
+        updatedAtEpochMs: Long
+    )
+
+    @Query("DELETE FROM reminder_delivery_ledger WHERE accountKey = :accountKey")
+    suspend fun deleteLedgerForAccount(accountKey: String)
+
+    @Query("DELETE FROM reminder_delivery_ledger")
+    suspend fun clearLedger()
+
+    @Query("SELECT COUNT(*) FROM reminder_delivery_ledger")
+    suspend fun countLedgerEntries(): Int
+
+    @Transaction
+    suspend fun wipeAllTablesAtomic() {
+        clearDrafts()
+        clearOutbox()
+        clearStaging()
+        clearServerBase()
+        clearMeta()
+        clearLocalSettings()
+        clearLedger()
+    }
+
+    // -------------------------------------------------------------------------
     // Atomic Transaction Methods (C1)
     // -------------------------------------------------------------------------
 
@@ -209,6 +282,18 @@ interface DoggoDao {
         if (draft != null && draft.localRevision <= conflictLocalRev) {
             deleteDraft(rowId)
         }
+    }
+
+    @Transaction
+    suspend fun purgeStaleOutboxAtomic(
+        opId: String,
+        rowId: String,
+        clearDraft: Boolean
+    ) {
+        if (clearDraft) {
+            deleteDraft(rowId)
+        }
+        deleteOutbox(opId)
     }
 
     @Transaction

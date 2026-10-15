@@ -96,7 +96,8 @@ class HubHttpClient(
 
             "/api/v1/sync/${config.appId}/strong/bootstrap",
             "/api/v1/sync/${config.appId}/strong/push",
-            "/api/v1/sync/${config.appId}/strong/pull" -> RouteClassification.DUAL_AUTH_STRICT
+            "/api/v1/sync/${config.appId}/strong/pull",
+            "/api/v1/sync/${config.appId}/strong/legacy-receipts" -> RouteClassification.DUAL_AUTH_STRICT
 
             else -> null
         }

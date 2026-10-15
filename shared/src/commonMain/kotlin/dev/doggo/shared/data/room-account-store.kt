@@ -176,16 +176,16 @@ class RoomAccountStore(
             throw IllegalStateException("Cannot mutate permanently deleted tombstone with rowId: ${todo.id}")
         }
 
-        val opContractVersion = defaultContractVersion
+        val meta = getOrCreateMeta()
+        val isReadyV2 = meta.syncStatus == "ready-v2" || meta.syncStatus == "READY_V2"
+        val opContractVersion = if (isReadyV2) OutboxEntity.CONTRACT_VERSION_V2 else defaultContractVersion
         if (opContractVersion == OutboxEntity.CONTRACT_VERSION_V1 && todo.deadline != null) {
             throw IllegalArgumentException("Task deadlines and reminders require strict-v2 account contract")
         }
 
-        val meta = getOrCreateMeta()
         val nextRev = meta.localRevisionCounter + 1L
         val updatedMeta = meta.copy(localRevisionCounter = nextRev)
         val activeEpoch = meta.activeEpoch ?: ""
-
         val existingDraft = dao.getDraft(todo.id)
         val existingOps = dao.getOutboxByRowId(todo.id)
         val latestExistingOp = existingOps.lastOrNull()
@@ -249,10 +249,11 @@ class RoomAccountStore(
         val expectedRev: Long
         val opId: String
 
-        if (canCoalesce && pendingOp != null) {
-            opId = pendingOp.opId
-            kind = StrictOperationKind.fromWireName(pendingOp.kind) ?: StrictOperationKind.UPDATE
-            expectedRev = pendingOp.expectedRevision
+        if (canCoalesce) {
+            val op = requireNotNull(pendingOp)
+            opId = op.opId
+            kind = StrictOperationKind.fromWireName(op.kind) ?: StrictOperationKind.UPDATE
+            expectedRev = op.expectedRevision
         } else {
             opId = generateUuid()
             if (existingBase == null || existingBase.serverRevision == 0L || existingBase.deleted) {
@@ -503,10 +504,15 @@ class RoomAccountStore(
 
         // Monotonic check: Never regress confirmed server base (W1, W-E)
         if (currentBase != null && serverRevision < currentBase.serverRevision) {
-            dao.purgeStaleOutboxAtomic(opId, op.rowId, clearDraft)
+            dao.discardRegressiveReconcileAtomic(opId, op.rowId, clearDraft)
             return
         }
         val isV1Op = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V1
+        val intentMasks = op.intentMask?.split("|")?.toSet() ?: emptySet()
+        val preservesRemoteDeadline = isV1Op || (intentMasks.isNotEmpty() &&
+                !intentMasks.contains(OutboxEntity.INTENT_DEADLINE) &&
+                !intentMasks.contains(OutboxEntity.INTENT_REMINDER))
+
         val updatedBase = if (op.kind == StrictOperationKind.DELETE.wireName) {
             ServerBaseEntity(
                 rowId = op.rowId,
@@ -531,27 +537,40 @@ class RoomAccountStore(
                 scheduleToken = null
             )
         } else {
+            val resolvedTitle = if (intentMasks.isNotEmpty() && !intentMasks.contains(OutboxEntity.INTENT_TITLE) && currentBase != null) {
+                currentBase.title
+            } else {
+                op.title ?: currentBase?.title ?: ""
+            }
+
+            val resolvedCompleted = if (intentMasks.isNotEmpty() && !intentMasks.contains(OutboxEntity.INTENT_COMPLETED) && currentBase != null) {
+                currentBase.completed
+            } else {
+                op.completed ?: currentBase?.completed ?: false
+            }
+
+            val useBaseDeadline = preservesRemoteDeadline && currentBase != null
             ServerBaseEntity(
                 rowId = op.rowId,
                 serverRevision = serverRevision,
                 deleted = false,
-                title = op.title ?: "",
-                completed = op.completed ?: false,
-                createdAt = op.createdAt ?: System.currentTimeMillis(),
+                title = resolvedTitle,
+                completed = resolvedCompleted,
+                createdAt = op.createdAt ?: currentBase?.createdAt ?: System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
                 epoch = op.epoch,
-                deadlineDate = if (isV1Op && currentBase != null) currentBase.deadlineDate else op.deadlineDate,
-                deadlineTime = if (isV1Op && currentBase != null) currentBase.deadlineTime else op.deadlineTime,
-                deadlineZone = if (isV1Op && currentBase != null) currentBase.deadlineZone else op.deadlineZone,
-                deadlineOffsetSeconds = if (isV1Op && currentBase != null) currentBase.deadlineOffsetSeconds else op.deadlineOffsetSeconds,
-                reminderAnchorTime = if (isV1Op && currentBase != null) currentBase.reminderAnchorTime else op.reminderAnchorTime,
-                deadlineAnchorEpochMs = if (isV1Op && currentBase != null) currentBase.deadlineAnchorEpochMs else op.deadlineAnchorEpochMs,
-                deadlineOverdueEpochMs = if (isV1Op && currentBase != null) currentBase.deadlineOverdueEpochMs else op.deadlineOverdueEpochMs,
-                reminderEnabled = if (isV1Op && currentBase != null) currentBase.reminderEnabled else op.reminderEnabled,
-                reminderLeadMinutes = if (isV1Op && currentBase != null) currentBase.reminderLeadMinutes else op.reminderLeadMinutes,
-                reminderIntervalMinutes = if (isV1Op && currentBase != null) currentBase.reminderIntervalMinutes else op.reminderIntervalMinutes,
-                reminderCount = if (isV1Op && currentBase != null) currentBase.reminderCount else op.reminderCount,
-                scheduleToken = if (isV1Op && currentBase != null) currentBase.scheduleToken else op.scheduleToken
+                deadlineDate = if (useBaseDeadline) currentBase.deadlineDate else op.deadlineDate,
+                deadlineTime = if (useBaseDeadline) currentBase.deadlineTime else op.deadlineTime,
+                deadlineZone = if (useBaseDeadline) currentBase.deadlineZone else op.deadlineZone,
+                deadlineOffsetSeconds = if (useBaseDeadline) currentBase.deadlineOffsetSeconds else op.deadlineOffsetSeconds,
+                reminderAnchorTime = if (useBaseDeadline) currentBase.reminderAnchorTime else op.reminderAnchorTime,
+                deadlineAnchorEpochMs = if (useBaseDeadline) currentBase.deadlineAnchorEpochMs else op.deadlineAnchorEpochMs,
+                deadlineOverdueEpochMs = if (useBaseDeadline) currentBase.deadlineOverdueEpochMs else op.deadlineOverdueEpochMs,
+                reminderEnabled = if (useBaseDeadline) currentBase.reminderEnabled else op.reminderEnabled,
+                reminderLeadMinutes = if (useBaseDeadline) currentBase.reminderLeadMinutes else op.reminderLeadMinutes,
+                reminderIntervalMinutes = if (useBaseDeadline) currentBase.reminderIntervalMinutes else op.reminderIntervalMinutes,
+                reminderCount = if (useBaseDeadline) currentBase.reminderCount else op.reminderCount,
+                scheduleToken = if (useBaseDeadline) currentBase.scheduleToken else op.scheduleToken
             )
         }
 

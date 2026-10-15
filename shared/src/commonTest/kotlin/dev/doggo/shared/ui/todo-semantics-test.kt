@@ -10,6 +10,8 @@ import dev.doggo.shared.contract.SafeError
 import dev.doggo.shared.contract.SyncProgress
 import dev.doggo.shared.contract.SyncStatus
 import dev.doggo.shared.contract.TitlePolicy
+import dev.doggo.shared.contract.TaskDeadline
+import dev.doggo.shared.contract.ReminderRule
 import dev.doggo.shared.contract.Todo
 import dev.doggo.shared.contract.TodoAction
 import dev.doggo.shared.contract.TodoCounts
@@ -33,6 +35,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TodoSemanticsTest {
@@ -170,6 +174,49 @@ class TodoSemanticsTest {
         assertEquals(rowId, copyAction.rowId)
         assertEquals(rowId, discardAction.rowId)
         assertEquals(rowId, reapplyAction.rowId)
+    }
+
+    @Test
+    fun testConflictStateUnknownSupersededAndDeadlineContext() {
+        val rowId = "00000000-0000-0000-0000-000000000002"
+        val deadline = TaskDeadline(
+            date = "2026-11-20",
+            time = "15:00",
+            zone = "UTC",
+            offsetSeconds = 0L,
+            anchorEpochMs = 1795186800000L,
+            overdueEpochMs = 1795186800000L
+        )
+        val rule = ReminderRule(enabled = true, leadMinutes = 30L, count = 1L)
+        val localTodo = Todo(
+            id = rowId,
+            title = "Local Task with Deadline",
+            completed = false,
+            createdAt = 1000L,
+            deadline = deadline,
+            reminderRule = rule,
+            scheduleToken = "tok-local"
+        )
+        val remoteTodo = Todo(
+            id = rowId,
+            title = "Remote Task without Deadline",
+            completed = false,
+            createdAt = 1000L,
+            serverRevision = 3L
+        )
+
+        val conflict = ConflictState(
+            rowId = rowId,
+            localTodo = localTodo,
+            remoteTodo = remoteTodo,
+            isUnknownSuperseded = true
+        )
+
+        assertTrue(conflict.isUnknownSuperseded)
+        assertNotNull(conflict.localTodo?.deadline)
+        assertEquals("2026-11-20", conflict.localTodo?.deadline?.date)
+        assertEquals("15:00", conflict.localTodo?.deadline?.time)
+        assertNull(conflict.remoteTodo?.deadline)
     }
 
     @Test

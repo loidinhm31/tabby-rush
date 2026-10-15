@@ -9,7 +9,8 @@ data class EditorState(
 data class ConflictState(
     val rowId: String,
     val localTodo: Todo?,
-    val remoteTodo: Todo?
+    val remoteTodo: Todo?,
+    val isUnknownSuperseded: Boolean = false
 )
 
 data class LeaveGuardState(

@@ -5,6 +5,9 @@ import dev.doggo.shared.contract.StrictOperationStatus
 import dev.doggo.shared.contract.StrictSyncContract
 import dev.doggo.shared.contract.StrictSyncDigest
 import dev.doggo.shared.contract.StrictTodoData
+import dev.doggo.shared.contract.StrictSyncV2Contract
+import dev.doggo.shared.contract.StrictSyncV2Digest
+import dev.doggo.shared.contract.StrictV2TodoData
 import dev.doggo.shared.data.OutboxEntity
 import dev.doggo.shared.data.RoomAccountStore
 
@@ -70,9 +73,13 @@ class OutboxReconciliation(
 
         for (op in batch) {
             if (op.deliveryState == OutboxEntity.STATE_UNCERTAIN) {
-                // N1: Retain exact frozen identity, revision, epoch, and digest for UNCERTAIN retry!
-                val dispatchingOp = op.copy(deliveryState = OutboxEntity.STATE_DISPATCHING)
-                store.dao.updateDeliveryState(op.opId, OutboxEntity.STATE_DISPATCHING, null)
+                // Retain exact frozen identity, revision, epoch, and digest for UNCERTAIN retry!
+                val history = op.dispatchHistory ?: """{"dispatched":true,"uncertain":true}"""
+                val dispatchingOp = op.copy(
+                    deliveryState = OutboxEntity.STATE_DISPATCHING,
+                    dispatchHistory = history
+                )
+                store.dao.upsertOutbox(dispatchingOp)
                 frozenBatch.add(dispatchingOp)
                 continue
             }
@@ -95,32 +102,66 @@ class OutboxReconciliation(
                 }
             }
 
-            val todoData = if (kind == StrictOperationKind.DELETE) null else StrictTodoData(
-                id = op.rowId,
-                title = op.title ?: "",
-                completed = op.completed ?: false,
-                createdAt = op.createdAt ?: 0L
-            )
-
-            val digest = StrictSyncDigest.computeDigest(
-                domain = StrictSyncContract.PROTOCOL_VERSION,
-                appId = store.appId,
-                userId = store.userId,
-                epoch = activeEpoch,
-                tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                rowId = op.rowId,
-                opId = op.opId,
-                kind = kind,
-                expectedRevision = expectedRev,
-                data = todoData
-            )
+            val isV2 = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V2
+            val digest = if (isV2) {
+                val v2Data = if (kind == StrictOperationKind.DELETE) null else StrictV2TodoData(
+                    id = op.rowId,
+                    title = op.title ?: "",
+                    completed = op.completed ?: false,
+                    createdAt = op.createdAt ?: 0L,
+                    deadlineDate = op.deadlineDate,
+                    deadlineTime = op.deadlineTime,
+                    deadlineZone = op.deadlineZone,
+                    deadlineOffsetSeconds = op.deadlineOffsetSeconds,
+                    reminderAnchorTime = op.reminderAnchorTime,
+                    deadlineAnchorEpochMs = op.deadlineAnchorEpochMs,
+                    deadlineOverdueEpochMs = op.deadlineOverdueEpochMs,
+                    reminderEnabled = op.reminderEnabled,
+                    reminderLeadMinutes = op.reminderLeadMinutes,
+                    reminderIntervalMinutes = op.reminderIntervalMinutes,
+                    reminderCount = op.reminderCount,
+                    scheduleToken = op.scheduleToken
+                )
+                StrictSyncV2Digest.computeDigest(
+                    domain = StrictSyncV2Contract.PROTOCOL_VERSION,
+                    appId = store.appId,
+                    userId = store.userId,
+                    epoch = activeEpoch,
+                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                    rowId = op.rowId,
+                    opId = op.opId,
+                    kind = kind,
+                    expectedRevision = expectedRev,
+                    data = v2Data
+                )
+            } else {
+                val todoData = if (kind == StrictOperationKind.DELETE) null else StrictTodoData(
+                    id = op.rowId,
+                    title = op.title ?: "",
+                    completed = op.completed ?: false,
+                    createdAt = op.createdAt ?: 0L
+                )
+                StrictSyncDigest.computeDigest(
+                    domain = StrictSyncContract.PROTOCOL_VERSION,
+                    appId = store.appId,
+                    userId = store.userId,
+                    epoch = activeEpoch,
+                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                    rowId = op.rowId,
+                    opId = op.opId,
+                    kind = kind,
+                    expectedRevision = expectedRev,
+                    data = todoData
+                )
+            }
 
             val frozenOp = op.copy(
                 epoch = activeEpoch,
                 kind = kind.wireName,
                 expectedRevision = expectedRev,
                 digest = digest,
-                deliveryState = OutboxEntity.STATE_DISPATCHING
+                deliveryState = OutboxEntity.STATE_DISPATCHING,
+                dispatchHistory = op.dispatchHistory ?: """{"dispatched":true}"""
             )
 
             // N2: Optimistic concurrency check to ensure no intervening edit occurred
@@ -149,6 +190,45 @@ class OutboxReconciliation(
         }
 
         return StrictOperationDto(
+            opId = entity.opId,
+            epoch = entity.epoch,
+            tableName = entity.tableName,
+            rowId = entity.rowId,
+            kind = entity.kind,
+            expectedRevision = entity.expectedRevision,
+            data = dataDto
+        )
+    }
+
+    /**
+     * Converts a frozen OutboxEntity to a wire StrictV2OperationDto.
+     * Delete operation data payload is serialized as null.
+     */
+    fun toV2Dto(entity: OutboxEntity): StrictV2OperationDto {
+        val dataDto = if (entity.kind == StrictOperationKind.DELETE.wireName) {
+            null
+        } else {
+            StrictV2TodoDataDto(
+                id = entity.rowId,
+                title = entity.title ?: "",
+                completed = entity.completed ?: false,
+                createdAt = entity.createdAt ?: 0L,
+                deadlineDate = entity.deadlineDate,
+                deadlineTime = entity.deadlineTime,
+                deadlineZone = entity.deadlineZone,
+                deadlineOffsetSeconds = entity.deadlineOffsetSeconds,
+                reminderAnchorTime = entity.reminderAnchorTime,
+                deadlineAnchorEpochMs = entity.deadlineAnchorEpochMs,
+                deadlineOverdueEpochMs = entity.deadlineOverdueEpochMs,
+                reminderEnabled = entity.reminderEnabled,
+                reminderLeadMinutes = entity.reminderLeadMinutes,
+                reminderIntervalMinutes = entity.reminderIntervalMinutes,
+                reminderCount = entity.reminderCount,
+                scheduleToken = entity.scheduleToken
+            )
+        }
+
+        return StrictV2OperationDto(
             opId = entity.opId,
             epoch = entity.epoch,
             tableName = entity.tableName,
@@ -244,7 +324,10 @@ class OutboxReconciliation(
                     // Critical Invariant:
                     // If operation was previously UNCERTAIN before this dispatch round,
                     // the previous attempt might have committed and then been superseded by another client.
-                    val wasUncertain = op.deliveryState == OutboxEntity.STATE_UNCERTAIN || op.consecutiveFailures > 0
+                    val wasUncertain = op.deliveryState == OutboxEntity.STATE_UNCERTAIN ||
+                            op.consecutiveFailures > 0 ||
+                            op.dispatchHistory != null ||
+                            op.transitionCheckpoint != null
                     if (wasUncertain) {
                         store.dao.updateDeliveryState(
                             opId = op.opId,

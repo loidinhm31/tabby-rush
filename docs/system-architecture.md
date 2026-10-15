@@ -1,7 +1,7 @@
 # Doggo System Architecture
 
 Last Updated: 2026-10-15
-Phase: Phase 01 frozen (Gate G1 approved); Phase 02 strict timezone/DST contracts and platform candidate adapters delivered, with Gate G2 native delivery formally blocked pending platform testbed environments (Android SDK/device, active Linux notification daemon, Windows host runtime); Phase 03 backend contracts, admission guards, and in-place migration engine delivered (Gate G3 staging hold pending replica set acceptance); Phase 04 operator tooling delivered; Phase 05 Room database version 2 migration and shared temporal task model delivered (Gate G4 storage migration delivered; connected platform & sync acceptance pending)
+Phase: Phase 01 frozen (Gate G1 approved); Phase 02 strict timezone/DST contracts and platform candidate adapters delivered, with Gate G2 native delivery formally blocked pending platform testbed environments (Android SDK/device, active Linux notification daemon, Windows host runtime); Phase 03 backend contracts, admission guards, and in-place migration engine delivered (Gate G3 staging hold pending replica set acceptance); Phase 04 operator tooling delivered; Phase 05 Room database version 2 migration and shared temporal task model delivered; Phase 06 client version transition, safe replay, and intention preservation delivered (Gate G4 client transition delivered; connected platform & end-to-end sync acceptance pending Phase 11)
 Related Docs: [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
@@ -109,8 +109,9 @@ flowchart TD
     UI["Compose Multiplatform UI\n(Material 3 / Light Theme)"]
     State["Todo State & Actions\n(TodoUiState / TodoAction)"]
 
-    subgraph LocalPersistence["Local Persistence & Sync (Phase 05)"]
+    subgraph LocalPersistence["Local Persistence & Sync (Phases 05–06)"]
       Coordinator["AccountSyncCoordinator\n(3-Stage Sync / Mutex)"]
+      TransitionCoordinator["ContractTransitionCoordinator\n(6-Phase Pipeline / Durable Checkpoints)"]
       Store["RoomAccountStore\n(Store Mutex & Atomic Ops)"]
       RoomDB[("DoggoDatabase (Room v2)\nserver_base | outbox\neditor_drafts | scan_staging\naccount_sync_meta\naccount_local_settings\nreminder_delivery_ledger")]
       Reconciliation["OutboxReconciliation\n(FIFO Dispatch / CAS Ack)"]
@@ -135,7 +136,7 @@ flowchart TD
     DualAuth["Dual Auth Layer\n(Bearer JWT + X-API-Key + X-App-Id)"]
     LegacyGuard["Legacy Sync Mode Guard\n(Rejects strict apps with 426)"]
     ScopeGuard["Strong Route Scope Guard\n(Enforces path/header app_id coherence)"]
-    StrictRoutes["Strict Routes\n(/api/v1/sync/:app_id/strong/{bootstrap,push,pull})"]
+    StrictRoutes["Strict Routes\n(/api/v1/sync/:app_id/strong/{bootstrap,push,pull,legacy-receipts})"]
     AdminStrict["Admin Strict Registration\n(POST /api/v1/strict-apps)"]
     AdmissionHelper["Admission Validator\n(Exact index, topology, uncapped, no TTL)"]
     MongoDB["MongoDB Target Collection\n(app_doggo)"]
@@ -154,10 +155,13 @@ flowchart TD
   Store --> RoomDB
   Store --> AccountFiles
   Coordinator --> Store
+  Coordinator --> TransitionCoordinator
   Coordinator --> Reconciliation
   Coordinator --> Scan
   Coordinator --> LeaveProtocol
   Coordinator --> AuthSession
+  TransitionCoordinator --> Store
+  TransitionCoordinator --> Reconciliation
   Reconciliation --> RoomDB
   Scan --> RoomDB
   LeaveProtocol --> Store
@@ -209,7 +213,7 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
 - **Prohibited Automatic POST Replays**: `authorizedRequest()` refreshes tokens on HTTP 401 but never replays mutating POST requests.
 - **Android Keystore Vault (`AndroidKeystoreVault`)**: AES-256-GCM encryption per account key (`doggo_vault_key_{accountKey}`), fresh 12-byte random nonces per write, AAD binding (`"doggo_vault_v1:" + accountKey`), atomic file replacement.
 
-### 4.6 Local Storage & Strict Synchronization Subsystem (Phase 05)
+### 4.6 Local Storage & Strict Synchronization Subsystem (Phases 05–06 of Deadlines/Reminders Plan)
 
 1. **Room KMP Persistence (`DoggoDatabase`)**:
    - Backed by `BundledSQLiteDriver`. Destructive migration is strictly forbidden; explicit step-by-step migration `DatabaseMigrations.MIGRATION_1_2` upgrades schema version 1 (`shared/schemas/.../1.json`) to schema version 2 (`shared/schemas/.../2.json`, identity hash `06a93ffbac4a0570d56446f47e0e3e4c`). Both Android (`createAndroidDatabaseBuilder`) and JVM (`createJvmDatabaseBuilder`) builders register `DatabaseMigrations.ALL`.
@@ -253,8 +257,30 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
    - Teardown checks 5 unresolved work categories (`drafts`, `pending`, `uncertain`, `conflict`, `unknownSuperseded`).
    - Strict 7-step sequence: freeze store -> write generation and `wipe.marker` outside DB -> cancel/await schedulers -> close Room -> delete DB files -> clear vault -> clear marker.
    - Startup recovery (`completePendingWipe`) inspects `wipe.marker` and finishes teardown fail-closed before any account opens.
+12. **Client Version Transition & Safe Replay (`ContractTransitionCoordinator`)**:
+   - Manages an orderly 6-phase state machine: `ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`.
+   - Durable state checkpointing: Persists active phase in `AccountSyncMetaEntity.syncStatus` (`"TRANSITION:<phase>"`) and `safeErrorCode = "CHECKPOINT_<PHASE>"`. Resumes uninterrupted upon crash/restart.
+   - Quiescence and interrupted recovery: `store.recoverInterruptedDispatches()` resets in-flight `DISPATCHING` operations to `UNCERTAIN`. Uncheckpointed uncertain/failed v1 ops are marked with `transitionCheckpoint = "QUIESCED"` and durable `dispatchHistory`.
+13. **Legacy Receipt Reconciliation (`POST /api/v1/sync/{appId}/strong/legacy-receipts`)**:
+   - Allowlisted under `RouteClassification.DUAL_AUTH_STRICT` in `HubHttpClient`. Batches up to 100 v1 ops.
+   - Exact matching: Transmits frozen v1 preimages (`opId`, `rowId`, `expectedRevision`, `digest`, `data`). Server outcomes: `PROVEN_ACCEPTED` (advances base via `reconcileAccepted`), `PROVEN_NOT_ACCEPTED` (marks `deliveryState = PENDING`, `transitionCheckpoint = "PROVEN_NOT_ACCEPTED"`), `UNKNOWN_SUPERSEDED` (marks `STATE_UNKNOWN_SUPERSEDED`), `INTEGRITY_FAILURE` (marks `STATE_CONFLICT`). Receipt omission defaults safely to `UNCERTAIN` and is never treated as non-delivery proof.
+14. **Migration Full Scan & Equal-Revision Temporal Enrichment**:
+   - `StagedFullScan` executes with `protocol = StrictSyncV2Contract.PROTOCOL_VERSION` and `isMigration = true`.
+   - Equal-revision enrichment: If `staged.serverRevision == currentBase.serverRevision`, staged records containing remote temporal metadata enrich confirmed `server_base` (deadlines, reminder rules, schedule tokens) when local base lacks them. Core title/completed fields must still match; mismatched core fields or divergent revisions outside this explicit migration path remain fatal `DIVERGENT_REVISION` errors.
+   - Pre-promotion fencing check: Validates `if (store.isFrozen || isFenced?.invoke() == true)` right before `promoteStagingAtomic`, clearing staging and aborting fail-closed if frozen.
+15. **Never-Sent Safe Intent Translation**:
+   - Provably unsent v1 operations (`PROVEN_NOT_ACCEPTED` or never-dispatched pending ops) are translated over confirmed v2 base records.
+   - Conservative classification check: Operations with `intentMask == INTENT_REQUIRES_REVIEW` (from Room v1 migration) fail closed to `STATE_CONFLICT` for explicit user review.
+   - `CREATE`: If row already exists on server, blocks as `STATE_CONFLICT`; otherwise mints fresh v2 UUID `opId`, `expectedRevision = 0L`, and replaces atomically via `replaceOutboxAtomic` with `transitionCheckpoint = "TRANSLATED_V2"`.
+   - `UPDATE`: If base is missing or deleted, blocks as `STATE_CONFLICT`; otherwise mints fresh v2 UUID `opId`, binds base `serverRevision`, retains base temporal metadata, and replaces atomically.
+   - `DELETE`: If base is missing or deleted, purges outbox entry; otherwise mints fresh v2 UUID `opId`, binds base `serverRevision`, and replaces atomically.
+16. **Intent-Masked Rebase Safety & Atomic Regressive Cleanup**:
+   - Non-destructive rebase: In `RoomAccountStore.reconcileAccepted()`, acknowledging a legacy strict-v1 outbox operation (`op.contractVersion == CONTRACT_VERSION_V1`) or a masked edit without deadline/reminder intents preserves remote temporal fields (`deadlineDate`, `deadlineTime`, `reminderEnabled`, `scheduleToken`, etc.) from `currentBase`.
+   - Atomic regressive cleanup: `DoggoDao.discardRegressiveReconcileAtomic` wraps `deleteDraft` and `deleteOutbox` in a single SQLite transaction, ensuring atomic cleanup when server revision is lower than confirmed base.
+   - Cross-version server compatibility guard: In `AccountSyncCoordinator.executeSyncRound()`, if the server reports protocol `strict-v1` and the local outbox contains any strict-v2 operations (`dao.countOutboxByVersion(CONTRACT_VERSION_V2) > 0`), sync aborts with `SafeError.ProtocolIncompatible("SERVER_VERSION_REGRESSION")`.
 
-### 4.7 Shared Compose UI & Accessible Light Theme Subsystem (Phase 06)
+### 4.7 Shared Compose UI & Accessible Light Theme Subsystem (Phase 06 of Foundation Plan)
+*(Note: This subsection documents Phase 06 of the initial UI foundation plan, distinct from Phase 06 client version transition in the task deadlines plan).*
 
 1. **Light Theme & Design Tokens (`DoggoTheme`, `DoggoColors`)**:
    - Material 3 `LightColorScheme` mapping with custom semantic extensions (`DoggoCustomColors`).
@@ -274,7 +300,7 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
    - `TodoList`: LazyColumn with stable keys (`rowId`), non-color completion checkboxes (`stateDescription`), and >=48dp touch targets.
    - `TodoEditorDialog`: Modal task creation/editing dialog with `TitlePolicy` validation (1–200 Unicode scalars).
    - `SyncFeedback`: Real-time sync status badges, pause/reset guidance, and relative/UTC reconciliation timestamp display.
-   - `ConflictReviewDialog`: Side-by-side local vs remote diff inspection with Discard, Reapply, CopyAsNew, and Decide Later workflows.
+   - `ConflictReviewDialog`: Side-by-side local vs remote diff inspection with Discard, Reapply, CopyAsNew, and Decide Later workflows. For `isUnknownSuperseded` conflicts, renders a high-contrast coral warning banner (`coralSurface`) cautioning against blind reapply; `VersionCard` displays full deadline date, time, zone, and reminder recurrence details with WCAG 2.1 AA accessible tokens.
    - `LeaveGuardDialog`: Fail-closed sign-out confirmation warning displaying unsynced draft, pending, uncertain, and conflict tallies.
    - `LicenseNoticesDialog`: In-app attribution viewer for bundled open-source dependencies.
 
@@ -382,9 +408,9 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 36. **Strict-v1 Legacy Receipt Replay Verification**: Legacy receipt reconciliation (`POST /api/v1/sync/:app_id/strong/legacy-receipts`) enforces bounded batches (`<= 100`) and strictly validates `request.protocol == "strict-v1"`. Matching receipts execute durable replay confirmation nonces without mutating payload records or applying legacy mutations.
 
 
-## 6. Deadlines, Reminders & Strict Upgrade Design (Phases 01–05 Status)
+## 6. Deadlines, Reminders & Strict Upgrade Design (Phases 01–06 Status)
 
-Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved). Phase 02 logic contracts and platform candidate adapters delivered on 2026-10-15 (Gate G2 physical native delivery formally recorded as BLOCKED pending missing host prerequisites). Phase 03 backend contracts, admission guards, and in-place migration engine delivered on 2026-10-15 with passing unit/contract checks; production admission remains on hold with Gate G3 live multi-instance replica-set acceptance unexecuted pending staging testbed, coordination-document compatibility/backfill for documents missing `permitCount` requiring live verification, and exact cumulative accounting across mid-batch crash interruption requiring formal revalidation. Phase 04 operator tooling delivered on 2026-10-15. Phase 05 Shared Task Model & Explicit Room v2 Migration delivered on 2026-10-15: Room database version 2 schema, explicit `MIGRATION_1_2`, shared temporal models (`TaskDeadline`, `ReminderRule`, checked 64-bit arithmetic in `Todo`), and new entities (`AccountLocalSettingsEntity`, `ReminderDeliveryLedgerEntity`) verified via `:shared:jvmTest` (128 passing tests); instrumented Android device testing and cross-version outbox reconciliation remain pending Phase 06/08.
+Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved). Phase 02 logic contracts and platform candidate adapters delivered on 2026-10-15 (Gate G2 physical native delivery formally recorded as BLOCKED pending missing host prerequisites). Phase 03 backend contracts, admission guards, and in-place migration engine delivered on 2026-10-15 with passing unit/contract checks; production admission remains on hold with Gate G3 live multi-instance replica-set acceptance unexecuted pending staging testbed, coordination-document compatibility/backfill for documents missing `permitCount` requiring live verification, and exact cumulative accounting across mid-batch crash interruption requiring formal revalidation. Phase 04 operator tooling delivered on 2026-10-15. Phase 05 Shared Task Model & Explicit Room v2 Migration delivered on 2026-10-15: Room database version 2 schema, explicit `MIGRATION_1_2`, shared temporal models (`TaskDeadline`, `ReminderRule`, checked 64-bit arithmetic in `Todo`), and new entities (`AccountLocalSettingsEntity`, `ReminderDeliveryLedgerEntity`) verified via `:shared:jvmTest` (128 passing tests). Phase 06 Client Version Transition, Safe Replay & Intention Preservation delivered on 2026-10-15: `ContractTransitionCoordinator` 7-state / 6-transition pipeline, legacy receipt reconciliation under `RouteClassification.DUAL_AUTH_STRICT`, intent-masked rebasing in `RoomAccountStore.reconcileAccepted()`, atomic cleanup via `DoggoDao.discardRegressiveReconcileAtomic()`, and migration-mode equal-revision temporal enrichment in `StagedFullScan` verified via reported test suites (243 passing checks with 0 failures); connected platform acceptance and live mixed-version cutover remain pending Phases 08–11.
 
 ### 6.1 Wire Schema & Fingerprints
 - Target sync protocol: `strict-v2`. Full replacement payloads, absent fields rejected, nulls explicit.
@@ -412,7 +438,7 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
 - **Authorization**: Requires JWT token with `is_admin: true` AND target app present in `claims.apps` via `app_scoped_admin_middleware`. Non-admin requests receive HTTP 401; admin without app grant receives HTTP 403.
 - **Coordination & Fencing**: Collection `_coordination`, document `permit:<app_id>`. Readers and writers acquire durable permits with bounded concurrency (`MAX_CONCURRENT_PERMITS = 1000`) enforced via atomic CAS `permitCount: { $lt: 1000 }` with `$inc: { permitCount: 1 }`. Release checks `activePermits.<permit_id>: { $exists: true }` and decrements `permitCount: -1`. Exclusive fence sets `fenced: true`, `fenceOwner`, incremented `fenceGeneration`. New permits fail fast with HTTP 503 `migrationInProgress`.
 
-### 6.4 Legacy-Receipt Reconciliation & Outbox Replay (Phase 03 Backend Delivered; Phase 06 Client Scheduled)
+### 6.4 Legacy-Receipt Reconciliation & Outbox Replay (Phase 03 Backend & Phase 06 Client Delivered)
 - **Delivered Endpoint**: `POST /api/v1/sync/:app_id/strong/legacy-receipts`: app-scoped and user-scoped dual-auth (`Authorization: Bearer <jwt>`, `X-API-Key: <key>`, `X-App-Id: <appId>`), bounded batch size `<= 100` (`MAX_BATCH_SIZE`).
 - **Protocol Validation**: Strictly requires `request.protocol == "strict-v1"`; non-v1 requests are rejected with HTTP 426 `protocolUnsupported`.
 - **Verification Logic**: Recomputes original v1 preimage and SHA-256 digest against submitted payload. Classifies operations into 4 statuses:
@@ -420,7 +446,7 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
   - `provenNotAccepted`: Current revision matches expected revision (operation was never applied). Returns current state.
   - `unknownSuperseded`: Current revision differs from expected revision (operation was superseded by later mutation). Returns current state for manual review.
   - `integrityFailure`: Invalid UUIDs, unknown table, non-matching digest, or malformed data payload.
-- **Outbox Transition (Phase 06 Client Contract)**: Legacy Room v1 databases lack original contract version, dispatch history flag, and changed-field mask. Where dispatch provenance or intention history cannot be proven, the record is flagged as `UNKNOWN_SUPERSEDED` for explicit user review; it is never auto-reapplied or auto-rehashed.
+- **Outbox Transition (Phase 06 Client Delivered)**: Legacy Room v1 databases lack original contract version, dispatch history flag, and changed-field mask. Where dispatch provenance or intention history cannot be proven, the record transitions to `UNKNOWN_SUPERSEDED` for explicit user review; it is never auto-reapplied or auto-rehashed.
 ### 6.5 Strict Timezone & Native Candidate Status (Phase 02 / Gate G2 Blocked)
 - **Delivered Logic Contracts**: Strict timezone resolver in `:shared` and candidate notification adapters in `:androidApp` and `:desktopApp`.
 - **Automated Verification**: Reported test runs pass 147 tests across `:shared:jvmTest` (115 tests, including 7 timezone vectors) and `:desktopApp:test` (32 tests, including 4 Linux D-Bus tests), executed with `--dependency-verification=off`.
@@ -433,3 +459,14 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
 - **Delivered Logic Contracts**: Strict upgrade models, coordination permit service, in-place migration engine, app-scoped admin authorization middleware, and legacy receipt reconciliation routes in `glean-hub-sync`.
 - **Automated Verification**: Reported test runs pass 54 tests in Rust `glean-hub-sync` (1 ignored: `test_strong_sync_live_mongo_acceptance_gate` due to missing `MONGO_TEST_URI`), 23/23 vector runner checks (`scripts/strict-v2-vector-runner.mjs`), 18/18 live smoke offline fixture checks (`hub-live-smoke.mjs --fixture-test`), and 116 shared JVM tests (`:shared:jvmTest --dependency-verification=off`).
 - **Gate G3 Staging Hold**: Phase 03 backend contracts and logic are delivered with passing unit/contract checks. Production admission remains on hold: (1) Gate G3 live multi-instance replica-set acceptance is unexecuted pending staging testbed, (2) coordination-document compatibility/backfill for documents missing `permitCount` requires live verification, and (3) exact cumulative accounting across mid-batch crash interruption requires formal revalidation.
+
+### 6.7 Client Version Transition, Safe Replay & Intention Preservation (Phase 06 Delivered)
+- **Delivered Logic Contracts**: `ContractTransitionCoordinator` in `:shared` managing the 6-phase transition pipeline (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`), durable phase checkpoints in `account_sync_meta`, legacy receipt DTOs and client integration under `RouteClassification.DUAL_AUTH_STRICT`, intent-masked non-destructive rebasing in `RoomAccountStore.reconcileAccepted()`, atomic transactional cleanup for regressive server revisions via `DoggoDao.discardRegressiveReconcileAtomic()`, migration-mode equal-revision temporal enrichment in `StagedFullScan`, and accessible `isUnknownSuperseded` warning card in Compose UI `ConflictReview`.
+- **Automated Verification**: Total 243 executed checks passed with 0 failures:
+  1. `:shared:jvmTest` (155 tests PASS across 20 classes), including `ContractTransitionTest` (4 tests), `AccountSyncCoordinatorTest` (9 tests), `HubSyncClientTest` (12 tests), `OutboxReconciliationTest` (12 tests), `StagedFullScanTest` (13 tests), `RoomAccountStoreTest` (21 tests), `TodoSemanticsTest` (8 tests).
+  2. `:desktopApp:test` (32 tests PASS across 6 classes).
+  3. `scripts/strict-v2-vector-runner.mjs` (23/23 checks PASS: 2 schema fingerprints, 10 valid vectors, 11 rejection vectors).
+  4. `scripts/hub-live-smoke.mjs --fixture-test` (18/18 checks PASS against in-process strict-v1 fixture mock).
+  5. `scripts/release-security-check.mjs --diagnose-source` (6/6 checks PASS: manifest flags, export audit, security XML, HTTPS origin, zero hardcoded secrets).
+  6. `scripts/hub-strict-upgrade.test.mjs` (9/9 CLI test suites PASS).
+- **Gate G4 Delivery Boundaries & Remaining Holds**: Phase 06 client version transition and replay logic are delivered and verified on JVM/BundledSQLite. Connected platform acceptance remains bounded: (1) Android instrumented test execution (`:shared:connectedAndroidTest`) is deferred to Phase 08 emulator/device testbeds, (2) connected platform notification delivery (Android AlarmManager, Linux D-Bus, Windows toast) is deferred to Phase 08–10, and (3) live mixed-version multi-device cutover across network boundaries is scheduled for Phase 11.

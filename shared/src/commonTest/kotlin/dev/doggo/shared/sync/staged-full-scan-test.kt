@@ -10,6 +10,7 @@ import dev.doggo.shared.contract.BuildMode
 import dev.doggo.shared.contract.CredentialBundle
 import dev.doggo.shared.contract.HubConfig
 import dev.doggo.shared.contract.SafeError
+import dev.doggo.shared.contract.StrictSyncV2Contract
 import dev.doggo.shared.data.AccountSyncMetaEntity
 import dev.doggo.shared.data.AccountLocalSettingsEntity
 import dev.doggo.shared.data.DoggoDao
@@ -25,6 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class FakeDoggoDao : DoggoDao {
@@ -60,6 +62,7 @@ class FakeDoggoDao : DoggoDao {
     override suspend fun clearOutbox() { outbox.clear() }
     override suspend fun countOutbox(): Int = outbox.size
     override suspend fun countOutboxByState(state: String): Int = outbox.values.count { it.deliveryState == state }
+    override suspend fun countOutboxByVersion(version: String): Int = outbox.values.count { it.contractVersion == version }
     override suspend fun updateDeliveryState(opId: String, state: String, errorMessage: String?) {
         val op = outbox[opId]
         if (op != null) {
@@ -614,5 +617,248 @@ class StagedFullScanTest {
         assertIs<ApiResult.Failure>(result)
         assertIs<SafeError.ProtocolIncompatible>(result.error)
         assertEquals("NON_PROGRESSING_CURSOR", result.error.code)
+    }
+
+    @Test
+    fun testV2ScanPromotesAll12TemporalFields() = runTest {
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v2",
+                    "epoch":"epoch-v2",
+                    "records":[
+                        {
+                            "tableName":"todos",
+                            "rowId":"row-v2-1",
+                            "revision":1,
+                            "deleted":false,
+                            "data":{
+                                "id":"row-v2-1",
+                                "title":"Full Temporal Task",
+                                "completed":false,
+                                "createdAt":1000,
+                                "deadlineDate":"2026-11-01",
+                                "deadlineTime":"14:00",
+                                "deadlineZone":"America/New_York",
+                                "deadlineOffsetSeconds":-18000,
+                                "deadlineAnchorEpochMs":1793559600000,
+                                "deadlineOverdueEpochMs":1793559600000,
+                                "reminderEnabled":true,
+                                "reminderLeadMinutes":30,
+                                "reminderIntervalMinutes":15,
+                                "reminderCount":2,
+                                "scheduleToken":"sched-tok-full"
+                            }
+                        }
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        val scan = StagedFullScan(client, store, activeEpoch = "epoch-v2", protocol = StrictSyncV2Contract.PROTOCOL_VERSION)
+        val result = scan.executeScan()
+
+        assertIs<ApiResult.Success<Int>>(result)
+        assertEquals(1, result.value)
+
+        val base = store.dao.getServerBase("row-v2-1")
+        assertNotNull(base)
+        assertEquals("2026-11-01", base.deadlineDate)
+        assertEquals("14:00", base.deadlineTime)
+        assertEquals("America/New_York", base.deadlineZone)
+        assertEquals(-18000L, base.deadlineOffsetSeconds)
+        assertEquals(1793559600000L, base.deadlineAnchorEpochMs)
+        assertEquals(1793559600000L, base.deadlineOverdueEpochMs)
+        assertTrue(base.reminderEnabled)
+        assertEquals(30L, base.reminderLeadMinutes)
+        assertEquals(15L, base.reminderIntervalMinutes)
+        assertEquals(2L, base.reminderCount)
+        assertEquals("sched-tok-full", base.scheduleToken)
+    }
+
+    @Test
+    fun testMigrationEqualRevisionNormalizesV1BaseWithV2Defaults() = runTest {
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v2",
+                    "epoch":"epoch-mig",
+                    "records":[
+                        {
+                            "tableName":"todos",
+                            "rowId":"row-eq-rev",
+                            "revision":2,
+                            "deleted":false,
+                            "data":{
+                                "id":"row-eq-rev",
+                                "title":"Identical Title",
+                                "completed":false,
+                                "createdAt":1000,
+                                "deadlineDate":"2026-11-05",
+                                "deadlineZone":"UTC",
+                                "deadlineOffsetSeconds":0,
+                                "deadlineAnchorEpochMs":1793836800000,
+                                "deadlineOverdueEpochMs":1793923200000,
+                                "reminderAnchorTime":"09:00",
+                                "reminderEnabled":false,
+                                "reminderLeadMinutes":0,
+                                "reminderCount":1,
+                                "scheduleToken":"migrated-tok"
+                            }
+                        }
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        // Local base has revision 2 from v1 (null temporal fields)
+        store.dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = "row-eq-rev",
+                serverRevision = 2L,
+                deleted = false,
+                title = "Identical Title",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-mig",
+                deadlineDate = null,
+                scheduleToken = null
+            )
+        )
+
+        // Scan with isMigration = true
+        val scan = StagedFullScan(
+            syncClient = client,
+            store = store,
+            activeEpoch = "epoch-mig",
+            protocol = StrictSyncV2Contract.PROTOCOL_VERSION,
+            isMigration = true
+        )
+        val result = scan.executeScan()
+        assertIs<ApiResult.Success<Int>>(result)
+
+        // Base is enriched with v2 metadata without throwing DIVERGENT_REVISION
+        val base = store.dao.getServerBase("row-eq-rev")
+        assertNotNull(base)
+        assertEquals("2026-11-05", base.deadlineDate)
+        assertEquals("migrated-tok", base.scheduleToken)
+    }
+
+    @Test
+    fun testNonMigrationEqualRevisionDifferingTemporalTriggersDivergentRevision() = runTest {
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v2",
+                    "epoch":"epoch-diverge",
+                    "records":[
+                        {
+                            "tableName":"todos",
+                            "rowId":"row-div",
+                            "revision":2,
+                            "deleted":false,
+                            "data":{
+                                "id":"row-div",
+                                "title":"Same Title",
+                                "completed":false,
+                                "createdAt":1000,
+                                "deadlineDate":"2026-12-01",
+                                "deadlineZone":"UTC",
+                                "deadlineOffsetSeconds":0,
+                                "deadlineAnchorEpochMs":1796083200000,
+                                "deadlineOverdueEpochMs":1796169600000,
+                                "reminderAnchorTime":"09:00",
+                                "reminderEnabled":false,
+                                "reminderLeadMinutes":0,
+                                "reminderCount":1,
+                                "scheduleToken":"tok-2"
+                            }
+                        }
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        // Local base has different deadlineDate ("2026-11-01" vs "2026-12-01") at the same revision
+        store.dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = "row-div",
+                serverRevision = 2L,
+                deleted = false,
+                title = "Same Title",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-diverge",
+                deadlineDate = "2026-11-01",
+                deadlineZone = "UTC",
+                deadlineOffsetSeconds = 0L,
+                reminderAnchorTime = "09:00",
+                deadlineAnchorEpochMs = 1793491200000L,
+                deadlineOverdueEpochMs = 1793577600000L,
+                reminderEnabled = false,
+                reminderLeadMinutes = 0L,
+                reminderCount = 1L,
+                scheduleToken = "tok-1"
+            )
+        )
+
+        // Normal scan (isMigration = false)
+        val scan = StagedFullScan(
+            syncClient = client,
+            store = store,
+            activeEpoch = "epoch-diverge",
+            protocol = StrictSyncV2Contract.PROTOCOL_VERSION,
+            isMigration = false
+        )
+        val result = scan.executeScan()
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.ProtocolIncompatible>(result.error)
+        assertEquals("DIVERGENT_REVISION", result.error.code)
+    }
+
+    @Test
+    fun testPrePromotionFencingAbortsWithoutPromoting() = runTest {
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v1",
+                    "epoch":"epoch-fence",
+                    "records":[
+                        {"tableName":"todos","rowId":"row-fence","revision":1,"deleted":false,"data":{"id":"row-fence","title":"Fenced","completed":false,"createdAt":1000}}
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        var isFencedFlag = true
+        val scan = StagedFullScan(
+            syncClient = client,
+            store = store,
+            activeEpoch = "epoch-fence",
+            isFenced = { isFencedFlag }
+        )
+        val result = scan.executeScan()
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.Unauthorized>(result.error)
+        assertEquals("STORE_FROZEN", result.error.code)
+        assertNull(store.dao.getServerBase("row-fence"))
     }
 }

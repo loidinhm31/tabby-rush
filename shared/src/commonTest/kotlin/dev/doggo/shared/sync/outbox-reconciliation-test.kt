@@ -3,6 +3,9 @@ package dev.doggo.shared.sync
 import dev.doggo.shared.contract.AccountKey
 import dev.doggo.shared.contract.StrictOperationKind
 import dev.doggo.shared.contract.StrictOperationStatus
+import dev.doggo.shared.contract.StrictSyncV2Digest
+import dev.doggo.shared.contract.StrictSyncV2Contract
+import dev.doggo.shared.contract.StrictV2TodoData
 import dev.doggo.shared.data.EditorDraftEntity
 import dev.doggo.shared.data.OutboxEntity
 import dev.doggo.shared.data.RoomAccountStore
@@ -546,5 +549,132 @@ class OutboxReconciliationTest {
         assertEquals("Edited", inDb.title)
         assertEquals(2L, inDb.localRevision)
         assertEquals(OutboxEntity.STATE_PENDING, inDb.deliveryState)
+    }
+
+    @Test
+    fun testV2OperationFreezeComputesV2DigestAndPreservesTemporalFields() = runTest {
+        val (store, dao) = createStore()
+
+        val v2Op = OutboxEntity(
+            opId = "v2-op-freeze",
+            epoch = "",
+            tableName = "todos",
+            rowId = "v2-row-1",
+            kind = "create",
+            expectedRevision = 0L,
+            title = "V2 Task",
+            completed = false,
+            createdAt = 1000L,
+            digest = "",
+            localRevision = 1L,
+            deliveryState = OutboxEntity.STATE_PENDING,
+            createdAtEpochMs = 1000L,
+            deadlineDate = "2026-11-01",
+            deadlineTime = "14:00",
+            deadlineZone = "America/New_York",
+            deadlineOffsetSeconds = -18000L,
+            deadlineAnchorEpochMs = 1793559600000L,
+            deadlineOverdueEpochMs = 1793559600000L,
+            reminderEnabled = true,
+            reminderLeadMinutes = 15L,
+            reminderCount = 1L,
+            scheduleToken = "tok-freeze-v2",
+            contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+            intentMask = "${OutboxEntity.INTENT_TITLE}|${OutboxEntity.INTENT_DEADLINE}"
+        )
+        dao.upsertOutbox(v2Op)
+
+        val reconciliation = OutboxReconciliation(store, activeEpoch = "epoch-v2")
+        val frozen = reconciliation.prepareAndFreezeBatch(listOf(v2Op))
+
+        assertEquals(1, frozen.size)
+        val op = frozen[0]
+        assertEquals("epoch-v2", op.epoch)
+        assertEquals(OutboxEntity.STATE_DISPATCHING, op.deliveryState)
+        assertNotNull(op.dispatchHistory)
+
+        val expectedDigest = StrictSyncV2Digest.computeDigest(
+            domain = StrictSyncV2Contract.PROTOCOL_VERSION,
+            appId = "doggo",
+            userId = "user-123",
+            epoch = "epoch-v2",
+            tableName = "todos",
+            rowId = "v2-row-1",
+            opId = "v2-op-freeze",
+            kind = StrictOperationKind.CREATE,
+            expectedRevision = 0L,
+            data = StrictV2TodoData(
+                id = "v2-row-1",
+                title = "V2 Task",
+                completed = false,
+                createdAt = 1000L,
+                deadlineDate = "2026-11-01",
+                deadlineTime = "14:00",
+                deadlineZone = "America/New_York",
+                deadlineOffsetSeconds = -18000L,
+                deadlineAnchorEpochMs = 1793559600000L,
+                deadlineOverdueEpochMs = 1793559600000L,
+                reminderEnabled = true,
+                reminderLeadMinutes = 15L,
+                reminderCount = 1L,
+                scheduleToken = "tok-freeze-v2"
+            )
+        )
+        assertEquals(expectedDigest, op.digest)
+
+        // Verify wire DTO mapping
+        val dto = reconciliation.toV2Dto(op)
+        assertEquals("v2-op-freeze", dto.opId)
+        assertEquals("2026-11-01", dto.data?.deadlineDate)
+        assertEquals("14:00", dto.data?.deadlineTime)
+        assertEquals("tok-freeze-v2", dto.data?.scheduleToken)
+    }
+
+    @Test
+    fun testDispatchedUncertainOpRetainsUncertaintyMarkerAcrossPreparation() = runTest {
+        val (store, dao) = createStore()
+
+        val op = OutboxEntity(
+            opId = "op-uncertain-marker",
+            epoch = "epoch-1",
+            tableName = "todos",
+            rowId = "row-marker",
+            kind = "update",
+            expectedRevision = 2L,
+            title = "Uncertain Op",
+            completed = false,
+            createdAt = 1000L,
+            digest = "frozen-digest",
+            localRevision = 1L,
+            deliveryState = OutboxEntity.STATE_UNCERTAIN,
+            createdAtEpochMs = 1000L,
+            dispatchHistory = """{"dispatched":true,"uncertain":true}"""
+        )
+        dao.upsertOutbox(op)
+
+        val reconciliation = OutboxReconciliation(store, activeEpoch = "epoch-1")
+        val frozen = reconciliation.prepareAndFreezeBatch(listOf(op))
+        assertEquals(1, frozen.size)
+        assertEquals(OutboxEntity.STATE_DISPATCHING, frozen[0].deliveryState)
+        assertNotNull(frozen[0].dispatchHistory)
+
+        // When push returns revisionConflict, it must become UNKNOWN_SUPERSEDED because of prior uncertainty
+        val response = StrictPushResponseDto(
+            protocol = "strict-v1",
+            epoch = "epoch-1",
+            results = listOf(
+                StrictOperationResultDto(
+                    opId = "op-uncertain-marker",
+                    rowId = "row-marker",
+                    digest = "frozen-digest",
+                    status = StrictOperationStatus.REVISION_CONFLICT.wireName,
+                    acceptedRevision = null
+                )
+            )
+        )
+        reconciliation.reconcilePushResults(frozen, response)
+        val updated = dao.getOutboxEntry("op-uncertain-marker")
+        assertNotNull(updated)
+        assertEquals(OutboxEntity.STATE_UNKNOWN_SUPERSEDED, updated.deliveryState)
     }
 }

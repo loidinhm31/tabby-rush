@@ -8,6 +8,11 @@ import dev.doggo.shared.contract.StrictOperationKind
 import dev.doggo.shared.contract.StrictSyncContract
 import dev.doggo.shared.contract.StrictSyncDigest
 import dev.doggo.shared.contract.StrictTodoData
+import dev.doggo.shared.contract.StrictSyncV2Contract
+import dev.doggo.shared.contract.StrictSyncV2Digest
+import dev.doggo.shared.contract.StrictV2TodoData
+import dev.doggo.shared.contract.TaskDeadline
+import dev.doggo.shared.contract.ReminderRule
 import dev.doggo.shared.contract.SyncCoordinator
 import dev.doggo.shared.contract.SyncProgress
 import dev.doggo.shared.contract.SyncStatus
@@ -137,11 +142,50 @@ class AccountSyncCoordinator(
         }
 
         val activeEpoch = serverEpoch
+        val isServerV2 = bootstrap.protocol == StrictSyncV2Contract.PROTOCOL_VERSION
+        val transitionCoordinator = ContractTransitionCoordinator(store, syncClient)
+
+        if (isServerV2) {
+            val durablePhase = transitionCoordinator.getDurablePhase()
+            if (durablePhase != TransitionPhase.READY_V2) {
+                val transitionResult = transitionCoordinator.executeTransition(activeEpoch)
+                if (transitionResult is ApiResult.Failure) {
+                    handleSyncFailure(transitionResult.error)
+                    return
+                }
+            }
+        } else {
+            // Server is on v1: verify local outbox contains no v2 operations
+            val hasV2Outbox = store.dao.countOutboxByVersion(OutboxEntity.CONTRACT_VERSION_V2) > 0
+            if (hasV2Outbox) {
+                handleSyncFailure(
+                    SafeError.ProtocolIncompatible(
+                        code = "SERVER_V1_INCOMPATIBLE",
+                        message = "Server is on strict-v1; cannot sync pending strict-v2 operations until server upgrades"
+                    )
+                )
+                return
+            }
+        }
+
+        val syncProtocol = if (isServerV2) StrictSyncV2Contract.PROTOCOL_VERSION else StrictSyncContract.PROTOCOL_VERSION
 
         // 3. Stage 1: Initial Staged Full Scan
-        var initialScan = StagedFullScan(syncClient, store, activeEpoch).executeScan()
+        var initialScan = StagedFullScan(
+            syncClient = syncClient,
+            store = store,
+            activeEpoch = activeEpoch,
+            protocol = syncProtocol,
+            isFenced = { capturedGeneration != currentGeneration || store.isFrozen }
+        ).executeScan()
         if (initialScan is ApiResult.Failure && initialScan.error is SafeError.Unauthorized && initialScan.error.code == "TOKEN_REFRESHED") {
-            initialScan = StagedFullScan(syncClient, store, activeEpoch).executeScan()
+            initialScan = StagedFullScan(
+                syncClient = syncClient,
+                store = store,
+                activeEpoch = activeEpoch,
+                protocol = syncProtocol,
+                isFenced = { capturedGeneration != currentGeneration || store.isFrozen }
+            ).executeScan()
         }
         if (capturedGeneration != currentGeneration || store.isFrozen) return
 
@@ -160,10 +204,15 @@ class AccountSyncCoordinator(
         if (eligibleBatch.isNotEmpty()) {
             // Freeze expectedRevision, epoch, and digest at DISPATCH time against current base (C2, C5)
             val frozenBatch = reconciliation.prepareAndFreezeBatch(eligibleBatch)
-            val dtos = frozenBatch.map { reconciliation.toDto(it) }
 
             val pushResult = try {
-                syncClient.push(activeEpoch, dtos)
+                if (isServerV2) {
+                    val dtos = frozenBatch.map { reconciliation.toV2Dto(it) }
+                    syncClient.pushV2(activeEpoch, dtos)
+                } else {
+                    val dtos = frozenBatch.map { reconciliation.toDto(it) }
+                    syncClient.push(activeEpoch, dtos)
+                }
             } catch (e: CancellationException) {
                 // Cancellation safety: mark batch UNCERTAIN in NonCancellable block (C4)
                 withContext(NonCancellable) {
@@ -194,7 +243,13 @@ class AccountSyncCoordinator(
             }
 
             // 5. Stage 3: Final Staged Full Scan after mutations
-            val finalScan = StagedFullScan(syncClient, store, activeEpoch).executeScan()
+            val finalScan = StagedFullScan(
+                syncClient = syncClient,
+                store = store,
+                activeEpoch = activeEpoch,
+                protocol = syncProtocol,
+                isFenced = { capturedGeneration != currentGeneration || store.isFrozen }
+            ).executeScan()
             if (capturedGeneration != currentGeneration || store.isFrozen) return
 
             if (finalScan is ApiResult.Failure) {
@@ -300,27 +355,80 @@ class AccountSyncCoordinator(
         val completed = draft?.draftCompleted ?: conflictOp?.completed ?: currentBase?.completed ?: false
         val createdAt = currentBase?.createdAt ?: conflictOp?.createdAt ?: System.currentTimeMillis()
 
+        val deadlineDate = draft?.deadlineDate ?: conflictOp?.deadlineDate ?: currentBase?.deadlineDate
+        val deadlineTime = draft?.deadlineTime ?: conflictOp?.deadlineTime ?: currentBase?.deadlineTime
+        val deadlineZone = draft?.deadlineZone ?: conflictOp?.deadlineZone ?: currentBase?.deadlineZone
+        val deadlineOffsetSeconds = draft?.deadlineOffsetSeconds ?: conflictOp?.deadlineOffsetSeconds ?: currentBase?.deadlineOffsetSeconds
+        val reminderAnchorTime = draft?.reminderAnchorTime ?: conflictOp?.reminderAnchorTime ?: currentBase?.reminderAnchorTime
+        val deadlineAnchorEpochMs = draft?.deadlineAnchorEpochMs ?: conflictOp?.deadlineAnchorEpochMs ?: currentBase?.deadlineAnchorEpochMs
+        val deadlineOverdueEpochMs = draft?.deadlineOverdueEpochMs ?: conflictOp?.deadlineOverdueEpochMs ?: currentBase?.deadlineOverdueEpochMs
+        val reminderEnabled = draft?.reminderEnabled ?: conflictOp?.reminderEnabled ?: currentBase?.reminderEnabled ?: false
+        val reminderLeadMinutes = draft?.reminderLeadMinutes ?: conflictOp?.reminderLeadMinutes ?: currentBase?.reminderLeadMinutes ?: 0L
+        val reminderIntervalMinutes = draft?.reminderIntervalMinutes ?: conflictOp?.reminderIntervalMinutes ?: currentBase?.reminderIntervalMinutes
+        val reminderCount = draft?.reminderCount ?: conflictOp?.reminderCount ?: currentBase?.reminderCount ?: 1L
+        val scheduleToken = draft?.scheduleToken ?: conflictOp?.scheduleToken ?: currentBase?.scheduleToken
+
+        val hasDeadline = deadlineDate != null
+        val contractVersion = if (hasDeadline || conflictOp?.contractVersion == OutboxEntity.CONTRACT_VERSION_V2) {
+            OutboxEntity.CONTRACT_VERSION_V2
+        } else {
+            OutboxEntity.CONTRACT_VERSION_V1
+        }
+
         val nextRev = store.allocateNextLocalRevision()
         val newOpId = generateUuid()
-        val todoData = if (kind == StrictOperationKind.DELETE) null else StrictTodoData(
-            id = rowId,
-            title = title,
-            completed = completed,
-            createdAt = createdAt
-        )
 
-        val digest = StrictSyncDigest.computeDigest(
-            domain = StrictSyncContract.PROTOCOL_VERSION,
-            appId = store.appId,
-            userId = store.userId,
-            epoch = activeEpoch,
-            tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-            rowId = rowId,
-            opId = newOpId,
-            kind = kind,
-            expectedRevision = expectedRev,
-            data = todoData
-        )
+        val digest = if (contractVersion == OutboxEntity.CONTRACT_VERSION_V2) {
+            val v2Data = if (kind == StrictOperationKind.DELETE) null else StrictV2TodoData(
+                id = rowId,
+                title = title,
+                completed = completed,
+                createdAt = createdAt,
+                deadlineDate = deadlineDate,
+                deadlineTime = deadlineTime,
+                deadlineZone = deadlineZone,
+                deadlineOffsetSeconds = deadlineOffsetSeconds,
+                reminderAnchorTime = reminderAnchorTime,
+                deadlineAnchorEpochMs = deadlineAnchorEpochMs,
+                deadlineOverdueEpochMs = deadlineOverdueEpochMs,
+                reminderEnabled = reminderEnabled,
+                reminderLeadMinutes = reminderLeadMinutes,
+                reminderIntervalMinutes = reminderIntervalMinutes,
+                reminderCount = reminderCount,
+                scheduleToken = scheduleToken
+            )
+            StrictSyncV2Digest.computeDigest(
+                domain = StrictSyncV2Contract.PROTOCOL_VERSION,
+                appId = store.appId,
+                userId = store.userId,
+                epoch = activeEpoch,
+                tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                rowId = rowId,
+                opId = newOpId,
+                kind = kind,
+                expectedRevision = expectedRev,
+                data = v2Data
+            )
+        } else {
+            val todoData = if (kind == StrictOperationKind.DELETE) null else StrictTodoData(
+                id = rowId,
+                title = title,
+                completed = completed,
+                createdAt = createdAt
+            )
+            StrictSyncDigest.computeDigest(
+                domain = StrictSyncContract.PROTOCOL_VERSION,
+                appId = store.appId,
+                userId = store.userId,
+                epoch = activeEpoch,
+                tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                rowId = rowId,
+                opId = newOpId,
+                kind = kind,
+                expectedRevision = expectedRev,
+                data = todoData
+            )
+        }
 
         store.dao.replaceOutboxAtomic(
             conflictOp?.opId,
@@ -337,10 +445,23 @@ class AccountSyncCoordinator(
                 digest = digest,
                 localRevision = nextRev,
                 deliveryState = OutboxEntity.STATE_PENDING,
-                createdAtEpochMs = System.currentTimeMillis()
+                createdAtEpochMs = System.currentTimeMillis(),
+                deadlineDate = if (kind == StrictOperationKind.DELETE) null else deadlineDate,
+                deadlineTime = if (kind == StrictOperationKind.DELETE) null else deadlineTime,
+                deadlineZone = if (kind == StrictOperationKind.DELETE) null else deadlineZone,
+                deadlineOffsetSeconds = if (kind == StrictOperationKind.DELETE) null else deadlineOffsetSeconds,
+                reminderAnchorTime = if (kind == StrictOperationKind.DELETE) null else reminderAnchorTime,
+                deadlineAnchorEpochMs = if (kind == StrictOperationKind.DELETE) null else deadlineAnchorEpochMs,
+                deadlineOverdueEpochMs = if (kind == StrictOperationKind.DELETE) null else deadlineOverdueEpochMs,
+                reminderEnabled = if (kind == StrictOperationKind.DELETE) false else reminderEnabled,
+                reminderLeadMinutes = if (kind == StrictOperationKind.DELETE) 0L else reminderLeadMinutes,
+                reminderIntervalMinutes = if (kind == StrictOperationKind.DELETE) null else reminderIntervalMinutes,
+                reminderCount = if (kind == StrictOperationKind.DELETE) 1L else reminderCount,
+                scheduleToken = if (kind == StrictOperationKind.DELETE) null else scheduleToken,
+                contractVersion = contractVersion,
+                intentMask = if (kind == StrictOperationKind.DELETE) OutboxEntity.INTENT_DELETE else conflictOp?.intentMask
             )
         )
-
         refreshProgressState()
     }
 
@@ -360,13 +481,46 @@ class AccountSyncCoordinator(
         val completed = draft?.draftCompleted ?: conflictOp?.completed ?: currentBase?.completed ?: false
         val now = System.currentTimeMillis()
 
+        val deadlineDate = draft?.deadlineDate ?: conflictOp?.deadlineDate ?: currentBase?.deadlineDate
+        val deadlineTime = draft?.deadlineTime ?: conflictOp?.deadlineTime ?: currentBase?.deadlineTime
+        val deadlineZone = draft?.deadlineZone ?: conflictOp?.deadlineZone ?: currentBase?.deadlineZone
+        val deadlineOffsetSeconds = draft?.deadlineOffsetSeconds ?: conflictOp?.deadlineOffsetSeconds ?: currentBase?.deadlineOffsetSeconds
+        val reminderAnchorTime = draft?.reminderAnchorTime ?: conflictOp?.reminderAnchorTime ?: currentBase?.reminderAnchorTime
+        val deadlineAnchorEpochMs = draft?.deadlineAnchorEpochMs ?: conflictOp?.deadlineAnchorEpochMs ?: currentBase?.deadlineAnchorEpochMs
+        val deadlineOverdueEpochMs = draft?.deadlineOverdueEpochMs ?: conflictOp?.deadlineOverdueEpochMs ?: currentBase?.deadlineOverdueEpochMs
+        val reminderEnabled = draft?.reminderEnabled ?: conflictOp?.reminderEnabled ?: currentBase?.reminderEnabled ?: false
+        val reminderLeadMinutes = draft?.reminderLeadMinutes ?: conflictOp?.reminderLeadMinutes ?: currentBase?.reminderLeadMinutes ?: 0L
+        val reminderIntervalMinutes = draft?.reminderIntervalMinutes ?: conflictOp?.reminderIntervalMinutes ?: currentBase?.reminderIntervalMinutes
+        val reminderCount = draft?.reminderCount ?: conflictOp?.reminderCount ?: currentBase?.reminderCount ?: 1L
+
+        val deadline = if (deadlineDate != null && deadlineZone != null && deadlineOffsetSeconds != null && deadlineAnchorEpochMs != null && deadlineOverdueEpochMs != null) {
+            TaskDeadline(
+                date = deadlineDate,
+                time = deadlineTime,
+                zone = deadlineZone,
+                offsetSeconds = deadlineOffsetSeconds,
+                reminderAnchorTime = reminderAnchorTime,
+                anchorEpochMs = deadlineAnchorEpochMs,
+                overdueEpochMs = deadlineOverdueEpochMs
+            )
+        } else null
+
+        val reminderRule = if (deadline != null) {
+            ReminderRule(
+                enabled = reminderEnabled,
+                leadMinutes = reminderLeadMinutes,
+                intervalMinutes = reminderIntervalMinutes,
+                count = reminderCount
+            )
+        } else ReminderRule.DISABLED
+
         // Clean up conflicted identity
         if (conflictOp != null) {
             store.dao.deleteOutbox(conflictOp.opId)
         }
         store.dao.deleteDraft(rowId)
 
-        // Create new identity
+        // Create new identity with fresh schedule token if deadline present
         val newId = generateUuid()
         store.saveTodoLocally(
             Todo(
@@ -377,10 +531,12 @@ class AccountSyncCoordinator(
                 updatedAt = now,
                 serverRevision = 0L,
                 isPending = true,
-                isDeleted = false
+                isDeleted = false,
+                deadline = deadline,
+                reminderRule = reminderRule,
+                scheduleToken = if (deadline != null) generateUuid() else null
             )
         )
-
         refreshProgressState()
     }
 

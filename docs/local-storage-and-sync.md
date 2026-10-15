@@ -1,7 +1,7 @@
 # Doggo Local Storage and Strict Synchronization Specification
 
 Date: 2026-10-15  
-Phase: Phase 05 Shared Task Model & Explicit Room v2 Migration (Storage Migration Delivered; Connected Platform & Sync Acceptance Pending)  
+Phase: Phase 06 Client Version Transition, Safe Replay & Intention Preservation Delivered (Gate G4 Delivered; Instrumented Platform Acceptance Pending Phase 11)  
 Plan: `plans/261015-0752-task-deadlines-reminders-strict-upgrades` (and `plans/261013-1540-doggo-glean-hub-reuse`)  
 Related Docs: [System Architecture](./system-architecture.md) · [API Contract](./api-contract.md) · [Code Standards](./code-standards.md) · [Sync Acceptance](./sync-acceptance.md)
 
@@ -85,12 +85,13 @@ In `prepareAndFreezeBatch()`:
 - **`PENDING` Operations**:
   - `expectedRevision` is bound to current `server_base.serverRevision` (0L for new/tombstone/create; current base revision for update/delete).
   - Active `epoch` is bound.
-  - Canonical SHA-256 `digest` is computed via `StrictSyncDigest.computeDigest` with big-endian UTF-8 byte lengths.
+  - Canonical SHA-256 `digest` is computed via `StrictSyncV2Digest.computeDigest` when `contractVersion == CONTRACT_VERSION_V2`, or `StrictSyncDigest.computeDigest` for legacy `strict-v1`, with big-endian UTF-8 byte lengths.
   - `freezeOutboxAtomic` executes a Room `@Transaction`: verifies `current.localRevision == expectedLocalRevision` and `deliveryState == PENDING` before updating to `DISPATCHING`. If an intervening local edit modified the row, the freeze fails and the stale op is omitted from the batch.
+- **Protected Legacy Operations**:
+  - Migrated legacy operations (`transitionCheckpoint != null` or `contractVersion == CONTRACT_VERSION_V1`) are never coalesced or automatically rehashed. In-flight dispatches recovered to `UNCERTAIN` retain their original immutable identity, epoch, revision, and digest.
 - **`UNCERTAIN` Retries**:
   - All frozen fields (`opId`, `epoch`, `tableName`, `rowId`, `kind`, `expectedRevision`, `digest`, `localRevision`, payload) are **strictly preserved**.
   - Delivery state transitions to `DISPATCHING`. No re-computation of digest or expectedRevision occurs.
-
 ---
 
 ## 3. Staged Full Scan & Monotonic Promotion
@@ -125,23 +126,29 @@ sequenceDiagram
 ```
 
 ### 3.1 Pagination Loop Invariants
+- **Protocol & Mode Parameters**: `StagedFullScan` accepts `protocol: String` (defaults to `strict-v1`; set to `StrictSyncV2Contract.PROTOCOL_VERSION` during v2 sync rounds and migration), `isMigration: Boolean = false`, and `isFenced: (() -> Boolean)? = null`.
 - **Cursor Tracking**: Loop begins with `cursor = null`. Repeating cursors or non-progressing cursors (empty records page while `hasMore == true`) immediately abort with `SafeError.ProtocolIncompatible`.
 - **Epoch Guard**: If any page returns an epoch differing from `activeEpoch`, staging is cleared and sync aborts with `SafeError.ResetRequired("EPOCH_MISMATCH")`.
 - **Batch Overflow**: Receiving more records than `batchSize` aborts with `ProtocolIncompatible("BATCH_OVERFLOW")`.
 - **Page Budget**: Loop enforces a hard cap (`maxPageBudget = 1000`) to prevent infinite network pagination.
-- **Payload Validation**: Non-deleted records must contain valid, non-blank titles, matching `rowId`, positive revisions, and non-negative timestamps.
+- **Payload Validation**: Non-deleted records must contain valid, non-blank titles, matching `rowId`, positive revisions, and non-negative timestamps. Timed and date-only deadlines must satisfy canonical strict-v2 framing.
 
 ### 3.2 Pre-Scan Identity Consistency Check
-Hub strict-v1 scans return all records including permanent tombstones. Before promoting staged records:
+Hub strict scans return all records including permanent tombstones. Before promoting staged records:
 - `StagedFullScan` checks every confirmed record in `server_base` that shares the `activeEpoch`.
 - If any such pre-scan confirmed identity is missing from `scan_staging`, sync aborts with `SafeError.ResetRequired("CONSISTENCY_ERROR")` and staging is cleared. This prevents silent record loss or split-brain deletions.
 
-### 3.3 Monotonic Promotion Rules
+### 3.3 Monotonic Promotion Rules & Migration Temporal Enrichment
 Staged records are promoted to `server_base` in a single Room `@Transaction` (`promoteStagingAtomic`):
 1. **New Record (`currentBase == null`)**: Inserted directly into `server_base`.
 2. **Higher Revision (`staged.serverRevision > currentBase.serverRevision`)**: Overwrites `server_base` with the higher revision.
-3. **Equal Revision (`staged.serverRevision == currentBase.serverRevision`)**: Checks logical equivalence (deleted status, title, completed, createdAt). If logically identical, retained. If logically divergent, staging is cleared and sync aborts with `SafeError.ProtocolIncompatible("DIVERGENT_REVISION")`.
+3. **Equal Revision (`staged.serverRevision == currentBase.serverRevision`)**:
+   - **Normal Steady-State**: Checks logical equivalence (deleted status, title, completed, createdAt, temporal fields). If logically identical, retained. If divergent, staging is cleared and sync aborts with `SafeError.ProtocolIncompatible("DIVERGENT_REVISION")`.
+   - **Migration Mode (`isMigration == true`)**: If `staged` possesses remote temporal metadata and `currentBase` lacks temporal metadata at an equal revision, `server_base` is enriched with the remote temporal attributes (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`). Core title/completed fields must still match; mismatched core fields remain a fatal `DIVERGENT_REVISION` error.
 4. **Lower Revision (`staged.serverRevision < currentBase.serverRevision`)**: Local confirmed base is retained; lower staged revision is discarded.
+
+### 3.4 Pre-Promotion Fencing Check
+Immediately before invoking `promoteStagingAtomic`, `StagedFullScan` validates `if (store.isFrozen || isFenced?.invoke() == true)`. If frozen or fenced (e.g. account leave or concurrent logout in progress), `scan_staging` is immediately cleared and the scan aborts fail-closed with `SafeError.Unauthorized("STORE_FROZEN")`.
 
 *Note on Locking*: While `promoteStagingAtomic` executes the database write inside an atomic SQLite transaction, pre-scan base comparisons and pagination occur across several asynchronous steps. Coherence relies on the coordinator's coroutine `coordinatorMutex` preventing concurrent scans or local mutations during sync rounds.
 
@@ -160,20 +167,25 @@ In `OutboxReconciliation.reconcilePushResults()`, response results are indexed b
      - If revision does not match, transitions to `UNCERTAIN`.
      - If valid, calls `store.reconcileAccepted(op.opId, acceptedRevision)`.
 
-### 4.2 Base Monotonicity & Newer Draft Preservation
+### 4.2 Base Monotonicity, Intent-Masked Rebase Safety & Atomic Cleanup
 Inside `RoomAccountStore.reconcileAccepted()`:
-- **Base Monotonicity**: If `serverRevision < currentBase.serverRevision` (stale ack arriving after a newer ack was already applied), the outbox op is deleted without regressing `server_base`.
-- **Newer Draft Preservation**: `clearDraft = currentDraft != null && currentDraft.localRevision <= op.localRevision`. If the user edited the record while the push was in-flight (`draft.localRevision > op.localRevision`), the draft is retained.
+- **Atomic Regressive Server Revision Cleanup**: If `currentBase != null && serverRevision < currentBase.serverRevision` (a stale acknowledgement arriving after a newer revision was already confirmed), `dao.discardRegressiveReconcileAtomic(opId, op.rowId, clearDraft)` executes an atomic SQLite `@Transaction` deleting the stale outbox op and conditionally clearing the draft without regressing `server_base`.
+- **Intent-Masked Non-Destructive Rebase Safety**:
+  - Evaluates `preservesRemoteDeadline = isV1Op || (intentMasks.isNotEmpty() && !intentMasks.contains(OutboxEntity.INTENT_DEADLINE) && !intentMasks.contains(OutboxEntity.INTENT_REMINDER))`.
+  - When `useBaseDeadline = preservesRemoteDeadline && currentBase != null`, `updatedBase` retains all remote temporal attributes (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`) from `currentBase`.
+  - `resolvedTitle` and `resolvedCompleted` only overwrite `currentBase` if explicitly masked (`INTENT_TITLE` or `INTENT_COMPLETED`) or on legacy whole-row updates.
+  - Acknowledging a legacy strict-v1 mutation or partial title edit never erases remote deadline or reminder metadata.
+- **Newer Draft Preservation**: `clearDraft = currentDraft != null && currentDraft.localRevision <= op.localRevision`. If the user edited the record while the push was in-flight (`draft.localRevision > op.localRevision`), the newer draft is retained.
 - **Atomic Reconcile**: `dao.reconcileAcceptedAtomic` executes in a single SQLite transaction: upserts `server_base`, deletes `outbox` entry, and conditionally deletes draft.
 
-### 4.3 UnknownSuperseded Disambiguation
-When the server returns a conflict status (`revisionConflict`, `missingRecord`, `deletedRecord`):
-- If the operation was in `UNCERTAIN` state or had prior failures (`op.deliveryState == UNCERTAIN || op.consecutiveFailures > 0`):
-  - Delivery state transitions to `UNKNOWN_SUPERSEDED`.
+### 4.3 UnknownSuperseded Disambiguation & UI Safety Warning
+When the server returns a conflict status (`revisionConflict`, `missingRecord`, `deletedRecord`), or when the legacy receipts endpoint reports `UNKNOWN_SUPERSEDED`:
+- If the operation was in `UNCERTAIN` state, had prior failures (`op.deliveryState == UNCERTAIN || op.consecutiveFailures > 0`), or had prior dispatch history:
+  - Delivery state transitions to `STATE_UNKNOWN_SUPERSEDED`.
   - **Rationale**: An uncertain dispatch may have successfully committed to Hub before a subsequent client edit bumped the revision. Server conflict does not prove the original intent failed.
+  - **UI Safety Display**: When reviewed in `ConflictReviewDialog`, `EditorState.isUnknownSuperseded` renders a prominent high-contrast warning banner (using `coralSurface` tokens). It alerts the user that the change may have already reached the server before an upgrade or revision bump, advising review of remote state before choosing to reapply or discard.
 - If the operation had no prior uncertainty:
   - Delivery state transitions to `CONFLICT`.
-
 ### 4.4 User Conflict Resolution Workflows
 - **`discardConflict(rowId)`**: Deletes the conflicted head operation via `discardConflictAtomic(conflictOp.opId, rowId, conflictOp.localRevision)` and clears draft if `draft.localRevision <= conflictLocalRev`. Successor outbox operations on the row are preserved.
 - **`reapplyConflict(rowId)`**: Inspects current confirmed `server_base.serverRevision`, allocates a new local revision, generates a fresh UUID `opId`, recomputes digest targeting the new base revision, and atomically replaces the outbox entry via `replaceOutboxAtomic`.
@@ -252,10 +264,9 @@ If file deletion fails, it returns `false`, preventing the account from being re
 
 ---
 
-## 7. Strict-v2 Schema Evolution & Outbox Reconciliation (Room v2 Delivered; Client Replay Pending Phase 06)
+## 7. Strict-v2 Client Transition, Safe Replay & Outbox Reconciliation (Phase 06 Delivered)
 
-*Note: Section 7.1 documents the Room database version 2 schema, explicit `MIGRATION_1_2`, and shared models delivered in Phase 05. Section 7.2 defines the cross-version outbox reconciliation and client transition rules scheduled for Phase 06. Section 7.3 defines the mathematical invariants and checked 64-bit arithmetic implemented in `dev.doggo.shared.contract`.*
-
+*Note: Section 7.1 documents the Room database version 2 schema, explicit `MIGRATION_1_2`, and shared models delivered in Phase 05. Section 7.2 defines the cross-version outbox reconciliation, durable transition pipeline, and safe replay mechanisms delivered in Phase 06. Section 7.3 defines the mathematical invariants and checked 64-bit arithmetic implemented in `dev.doggo.shared.contract`.*
 ### 7.1 Room Database Migration (1 -> 2) [Phase 05 Delivered]
 In Room database version 2, `DoggoDatabase` executes explicit step-by-step migration `DatabaseMigrations.MIGRATION_1_2`. Both `createAndroidDatabaseBuilder` and `createJvmDatabaseBuilder` consume `DatabaseMigrations.ALL`, which registers `MIGRATION_1_2`. Destructive migration fallback is strictly forbidden.
 
@@ -324,12 +335,53 @@ In Room database version 2, `DoggoDatabase` executes explicit step-by-step migra
   }
   ```
 
-### 7.2 Outbox Replay & Reconciliation Safety [Planned Phase 06]
-- **Unprovable Legacy Outbox**: In Room v1 databases, existing `OutboxEntity` records lacked dispatch history and intent diff masks. If an outbox operation cannot be proven (via server monotonic revision, missing row for expected0 create, or matching receipt from `POST /api/v1/sync/:app_id/strong/legacy-receipts`), it enters `UNKNOWN_SUPERSEDED` for explicit user review; it is never automatically rehashed or re-applied.
-- **Safe Intent Rebase**: Whole-row v1 mutations must never overwrite newly introduced remote v2 fields. When rebasing a safe v1 pending intention over a newly scanned v2 record, only the explicitly changed fields (title, completed) are applied over the remote base.
-- **Cross-Version Base Reconciliation Risk**: In `RoomAccountStore.reconcileAccepted()`, acknowledging a legacy strict-v1 outbox operation (`op.contractVersion == CONTRACT_VERSION_V1`) must be safeguarded in Phase 06 so that `updatedBase` copies don't overwrite remote v2 deadline fields on equal/higher revisions.
-- **Atomic Cleanup on Regressive Server Revision**: Deferring `discardRegressiveReconcileAtomic` means `deleteDraft` and `deleteOutbox` on regressive server revisions currently execute non-atomically; a crash between calls leaves partially reconciled state until Phase 06 transaction wrapping lands.
+### 7.2 Client Version Transition, Safe Replay & Intention Preservation [Phase 06 Delivered]
 
+When an established client partition upgrades from `strict-v1` to `strict-v2`, `ContractTransitionCoordinator` coordinates an orderly, crash-resilient 7-state / 6-transition state machine:
+
+```
+ready-v1 -> upgrade-detected -> dispatch-quiesced -> legacy-reconciling ->
+v2-base-scanning -> safe-intents-translating -> ready-v2
+```
+
+#### 1. Transition State Machine & Durable Checkpoints
+- **Durable State Storage**: The active phase is persisted in `AccountSyncMetaEntity.syncStatus` prefixed with `TRANSITION:` (e.g. `TRANSITION:dispatch-quiesced`) along with `safeErrorCode = "CHECKPOINT_<PHASE>"`. Upon process restart or crash, the coordinator inspects `getDurablePhase()` and resumes execution at the exact interrupted checkpoint without re-running completed phases.
+- **Phase 1: Upgrade Detected (`UPGRADE_DETECTED`)**: Triggered when `HubSyncClient.bootstrap()` returns `protocol == StrictSyncV2Contract.PROTOCOL_VERSION` on a client previously in `ready-v1`.
+- **Phase 2: Dispatch Quiesced (`DISPATCH_QUIESCED`)**: Recovers all in-flight `DISPATCHING` operations to `UNCERTAIN` via `store.recoverInterruptedDispatches()`. Marks any uncheckpointed uncertain or failed legacy v1 operations with `transitionCheckpoint = "QUIESCED"` and durable `dispatchHistory`.
+- **Phase 3: Legacy Receipts Reconciliation (`LEGACY_RECONCILING`)**: Queries the legacy receipts endpoint to resolve pending uncertain operations against server history.
+- **Phase 4: V2 Base Scanning (`V2_BASE_SCANNING`)**: Ingests authoritative strict-v2 server records into `server_base` using migration-mode full scan.
+- **Phase 5: Safe Intents Translating (`SAFE_INTENTS_TRANSLATING`)**: Atomically translates verified unsent mutations over newly scanned v2 base records.
+- **Phase 6: Ready V2 (`READY_V2`)**: Transitions `syncStatus` to `ready-v2`, enabling normal strict-v2 outbox creation, push (`syncClient.pushV2`), and pull.
+
+#### 2. Exact Legacy Receipt Matching (`POST /api/v1/sync/{appId}/strong/legacy-receipts`)
+- **Route & Security Classification**: Explicitly allowlisted under `RouteClassification.DUAL_AUTH_STRICT` in `HubHttpClient`, requiring both valid Bearer token and App API Key (`X-API-Key`, `X-App-Id`).
+- **Batch Bounds**: Legacy receipt items are chunked into bounded batches of `<= 100` operations.
+- **Exact Identity & Digest Verification**: Transmits frozen v1 preimage fields (`opId`, `tableName`, `rowId`, `kind`, `expectedRevision`, `digest`, `data`). The server matches against confirmed operation history:
+  - `PROVEN_ACCEPTED`: Mutation committed on server. Coordinator calls `store.reconcileAccepted(opId, acceptedRevision)`, advancing base.
+  - `PROVEN_NOT_ACCEPTED`: Server confirms operation never committed. Coordinator updates outbox to `deliveryState = PENDING`, `transitionCheckpoint = "PROVEN_NOT_ACCEPTED"`, clearing errors.
+  - `UNKNOWN_SUPERSEDED`: Server revision advanced beyond `expectedRevision` without verifiable receipt record. Coordinator updates outbox to `deliveryState = STATE_UNKNOWN_SUPERSEDED` for user review.
+  - `INTEGRITY_FAILURE`: Server detected digest or payload corruption. Coordinator marks op as `deliveryState = STATE_CONFLICT`.
+  - **Omission Safety**: If an operation is omitted from the receipts response, it remains in `deliveryState = STATE_UNCERTAIN`. Receipt omission is never treated as proof of non-delivery.
+
+#### 3. Migration Full Scan & Equal-Revision Temporal Enrichment
+- `ContractTransitionCoordinator` executes `StagedFullScan` with `protocol = StrictSyncV2Contract.PROTOCOL_VERSION` and `isMigration = true`.
+- **Equal-Revision Temporal Enrichment**: If `staged.serverRevision == currentBase.serverRevision`, staged records containing remote temporal metadata enrich the confirmed `server_base` (populating deadlines, reminder rules, schedule tokens) when local base lacks them. Core title and completed fields must still match; mismatched core fields or divergent revisions outside this explicit migration path remain fatal `DIVERGENT_REVISION` errors.
+
+#### 4. Never-Sent Safe Intent Translation
+Provably unsent legacy v1 operations (`transitionCheckpoint == "PROVEN_NOT_ACCEPTED"` or never-dispatched pending ops) are translated over confirmed v2 base records:
+- **Review Guard**: Operations with `intentMask == INTENT_REQUIRES_REVIEW` (from conservative Room v1 migration) fail closed to `STATE_CONFLICT` for explicit user decision.
+- **CREATE Translation**: If the record already exists on the server (`currentBase != null && !currentBase.deleted`), translation blocks as `STATE_CONFLICT` ("Cannot translate create: row already exists on server"). Otherwise, mints a fresh v2 UUID `opId`, sets `expectedRevision = 0L`, and atomically replaces the outbox entry via `replaceOutboxAtomic` with `transitionCheckpoint = "TRANSLATED_V2"`.
+- **UPDATE Translation**: If base is missing or deleted on the server, translation blocks as `STATE_CONFLICT` ("Cannot translate update: base row missing or deleted on server"). Otherwise, mints a fresh v2 UUID `opId`, binds base `serverRevision`, retains base temporal metadata, and replaces atomically with `transitionCheckpoint = "TRANSLATED_V2"`.
+- **DELETE Translation**: If base is missing or deleted, purges the outbox entry locally. Otherwise, mints a fresh v2 UUID `opId`, binds base `serverRevision`, and replaces atomically with `transitionCheckpoint = "TRANSLATED_V2"`.
+
+#### 5. Intent-Masked Rebase Safety & Atomic Cleanup
+- **Non-Destructive Rebase**: In `RoomAccountStore.reconcileAccepted()`, acknowledging a legacy strict-v1 outbox operation (`op.contractVersion == CONTRACT_VERSION_V1`) or a masked edit without deadline/reminder intents preserves remote temporal fields (`deadlineDate`, `deadlineTime`, `reminderEnabled`, `scheduleToken`, etc.) from `currentBase`.
+- **Atomic Regressive Cleanup**: In `DoggoDao.discardRegressiveReconcileAtomic()`, receiving a server revision lower than confirmed base deletes the stale outbox entry and conditionally clears the draft in a single SQLite transaction without regressing `server_base`.
+
+#### 6. Cross-Version Invariant & Server Compatibility Guard
+- In `AccountSyncCoordinator.executeSyncRound()`:
+  - If the server reports protocol `strict-v1` and the local outbox contains any strict-v2 operations (`dao.countOutboxByVersion(CONTRACT_VERSION_V2) > 0`), sync aborts with `SafeError.ProtocolIncompatible("SERVER_VERSION_REGRESSION")`.
+  - Local v2 intentions created while offline are preserved in SQLite and never down-converted or pushed to an un-upgraded v1 server.
 ### 7.3 Strict-v2 Mathematical Invariants & Checked Arithmetic
 - **Preimage Framing**: Domain `strict-v2` with 8 length-prefixed identity strings followed by 8-byte big-endian signed revision. Data payload is 0 bytes for DELETE; CREATE/UPDATE serialize 4 base fields followed by 12 strict-v2 fields in table order with explicit presence tags (`0x00`/`0x01`).
 - **Rule Opportunity Bounds**: `reminderCount` is strictly constrained to `1..10`. For non-repeating reminders (`reminderCount == 1`), `reminderIntervalMinutes` MUST be null. For repeating reminders (`reminderCount > 1`), `reminderIntervalMinutes` MUST be non-null and `>= 15`.

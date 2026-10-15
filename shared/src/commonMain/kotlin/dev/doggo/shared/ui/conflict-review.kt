@@ -79,6 +79,24 @@ fun ConflictReview(
                 color = MaterialTheme.colorScheme.onSurface
             )
 
+            if (conflict.isUnknownSuperseded) {
+                Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingSmall))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = DoggoThemeTokens.customColors.coralSurface
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small)
+                ) {
+                    Text(
+                        text = "Warning: This operation was in-flight and may have already been accepted on the server before being superseded by another client. Reapplying or copying as new may duplicate prior edits.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(DoggoThemeTokens.SpacingMedium)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingLarge))
 
             // Local Draft Card
@@ -234,6 +252,38 @@ private fun VersionCard(
                 )
                 Text(
                     text = "Rev: ${todo.serverRevision}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = DoggoThemeTokens.customColors.muted
+                )
+            }
+
+            if (todo.deadline != null) {
+                Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingXSmall))
+                val deadlineText = if (todo.deadline.time != null) {
+                    "Deadline: ${todo.deadline.date} ${todo.deadline.time} (${todo.deadline.zone})"
+                } else {
+                    "Deadline: ${todo.deadline.date} (date-only, ${todo.deadline.zone})"
+                }
+                Text(
+                    text = deadlineText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                val reminderText = if (todo.reminderRule.enabled) {
+                    "Reminder: ${todo.reminderRule.leadMinutes}m before (${todo.reminderRule.count}x)"
+                } else {
+                    "Reminder: Disabled"
+                }
+                Text(
+                    text = reminderText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = DoggoThemeTokens.customColors.muted
+                )
+            } else {
+                Spacer(modifier = Modifier.height(DoggoThemeTokens.SpacingXSmall))
+                Text(
+                    text = "Deadline: None",
                     style = MaterialTheme.typography.bodySmall,
                     color = DoggoThemeTokens.customColors.muted
                 )

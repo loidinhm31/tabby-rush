@@ -17,9 +17,12 @@ class StagedFullScan(
     val syncClient: HubSyncClient,
     val store: RoomAccountStore,
     val activeEpoch: String,
+    val protocol: String = StrictSyncContract.PROTOCOL_VERSION,
+    val isMigration: Boolean = false,
     val tableName: String = StrictSyncContract.DEFAULT_TABLE_NAME,
     val batchSize: Int = 100,
-    val maxPageBudget: Int = 1000
+    val maxPageBudget: Int = 1000,
+    val isFenced: (() -> Boolean)? = null
 ) {
 
     suspend fun executeScan(): ApiResult<Int> {
@@ -51,6 +54,7 @@ class StagedFullScan(
 
             val pullResult = syncClient.pull(
                 epoch = activeEpoch,
+                protocol = protocol,
                 tableName = tableName,
                 cursor = cursor,
                 batchSize = batchSize
@@ -162,7 +166,19 @@ class StagedFullScan(
                                 title = record.data?.title ?: "",
                                 completed = record.data?.completed ?: false,
                                 createdAt = record.data?.createdAt ?: 0L,
-                                epoch = response.epoch
+                                epoch = response.epoch,
+                                deadlineDate = record.data?.deadlineDate,
+                                deadlineTime = record.data?.deadlineTime,
+                                deadlineZone = record.data?.deadlineZone,
+                                deadlineOffsetSeconds = record.data?.deadlineOffsetSeconds,
+                                reminderAnchorTime = record.data?.reminderAnchorTime,
+                                deadlineAnchorEpochMs = record.data?.deadlineAnchorEpochMs,
+                                deadlineOverdueEpochMs = record.data?.deadlineOverdueEpochMs,
+                                reminderEnabled = record.data?.reminderEnabled ?: false,
+                                reminderLeadMinutes = record.data?.reminderLeadMinutes ?: 0L,
+                                reminderIntervalMinutes = record.data?.reminderIntervalMinutes,
+                                reminderCount = record.data?.reminderCount ?: 1L,
+                                scheduleToken = record.data?.scheduleToken
                             )
                         )
                     }
@@ -243,7 +259,19 @@ class StagedFullScan(
                         completed = staged.completed,
                         createdAt = staged.createdAt,
                         updatedAt = System.currentTimeMillis(),
-                        epoch = staged.epoch
+                        epoch = staged.epoch,
+                        deadlineDate = staged.deadlineDate,
+                        deadlineTime = staged.deadlineTime,
+                        deadlineZone = staged.deadlineZone,
+                        deadlineOffsetSeconds = staged.deadlineOffsetSeconds,
+                        reminderAnchorTime = staged.reminderAnchorTime,
+                        deadlineAnchorEpochMs = staged.deadlineAnchorEpochMs,
+                        deadlineOverdueEpochMs = staged.deadlineOverdueEpochMs,
+                        reminderEnabled = staged.reminderEnabled,
+                        reminderLeadMinutes = staged.reminderLeadMinutes,
+                        reminderIntervalMinutes = staged.reminderIntervalMinutes,
+                        reminderCount = staged.reminderCount,
+                        scheduleToken = staged.scheduleToken
                     )
                 )
             } else {
@@ -259,16 +287,54 @@ class StagedFullScan(
                                 completed = staged.completed,
                                 createdAt = staged.createdAt,
                                 updatedAt = System.currentTimeMillis(),
-                                epoch = staged.epoch
+                                epoch = staged.epoch,
+                                deadlineDate = staged.deadlineDate,
+                                deadlineTime = staged.deadlineTime,
+                                deadlineZone = staged.deadlineZone,
+                                deadlineOffsetSeconds = staged.deadlineOffsetSeconds,
+                                reminderAnchorTime = staged.reminderAnchorTime,
+                                deadlineAnchorEpochMs = staged.deadlineAnchorEpochMs,
+                                deadlineOverdueEpochMs = staged.deadlineOverdueEpochMs,
+                                reminderEnabled = staged.reminderEnabled,
+                                reminderLeadMinutes = staged.reminderLeadMinutes,
+                                reminderIntervalMinutes = staged.reminderIntervalMinutes,
+                                reminderCount = staged.reminderCount,
+                                scheduleToken = staged.scheduleToken
                             )
                         )
                     }
                     staged.serverRevision == currentBase.serverRevision -> {
                         // Same revision: verify logical equivalence
-                        val logicallyEqual = staged.deleted == currentBase.deleted &&
-                                (staged.deleted || (staged.title == currentBase.title &&
-                                        staged.completed == currentBase.completed &&
-                                        staged.createdAt == currentBase.createdAt))
+                        val titlesEqual = staged.title == currentBase.title
+                        val completedEqual = staged.completed == currentBase.completed
+                        val createdAtEqual = staged.createdAt == currentBase.createdAt
+                        val deletedEqual = staged.deleted == currentBase.deleted
+
+                        val baseHasTemporal = currentBase.deadlineDate != null ||
+                                currentBase.reminderEnabled || currentBase.scheduleToken != null
+                        val stagedHasTemporal = staged.deadlineDate != null ||
+                                staged.reminderEnabled || staged.scheduleToken != null
+
+                        val temporalEqual = if (isMigration && !baseHasTemporal) {
+                            // In explicit migration transition only: normalize legacy v1 null/default extension
+                            true
+                        } else {
+                            staged.deadlineDate == currentBase.deadlineDate &&
+                                    staged.deadlineTime == currentBase.deadlineTime &&
+                                    staged.deadlineZone == currentBase.deadlineZone &&
+                                    staged.deadlineOffsetSeconds == currentBase.deadlineOffsetSeconds &&
+                                    staged.reminderAnchorTime == currentBase.reminderAnchorTime &&
+                                    staged.deadlineAnchorEpochMs == currentBase.deadlineAnchorEpochMs &&
+                                    staged.deadlineOverdueEpochMs == currentBase.deadlineOverdueEpochMs &&
+                                    staged.reminderEnabled == currentBase.reminderEnabled &&
+                                    staged.reminderLeadMinutes == currentBase.reminderLeadMinutes &&
+                                    staged.reminderIntervalMinutes == currentBase.reminderIntervalMinutes &&
+                                    staged.reminderCount == currentBase.reminderCount &&
+                                    staged.scheduleToken == currentBase.scheduleToken
+                        }
+
+                        val logicallyEqual = deletedEqual && (staged.deleted ||
+                                (titlesEqual && completedEqual && createdAtEqual && temporalEqual))
 
                         if (!logicallyEqual) {
                             store.dao.clearStaging()
@@ -279,12 +345,51 @@ class StagedFullScan(
                                 )
                             )
                         }
+
+                        if (isMigration && stagedHasTemporal && !baseHasTemporal) {
+                            // Enrich local base with migrated server temporal metadata
+                            basesToUpsert.add(
+                                ServerBaseEntity(
+                                    rowId = staged.rowId,
+                                    serverRevision = staged.serverRevision,
+                                    deleted = staged.deleted,
+                                    title = staged.title,
+                                    completed = staged.completed,
+                                    createdAt = staged.createdAt,
+                                    updatedAt = System.currentTimeMillis(),
+                                    epoch = staged.epoch,
+                                    deadlineDate = staged.deadlineDate,
+                                    deadlineTime = staged.deadlineTime,
+                                    deadlineZone = staged.deadlineZone,
+                                    deadlineOffsetSeconds = staged.deadlineOffsetSeconds,
+                                    reminderAnchorTime = staged.reminderAnchorTime,
+                                    deadlineAnchorEpochMs = staged.deadlineAnchorEpochMs,
+                                    deadlineOverdueEpochMs = staged.deadlineOverdueEpochMs,
+                                    reminderEnabled = staged.reminderEnabled,
+                                    reminderLeadMinutes = staged.reminderLeadMinutes,
+                                    reminderIntervalMinutes = staged.reminderIntervalMinutes,
+                                    reminderCount = staged.reminderCount,
+                                    scheduleToken = staged.scheduleToken
+                                )
+                            )
+                        }
                     }
                     else -> {
                         // staged.serverRevision < currentBase.serverRevision: retain higher confirmed revision
                     }
                 }
             }
+        }
+
+        // Fencing check right before atomic promotion
+        if (store.isFrozen || isFenced?.invoke() == true) {
+            store.dao.clearStaging()
+            return ApiResult.Failure(
+                SafeError.Unauthorized(
+                    code = "STORE_FROZEN",
+                    message = "Store frozen or fenced before scan promotion"
+                )
+            )
         }
 
         // Atomic promotion and staging clear (C1)

@@ -679,7 +679,7 @@ class RoomAccountStoreTest {
     }
 
     @Test
-    fun testTokenGeneratedWhenCallerSuppliesNull() = runTest {
+    fun testScheduleTokenPersistedAndRotatedOnSemanticChange() = runTest {
         val v2Store = RoomAccountStore(
             accountKey = accountKey,
             userId = "user-jvm-test",
@@ -694,21 +694,27 @@ class RoomAccountStoreTest {
             anchorEpochMs = 1000L,
             overdueEpochMs = 1000L
         )
-        // Caller supplies scheduleToken = null
-        val todoWithoutToken = Todo(
+        val initialTodo = Todo(
             id = "todo-auto-token-gen",
-            title = "Generate My Token",
+            title = "Initial Schedule Token",
             completed = false,
             createdAt = 1000L,
             updatedAt = 1000L,
             deadline = deadline,
-            scheduleToken = "temporary-caller-token" // Note: Todo validation requires scheduleToken != null if deadline != null
+            scheduleToken = "initial-token-123"
         )
-        // But in saveTodoLocally, we verify it derives and persists token
-        v2Store.saveTodoLocally(todoWithoutToken)
+        v2Store.saveTodoLocally(initialTodo)
         val loaded = v2Store.loadTodos().first { it.id == "todo-auto-token-gen" }
-        assertNotNull(loaded.scheduleToken)
-        assertTrue(loaded.scheduleToken!!.isNotEmpty())
+        assertEquals("initial-token-123", loaded.scheduleToken)
+
+        // Mutating deadline semantic properties (e.g. time shifted) must rotate scheduleToken
+        val shiftedDeadline = deadline.copy(time = "11:00", anchorEpochMs = 4600000L, overdueEpochMs = 4600000L)
+        val editedTodo = initialTodo.copy(deadline = shiftedDeadline, updatedAt = 2000L)
+        v2Store.saveTodoLocally(editedTodo)
+        val rotated = v2Store.loadTodos().first { it.id == "todo-auto-token-gen" }
+        assertNotNull(rotated.scheduleToken)
+        assertTrue(rotated.scheduleToken!!.isNotEmpty())
+        assertTrue(rotated.scheduleToken != "initial-token-123", "scheduleToken must rotate on schedule change")
     }
 
     @Test
@@ -742,5 +748,197 @@ class RoomAccountStoreTest {
         assertEquals(op1.opId, op2.opId)
         assertEquals("create", op2.kind)
         assertEquals("Unsent Create Edited", op2.title)
+    }
+
+    @Test
+    fun testDiscardRegressiveReconcileAtomic() = runTest {
+        // Setup base at serverRevision 5
+        database.doggoDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = "regressive-row",
+                serverRevision = 5L,
+                deleted = false,
+                title = "Confirmed Server Title",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-1"
+            )
+        )
+
+        // Setup draft and outbox at localRevision 2
+        database.doggoDao().upsertDraft(
+            EditorDraftEntity(
+                rowId = "regressive-row",
+                draftTitle = "Stale Local Draft",
+                draftCompleted = true,
+                localRevision = 2L,
+                updatedAt = 1500L
+            )
+        )
+        database.doggoDao().upsertOutbox(
+            OutboxEntity(
+                opId = "stale-op-1",
+                epoch = "epoch-1",
+                tableName = "todos",
+                rowId = "regressive-row",
+                kind = "update",
+                expectedRevision = 3L,
+                title = "Stale Local Draft",
+                completed = true,
+                createdAt = 1000L,
+                digest = "fake-digest",
+                localRevision = 2L,
+                deliveryState = OutboxEntity.STATE_DISPATCHING,
+                createdAtEpochMs = 1500L
+            )
+        )
+
+        // Reconcile with regressive revision (4 < 5)
+        store.reconcileAccepted("stale-op-1", serverRevision = 4L)
+
+        // Confirmed base must NOT regress
+        val base = database.doggoDao().getServerBase("regressive-row")
+        assertNotNull(base)
+        assertEquals(5L, base.serverRevision)
+        assertEquals("Confirmed Server Title", base.title)
+
+        // Outbox entry and draft must be cleaned up atomically
+        assertNull(database.doggoDao().getOutboxEntry("stale-op-1"))
+        assertNull(database.doggoDao().getDraft("regressive-row"))
+    }
+
+    @Test
+    fun testLegacyV1ReconcilePreservesRemoteV2DeadlineMetadata() = runTest {
+        // Setup base at revision 2 with v2 temporal fields
+        database.doggoDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = "v1-preserve-row",
+                serverRevision = 2L,
+                deleted = false,
+                title = "Base Title",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-1",
+                deadlineDate = "2026-11-01",
+                deadlineTime = "14:00",
+                deadlineZone = "America/New_York",
+                deadlineOffsetSeconds = -18000L,
+                reminderAnchorTime = null,
+                deadlineAnchorEpochMs = 1793559600000L,
+                deadlineOverdueEpochMs = 1793559600000L,
+                reminderEnabled = true,
+                reminderLeadMinutes = 30L,
+                reminderCount = 1L,
+                scheduleToken = "remote-token-123"
+            )
+        )
+
+        // Enqueue legacy v1 update (where all temporal fields are null)
+        database.doggoDao().upsertOutbox(
+            OutboxEntity(
+                opId = "legacy-v1-op",
+                epoch = "epoch-1",
+                tableName = "todos",
+                rowId = "v1-preserve-row",
+                kind = "update",
+                expectedRevision = 2L,
+                title = "Updated Title From V1 Client",
+                completed = true,
+                createdAt = 1000L,
+                digest = "fake-v1-digest",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_DISPATCHING,
+                createdAtEpochMs = 1500L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V1,
+                deadlineDate = null,
+                deadlineTime = null,
+                deadlineZone = null,
+                deadlineOffsetSeconds = null,
+                reminderAnchorTime = null,
+                deadlineAnchorEpochMs = null,
+                deadlineOverdueEpochMs = null,
+                reminderEnabled = false,
+                reminderLeadMinutes = 0L,
+                reminderIntervalMinutes = null,
+                reminderCount = 1L,
+                scheduleToken = null
+            )
+        )
+
+        // Reconcile accepted legacy v1 op
+        store.reconcileAccepted("legacy-v1-op", serverRevision = 3L)
+
+        val updated = database.doggoDao().getServerBase("v1-preserve-row")
+        assertNotNull(updated)
+        assertEquals(3L, updated.serverRevision)
+        assertEquals("Updated Title From V1 Client", updated.title)
+        assertTrue(updated.completed)
+
+        // Critical Invariant: Remote v2 deadline metadata must be completely preserved!
+        assertEquals("2026-11-01", updated.deadlineDate)
+        assertEquals("14:00", updated.deadlineTime)
+        assertEquals("America/New_York", updated.deadlineZone)
+        assertEquals(-18000L, updated.deadlineOffsetSeconds)
+        assertEquals(1793559600000L, updated.deadlineAnchorEpochMs)
+        assertEquals(1793559600000L, updated.deadlineOverdueEpochMs)
+        assertTrue(updated.reminderEnabled)
+        assertEquals(30L, updated.reminderLeadMinutes)
+        assertEquals("remote-token-123", updated.scheduleToken)
+    }
+
+    @Test
+    fun testV2TitleOnlyIntentPreservesRemoteDeadline() = runTest {
+        database.doggoDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = "v2-title-only-row",
+                serverRevision = 2L,
+                deleted = false,
+                title = "Base Title",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-1",
+                deadlineDate = "2026-12-25",
+                deadlineZone = "UTC",
+                deadlineOffsetSeconds = 0L,
+                reminderAnchorTime = "09:00",
+                deadlineAnchorEpochMs = 1798189200000L,
+                deadlineOverdueEpochMs = 1798243200000L,
+                reminderEnabled = true,
+                reminderLeadMinutes = 60L,
+                scheduleToken = "xmas-token"
+            )
+        )
+
+        database.doggoDao().upsertOutbox(
+            OutboxEntity(
+                opId = "v2-title-op",
+                epoch = "epoch-1",
+                tableName = "todos",
+                rowId = "v2-title-only-row",
+                kind = "update",
+                expectedRevision = 2L,
+                title = "Edited Title Only",
+                completed = false,
+                createdAt = 1000L,
+                digest = "fake-v2-digest",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_DISPATCHING,
+                createdAtEpochMs = 1500L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                intentMask = OutboxEntity.INTENT_TITLE
+            )
+        )
+
+        store.reconcileAccepted("v2-title-op", serverRevision = 3L)
+
+        val updated = database.doggoDao().getServerBase("v2-title-only-row")
+        assertNotNull(updated)
+        assertEquals("Edited Title Only", updated.title)
+        assertEquals("2026-12-25", updated.deadlineDate)
+        assertEquals("xmas-token", updated.scheduleToken)
+        assertTrue(updated.reminderEnabled)
     }
 }

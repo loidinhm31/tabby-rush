@@ -70,6 +70,9 @@ interface DoggoDao {
     @Query("SELECT COUNT(*) FROM outbox WHERE deliveryState = :state")
     suspend fun countOutboxByState(state: String): Int
 
+    @Query("SELECT COUNT(*) FROM outbox WHERE contractVersion = :version")
+    suspend fun countOutboxByVersion(version: String): Int
+
     @Query("UPDATE outbox SET deliveryState = :state, errorMessage = :errorMessage WHERE opId = :opId")
     suspend fun updateDeliveryState(opId: String, state: String, errorMessage: String? = null)
 
@@ -294,6 +297,15 @@ interface DoggoDao {
             deleteDraft(rowId)
         }
         deleteOutbox(opId)
+    }
+
+    @Transaction
+    suspend fun discardRegressiveReconcileAtomic(
+        opId: String,
+        rowId: String,
+        clearDraft: Boolean
+    ) {
+        purgeStaleOutboxAtomic(opId, rowId, clearDraft)
     }
 
     @Transaction

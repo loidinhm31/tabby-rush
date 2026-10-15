@@ -3,6 +3,72 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 06] - 2026-10-15: Client Version Transition, Safe Replay & Intention Preservation (Gate G4 Logic Delivered; Connected Platform Acceptance Pending Phases 08/11)
+
+### Added
+- Client transition state coordinator in `:shared` (`dev.doggo.shared.sync.contract-transition-coordinator.kt`):
+  - `TransitionPhase` enum: `READY_V1`, `UPGRADE_DETECTED`, `DISPATCH_QUIESCED`, `LEGACY_RECONCILING`, `V2_BASE_SCANNING`, `SAFE_INTENTS_TRANSLATING`, `READY_V2`.
+  - `ContractTransitionCoordinator`: Implements durable 7-state / 6-transition upgrade lifecycle (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`), persisting active phase in `AccountSyncMetaEntity.syncStatus` (`"TRANSITION:<phase>"`) and `safeErrorCode = "CHECKPOINT_<PHASE>"` for interruption recovery.
+  - Quiesces network dispatch and recovers in-flight `DISPATCHING` operations to `UNCERTAIN` via `RoomAccountStore.recoverInterruptedDispatches()`.
+  - Bounded legacy receipt matching against `POST /api/v1/sync/{appId}/strong/legacy-receipts`: verifies `opId`, `rowId`, `expectedRevision`, and `digest`, advancing base on `PROVEN_ACCEPTED`, unblocking on `PROVEN_NOT_ACCEPTED`, flagging `STATE_UNKNOWN_SUPERSEDED` on server revision skew, flagging `STATE_CONFLICT` on `INTEGRITY_FAILURE`, and defaulting omitted receipts safely to `STATE_UNCERTAIN` (never treated as non-delivery proof or permitting automatic rehash).
+  - Migration-mode base promotion via `StagedFullScan(..., protocol = StrictSyncV2Contract.PROTOCOL_VERSION, isMigration = true)`.
+  - Transactional safe intent translation (`translateSafeIntents()`): reuses row identity, applies known changed fields over scanned v2 base, generates fresh v2 UUID `opId`, and marks old intention replaced in SQLite via `replaceOutboxAtomic` (`transitionCheckpoint = "TRANSLATED_V2"`). Rows marked `INTENT_REQUIRES_REVIEW` from Room v1 migration fail closed to `STATE_CONFLICT`.
+- Legacy receipt wire models and network client integration (`dev.doggo.shared.sync.hub-sync-dtos.kt` and `hub-sync-client.kt`):
+  - `LegacyReceiptItemDto`: Serializes `opId`, `tableName`, `rowId`, `kind`, `expectedRevision`, `digest`, and `data` (`StrictTodoDataDto`).
+  - `LegacyReceiptResultDto`: Deserializes `opId`, `rowId`, `status` (`LegacyReceiptStatus`), and nullable `acceptedRevision`.
+  - `LegacyReceiptsRequestDto` and `LegacyReceiptsResponseDto`.
+  - `HubSyncClient.legacyReceipts(epoch, receipts)`: POSTs to `/api/v1/sync/{appId}/strong/legacy-receipts` with dual-auth and batch size validation (`<= 100`).
+  - `HubSyncClient.pushV2(epoch, operations)`: Dispatches `StrictV2OperationDto` batches (`<= 100`) to strict-v2 push endpoint.
+  - `HubHttpClient`: Added `/api/v1/sync/{appId}/strong/legacy-receipts` to `RouteClassification.DUAL_AUTH_STRICT` route allowlist.
+- Room DAO and Entity extensions in `dev.doggo.shared.data`:
+  - `DoggoDao.countOutboxByVersion(version: String): Int`: Index-backed outbox query for server version regression detection.
+  - `DoggoDao.discardRegressiveReconcileAtomic(opId: String, rowId: String, clearDraft: Boolean)`: `@Transaction` method deleting stale outbox and draft atomically on regressive server revision receipt.
+- UI conflict review and semantics enhancements (`dev.doggo.shared.contract.todo-ui-state.kt` and `dev.doggo.shared.ui.conflict-review.kt`):
+  - `EditorState.isUnknownSuperseded: Boolean = false`: Flags operations with ambiguous delivery history.
+  - `ConflictReview`: Renders high-visibility coral warning card (`coralSurface`) on `isUnknownSuperseded` conflicts, explaining potential prior remote acceptance and warning against duplicate reapply.
+  - `VersionCard`: Displays formatted deadline date, time, zone, and reminder recurrence details with WCAG 2.1 AA accessible contrast tokens.
+- Automated test suites:
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/sync/contract-transition-test.kt`: 4 unit tests covering transition state progression, durable checkpoint resume, unknown-superseded blocking, and user review gating.
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/sync/account-sync-coordinator-test.kt`: 9 unit tests for upgrade detection, quiescence, receipt rebase, and v2 push dispatch.
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/sync/hub-sync-client-test.kt`: 12 unit tests covering bootstrap v2 negotiation, pushV2, pull v2, and legacy-receipt envelopes.
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/sync/outbox-reconciliation-test.kt`: 12 unit tests for optimistic locking, FIFO batches, receipt matching, and CAS acknowledgement.
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/sync/staged-full-scan-test.kt`: 13 unit tests for multi-page full scan, monotonic promotion, and migration-mode equal-revision temporal enrichment.
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/ui/todo-semantics-test.kt`: 8 unit tests for semantics, contrast tokens, and conflict warning copy.
+  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt`: Extended with 7 new tests (21 total) covering non-destructive intent-masked rebasing, atomic cleanup on regressive revisions, and schedule token rotation.
+
+### Changed
+- `RoomAccountStore.reconcileAccepted()`:
+  - Non-destructive intent-masked rebasing: Acknowledging legacy strict-v1 outbox operations or title/completed-only mutations preserves remote temporal metadata (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`) on `server_base`.
+  - Atomic regressive cleanup: Invokes `DoggoDao.discardRegressiveReconcileAtomic` when received server revision is lower than confirmed base.
+- `RoomAccountStore.saveTodoLocally()`:
+  - Dynamically assigns `contractVersion = OutboxEntity.CONTRACT_VERSION_V2` when `syncStatus` is `ready-v2` / `READY_V2`.
+- `AccountSyncCoordinator.executeSyncRound()`:
+  - Intercepts v2 protocol in bootstrap response; triggers `ContractTransitionCoordinator.executeTransition()` if durable phase is not `READY_V2`.
+  - Enforces server version compatibility: aborts with `SafeError.ProtocolIncompatible("SERVER_VERSION_REGRESSION")` if connecting to a v1 server while v2 outbox operations exist.
+  - Dispatches outbox mutations via `syncClient.pushV2()` when active protocol is strict-v2.
+- `StagedFullScan`:
+  - Added `protocol: String` parameter (passed to `syncClient.pull`).
+  - Added `isMigration: Boolean` parameter: enriches confirmed base with remote temporal metadata when revisions are equal and local base lacks temporal metadata.
+  - Added `isFenced: (() -> Boolean)?` parameter: verifies store and coordinator freeze status before invoking `promoteStagingAtomic`.
+- `OutboxReconciliation`:
+  - Added `toV2Dto()` converting `OutboxEntity` to `StrictV2OperationDto`.
+  - Enhanced `wasUncertain` detection to inspect `op.dispatchHistory` and `op.transitionCheckpoint` in addition to `STATE_UNCERTAIN` and failure counts.
+
+### Verification and Delivery Status
+- Automated test suites pass 243 executed checks with 0 failures (reported in `plans/reports/qa-261015-1815-phase-06-client-transition-and-replay.md`):
+  1. `:shared:jvmTest` (155 tests PASS across 20 test classes, executed with `--dependency-verification=off`).
+  2. `:desktopApp:test` (32 tests PASS across 6 test classes, executed with `--dependency-verification=off`).
+  3. `node scripts/strict-v2-vector-runner.mjs` (23/23 PASS: v1/v2 schema fingerprints, 10 valid vectors, 11 rejection vectors).
+  4. `node scripts/hub-live-smoke.mjs --fixture-test` (18/18 PASS against offline fixture mock server).
+  5. `node scripts/release-security-check.mjs --diagnose-source` (6/6 PASS: static manifest rules, export audit, security XML, HTTPS origin, 0 hardcoded secrets).
+  6. `node scripts/hub-strict-upgrade.test.mjs` (9/9 PASS: upgrade CLI runner test suite).
+- Code review completed with 0 critical/high issues (documented in `plans/reports/code-review-261015-1830-phase-06-client-transition-and-replay.md`).
+- **Delivery Boundaries & Remaining Holds**:
+  1. Gate G4 offline-client upgrade round-trip and safe replay logic are delivered and verified on JVM BundledSQLite. Android instrumented execution (`:shared:connectedAndroidTest`) remains pending Phase 08 emulator/device testbeds.
+  2. Connected native notification delivery (Android AlarmManager, Linux Secret Service / D-Bus notifications, Windows DPAPI / toast bridge) remains scheduled for platform phases 08–10.
+  3. Live multi-device mixed-version strict-v2 cutover across network boundaries is scheduled for Phase 11 end-to-end integration.
+
+---
 ## [Phase 05] - 2026-10-15: Shared Task Model & Explicit Room v2 Migration (Gate G4 Storage Migration Delivered; Instrumented Platform Acceptance Pending)
 
 ### Added

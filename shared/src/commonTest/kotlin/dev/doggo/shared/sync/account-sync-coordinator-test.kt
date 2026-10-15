@@ -16,6 +16,10 @@ import dev.doggo.shared.contract.StrictSyncContract
 import dev.doggo.shared.contract.StrictSyncDigest
 import dev.doggo.shared.contract.StrictTodoData
 import dev.doggo.shared.contract.Todo
+import dev.doggo.shared.contract.StrictSyncV2Contract
+import dev.doggo.shared.contract.TaskDeadline
+import dev.doggo.shared.contract.ReminderRule
+import dev.doggo.shared.data.AccountSyncMetaEntity
 import dev.doggo.shared.data.OutboxEntity
 import dev.doggo.shared.data.RoomAccountStore
 import dev.doggo.shared.data.ServerBaseEntity
@@ -311,5 +315,199 @@ class AccountSyncCoordinatorTest {
         assertEquals(0L, brandNewOp.expectedRevision)
         assertEquals("create", brandNewOp.kind)
         assertEquals("Content To Preserve", brandNewOp.title)
+    }
+
+    @Test
+    fun testV2ServerTriggersTransitionAndCompletesV2Sync() = runTest {
+        val engine = TestHttpEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/v1/sync/doggo/strong/bootstrap" -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v2","appId":"doggo","epoch":"epoch-v2","tables":["todos"]}"""
+                    )
+                }
+                "/api/v1/sync/doggo/strong/pull" -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v2","epoch":"epoch-v2","records":[],"cursor":null,"hasMore":false}"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.NotFound, "")
+            }
+        }
+
+        val (coordinator, store, dao) = createTestSetup(engine)
+        coordinator.triggerSync()
+
+        val progress = coordinator.progress.value
+        assertEquals(SyncStatus.IDLE, progress.status)
+        assertNull(progress.safeError)
+        assertEquals("epoch-v2", store.getActiveEpoch())
+        val meta = dao.getMeta()
+        assertEquals(TransitionPhase.READY_V2.wireName, meta?.syncStatus)
+    }
+
+    @Test
+    fun testServerV1RejectsPendingV2Outbox() = runTest {
+        val engine = TestHttpEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/v1/sync/doggo/strong/bootstrap" -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v1","appId":"doggo","epoch":"epoch-v1","tables":["todos"]}"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.NotFound, "")
+            }
+        }
+
+        val (coordinator, store, dao) = createTestSetup(engine)
+        // Enqueue a strict-v2 operation
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "v2-op-on-v1-server",
+                epoch = "epoch-v1",
+                tableName = "todos",
+                rowId = "row-v2",
+                kind = "create",
+                expectedRevision = 0L,
+                title = "V2 Task",
+                completed = false,
+                createdAt = 1000L,
+                digest = "dig",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1000L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                deadlineDate = "2026-11-01"
+            )
+        )
+
+        coordinator.triggerSync()
+
+        val progress = coordinator.progress.value
+        assertEquals(SyncStatus.PAUSED_PROTOCOL, progress.status)
+        assertNotNull(progress.safeError)
+        assertEquals("SERVER_V1_INCOMPATIBLE", progress.safeError?.code)
+    }
+
+    @Test
+    fun testReapplyConflictPreservesDeadlineAndComputesV2Digest() = runTest {
+        val engine = TestHttpEngine { Pair(HttpStatusCode.OK, "{}") }
+        val (coordinator, store, dao) = createTestSetup(engine)
+        store.setActiveEpoch("epoch-v2")
+
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = "row-c-v2",
+                serverRevision = 5L,
+                deleted = false,
+                title = "Server Base Title",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-v2"
+            )
+        )
+
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-old-v2-conflict",
+                epoch = "epoch-v2",
+                tableName = "todos",
+                rowId = "row-c-v2",
+                kind = "update",
+                expectedRevision = 4L,
+                title = "My Winning V2 Edit",
+                completed = false,
+                createdAt = 1000L,
+                digest = "d-old",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_CONFLICT,
+                createdAtEpochMs = 1000L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                deadlineDate = "2026-11-15",
+                deadlineTime = "10:00",
+                deadlineZone = "America/New_York",
+                deadlineOffsetSeconds = -18000L,
+                deadlineAnchorEpochMs = 1794754800000L,
+                deadlineOverdueEpochMs = 1794754800000L,
+                reminderEnabled = true,
+                reminderLeadMinutes = 15L,
+                reminderCount = 1L,
+                scheduleToken = "tok-reapply"
+            )
+        )
+
+        coordinator.reapplyConflict("row-c-v2")
+
+        assertNull(dao.getOutboxEntry("op-old-v2-conflict"))
+        val ops = dao.getOutboxByRowId("row-c-v2")
+        assertEquals(1, ops.size)
+        val newOp = ops[0]
+        assertEquals(5L, newOp.expectedRevision)
+        assertEquals("My Winning V2 Edit", newOp.title)
+        assertEquals(OutboxEntity.CONTRACT_VERSION_V2, newOp.contractVersion)
+        assertEquals("2026-11-15", newOp.deadlineDate)
+        assertEquals("10:00", newOp.deadlineTime)
+        assertEquals("tok-reapply", newOp.scheduleToken)
+        assertTrue(newOp.reminderEnabled)
+        assertEquals(OutboxEntity.STATE_PENDING, newOp.deliveryState)
+    }
+
+    @Test
+    fun testCopyAsNewPreservesDeadlineAndReminderRule() = runTest {
+        val engine = TestHttpEngine { Pair(HttpStatusCode.OK, "{}") }
+        val (coordinator, store, dao) = createTestSetup(engine)
+        store.setActiveEpoch("epoch-v2")
+        dao.upsertMeta(AccountSyncMetaEntity(activeEpoch = "epoch-v2", syncStatus = "ready-v2"))
+
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-copy-deadline",
+                epoch = "epoch-v2",
+                tableName = "todos",
+                rowId = "row-to-copy",
+                kind = "update",
+                expectedRevision = 3L,
+                title = "Task with Deadline to Copy",
+                completed = false,
+                createdAt = 1000L,
+                digest = "d-old",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_CONFLICT,
+                createdAtEpochMs = 1000L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                deadlineDate = "2026-12-01",
+                deadlineTime = "09:00",
+                deadlineZone = "UTC",
+                deadlineOffsetSeconds = 0L,
+                deadlineAnchorEpochMs = 1796115600000L,
+                deadlineOverdueEpochMs = 1796115600000L,
+                reminderEnabled = true,
+                reminderLeadMinutes = 30L,
+                reminderCount = 1L,
+                scheduleToken = "old-tok"
+            )
+        )
+
+        coordinator.copyAsNew("row-to-copy")
+
+        assertNull(dao.getOutboxEntry("op-copy-deadline"))
+        val allOutbox = dao.getAllOutbox()
+        assertEquals(1, allOutbox.size)
+        val newOp = allOutbox[0]
+        assertTrue(newOp.rowId != "row-to-copy")
+        assertEquals(0L, newOp.expectedRevision)
+        assertEquals("create", newOp.kind)
+        assertEquals("Task with Deadline to Copy", newOp.title)
+        assertEquals("2026-12-01", newOp.deadlineDate)
+        assertEquals("09:00", newOp.deadlineTime)
+        assertTrue(newOp.reminderEnabled)
+        assertEquals(30L, newOp.reminderLeadMinutes)
+        // New schedule token generated
+        assertNotNull(newOp.scheduleToken)
+        assertTrue(newOp.scheduleToken != "old-tok")
     }
 }

@@ -13,7 +13,7 @@
  *    - Generates a new external UUID v4 epoch (canonical lowercase). Never reuses or reopens a stale epoch.
  * 3. Target Collection Provisioning:
  *    - Uses canonical collection namespace matching backend convention:
- *      `app_<appId>` (e.g. `app_doggo`)
+ *      `app<AppId>` (e.g. `appDoggo`)
  *    - Creates exact scan index: { userId: 1, tableName: 1, rowId: 1 } with simple collation, not capped, no TTL.
  * 4. Sanitized Data Import:
  *    - Requires non-empty SOURCE_BACKUP_COLLECTION. Cannot publish an unseeded or empty epoch.
@@ -70,6 +70,20 @@ function generateUuidV4() {
     return v.toString(16);
   });
 }
+function toCamelCaseCollection(appId) {
+  var parts = appId.split('-');
+  var first = parts[0] || '';
+  var rest = '';
+  for (var p = 1; p < parts.length; p++) {
+    var s = parts[p];
+    if (s.length > 0) {
+      rest += s.charAt(0).toUpperCase() + s.slice(1);
+    }
+  }
+  var capFirst = first.length > 0 ? (first.charAt(0).toUpperCase() + first.slice(1)) : '';
+  return 'app' + capFirst + rest;
+}
+
 
 function toBsonLong(v) {
   if (typeof NumberLong === 'function') return NumberLong(v);
@@ -108,7 +122,7 @@ function validatePrerequisites() {
   }
 
   if (CONFIG.sourceCollection) {
-    if (CONFIG.sourceCollection.startsWith('app_') ||
+    if (CONFIG.sourceCollection.startsWith('app') ||
         CONFIG.sourceCollection === '_schemas' ||
         CONFIG.sourceCollection.startsWith('system.')) {
       errors.push("SOURCE_BACKUP_COLLECTION cannot be an active app collection ('" + CONFIG.sourceCollection + "'), internal, or system collection. Must be an isolated staging collection (e.g. 'staging_doggo_restore' or 'backup_doggo').");
@@ -203,7 +217,7 @@ function runRecoveryInDatabase(db) {
   // Step 2: Allocate fresh epoch and staging collection
   var newEpoch = generateUuidV4();
   var cleanEpoch = newEpoch.replace(/-/g, '');
-  var liveCollectionName = 'app_' + CONFIG.appId;
+  var liveCollectionName = toCamelCaseCollection(CONFIG.appId);
   var stagingCollectionName = '_recovery_staging_' + CONFIG.appId + '_' + cleanEpoch;
   var backupCollectionName = '_recovery_backup_' + CONFIG.appId + '_' + cleanEpoch;
   console.log('\n[Step 2/6] Allocating fresh canonical epoch and isolated staging collection...');

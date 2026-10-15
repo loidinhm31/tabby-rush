@@ -28,9 +28,9 @@
 
 ## 2. Hub Strict Persistence Invariants
 
-1. **Namespace Isolation**:
-   - Each strict-v1 application is partitioned into a dedicated collection: `app_<appId>` (e.g. `app_doggo`).
-   - Legacy Glean Hub camelCase collections (`app<AppId>`) are never queried, updated, or written to by strict endpoints.
+1. **Dedicated Target Namespace**:
+   - Application data resides in its canonical Hub collection namespace: `app<AppId>` (e.g. `appDoggo` via `SyncService::collection_name(app_id)`).
+   - Strict routes isolate `todos` operations, enforcing exact column schemas, strict epoch verification, and versioned Compare-And-Swap (CAS).
 2. **CAS & Tombstone Policy**:
    - Inserts: require `expectedRevision === 0` and produce revision 1.
    - Updates: require exact `expectedRevision === currentRevision`.
@@ -130,7 +130,7 @@ mongosh --nodb --file scripts/hub-strict-recovery.js
 ### 4.1 In-Place Upgrade vs. Disaster Recovery
 Upgrading Doggo to `strict-v2` is a **data-preserving, in-place feature migration**, fundamentally distinct from emergency fresh-epoch disaster recovery:
 - **Preserves Active Epoch**: `strictEpoch` UUID remains unchanged in `_schemas`.
-- **Preserves Collection Identity**: All data resides in `app_doggo` throughout the transform.
+- **Preserves Collection Identity**: All data resides in `appDoggo` throughout the transform.
 - **Preserves Monotonic Revisions**: Existing revisions, tombstones, and confirmation receipts are preserved bit-for-bit.
 - **Non-Destructive Defaults**: Missing v2 temporal fields default to null (reminders disabled) without modifying user data.
 

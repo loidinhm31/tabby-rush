@@ -97,7 +97,7 @@ Source/document inspection and two completed read-only research reports; officia
   2. Concurrent read/write request permit drain under active migration.
   3. Crash injection during transform batches with resumption from checkpoint.
   4. Publish-response packet loss with idempotent replay.
-  5. Physical collection `app_<appId>` and protected-field fingerprint preservation under real DB storage.
+  5. Physical collection `appDoggo` and protected-field fingerprint preservation under real DB storage.
 - **Residual Scope & Downstream Phases:** Downstream Phase 04 (Hub admin UI & upgrade script) and Phase 05 (Shared Room migration) can proceed on logic and contract foundations under Gate G1/Phase 03 logic delivery (Phase 06 implementation remains dependent on Phase 05), while Gate G3 live cluster execution and 3 open code remediations remain prerequisites for production admission.
 
 ## Phase 04 Delivery & Verification Evidence

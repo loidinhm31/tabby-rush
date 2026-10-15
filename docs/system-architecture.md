@@ -147,7 +147,7 @@ flowchart TD
     StrictRoutes["Strict Routes\n(/api/v1/sync/:app_id/strong/{bootstrap,push,pull,legacy-receipts})"]
     AdminStrict["Admin Strict Registration\n(POST /api/v1/strict-apps)"]
     AdmissionHelper["Admission Validator\n(Exact index, topology, uncapped, no TTL)"]
-    MongoDB["MongoDB Target Collection\n(app_doggo)"]
+    MongoDB["MongoDB Target Collection\n(appDoggo)"]
   end
 
   MainActivity --> UI
@@ -201,7 +201,7 @@ flowchart TD
 
 ### 4.1 Storage Namespace & Backend Isolation
 Strict sync completely segregates Doggo data from legacy Hub storage:
-- **Naming Pattern**: `app_<appId>` (e.g. `app_doggo`).
+- **Naming Pattern**: Canonical Hub collection naming: `app<AppId>` (e.g. `appDoggo` via `SyncService::collection_name(app_id)`).
 - **Document Key (`_id`)**: Exact composite key `userId:rowId` preventing cross-user collisions.
 - **Scan Index**: Exact compound index `{ userId: 1, tableName: 1, rowId: 1 }` with simple collation.
 - **Publication-Last Registration**: Schema entry published only after storage and indexes pass admission.

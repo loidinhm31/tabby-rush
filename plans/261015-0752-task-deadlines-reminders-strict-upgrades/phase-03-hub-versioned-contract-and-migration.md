@@ -11,7 +11,7 @@ Current schema/digest are fixed v1; current fresh-epoch script is destructive to
 ## Requirements
 - Exact v1/v2 admission, typed version-aware payloads/digest, preserved CAS/scan/tombstone guarantees.
 - One authorized migration operation, durable idempotency/exclusion and publish-last activation.
-- Physical `app_<appId>` collection and strict epoch preserved. Live data gains defaults; tombstones remain empty; protected receipt/revision fields unchanged.
+- Physical `appDoggo` collection and strict epoch preserved. Live data gains defaults; tombstones remain empty; protected receipt/revision fields unchanged.
 - Reconciliation-only legacy receipts work on v2; no general legacy writes after activation.
 
 ## Architecture
@@ -84,5 +84,5 @@ If selected permit algorithm cannot be proved on actual topology, replace design
   2. Concurrent read/write request permit drain under active migration.
   3. Crash injection during transform batches with resumption from checkpoint.
   4. Publish-response packet loss with idempotent replay.
-  5. Physical collection `app_<appId>` and protected-field fingerprint preservation under real DB storage.
+  5. Physical collection `appDoggo` and protected-field fingerprint preservation under real DB storage.
 - **Residual Scope & Downstream Phases:** Downstream Phase 04 (Hub admin UI & upgrade script) and Phase 05 (Shared Room migration) can proceed on logic and contract foundations under Gate G1/Phase 03 logic delivery (Phase 06 implementation remains dependent on Phase 05), while Gate G3 live cluster execution and 3 open code remediations remain prerequisites for production admission.

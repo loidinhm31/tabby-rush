@@ -162,7 +162,7 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 ### 5.3 Storage & CAS Invariants
 - Strict mutation writes must execute atomic compare-and-swap (CAS) queries matching `expectedRevision` and live record filters.
 - Replay confirmation writes must conditionally match `(opId, digest)` and verify `matched_count == 1`.
-- Strict collection naming targets the designated application collection: `app_<appId>` (e.g. `app_doggo`).
+- Strict collection naming targets the canonical application collection: `app<AppId>` (e.g. `appDoggo` via `SyncService::collection_name(app_id)`).
 - Code must compile cleanly with `cargo clippy --locked --all-targets` with zero warnings.
 
 ---

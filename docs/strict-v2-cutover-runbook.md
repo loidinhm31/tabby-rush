@@ -12,7 +12,7 @@
 This runbook establishes the strict, versioned procedure for upgrading the Doggo personal task management application on Glean Hub from `strict-v1` to `strict-v2` (incorporating task deadlines, timezones, and offline reminders).
 
 ### 1.1 In-Place Upgrade Invariants
-1. **Zero Data Loss**: In-place transformation of `app_doggo` records; no collection recreation or record ID modifications.
+1. **Zero Data Loss**: In-place transformation of `appDoggo` records; no collection recreation or record ID modifications.
 2. **Epoch Invariance**: Active `strictEpoch` UUID is strictly preserved across the upgrade. Epoch rotation is forbidden during feature upgrades.
 3. **Monotonic Revisions**: Monotonic record revisions, tombstones (`deleted: true`, `data: {}`), and confirmation receipts are preserved bit-for-bit.
 4. **Coordinated Fencing**: Request permits in `_coordination` drain in-flight reads/writes, acquire an exclusive fence, transform batches idempotently, and publish the canonical `strict-v2` schema atomically.
@@ -111,7 +111,7 @@ sequenceDiagram
   Op->>Client: 2. Publish Room v2 Doggo client binaries
   Note over Client: Clients run Room v2; deadline UI blocked on v1 server
   Op->>Hub: 3. Execute non-mutating preflight dry-run
-  Hub->>DB: Scan & validate app_doggo records
+  Hub->>DB: Scan & validate appDoggo records
   Op->>Hub: 4. Initiate live upgrade with durable migration UUID
   Hub->>DB: Acquire exclusive fence in _coordination
   Note over Hub: New traffic rejected with HTTP 503 (migrationInProgress)
@@ -165,7 +165,7 @@ The runner will:
 1. Validate preconditions and active epoch.
 2. Acquire exclusive fence in `_coordination` (`fenced: true`, `fenceOwner: migration_id`).
 3. Drain admitted reader/writer permits.
-4. Transform `app_doggo` live documents in batches of 500, setting null/default values for the 12 new fields while leaving tombstones empty (`data: {}`).
+4. Transform `appDoggo` live documents in batches of 500, setting null/default values for the 12 new fields while leaving tombstones empty (`data: {}`).
 5. Incrementally update `checkpointRowId` in `_schemas.activeMigration`.
 6. Validate all documents adhere to the 16-column schema.
 7. Atomically CAS publish `syncMode: "strict-v2"` with the canonical v2 fingerprint in `_schemas`.
@@ -234,4 +234,4 @@ Upon successful cutover verification:
    - Pre-cutover and post-cutover schema fingerprints
    - Total transformed record count
    - Verification curl outputs
-3. Notify stakeholders and release leads that `app_doggo` is operating under `strict-v2`.
+3. Notify stakeholders and release leads that `appDoggo` is operating under `strict-v2`.

@@ -7,7 +7,7 @@ Related Docs: [Hub Schema Integration](./hub-schema-integration.md) · [API Cont
 ---
 ## Scope and Isolation Policy
 Strict-v1 sync establishes absolute isolation between Doggo and other Hub applications:
-- **Namespace Isolation**: Strict data resides in dedicated target collections named `app_<appId>` (e.g. `app_doggo`), completely separate from legacy camelCase `app*` collections.
+- **Namespace Isolation**: Strict data resides in designated target collection `app<AppId>` (e.g. `appDoggo` via `SyncService::collection_name(app_id)`).
 - **Legacy Route Rejection**: Legacy routes (`/api/v1/sync/:app_id/{push,pull,delta,purge,restore}`) reject strict-mode apps with HTTP 426 (`protocolUnsupported`).
 - **Strong Route Protection**: Strict routes (`/api/v1/sync/:app_id/strong/{bootstrap,push,pull}`) require `syncMode === "strict-v1"` and matching canonical `epoch`. Stale or forged epochs return HTTP 409 (`epochMismatch`).
 - **Unchanged Legacy Applications**: Legacy apps with absent `syncMode` continue using legacy routes, storage, and jobs with zero behavioral modification.

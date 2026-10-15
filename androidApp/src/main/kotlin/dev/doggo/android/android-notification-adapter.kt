@@ -2,118 +2,178 @@ package dev.doggo.android
 
 import android.app.AlarmManager
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.os.Build
+import android.util.Log
+import dev.doggo.android.AndroidNotificationIntentFactory.CHANNEL_ID
+import dev.doggo.android.AndroidNotificationIntentFactory.createAlarmIntent
+import dev.doggo.android.AndroidNotificationIntentFactory.createAlarmPendingIntent
+import dev.doggo.android.AndroidNotificationIntentFactory.createViewTaskPendingIntent
+import dev.doggo.android.AndroidNotificationIntentFactory.ensureNotificationChannel
+import dev.doggo.android.AndroidNotificationIntentFactory.getAccountNotificationTag
+import dev.doggo.android.AndroidNotificationIntentFactory.getAlarmRequestCode
+import dev.doggo.shared.contract.AccountKey
+import dev.doggo.shared.contract.NativeReminderAdapter
+import dev.doggo.shared.contract.ReminderCapabilities
+import dev.doggo.shared.contract.ScheduledAlarmHandle
 
 /**
- * Candidate adapter managing Android NotificationManager channels and AlarmManager scheduling.
+ * Android native reminder adapter managing AlarmManager scheduling and NotificationManager alerts.
+ * Implements NativeReminderAdapter with fail-closed permission snapshots and private visibility.
  */
-object AndroidNotificationAdapter {
-    const val CHANNEL_ID = "doggo_reminders"
-    const val CHANNEL_NAME = "Doggo Task Reminders"
-    const val CHANNEL_DESCRIPTION = "Offline task deadline and reminder notifications"
+class AndroidNotificationAdapter(
+    private val context: Context
+) : NativeReminderAdapter {
 
-    const val ACTION_DELIVER_REMINDER = "dev.doggo.android.ACTION_DELIVER_REMINDER"
-    const val EXTRA_TASK_ID = "extra_task_id"
-    const val EXTRA_SCHEDULE_TOKEN = "extra_schedule_token"
-    const val EXTRA_OCCURRENCE_INDEX = "extra_occurrence_index"
-    const val EXTRA_NOTIFICATION_ID = "extra_notification_id"
-    const val EXTRA_TITLE = "extra_title"
+    private val alarmRegistry = AndroidAlarmRegistry(context)
 
-    fun ensureNotificationChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-                ?: return
-            if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-                val channel = NotificationChannel(
-                    CHANNEL_ID,
-                    CHANNEL_NAME,
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = CHANNEL_DESCRIPTION
-                    enableLights(true)
-                    enableVibration(true)
-                }
-                nm.createNotificationChannel(channel)
+    override suspend fun queryCapabilities(): ReminderCapabilities {
+        ensureNotificationChannel(context)
+        val checker = AndroidReminderCapabilitiesChecker.checkCapabilities(context, CHANNEL_ID)
+        return ReminderCapabilities(
+            canScheduleExactAlarms = checker.canScheduleExactAlarms,
+            canPostNotifications = checker.canPostNotifications,
+            areNotificationsEnabled = checker.isChannelEnabled
+        )
+    }
+
+    override suspend fun reconcileSchedule(
+        accountKey: AccountKey,
+        generation: Long,
+        desiredAlarms: List<ScheduledAlarmHandle>
+    ) {
+        val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val currentKeys = alarmRegistry.getScheduledAlarmKeys(accountKey)
+        val desiredMap = desiredAlarms.associateBy {
+            AndroidAlarmRegistry.formatAlarmKey(it.generation, it.taskId, it.scheduleToken, it.occurrenceIndex)
+        }
+
+        // Cancel obsolete alarms
+        val obsoleteKeys = currentKeys - desiredMap.keys
+        for (obsoleteKey in obsoleteKeys) {
+            val parsed = AndroidAlarmRegistry.parseAlarmKey(obsoleteKey) ?: continue
+            cancelAlarmHandle(am, accountKey, parsed.generation, parsed.taskId, parsed.scheduleToken, parsed.occurrenceIndex)
+        }
+
+        // Schedule desired alarms
+        for ((_, alarm) in desiredMap) {
+            scheduleAlarmHandle(am, accountKey, alarm)
+        }
+
+        alarmRegistry.saveScheduledAlarmKeys(accountKey, desiredMap.keys)
+    }
+
+    override suspend fun postOwnedNotification(
+        accountKey: AccountKey,
+        generation: Long,
+        taskId: String,
+        scheduleToken: String,
+        occurrenceIndex: Int,
+        title: String,
+        dueEpochMs: Long
+    ): String? {
+        if (!AndroidReminderCapabilitiesChecker.canPostNotifications(context, CHANNEL_ID)) return null
+        ensureNotificationChannel(context)
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return null
+
+        val publicVersion = Notification.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Doggo")
+            .setContentText("Task reminder")
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .build()
+
+        val clickPendingIntent = createViewTaskPendingIntent(context, accountKey, taskId)
+        val notification = Notification.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText("Task reminder: $title")
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion)
+            .setContentIntent(clickPendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        val notifId = (accountKey.value + taskId).hashCode() and 0x7FFFFFFF
+        val tag = getAccountNotificationTag(accountKey)
+
+        return try {
+            nm.notify(tag, notifId, notification)
+            alarmRegistry.recordActiveNotificationId(accountKey, notifId.toString())
+            notifId.toString()
+        } catch (e: Exception) {
+            Log.w(TAG, "Notification post failed: ${e.message}")
+            null
+        }
+    }
+
+    override suspend fun removeOwnedNotification(
+        accountKey: AccountKey,
+        platformNotificationId: String
+    ) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        val notifId = platformNotificationId.toIntOrNull() ?: return
+        val tag = getAccountNotificationTag(accountKey)
+        nm.cancel(tag, notifId)
+        alarmRegistry.removeActiveNotificationId(accountKey, platformNotificationId)
+    }
+
+    override suspend fun cancelAllForAccount(accountKey: AccountKey) {
+        val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+
+        if (am != null) {
+            val scheduledKeys = alarmRegistry.getScheduledAlarmKeys(accountKey)
+            for (key in scheduledKeys) {
+                val parsed = AndroidAlarmRegistry.parseAlarmKey(key) ?: continue
+                cancelAlarmHandle(am, accountKey, parsed.generation, parsed.taskId, parsed.scheduleToken, parsed.occurrenceIndex)
+            }
+        }
+
+        if (nm != null) {
+            val tag = getAccountNotificationTag(accountKey)
+            for (idStr in alarmRegistry.getActiveNotificationIds(accountKey)) {
+                val id = idStr.toIntOrNull() ?: continue
+                nm.cancel(tag, id)
+            }
+        }
+
+        alarmRegistry.clearAll(accountKey)
+    }
+
+    private fun scheduleAlarmHandle(am: AlarmManager, accountKey: AccountKey, alarm: ScheduledAlarmHandle) {
+        val pendingIntent = createAlarmPendingIntent(
+            context, accountKey, alarm.generation, alarm.taskId, alarm.scheduleToken, alarm.occurrenceIndex
+        )
+        val canExact = AndroidReminderCapabilitiesChecker.canScheduleExactAlarms(context)
+        try {
+            if (canExact) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.triggerAtEpochMs, pendingIntent)
+            } else {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.triggerAtEpochMs, pendingIntent)
+            }
+        } catch (_: SecurityException) {
+            try {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.triggerAtEpochMs, pendingIntent)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed inexact fallback alarm: ${e.message}")
             }
         }
     }
 
-    fun checkCapabilities(context: Context): AndroidReminderCapabilities {
-        ensureNotificationChannel(context)
-        return AndroidReminderCapabilitiesChecker.checkCapabilities(context, CHANNEL_ID)
-    }
-
-    fun createAlarmIntent(
-        context: Context,
+    private fun cancelAlarmHandle(
+        am: AlarmManager,
+        accountKey: AccountKey,
+        generation: Long,
         taskId: String,
         scheduleToken: String,
-        occurrenceIndex: Long,
-        notificationId: Int,
-        title: String
-    ): Intent {
-        return Intent(context, DoggoAlarmReceiver::class.java).apply {
-            action = ACTION_DELIVER_REMINDER
-            putExtra(EXTRA_TASK_ID, taskId)
-            putExtra(EXTRA_SCHEDULE_TOKEN, scheduleToken)
-            putExtra(EXTRA_OCCURRENCE_INDEX, occurrenceIndex)
-            putExtra(EXTRA_NOTIFICATION_ID, notificationId)
-            putExtra(EXTRA_TITLE, title)
-        }
-    }
-
-    fun createPendingIntent(
-        context: Context,
-        notificationId: Int,
-        intent: Intent
-    ): PendingIntent {
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        return PendingIntent.getBroadcast(context, notificationId, intent, flags)
-    }
-
-    fun scheduleAlarm(
-        context: Context,
-        triggerEpochMs: Long,
-        taskId: String,
-        scheduleToken: String,
-        occurrenceIndex: Long,
-        notificationId: Int,
-        title: String
-    ): Boolean {
-        val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-            ?: return false
-        val intent = createAlarmIntent(
-            context = context,
-            taskId = taskId,
-            scheduleToken = scheduleToken,
-            occurrenceIndex = occurrenceIndex,
-            notificationId = notificationId,
-            title = title
-        )
-        val pendingIntent = createPendingIntent(context, notificationId, intent)
-
-        val canExact = AndroidReminderCapabilitiesChecker.canScheduleExactAlarms(context)
-        if (canExact) {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerEpochMs, pendingIntent)
-        } else {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerEpochMs, pendingIntent)
-        }
-        return canExact
-    }
-
-    fun cancelAlarm(context: Context, notificationId: Int) {
-        val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-            ?: return
-        val dummyIntent = Intent(context, DoggoAlarmReceiver::class.java).apply {
-            action = ACTION_DELIVER_REMINDER
-        }
+        occurrenceIndex: Int
+    ) {
+        val dummyIntent = createAlarmIntent(context, accountKey, generation, taskId, scheduleToken, occurrenceIndex)
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            notificationId,
+            getAlarmRequestCode(accountKey, taskId, scheduleToken, occurrenceIndex),
             dummyIntent,
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
@@ -123,40 +183,7 @@ object AndroidNotificationAdapter {
         }
     }
 
-    fun postNotification(
-        context: Context,
-        notificationId: Int,
-        title: String,
-        content: String
-    ): Boolean {
-        if (!AndroidReminderCapabilitiesChecker.canPostNotifications(context, CHANNEL_ID)) {
-            return false
-        }
-        ensureNotificationChannel(context)
-        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            ?: return false
-
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(context, CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(context)
-        }
-
-        val notification = builder
-            .setContentTitle(title)
-            .setContentText(content)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setAutoCancel(true)
-            .build()
-
-        nm.notify(notificationId, notification)
-        return true
-    }
-
-    fun cancelNotification(context: Context, notificationId: Int) {
-        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            ?: return
-        nm.cancel(notificationId)
+    companion object {
+        private const val TAG = "AndroidNotificationAdapter"
     }
 }

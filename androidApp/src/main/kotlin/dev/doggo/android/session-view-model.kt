@@ -36,9 +36,8 @@ class SessionViewModel : ViewModel() {
     val uiState: StateFlow<TodoUiState> = _uiState.asStateFlow()
 
     private var allTodos: List<Todo> = emptyList()
-    private var accountJob: Job? = null
-    private var syncJob: Job? = null
-
+    private var isTodosLoaded = false; private var accountJob: Job? = null; private var syncJob: Job? = null
+    private var pendingTarget: Pair<String, String>? = null
     init {
         viewModelScope.launch {
             app.authSession.state.collect { s ->
@@ -71,15 +70,16 @@ class SessionViewModel : ViewModel() {
     }
 
     private fun onUnauthenticated() {
-        accountJob?.cancel(); accountJob = null
-        syncJob?.cancel(); syncJob = null
-        allTodos = emptyList(); _uiState.value = TodoUiState()
+        accountJob?.cancel(); accountJob = null; syncJob?.cancel(); syncJob = null
+        allTodos = emptyList(); isTodosLoaded = false; _uiState.value = TodoUiState()
     }
 
     private suspend fun reloadTodos() {
         val runtime = app.getActiveRuntime() ?: return
-        try { allTodos = runtime.store.loadTodos(); applyFilterAndCounts() }
-        catch (ce: CancellationException) { throw ce } catch (_: Exception) {}
+        try {
+            allTodos = runtime.store.loadTodos(); applyFilterAndCounts(); isTodosLoaded = true
+            pendingTarget?.let { (k, t) -> dispatchTaskSelection(k, t) }
+        } catch (ce: CancellationException) { throw ce } catch (_: Exception) {}
     }
 
     private fun applyFilterAndCounts() {
@@ -111,10 +111,7 @@ class SessionViewModel : ViewModel() {
                 is TodoAction.DiscardConflict -> resolveConflict { it.discardConflict(action.rowId) }
                 is TodoAction.ReapplyConflict -> resolveConflict { it.reapplyConflict(action.rowId) }
                 is TodoAction.CopyAsNew -> resolveConflict { it.copyAsNew(action.rowId) }
-                is TodoAction.DismissError -> {
-                    app.getActiveRuntime()?.coordinator?.dismissError()
-                    _uiState.value = _uiState.value.copy(safeError = null)
-                }
+                is TodoAction.DismissError -> { app.getActiveRuntime()?.coordinator?.dismissError(); _uiState.value = _uiState.value.copy(safeError = null) }
                 is TodoAction.RequestLeave -> requestLeave()
                 is TodoAction.ConfirmLeave -> if (app.getActiveRuntime()?.leaveProtocol?.discardAndLeave() == true) { app.clearActiveAccount(); app.closeActiveRuntime(); _uiState.value = _uiState.value.copy(leaveGuard = null) }
                 is TodoAction.CancelLeave -> _uiState.value = _uiState.value.copy(leaveGuard = null)
@@ -173,11 +170,8 @@ class SessionViewModel : ViewModel() {
         val runtime = app.getActiveRuntime()
         if (runtime == null) { app.authSession.logout(); app.clearActiveAccount(); _uiState.value = TodoUiState(); return }
         val r = runtime.leaveProtocol.checkReviewWork()
-        if (r.hasReviewWork) {
-            _uiState.value = _uiState.value.copy(leaveGuard = LeaveGuardState(r.pendingCount + r.draftCount, r.uncertainCount, r.conflictCount + r.unknownSupersededCount))
-        } else if (runtime.leaveProtocol.executeLeave()) {
-            app.clearActiveAccount(); app.closeActiveRuntime()
-        }
+        if (r.hasReviewWork) _uiState.value = _uiState.value.copy(leaveGuard = LeaveGuardState(r.pendingCount + r.draftCount, r.uncertainCount, r.conflictCount + r.unknownSupersededCount))
+        else if (runtime.leaveProtocol.executeLeave()) { app.clearActiveAccount(); app.closeActiveRuntime() }
     }
 
     fun onAuthSubmit(action: AuthSubmitAction) = viewModelScope.launch {
@@ -186,16 +180,20 @@ class SessionViewModel : ViewModel() {
             is AuthSubmitAction.Register -> handleAuth(app.authSession.register(action.username, action.email, action.password))
             is AuthSubmitAction.RequestAccess -> handleAccess(app.authSession.requestAccess(action.message))
             is AuthSubmitAction.RefreshStatus -> handleAccess(app.authSession.checkAccess())
-            is AuthSubmitAction.Logout -> {
-                if (app.getActiveRuntime() != null) onAction(TodoAction.RequestLeave)
-                else { app.authSession.logout(); app.clearActiveAccount(); _uiState.value = TodoUiState() }
-            }
+            is AuthSubmitAction.Logout -> { pendingTarget = null; if (app.getActiveRuntime() != null) onAction(TodoAction.RequestLeave) else { app.authSession.logout(); app.clearActiveAccount(); _uiState.value = TodoUiState() } }
         }
     }
 
     private fun handleAuth(res: ApiResult<*>) { if (res is ApiResult.Failure) _uiState.value = _uiState.value.copy(safeError = res.error) }
-    private fun handleAccess(res: ApiResult<*>) {
-        if (res is ApiResult.Failure) _uiState.value = _uiState.value.copy(safeError = res.error)
-        else if (res is ApiResult.Success) _uiState.value = _uiState.value.copy(accessRequest = res.value as? AccessRequestInfo)
+    private fun handleAccess(res: ApiResult<*>) { if (res is ApiResult.Failure) _uiState.value = _uiState.value.copy(safeError = res.error) else if (res is ApiResult.Success) _uiState.value = _uiState.value.copy(accessRequest = res.value as? AccessRequestInfo) }
+    fun selectTaskFromNotification(accountKey: String, taskId: String) = viewModelScope.launch {
+        if (app.authSession.currentAccountKey.value?.value == null || !isTodosLoaded) { pendingTarget = Pair(accountKey, taskId); return@launch }
+        dispatchTaskSelection(accountKey, taskId)
+    }
+    private fun dispatchTaskSelection(accountKey: String, taskId: String) {
+        val currentKey = app.authSession.currentAccountKey.value?.value; pendingTarget = null
+        if (currentKey != accountKey || app.accountFiles.hasPendingWipe(dev.doggo.shared.contract.AccountKey(accountKey))) return
+        val task = allTodos.find { it.id == taskId } ?: return
+        _uiState.value = _uiState.value.copy(editor = EditorState(id = task.id, rawTitle = task.title))
     }
 }

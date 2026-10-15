@@ -112,4 +112,21 @@ class BackgroundIsolationTest {
             .get()
         assertTrue("All tagged work should be finished or cancelled", infos.all { it.state.isFinished })
     }
+
+    @Test
+    fun testStartupWipeRecoveryCleansAlarmRegistry() = runBlocking {
+        val registry = AndroidAlarmRegistry(context)
+        registry.saveScheduledAlarmKeys(testAccountKey, setOf("1:task1:tok1:0", "1:task2:tok2:0"))
+        registry.recordActiveNotificationId(testAccountKey, "12345")
+
+        app.accountFiles.writeGeneration(testAccountKey, 1L)
+        app.accountFiles.writeWipeMarker(testAccountKey, 2L)
+        assertTrue(app.accountFiles.hasPendingWipe(testAccountKey))
+
+        app.completePendingWipesOnStartup()
+
+        assertFalse(app.accountFiles.hasPendingWipe(testAccountKey))
+        assertTrue("Scheduled alarm keys must be cleared on wipe recovery", registry.getScheduledAlarmKeys(testAccountKey).isEmpty())
+        assertTrue("Active notifications must be cleared on wipe recovery", registry.getActiveNotificationIds(testAccountKey).isEmpty())
+    }
 }

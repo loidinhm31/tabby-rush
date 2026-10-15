@@ -4,6 +4,9 @@ import dev.doggo.shared.contract.AccountKey
 import dev.doggo.shared.contract.Todo
 import dev.doggo.shared.contract.ReminderRule
 import dev.doggo.shared.contract.TaskDeadline
+import dev.doggo.shared.contract.StrictOperationKind
+import dev.doggo.shared.contract.StrictSyncV2Contract
+import dev.doggo.shared.contract.StrictSyncV2Digest
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -940,5 +943,52 @@ class RoomAccountStoreTest {
         assertEquals("2026-12-25", updated.deadlineDate)
         assertEquals("xmas-token", updated.scheduleToken)
         assertTrue(updated.reminderEnabled)
+    }
+
+    @Test
+    fun testDeleteTodoLocallySelectsV2ContractWhenReadyV2() = runTest {
+        // Transition store to ready-v2
+        database.doggoDao().upsertMeta(
+            AccountSyncMetaEntity(
+                activeEpoch = "epoch-test",
+                syncStatus = "ready-v2"
+            )
+        )
+
+        database.doggoDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = "delete-v2-row",
+                serverRevision = 4L,
+                deleted = false,
+                title = "To Delete",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-test"
+            )
+        )
+
+        store.deleteTodoLocally("delete-v2-row")
+
+        val ops = database.doggoDao().getOutboxByRowId("delete-v2-row")
+        assertEquals(1, ops.size)
+        val deleteOp = ops[0]
+        assertEquals(OutboxEntity.CONTRACT_VERSION_V2, deleteOp.contractVersion)
+        assertEquals("delete", deleteOp.kind)
+        assertEquals(4L, deleteOp.expectedRevision)
+
+        val expectedV2Digest = StrictSyncV2Digest.computeDigest(
+            domain = StrictSyncV2Contract.PROTOCOL_VERSION,
+            appId = "doggo",
+            userId = "user-jvm-test",
+            epoch = "epoch-test",
+            tableName = "todos",
+            rowId = "delete-v2-row",
+            opId = deleteOp.opId,
+            kind = StrictOperationKind.DELETE,
+            expectedRevision = 4L,
+            data = null
+        )
+        assertEquals(expectedV2Digest, deleteOp.digest)
     }
 }

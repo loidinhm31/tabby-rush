@@ -432,8 +432,8 @@ class RoomAccountStore(
         val opId = generateUuid()
         val expectedRev = existingBase?.serverRevision ?: 0L
         val kind = StrictOperationKind.DELETE
-        val opContractVersion = defaultContractVersion
-
+        val isReadyV2 = meta.syncStatus == "ready-v2" || meta.syncStatus == "READY_V2"
+        val opContractVersion = if (isReadyV2) OutboxEntity.CONTRACT_VERSION_V2 else defaultContractVersion
         val digest = if (opContractVersion == OutboxEntity.CONTRACT_VERSION_V2) {
             dev.doggo.shared.contract.StrictSyncV2Digest.computeDigest(
                 domain = dev.doggo.shared.contract.StrictSyncV2Contract.PROTOCOL_VERSION,

@@ -861,4 +861,71 @@ class StagedFullScanTest {
         assertEquals("STORE_FROZEN", result.error.code)
         assertNull(store.dao.getServerBase("row-fence"))
     }
+
+    @Test
+    fun testMigrationEqualRevisionRejectsMismatchedTitleEvenWithMissingTemporalMetadata() = runTest {
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v2",
+                    "epoch":"epoch-mig-reject",
+                    "records":[
+                        {
+                            "tableName":"todos",
+                            "rowId":"row-mig-mismatch",
+                            "revision":2,
+                            "deleted":false,
+                            "data":{
+                                "id":"row-mig-mismatch",
+                                "title":"Server Title Differs",
+                                "completed":false,
+                                "createdAt":1000,
+                                "deadlineDate":"2026-11-05",
+                                "deadlineZone":"UTC",
+                                "deadlineOffsetSeconds":0,
+                                "deadlineAnchorEpochMs":1793836800000,
+                                "deadlineOverdueEpochMs":1793923200000,
+                                "reminderAnchorTime":"09:00",
+                                "reminderEnabled":false,
+                                "reminderLeadMinutes":0,
+                                "reminderCount":1,
+                                "scheduleToken":"migrated-tok"
+                            }
+                        }
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        store.dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = "row-mig-mismatch",
+                serverRevision = 2L,
+                deleted = false,
+                title = "Local Title",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-mig-reject",
+                deadlineDate = null,
+                scheduleToken = null
+            )
+        )
+
+        val scan = StagedFullScan(
+            syncClient = client,
+            store = store,
+            activeEpoch = "epoch-mig-reject",
+            protocol = StrictSyncV2Contract.PROTOCOL_VERSION,
+            isMigration = true
+        )
+        val result = scan.executeScan()
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.ProtocolIncompatible>(result.error)
+        assertEquals("DIVERGENT_REVISION", result.error.code)
+    }
 }

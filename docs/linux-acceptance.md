@@ -50,6 +50,15 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 | **RPM Packaging** | Native `.rpm` package generation | `./gradlew :desktopApp:packageRpm` | Pending `rpm-build` tool on host |
 | **Installed RPM Test** | System installation via `dnf install` | `sudo dnf install` | Pending operator sudo credentials |
 
+
+### Phase 02 — Native Delivery & Notification Proof Status
+
+| Gate | Requirement | Verification Method | Status |
+|---|---|---|---|
+| **D-Bus Notification Adapter** | Session bus communication with `org.freedesktop.Notifications`, capability probing, and missing-daemon error handling | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.linux.LinuxNotificationAdapterTest"` | PASS (4/4 tests passing) |
+| **Workstation Bus Probe** | Introspect user D-Bus at `/run/user/1000/bus` for `org.freedesktop.Notifications` | `busctl --user introspect org.freedesktop.Notifications /org/freedesktop/Notifications` | Safely caught: `org.freedesktop.DBus.Error.ServiceUnknown` (Returns `LinuxNotificationStatus.Unavailable` without crash) |
+| **Dependency Locking** | Reconciled `desktopApp/gradle-linux.lockfile` without Windows JNA dependencies | `./gradlew :desktopApp:test` (without `--write-locks`) | PASS (23/23 tests passing) |
+| **Live Visual Notification Bubble** | Native notification bubble display and removal in active desktop session | Live desktop session notification | BLOCKED (Headless Fedora host has no active notification daemon; G2 gate prerequisite remaining) |
 ---
 
 ## 3. Disclosed Limitations & Operator Prerequisites

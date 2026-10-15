@@ -57,6 +57,12 @@ Status cells are transcribed from `docs/evidence/windows-test-summary.md`; comma
 | **MSI Packaging** | Native `.msi` package generation | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:packageMsi` | PASS (Doggo-1.0.0.msi, 100.68 MB, SHA-256 verified) |
 | **Installed MSI Test** | System installation via `msiexec.exe` | `msiexec /i Doggo-1.0.0.msi` | PENDING (package structure/metadata verified; interactive installation and installed-runtime acceptance not reported) |
 
+### 2.1 Phase 02 — Native Toast & AUMID Proof Status
+
+| Gate | Requirement | Verification Method | Status |
+|---|---|---|---|
+| **Toast Adapter Candidate** | XML escaping, toast structure, tag/group history clearance, and `WindowsToastBridge` interface | `WindowsNotificationAdapterTest` (tested with fake bridge) | SOURCE INSPECTED / UNEXECUTED (XML escaping, structure, and safe unavailability verified; native toast delivery and Action Center history clearance unexecuted pending Windows runner in Phase 09) |
+| **Live Windows AUMID & Toast Execution** | Installed MSI shortcut AUMID registration and Action Center toast observation | Windows test environment | BLOCKED (Workstation is Linux x86_64; Windows runtime and MSI tools absent; adapter remains Candidate / Unproven until installed Windows verification; G2 gate prerequisite remaining) |
 ---
 
 ## 3. UI Evidence Matrix

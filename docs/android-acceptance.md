@@ -51,7 +51,15 @@ Phase 07 delivers the native Android application module (`:androidApp`), integra
   - `todo-device-test.kt`: Statically verifies ViewModel initial state, filter switching, editor opening/cancelling, and direct AccountRuntime database store persistence. (Compose UI semantic nodes, toggle, and deletion tests deferred to Phase 08 device testbed).
   - `background-isolation-test.kt`: Statically verifies WorkManager background worker failure on pending wipe and generation mismatch, startup wipe marker cleanup, and scheduler cancel-and-await quiescence.
 
-### 4.2 Fault-Injection & Network Tests
+
+### 4.2 Phase 02 — Native Alarm & Notification Proof Status
+
+| Gate | Requirement | Verification Method | Status |
+|---|---|---|---|
+| **Manifest Declarations** | `SCHEDULE_EXACT_ALARM`, `POST_NOTIFICATIONS`, and non-exported `DoggoAlarmReceiver` (`android:exported="false"`) | Static manifest inspection | PASS (Verified in `androidApp/src/main/AndroidManifest.xml`) |
+| **Alarm & Notification Adapter** | `AndroidNotificationAdapter` and `AndroidReminderCapabilitiesChecker` separating notification permission from exact-alarm access | Host unit test `AndroidNotificationAdapterTest` (requires SDK) | SOURCE INSPECTED / UNEXECUTED (Adapter structure and constants defined; scheduling, capability checks, and receiver delivery unexecuted pending Android SDK in Phase 08) |
+| **Live Device & SDK Execution** | Build and execute AlarmManager intent scheduling and offline receipt on physical/emulated device | `./gradlew :androidApp:assembleDebug` | BLOCKED (Workstation lacks Android SDK in `/home/loidinh/Android/Sdk` and connected device/emulator; G2 gate prerequisite remaining) |
+### 4.3 Fault-Injection & Network Tests
 - **Proxy**: `scripts/debug-fault-proxy.mjs` binds strictly to `127.0.0.1:3000` forwarding to upstream `3001` with allowlisted routes (`/api/v1/sync/doggo/strong/*`, `/api/v1/auth/*`, `/api/v1/apps/access-requests*`).
 - **Scenarios**:
   - `drop-push-response`: Upstream commits push mutation (2xx verified), proxy severs client connection; client detects uncertainty and recovers via nonce replay on subsequent sync.

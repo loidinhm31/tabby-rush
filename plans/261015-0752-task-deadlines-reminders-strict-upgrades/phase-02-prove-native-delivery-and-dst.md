@@ -4,8 +4,7 @@
 [Parent](plan.md) · [Platform research/sources](research/reminder-platform-research.md) · [Temporal decisions](phase-01-freeze-contract-and-transition-design.md) · [Windows acceptance](../../docs/windows-acceptance.md)
 
 ## Overview
-Date 2026-10-15. Priority P1. Implementation pending 0%; review pending. Estimate 16h. Owner: platform leads. Dependencies: agreed brainstorm; can run beside phase 01. Gate G2 blocks broad shared UI and final native adapters.
-
+Date 2026-10-15. Priority P1. Status: Logic and contracts DELIVERED (2026-10-15); Gate G2 physical native delivery formally BLOCKED on missing host prerequisites (Android SDK/device, desktop notification daemon, Windows runtime). Review completed (Score: 7.5/10 APPROVED). Estimate 16h. Owner: platform leads. Dependencies: agreed brainstorm; can run beside phase 01. Gate G2 blocks broad shared UI (Phase 10) and final native adapters.
 ## Key Insights
 D-Bus/JNA presence is not delivery proof. Windows host-matched target guard prevents validating Windows on Linux. kotlinx-datetime default local conversion may normalize gaps or choose an overlap offset silently.
 
@@ -37,11 +36,12 @@ Evidence: existing `docs/android-acceptance.md`, `docs/linux-acceptance.md`, `do
 6. Decide binding/resolver and supported runtime matrix; attach sanitized OS/build versions, observed timestamps/screenshots, native IDs and failure statuses. Delete throwaway harnesses after reusable code retained.
 
 ## Todo list
-- [ ] Observe Android receiver-based offline notification and clear.
-- [ ] Observe packaged Linux native notification and absence status.
-- [ ] Observe installed Windows toast and AUMID/history removal.
-- [ ] Prove strict DST resolver on API26/JVM; record binding decision.
-
+- [x] Deliver strict DST resolver contract and platform actuals (`StrictTimeZoneResolver`, `StrictZoneOffsetResult`, `StrictTimeZoneResolverTest` 7/7 vectors passing; JVM `java.time.zone.ZoneRules` binding selected; physical Android API 26 execution pending SDK in Phase 08).
+- [x] Deliver candidate native notification adapters, capabilities checkers, and manifest entries across Android, Linux, and Windows; repair Linux dependency lockfile.
+- [ ] Observe Android receiver-based offline notification and clear (BLOCKED: Candidate adapter & receiver delivered in androidApp; physical execution pending Android SDK & device in Phase 08).
+- [ ] Observe packaged Linux native notification and absence status (PARTIAL/BLOCKED: Absence handling and D-Bus fallback verified in tests; visual bubble delivery pending notification daemon in user session in Phase 09).
+- [ ] Observe installed Windows toast and AUMID/history removal (BLOCKED: Candidate adapter & XML builder delivered; installed MSI toast execution pending Windows host in Phase 09).
+- [ ] Complete Gate G2 physical native delivery (BLOCKED on missing host prerequisites: Android SDK/device, desktop notification daemon, Windows runtime).
 ## Success Criteria
 G2 only passes with actual visible native evidence from all three platforms and strict gap/overlap results. API invocation/build alone fails gate. Permission-disabled delivery is a supported blocked state, not fake success.
 Future commands: `./gradlew :androidApp:assembleDebug`; Linux `./gradlew -PdesktopTarget=linux :desktopApp:createDistributable`; Windows `.\gradlew.bat -PdesktopTarget=windows :desktopApp:packageMsi`. Read existing smoke script help for runtime/package options.
@@ -53,7 +53,10 @@ Windows proof may require helper/packaging work; keep phase blocked until concre
 Generic proof payloads; no account text/secrets. User-initiated permission access. No bypass of DND/channel controls; installer changes remain per-user and signed-release policy unchanged.
 
 ## Next steps
-G2 evidence selects final adapters for phases 08/09 and unlocks phase 10 together with G1. Full Doze/reboot/account-race acceptance remains phase 11.
-
+1. Retain Gate G2 status as BLOCKED for physical device delivery while unblocking independent contracts.
+2. Proceed with Phase 03 (Hub Versioned Contract & Migration) and Phase 05 (Shared Model & Room Migration).
+3. Fulfill physical delivery prerequisites in Phase 08 (Android device testbed) and Phase 09 (Linux desktop notification daemon and Windows MSI testbed).
+4. Addressed code review recommendations: eliminated stub fake success in Windows toast bridge (returns safe `Unavailable`), documented duplicate timezone resolver code between jvmMain and androidMain for Phase 05/07 intermediate source-set unification, and fixed duplicate section header in docs/android-acceptance.md.
 ## Unresolved questions
-Selected Windows binding and final Linux service/runtime matrix are outputs of this executable gate, not already-proven facts.
+1. Selected Windows binding/native helper and installed AUMID identity remain an open implementation decision pending Phase 09 Windows testbed; current candidate bridge returns safe `Unavailable` stub.
+2. Physical delivery on Android API 26 (Phase 08), Linux session notification daemon (Phase 09), and Windows MSI host (Phase 09) are prerequisites to clear Gate G2.

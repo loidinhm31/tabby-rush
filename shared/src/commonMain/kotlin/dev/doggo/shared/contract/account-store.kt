@@ -1,5 +1,7 @@
 package dev.doggo.shared.contract
 
+import kotlinx.coroutines.flow.Flow
+
 interface AccountStore {
     val accountKey: AccountKey
 
@@ -10,6 +12,9 @@ interface AccountStore {
     suspend fun reconcileAccepted(opId: String, serverRevision: Long)
     suspend fun wipeLocalData()
     fun close()
+
+    suspend fun getPersistedScheduleProjection(): List<PersistedTaskSchedule>
+    fun observePersistedSchedule(): Flow<List<PersistedTaskSchedule>>
 }
 
 interface AccountStoreFactory {

@@ -269,31 +269,37 @@ class OutboxReconciliation(
         for (op in dispatched) {
             val result = resultsByOpId[op.opId]
             if (result == null) {
-                store.dao.updateDeliveryState(
-                    opId = op.opId,
-                    state = OutboxEntity.STATE_UNCERTAIN,
-                    errorMessage = "Server omitted operation from push response"
-                )
+                store.withMutationLock {
+                    store.dao.updateDeliveryState(
+                        opId = op.opId,
+                        state = OutboxEntity.STATE_UNCERTAIN,
+                        errorMessage = "Server omitted operation from push response"
+                    )
+                }
                 continue
             }
 
             // Validate rowId matches
             if (result.rowId != op.rowId) {
-                store.dao.updateDeliveryState(
-                    opId = op.opId,
-                    state = OutboxEntity.STATE_UNCERTAIN,
-                    errorMessage = "Server response rowId ${result.rowId} mismatched request ${op.rowId}"
-                )
+                store.withMutationLock {
+                    store.dao.updateDeliveryState(
+                        opId = op.opId,
+                        state = OutboxEntity.STATE_UNCERTAIN,
+                        errorMessage = "Server response rowId ${result.rowId} mismatched request ${op.rowId}"
+                    )
+                }
                 continue
             }
 
             if (result.status == StrictOperationStatus.ACCEPTED.wireName || result.status == StrictOperationStatus.REPLAYED.wireName) {
                 if (result.digest != op.digest) {
-                    store.dao.updateDeliveryState(
-                        opId = op.opId,
-                        state = OutboxEntity.STATE_UNCERTAIN,
-                        errorMessage = "Server response digest mismatched request digest"
-                    )
+                    store.withMutationLock {
+                        store.dao.updateDeliveryState(
+                            opId = op.opId,
+                            state = OutboxEntity.STATE_UNCERTAIN,
+                            errorMessage = "Server response digest mismatched request digest"
+                        )
+                    }
                     continue
                 }
             }
@@ -305,11 +311,13 @@ class OutboxReconciliation(
                     val expectedNextRev = op.expectedRevision + 1L
 
                     if (acceptedRev == null || acceptedRev != expectedNextRev) {
-                        store.dao.updateDeliveryState(
-                            opId = op.opId,
-                            state = OutboxEntity.STATE_UNCERTAIN,
-                            errorMessage = "acceptedRevision $acceptedRev did not equal expected $expectedNextRev"
-                        )
+                        store.withMutationLock {
+                            store.dao.updateDeliveryState(
+                                opId = op.opId,
+                                state = OutboxEntity.STATE_UNCERTAIN,
+                                errorMessage = "acceptedRevision $acceptedRev did not equal expected $expectedNextRev"
+                            )
+                        }
                     } else {
                         store.reconcileAccepted(
                             opId = op.opId,
@@ -329,47 +337,60 @@ class OutboxReconciliation(
                             op.dispatchHistory != null ||
                             op.transitionCheckpoint != null
                     if (wasUncertain) {
-                        store.dao.updateDeliveryState(
-                            opId = op.opId,
-                            state = OutboxEntity.STATE_UNKNOWN_SUPERSEDED,
-                            errorMessage = "Superseded after uncertain delivery: ${result.status}"
-                        )
+                        store.withMutationLock {
+                            store.dao.updateDeliveryState(
+                                opId = op.opId,
+                                state = OutboxEntity.STATE_UNKNOWN_SUPERSEDED,
+                                errorMessage = "Superseded after uncertain delivery: ${result.status}"
+                            )
+                        }
                     } else {
-                        store.dao.updateDeliveryState(
-                            opId = op.opId,
-                            state = OutboxEntity.STATE_CONFLICT,
-                            errorMessage = "Server conflict: ${result.status}"
-                        )
+                        store.withMutationLock {
+                            store.dao.updateDeliveryState(
+                                opId = op.opId,
+                                state = OutboxEntity.STATE_CONFLICT,
+                                errorMessage = "Server conflict: ${result.status}"
+                            )
+                        }
                     }
                 }
 
                 StrictOperationStatus.RETRYABLE_FAILURE.wireName -> {
-                    val current = store.dao.getOutboxEntry(op.opId)
-                    val newFailures = (current?.consecutiveFailures ?: op.consecutiveFailures) + 1
-                    store.dao.upsertOutbox(
-                        op.copy(
-                            deliveryState = OutboxEntity.STATE_UNCERTAIN,
-                            errorMessage = "Server retryableFailure",
-                            consecutiveFailures = newFailures
+                    store.withMutationLock {
+                        val current = store.dao.getOutboxEntry(op.opId) ?: return@withMutationLock
+                        if (current.deliveryState != OutboxEntity.STATE_DISPATCHING) {
+                            return@withMutationLock
+                        }
+                        val newFailures = current.consecutiveFailures + 1
+                        store.dao.upsertOutbox(
+                            current.copy(
+                                deliveryState = OutboxEntity.STATE_UNCERTAIN,
+                                errorMessage = "Server retryableFailure",
+                                consecutiveFailures = newFailures
+                            )
                         )
-                    )
+                    }
                 }
 
                 StrictOperationStatus.OP_ID_REUSE.wireName,
                 StrictOperationStatus.INVALID_RECORD.wireName -> {
-                    store.dao.updateDeliveryState(
-                        opId = op.opId,
-                        state = OutboxEntity.STATE_CONFLICT,
-                        errorMessage = "Server rejected: ${result.status}"
-                    )
+                    store.withMutationLock {
+                        store.dao.updateDeliveryState(
+                            opId = op.opId,
+                            state = OutboxEntity.STATE_CONFLICT,
+                            errorMessage = "Server rejected: ${result.status}"
+                        )
+                    }
                 }
 
                 else -> {
-                    store.dao.updateDeliveryState(
-                        opId = op.opId,
-                        state = OutboxEntity.STATE_UNCERTAIN,
-                        errorMessage = "Unrecognized status: ${result.status}"
-                    )
+                    store.withMutationLock {
+                        store.dao.updateDeliveryState(
+                            opId = op.opId,
+                            state = OutboxEntity.STATE_UNCERTAIN,
+                            errorMessage = "Unrecognized status: ${result.status}"
+                        )
+                    }
                 }
             }
         }

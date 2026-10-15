@@ -3,6 +3,77 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Phase 07] - 2026-10-15: Shared Scheduling, Persisted Eligibility & Account Safety (Gate G5 Passed; Native Adapters Unlocked for Phases 08/09)
+
+### Added
+- Shared reminder scheduling calculator in `:shared` (`dev.doggo.shared.contract.reminder-schedule-calculator.kt`):
+  - `ReminderScheduleCalculator`: Calculates all planned occurrences (`CalculatedReminderOccurrence`) using checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) without floating-point errors.
+  - Enforces repeat bounds: `rule.count` in `1..10`, non-repeating rules require null interval, repeating rules require interval >= 15m, and last occurrence cannot exceed anchor instant.
+  - Evaluates strict 5-minute grace window (`GRACE_PERIOD_MS = 300_000L`): exactly 300,000ms included, 300,001ms skipped.
+  - Latest opportunity selection: selects at most the single latest eligible occurrence per task, marking older unconsumed opportunities `SKIPPED`.
+  - Consumed opportunity barrier: if latest eligible occurrence was already consumed (`CLAIMED` or `POSTED`), fallback to older opportunities is strictly blocked (`isLatestConsumed = true`).
+  - Preserves all future occurrences (`dueEpochMs > nowEpochMs`) for future alarm scheduling.
+- Draft-free persisted schedule projector (`dev.doggo.shared.contract.persisted-schedule-projector.kt`):
+  - `PersistedScheduleProjector.computeProjection()`: Computes schedule projection directly from atomic SQLite snapshots of `server_base` overlaid with submitted `outbox` records (`PENDING`, `DISPATCHING`, `UNCERTAIN`).
+  - Strict isolation: `editor_drafts` table is never read; uncommitted typing and user edits never schedule alarms or cancel reminders.
+  - Explicit nullable clearing: explicit deadline removal clears all deadline fields and scheduleToken, resetting reminder rules to disabled (`ReminderRule.DISABLED`), while updating deadline parameters recomputes schedule projection with the new temporal bounds.
+  - Conflict head suppression: suppresses schedule calculations (`hasUnresolvedConflict = true`) when the row's head outbox operation has `deliveryState == STATE_CONFLICT` or `STATE_UNKNOWN_SUPERSEDED`.
+  - Cancellation barriers: task completion, local delete, or disabled reminder rule acts as an immediate cancellation barrier even when another rule on the row is conflicted.
+- Durable occurrence ledger store (`dev.doggo.shared.data.reminder-occurrence-store.kt`):
+  - `ReminderOccurrenceStore`: Manages lifecycle of `reminder_delivery_ledger` entries under composite primary key 5-tuple (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`).
+  - Monotonic occurrence identity: Schedule tokens rotate exclusively on temporal schedule changes; task title updates modify notification copy without altering schedule tokens or duplicating occurrence opportunities.
+  - Reopened task preservation: Reactivates ledger records from `CANCELLED` to `ACTIVE` while preserving prior consumed claim outcomes (`CLAIMED`, `POSTED`).
+  - Reconcile delta computation (`syncPlannedOccurrences`): syncs planned occurrences, cancels orphan tasks and stale tokens, identifies future alarms (`dueEpochMs > nowEpochMs`), and detects obsolete posted notifications for removal.
+  - Atomic claim-before-post (`evaluateAndClaimDueOpportunity`): evaluates grace window and atomically claims occurrence in Room `@Transaction` (`claimOccurrenceAtomic`), marking older opportunities skipped in the same SQLite transaction.
+  - Platform notification acknowledgment: `recordPosted()` commits platform-assigned notification ID; `clearPostedNotificationId()` clears notification reference after native removal acknowledgment.
+- Delivery gate concurrency coordinator (`dev.doggo.shared.sync.reminder-delivery-gate.kt`):
+  - `ReminderDeliveryGate`: Coordinates concurrency between store mutations, alarm callbacks, and account teardown.
+  - Enforces three-tier lock hierarchy: `delivery gate admission -> store mutex -> DB transaction`. Inversion is prohibited; admission tracks in-flight deliveries across native adapter operations so teardown can drain them, while the gate's internal mutex and SQLite transaction locks are never held across platform IPC or network socket calls.
+  - Gate lifecycle states: `OPEN`, `CLOSING`, `CLOSED`.
+  - Fail-closed callback admission (`withDeliveryAdmission`): verifies gate state `OPEN`, absence of pending `wipe.marker`, and persisted generation equality; fails closed returning `null` on any mismatch.
+  - Teardown quiescence (`closeAndDrain(5000L)`): transitions gate to `CLOSING`, blocks new callback admissions, and waits for active in-flight callbacks and mutations to reach 0 before transitioning to `CLOSED`.
+- Per-account scheduling coordinator (`dev.doggo.shared.sync.reminder-scheduling-coordinator.kt`):
+  - `ReminderSchedulingCoordinator`: Owns per-account scheduling lifecycle binding `RoomAccountStore`, `ReminderOccurrenceStore`, `NativeReminderAdapter`, and `ReminderDeliveryGate`.
+  - Mutation-gated reconciliation (`reconcile()`): executes under gate mutation admission, computes planned occurrence delta, reconciles scheduled alarms via `adapter.reconcileSchedule()`, removes obsolete notifications via `adapter.removeOwnedNotification()`, and acknowledges removal in the ledger.
+  - Claim-before-post delivery flow (`deliverReminder()`): acquires delivery gate admission, checks capabilities, re-reads current persisted task projection from SQLite (re-validating eligibility and fetching fresh title text), executes atomic SQLite claim, re-checks wipe marker and eligibility pre-post, posts natively via `adapter.postOwnedNotification()`, and commits platform notification ID via `occurrenceStore.recordPosted()`.
+  - Opportunity delivery semantics: cross-process OS posting and SQLite commits cannot achieve two-phase atomic commit; claim-before-post enforces at most one posting attempt per durable occurrence identity (assuming atomic claims and preserved ledger state; crashes after claim may forfeit alerts to avoid double posting). Failed native posting is recorded as claimed/attempted with no retry loop.
+  - Teardown cancellation: implements `LeaveSchedulerCancelGate`, establishing the required teardown cancellation contract via `adapter.cancelAllForAccount(accountKey)` (physical platform alarm/notification removal verified in Phases 08/09).
+- Automated test suites:
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/reminder-schedule-calculator-test.kt`: 9 unit tests for checked arithmetic, 1..10 repeat bounds, exact 300,000ms grace inclusion, 300,001ms exclusion, latest opportunity selection, and consumed barrier blocking.
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/persisted-schedule-projection-test.kt`: 5 unit tests for draft-free projection, base + outbox overlay, nullable clearing, conflict head suppression, and completion/delete barriers.
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/data/reminder-occurrence-store-test.kt`: 4 unit tests for ledger persistence, atomic claim, grace skip marking, and idempotent sync.
+  - `shared/src/commonTest/kotlin/dev/doggo/shared/sync/reminder-delivery-gate-test.kt`: 4 unit tests for mutation/delivery admission, drain signal, wipe marker rejection, and generation mismatch guard.
+  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/reminder-scheduling-coordinator-sqlite-smoke-test.kt`: 2 integration tests on BundledSQLite exercising local save/delete/complete/reopen, title update identity retention, grace bounds, duplicate callback rejection, and wipe race protection.
+  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/reminder-teardown-barrier-sqlite-test.kt`: 1 integration test on BundledSQLite demonstrating teardown gate drain synchronization, fail-closed wipe marker retention on cancel failure, and startup wipe recovery.
+
+### Changed
+- `AccountLeaveProtocol` (`dev.doggo.shared.sync.account-leave-protocol.kt`):
+  - Integrates `deliveryGate.closeAndDrain(5000L)` into teardown sequence before database closure. Drain timeout aborts fail-closed leaving store frozen.
+  - Fail-closed marker retention: if background scheduler cancellation (`schedulerCancelGate.cancelAndAwait()`) fails or throws, teardown retains `wipe.marker` and remains frozen fail-closed (no rollback to unfrozen state).
+  - Interrupted startup recovery (`completePendingWipe`): cancels schedulers via `schedulerCancelGate`, deletes remaining database files (`doggo.db`, `doggo.db-wal`, `doggo.db-shm`), clears vault credentials, and clears `wipe.marker` fail-closed.
+- `RoomAccountStore` (`dev.doggo.shared.data.room-account-store.kt`):
+  - Added `@kotlin.jvm.Volatile` to `var deliveryGate: ReminderDeliveryGate? = null` for safe multi-threaded coroutine visibility.
+  - Wrapped all outbox error state transitions (retryable failures, malformed accepted revisions, unrecognized statuses) in `withMutationLock` to ensure gate admission tracking and schedule change notifications.
+  - Exposes `getPersistedScheduleProjection()` and `observePersistedSchedule()` emitting updates on committed mutations without polling drafts.
+- `DoggoDao` (`dev.doggo.shared.data.doggo-dao.kt`):
+  - Added `clearPostedNotificationId(accountKey, generation, platformNotificationId, nowEpochMs)` to acknowledged native removals in the SQLite ledger.
+  - Added atomic claim and skip transaction methods: `claimOccurrenceAtomic`, `markOccurrencesSkippedAtomic`, `recordPostedAtomic`.
+
+### Verification and Delivery Status
+- Automated test suites pass 270 executed checks with 0 failures:
+  1. `:shared:jvmTest` (182 tests PASS across 26 classes, executed with `--dependency-verification=off`).
+  2. `:desktopApp:test` (32 tests PASS across 6 classes, executed with `--dependency-verification=off`).
+  3. `node scripts/strict-v2-vector-runner.mjs` (23/23 PASS).
+  4. `node scripts/hub-live-smoke.mjs --fixture-test` (18/18 PASS against offline fixture mock server).
+  5. `node scripts/release-security-check.mjs --diagnose-source` (6/6 PASS: static manifest rules, export audit, security XML, HTTPS origin, 0 hardcoded secrets).
+  6. `node scripts/hub-strict-upgrade.test.mjs` (9/9 PASS: upgrade CLI runner test suite).
+- Code reviews completed with all remediations verified (documented in `plans/reports/code-review-261015-1928-phase-07-shared-scheduling-account-safety.md` and `code-review-261015-1944-phase-07-remediations-rereview.md`).
+- **Delivery Boundaries & Downstream Unlocks**:
+  - Gate G5 is formally passed for shared scheduling arithmetic, draft-free persisted projection, durable ledger lifecycle, delivery gate concurrency, and account safety.
+  - Native platform alarm scheduling and notification display are unlocked for Phase 08 (Android Exact Alarm / Notification Delivery) and Phase 09 (Linux Desktop Delivery).
+  - Physical connected platform acceptance and live multi-device sync cutover remain scheduled for Phase 11.
+
+---
 ## [Phase 06] - 2026-10-15: Client Version Transition, Safe Replay & Intention Preservation (Gate G4 Logic Delivered; Connected Platform Acceptance Pending Phases 08/11)
 
 ### Added

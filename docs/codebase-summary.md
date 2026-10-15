@@ -297,7 +297,7 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 | `staged-full-scan.kt` | `StagedFullScan` | 3-stage scan reconciler: cursor pagination, loop/overflow/non-progress detection, pre-scan identity check (`CONSISTENCY_ERROR`), and monotonic promotion. |
 | `outbox-reconciliation.kt` | `OutboxReconciliation` | FIFO row-head selection, head blocking on conflicts, dispatch freezing via `freezeOutboxAtomic`, exact CAS ack verification, and `UNKNOWN_SUPERSEDED` classification. |
 | `account-sync-coordinator.kt` | `AccountSyncCoordinator` | 3-stage sync coordinator (`SyncCoordinator`), mutex serialization, generation fencing, conflict actions (`discardConflict`, `reapplyConflict`, `copyAsNew`), and cancellation safety. |
-| `account-leave-protocol.kt` | `AccountLeaveProtocol` | 5-category review work guard, store freezing, 7-step fail-closed teardown sequence, marker rollback, and startup `completePendingWipe`. |
+| `account-leave-protocol.kt` | `AccountLeaveProtocol` | 5-category review work guard, store freezing, delivery gate drain synchronization, fail-closed teardown keeping wipe marker on cancellation failure, and startup `completePendingWipe`. |
 
 | Test Suite File | Scope & Tested Invariants | Status |
 |---|---|---|
@@ -305,7 +305,7 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 | `staged-full-scan-test.kt` | Cursor loops, batch overflow, non-progressing cursors, missing pre-scan identity check, monotonic promotion, divergent revisions. | **PASSED** (JVM) |
 | `outbox-reconciliation-test.kt` | FIFO row-head dispatch, head blocking on conflicts, dispatch freezing, exact CAS ack matching, newer draft preservation, UnknownSuperseded, retries. | **PASSED** (JVM) |
 | `account-sync-coordinator-test.kt` | 3-stage sync loop, mutex serialization, generation fencing, conflict workflows, push cancellation safety. | **PASSED** (JVM) |
-| `account-leave-protocol-test.kt` | 5-category review guard, freeze-before-review, marker write failure abort, scheduler cancel rollback, database deletion fail-closed, completePendingWipe. | **PASSED** (JVM) |
+| `account-leave-protocol-test.kt` | 5-category review guard, freeze-before-review, marker write failure abort, fail-closed marker retention on scheduler cancel failure, database deletion fail-closed, completePendingWipe. | **PASSED** (JVM) |
 | `task-deadline-reminder-models-test.kt` | `TaskDeadline`, `ReminderRule`, `Todo` models, checked 64-bit integer arithmetic, occurrence bounds. | **PASSED** (JVM) |
 | `room-migration-v1-to-v2-test.kt` (JVM) | Explicit Room v1->v2 migration on BundledSQLite: schema alteration, legacy outbox intent derivation, table creation. | **PASSED** (JVM) |
 | `room-account-store-test.kt` (JVM) | Real SQLite temporary database: schema v2, atomic saves, v2 schedule tokens, unsent create-delete cancel, FIFO outbox, monotonic base advancement, crash recovery, wipe. | **PASSED** (JVM) |
@@ -332,12 +332,33 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 |---|---|---|
 | `todo-semantics-test.kt` | 16 WCAG 2.1 AA relative luminance & contrast pairs (Ink, Page, White, Cream, MintSurface, Coral, Muted, Outline), `AuthSubmitAction.toString()` password redaction, `TitlePolicy` editor validation, `LeaveGuardState` tallies, `AccessRequestInfo` statuses, `SyncProgress` formatting and timestamp calculation. | **PASSED** (JVM, 7/7 tests) |
 
-### 2.6 Glean Hub Integration Artifacts & Host Scripts
+### 2.6 Shared Scheduling, Persisted Eligibility and Account Safety (Phase 07)
+
+| Component File | Primary Types & Functions | Architectural Role |
+|---|---|---|
+| `reminder-schedule-calculator.kt` | `ReminderScheduleCalculator` | Checked 64-bit integer arithmetic, 1..10 repeat bounds, strict 5-min grace window (300,000ms included, 300,001ms skipped), latest opportunity selection, and consumed barrier blocking. |
+| `persisted-schedule-projector.kt` | `PersistedScheduleProjector` | Draft-free projection from server_base + submitted outbox, nullable clearing, conflict head suppression, completion/delete/disable cancellation barriers. |
+| `reminder-occurrence-store.kt` | `ReminderOccurrenceStore` | Durable occurrence ledger lifecycle, atomic claim-before-post (`evaluateAndClaimDueOpportunity`), orphan task cancellation, posted notification removal acknowledgment (`clearPostedNotificationId`). |
+| `reminder-delivery-gate.kt` | `ReminderDeliveryGate`, `DeliveryGateState` | Three-tier lock hierarchy (`gate -> mutex -> DB tx`), fail-closed generation/wipe checks, teardown drain synchronization (`closeAndDrain`). |
+| `reminder-scheduling-coordinator.kt` | `ReminderSchedulingCoordinator` | Per-account coordinator, mutation-gated reconciliation (`withMutationAdmission`), pre-post projection recheck, opportunity delivery semantics, teardown cancellation gate. |
+| `reminder-scheduler.kt` | `NativeReminderAdapter`, `ScheduledAlarmHandle` | Platform adapter contracts for capability querying, schedule reconciliation, notification posting/removal, and account-wide cancellation. |
+| `reminder-capability.kt` | `ReminderCapabilities` | Platform capability abstractions for alarms and notifications. |
+
+| Test Suite File | Scope & Tested Invariants | Status |
+|---|---|---|
+| `reminder-schedule-calculator-test.kt` | Checked arithmetic, 1..10 repeat bounds, exact 300,000ms grace boundary, latest opportunity selection, consumed barrier blocking. | **PASSED** (JVM, 9/9 tests) |
+| `persisted-schedule-projection-test.kt` | Draft-free projection, base + outbox overlay, nullable clearing, conflict head suppression, completion/delete barriers. | **PASSED** (JVM, 5/5 tests) |
+| `reminder-occurrence-store-test.kt` | Ledger persistence, atomic claim, grace skip marking, and idempotent sync. | **PASSED** (JVM, 4/4 tests) |
+| `reminder-delivery-gate-test.kt` | Mutation/delivery admission, drain signal, wipe marker rejection, and generation mismatch guard. | **PASSED** (JVM, 4/4 tests) |
+| `reminder-scheduling-coordinator-sqlite-smoke-test.kt` | Real BundledSQLite smoke test exercising local save/delete/complete/reopen, title update identity retention, grace bounds, duplicate callback rejection, and wipe race protection. | **PASSED** (JVM, 2/2 tests) |
+| `reminder-teardown-barrier-sqlite-test.kt` | Real BundledSQLite test validating teardown gate drain synchronization, fail-closed wipe marker retention on cancel failure, and startup wipe recovery. | **PASSED** (JVM, 1/1 test) |
+
+### 2.7 Glean Hub Integration Artifacts & Host Scripts
 
 - `integration/glean-hub/doggo-schema.json`: Canonical strict-v1 todos schema specification.
 - `scripts/`: Headless Xpra display orchestration (`start-xpra.sh`), Android SDK/JDK environment configuration (`android-sdk-env.sh`), emulator management (`start-android-emulator.sh`), Hub provisioning/smoke runners (`hub-schema-provision.mjs`, `hub-compatibility-smoke.mjs`), device smoke runner (`android-smoke.sh`), and loopback sync fault-injection proxy (`debug-fault-proxy.mjs`).
 
-### 2.7 Native Android Application Module (Phase 07)
+### 2.8 Native Android Application Module (Phase 07)
 
 | Component File | Primary Types & Functions | Architectural Role |
 |---|---|---|
@@ -359,7 +380,7 @@ Following Phases 01–10, the repository contains the Android and shared Compose
 | `debug-fault-proxy.mjs` | Node fault proxy | Loopback HTTP proxy (127.0.0.1:3000 -> 3001) for deterministic sync fault injection (`drop-push-response`, `drop-refresh-response`) with strict route allowlist and zero payload logging. |
 
 
-### 2.8 Phase 08 Release Operations, Security Auditing & Recovery Tooling (`scripts/`)
+### 2.9 Phase 08 Release Operations, Security Auditing & Recovery Tooling (`scripts/`)
 
 | Component File | Primary Types & Functions | Architectural Role |
 |---|---|---|

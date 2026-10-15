@@ -175,6 +175,12 @@ interface DoggoDao {
     @Query("SELECT * FROM reminder_delivery_ledger ORDER BY dueEpochMs ASC")
     suspend fun getAllLedgerEntries(): List<ReminderDeliveryLedgerEntity>
 
+    @Query("SELECT * FROM reminder_delivery_ledger WHERE accountKey = :accountKey AND generation = :generation AND claimOutcome = 'POSTED' AND postedPlatformId IS NOT NULL AND cancellationState = 'ACTIVE'")
+    suspend fun getActivePostedNotifications(accountKey: String, generation: Long): List<ReminderDeliveryLedgerEntity>
+
+    @Query("SELECT * FROM reminder_delivery_ledger WHERE accountKey = :accountKey AND claimOutcome = 'POSTED' AND postedPlatformId IS NOT NULL")
+    suspend fun getAllPostedNotificationsForAccount(accountKey: String): List<ReminderDeliveryLedgerEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertLedgerEntry(entry: ReminderDeliveryLedgerEntity)
 
@@ -188,6 +194,14 @@ interface DoggoDao {
         taskId: String,
         updatedAtEpochMs: Long
     )
+    @Query("UPDATE reminder_delivery_ledger SET postedPlatformId = NULL, updatedAtEpochMs = :nowEpochMs WHERE accountKey = :accountKey AND generation = :generation AND postedPlatformId = :platformNotificationId")
+    suspend fun clearPostedNotificationId(
+        accountKey: String,
+        generation: Long,
+        platformNotificationId: String,
+        nowEpochMs: Long
+    )
+
 
     @Query("DELETE FROM reminder_delivery_ledger WHERE accountKey = :accountKey")
     suspend fun deleteLedgerForAccount(accountKey: String)
@@ -208,6 +222,96 @@ interface DoggoDao {
         clearLocalSettings()
         clearLedger()
     }
+    @Transaction
+    suspend fun getScheduleSnapshotAtomic(): PersistedScheduleSnapshot {
+        return PersistedScheduleSnapshot(
+            serverBases = getAllServerBase(),
+            outboxEntries = getAllOutbox()
+        )
+    }
+
+    @Transaction
+    suspend fun claimOccurrenceAtomic(
+        accountKey: String,
+        generation: Long,
+        taskId: String,
+        scheduleToken: String,
+        occurrenceIndex: Int,
+        claimTimeEpochMs: Long
+    ): Boolean {
+        val entry = getLedgerEntry(accountKey, generation, taskId, scheduleToken, occurrenceIndex) ?: return false
+        if (entry.claimOutcome != ReminderDeliveryLedgerEntity.OUTCOME_PENDING ||
+            entry.cancellationState != ReminderDeliveryLedgerEntity.CANCELLATION_ACTIVE) {
+            return false
+        }
+        val taskEntries = getLedgerEntriesForTask(accountKey, generation, taskId)
+        for (other in taskEntries) {
+            if (other.scheduleToken == scheduleToken &&
+                other.occurrenceIndex < occurrenceIndex &&
+                other.claimOutcome == ReminderDeliveryLedgerEntity.OUTCOME_PENDING &&
+                other.cancellationState == ReminderDeliveryLedgerEntity.CANCELLATION_ACTIVE) {
+                upsertLedgerEntry(
+                    other.copy(
+                        claimOutcome = ReminderDeliveryLedgerEntity.OUTCOME_SKIPPED,
+                        updatedAtEpochMs = claimTimeEpochMs
+                    )
+                )
+            }
+        }
+        upsertLedgerEntry(
+            entry.copy(
+                claimOutcome = ReminderDeliveryLedgerEntity.OUTCOME_CLAIMED,
+                claimedAtEpochMs = claimTimeEpochMs,
+                updatedAtEpochMs = claimTimeEpochMs
+            )
+        )
+        return true
+    }
+
+    @Transaction
+    suspend fun recordPostedAtomic(
+        accountKey: String,
+        generation: Long,
+        taskId: String,
+        scheduleToken: String,
+        occurrenceIndex: Int,
+        platformNotificationId: String,
+        postTimeEpochMs: Long
+    ): Boolean {
+        val entry = getLedgerEntry(accountKey, generation, taskId, scheduleToken, occurrenceIndex) ?: return false
+        upsertLedgerEntry(
+            entry.copy(
+                claimOutcome = ReminderDeliveryLedgerEntity.OUTCOME_POSTED,
+                postedPlatformId = platformNotificationId,
+                updatedAtEpochMs = postTimeEpochMs
+            )
+        )
+        return true
+    }
+
+    @Transaction
+    suspend fun markOccurrencesSkippedAtomic(
+        accountKey: String,
+        generation: Long,
+        taskId: String,
+        scheduleToken: String,
+        indices: List<Int>,
+        updatedAtEpochMs: Long
+    ) {
+        for (index in indices) {
+            val entry = getLedgerEntry(accountKey, generation, taskId, scheduleToken, index) ?: continue
+            if (entry.claimOutcome == ReminderDeliveryLedgerEntity.OUTCOME_PENDING &&
+                entry.cancellationState == ReminderDeliveryLedgerEntity.CANCELLATION_ACTIVE) {
+                upsertLedgerEntry(
+                    entry.copy(
+                        claimOutcome = ReminderDeliveryLedgerEntity.OUTCOME_SKIPPED,
+                        updatedAtEpochMs = updatedAtEpochMs
+                    )
+                )
+            }
+        }
+    }
+
 
     // -------------------------------------------------------------------------
     // Atomic Transaction Methods (C1)

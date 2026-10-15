@@ -10,10 +10,17 @@ import dev.doggo.shared.contract.Todo
 import dev.doggo.shared.contract.TaskDeadline
 import dev.doggo.shared.contract.ReminderRule
 import dev.doggo.shared.contract.toStrictV2TodoData
+import dev.doggo.shared.contract.PersistedScheduleProjector
+import dev.doggo.shared.contract.PersistedTaskSchedule
+import dev.doggo.shared.sync.ReminderDeliveryGate
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.random.Random
-
 /**
  * RoomAccountStore implements the AccountStore interface using DoggoDatabase.
  * Coordinates visible todo projections from server_base, editor_drafts, and outbox,
@@ -32,10 +39,57 @@ class RoomAccountStore(
         "Either database or daoOverride must be provided"
     }.doggoDao()
 
-    private val mutex = Mutex()
+    val mutex = Mutex()
     @kotlin.jvm.Volatile
     var isFrozen: Boolean = false
 
+    @kotlin.jvm.Volatile
+    var deliveryGate: ReminderDeliveryGate? = null
+
+    private val scheduleInvalidationFlow = MutableSharedFlow<Unit>(
+        replay = 1,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    ).apply {
+        tryEmit(Unit)
+    }
+
+    fun notifyScheduleChanged() {
+        scheduleInvalidationFlow.tryEmit(Unit)
+    }
+
+    suspend fun <T> withMutationLock(block: suspend () -> T): T {
+        check(!isFrozen) { "Cannot mutate store while account leave is in progress" }
+        val gate = deliveryGate
+        return if (gate != null) {
+            gate.withMutationAdmission {
+                mutex.withLock {
+                    check(!isFrozen) { "Cannot mutate store while account leave is in progress" }
+                    val result = block()
+                    notifyScheduleChanged()
+                    result
+                }
+            }
+        } else {
+            mutex.withLock {
+                check(!isFrozen) { "Cannot mutate store while account leave is in progress" }
+                val result = block()
+                notifyScheduleChanged()
+                result
+            }
+        }
+    }
+
+    override suspend fun getPersistedScheduleProjection(): List<PersistedTaskSchedule> = mutex.withLock {
+        val snapshot = dao.getScheduleSnapshotAtomic()
+        PersistedScheduleProjector.computeProjection(snapshot.serverBases, snapshot.outboxEntries)
+    }
+
+    override fun observePersistedSchedule(): Flow<List<PersistedTaskSchedule>> {
+        return scheduleInvalidationFlow.map {
+            getPersistedScheduleProjection()
+        }.distinctUntilChanged()
+    }
     /**
      * Loads the current visible list of todos, projecting server_base overlaid
      * with uncommitted editor_drafts and outbox intents.
@@ -168,8 +222,7 @@ class RoomAccountStore(
      * Saves a todo locally with atomic draft and outbox persistence before returning success.
      * Enforces tombstone non-mutation, account contract version guard, and semantic scheduleToken rotation.
      */
-    override suspend fun saveTodoLocally(todo: Todo): Unit = mutex.withLock {
-        check(!isFrozen) { "Cannot mutate store while account leave is in progress" }
+    override suspend fun saveTodoLocally(todo: Todo): Unit = withMutationLock {
 
         val existingBase = dao.getServerBase(todo.id)
         if (existingBase != null && existingBase.deleted) {
@@ -395,8 +448,7 @@ class RoomAccountStore(
      * Deletes a todo locally. Unsent un-migrated create-delete cancels locally without wire dispatch.
      * Otherwise enqueues a frozen delete operation with canonical digest.
      */
-    override suspend fun deleteTodoLocally(id: String): Unit = mutex.withLock {
-        check(!isFrozen) { "Cannot mutate store while account leave is in progress" }
+    override suspend fun deleteTodoLocally(id: String): Unit = withMutationLock {
 
         val existingBase = dao.getServerBase(id)
         val existingOps = dao.getOutboxByRowId(id)
@@ -412,7 +464,7 @@ class RoomAccountStore(
 
         if (hasOnlyPendingCreate) {
             dao.cancelUnsentCreateAtomic(id)
-            return
+            return@withMutationLock
         }
 
         val meta = getOrCreateMeta()
@@ -495,8 +547,8 @@ class RoomAccountStore(
      * Reconciles an accepted operation with the server base atomically.
      * Enforces monotonic base advancement and preserves newer drafts.
      */
-    override suspend fun reconcileAccepted(opId: String, serverRevision: Long): Unit = mutex.withLock {
-        val op = dao.getOutboxEntry(opId) ?: return
+    override suspend fun reconcileAccepted(opId: String, serverRevision: Long): Unit = withMutationLock {
+        val op = dao.getOutboxEntry(opId) ?: return@withMutationLock
         val currentBase = dao.getServerBase(op.rowId)
 
         val currentDraft = dao.getDraft(op.rowId)
@@ -505,7 +557,7 @@ class RoomAccountStore(
         // Monotonic check: Never regress confirmed server base (W1, W-E)
         if (currentBase != null && serverRevision < currentBase.serverRevision) {
             dao.discardRegressiveReconcileAtomic(opId, op.rowId, clearDraft)
-            return
+            return@withMutationLock
         }
         val isV1Op = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V1
         val intentMasks = op.intentMask?.split("|")?.toSet() ?: emptySet()
@@ -600,7 +652,7 @@ class RoomAccountStore(
     /**
      * Wipes all local database tables in the partition atomically.
      */
-    override suspend fun wipeLocalData(): Unit = mutex.withLock {
+    override suspend fun wipeLocalData(): Unit = withMutationLock {
         dao.wipeAllTablesAtomic()
     }
 

@@ -1,7 +1,7 @@
 # Doggo Local Storage and Strict Synchronization Specification
 
 Date: 2026-10-15  
-Phase: Phase 06 Client Version Transition, Safe Replay & Intention Preservation Delivered (Gate G4 Delivered; Instrumented Platform Acceptance Pending Phase 11)  
+Phase: Phase 07 Shared Scheduling, Persisted Eligibility and Account Safety Delivered (Gate G5 Passed; Physical Native Delivery Adapters Deferred to Phases 08–10; Instrumented Platform Acceptance Pending Phase 11)  
 Plan: `plans/261015-0752-task-deadlines-reminders-strict-upgrades` (and `plans/261013-1540-doggo-glean-hub-reuse`)  
 Related Docs: [System Architecture](./system-architecture.md) · [API Contract](./api-contract.md) · [Code Standards](./code-standards.md) · [Sync Acceptance](./sync-acceptance.md)
 
@@ -211,6 +211,7 @@ sequenceDiagram
     actor User
     participant Leave as AccountLeaveProtocol
     participant Store as RoomAccountStore
+    participant Gate as ReminderDeliveryGate
     participant Sched as LeaveSchedulerCancelGate
     participant Disk as Platform Account Files
     participant Vault as CredentialVault
@@ -223,16 +224,17 @@ sequenceDiagram
         Leave-->>User: Abort (Guarded)
     end
     Note over Leave: Begin Guarded Teardown
-    Leave->>Disk: Persist generation + wipe.marker (outside DB)
+    Leave->>Gate: closeAndDrain(5000L)
+    alt Drain Timeout
+        Leave-->>User: Abort (Fail-Closed: remains frozen)
+    end
+    Leave->>Disk: Persist next generation + wipe.marker (outside DB)
     alt Marker Write Fails
-        Leave->>Store: Set isFrozen = false
-        Leave-->>User: Abort (No data deleted)
+        Leave-->>User: Abort (Fail-Closed: remains frozen, no data deleted)
     end
     Leave->>Sched: cancelAndAwait(accountKey)
     alt Scheduler Cancel Fails
-        Leave->>Disk: onClearWipeMarker(accountKey)
-        Note over Leave: If cleared, unfreeze; else stay frozen + marker intact
-        Leave-->>User: Abort (Fail-Closed)
+        Leave-->>User: Abort (Fail-Closed: marker intact, store remains frozen)
     end
     Leave->>Store: close() Room database
     Leave->>Disk: deleteDatabaseAndArtifacts (db, wal, shm)
@@ -246,22 +248,23 @@ sequenceDiagram
 
 ### 6.1 Teardown Order
 1. **Freeze Store**: `store.isFrozen = true` prevents new local edits (`saveTodoLocally` throws `IllegalStateException`).
-2. **Persist Marker Outside Database**: Atomically writes `generation + 1` to `wipe.marker.tmp` with file sync (`fsync`), then atomically moves to `wipe.marker`. If marker persistence fails, teardown aborts immediately and unfreezes the store—no data is deleted.
-3. **Cancel & Await Schedulers**: Cancels background WorkManager or job schedulers via `LeaveSchedulerCancelGate`. If cancellation throws, it attempts to clear the marker and unfreezes only if the marker was successfully cleared.
-4. **Close Room Database**: `store.close()` closes all database connections.
-5. **Delete Database Artifacts**: Deletes `doggo.db`, `doggo.db-wal`, `doggo.db-shm`. If deletion fails, the process stays fail-closed with `wipe.marker` intact.
-6. **Clear Credentials**: Removes tokens and identity from `CredentialVault` and resets `HubAuthSession`.
-7. **Clear Wipe Marker**: Removes `wipe.marker`.
+2. **Close & Drain Delivery Gate**: `store.deliveryGate?.closeAndDrain(5000L)` transitions delivery gate to `CLOSING`, blocks new callback admissions, and waits up to 5s for in-flight callbacks and mutations to reach 0. If drain times out, teardown aborts fail-closed, leaving store frozen without modifying files.
+3. **Persist Marker Outside Database**: Atomically writes `generation + 1` to `wipe.marker.tmp` with file sync (`fsync`), then atomically moves to `wipe.marker`. If generation read or marker persistence fails, teardown aborts immediately fail-closed with store frozen.
+4. **Cancel & Await Schedulers**: Cancels background WorkManager tasks on Android and coordinates platform teardown cancellation via `LeaveSchedulerCancelGate` (binding `adapter.cancelAllForAccount(accountKey)`; physical native alarm/notification cancellation verified in Phases 08/09). If cancellation throws or fails, teardown aborts fail-closed: **retains `wipe.marker` and remains frozen** (no rollback to unfrozen state).
+5. **Close Room Database**: `store.close()` closes all database connections cleanly after in-flight work has drained.
+6. **Delete Database Artifacts**: Deletes `doggo.db`, `doggo.db-wal`, `doggo.db-shm`. If deletion fails, the process stays fail-closed with `wipe.marker` intact.
+7. **Clear Credentials**: Removes tokens and identity from `CredentialVault` and resets `HubAuthSession`.
+8. **Clear Wipe Marker**: Removes `wipe.marker` once database artifacts and credentials are provably eliminated.
 
-*Table vs Filesystem Wipe*: `store.wipeLocalData()` invokes `dao.wipeAllTablesAtomic()`, which transactionally clears all 7 tables in a single SQLite transaction (`editor_drafts`, `outbox`, `scan_staging`, `server_base`, `account_sync_meta`, `account_local_settings`, `reminder_delivery_ledger`). This database transaction is distinct from the 7-step fail-closed filesystem and credential teardown protocol managed by `AccountLeaveProtocol`, which operates on external files, WorkManager schedulers, and Keystore credentials.
+*Table vs Filesystem Wipe*: `store.wipeLocalData()` invokes `dao.wipeAllTablesAtomic()`, which transactionally clears all 7 tables in a single SQLite transaction (`editor_drafts`, `outbox`, `scan_staging`, `server_base`, `account_sync_meta`, `account_local_settings`, `reminder_delivery_ledger`). This database transaction is distinct from the 8-step fail-closed filesystem and credential teardown protocol managed by `AccountLeaveProtocol`, which operates on external files, WorkManager schedulers, and Keystore credentials.
 
 ### 6.2 Startup Crash Recovery
 On application startup, before opening any database or initializing an account, `AccountLeaveProtocol.completePendingWipe()` inspects `hasPendingWipe(accountKey)`. If `wipe.marker` exists:
-- Deletes remaining database files (`doggo.db`, `doggo.db-wal`, `doggo.db-shm`).
-- Clears vault credentials.
-- Clears `wipe.marker`.
+1. Cancels all background work and alarms via `schedulerCancelGate?.cancelAndAwait(accountKey)`. If cancellation throws, it aborts returning `false` (retaining `wipe.marker`).
+2. Deletes remaining database files (`doggo.db`, `doggo.db-wal`, `doggo.db-shm`).
+3. If files are deleted successfully, clears vault credentials via `onClearVault(accountKey)`.
+4. Clears `wipe.marker` via `onClearWipeMarker(accountKey)`.
 If file deletion fails, it returns `false`, preventing the account from being reopened in a corrupted state.
-
 ---
 
 ## 7. Strict-v2 Client Transition, Safe Replay & Outbox Reconciliation (Phase 06 Delivered)
@@ -394,3 +397,83 @@ Provably unsent legacy v1 operations (`transitionCheckpoint == "PROVEN_NOT_ACCEP
   - Last anchor: `firstAnchor + lastOffset`
   - Occurrence boundary: `lastAnchor <= deadlineAnchorEpochMs`
 - **Deadline Alignment**: Timed deadline requires `deadlineOverdueEpochMs == deadlineAnchorEpochMs`. Date-only deadline requires non-null `reminderAnchorTime`. Deadline removal clears all deadline and schedule token attributes and resets reminder preferences to default (`reminderEnabled = false`, `lead = 0`, `count = 1`, `interval = null`).
+
+---
+
+## 8. Shared Scheduling, Persisted Eligibility & Delivery Gate (Phase 07 Delivered)
+
+### 8.1 Deterministic Checked Arithmetic & 5-Minute Grace Window (`ReminderScheduleCalculator`)
+Reminder occurrences are computed deterministically without floating-point arithmetic or platform-specific temporal classes:
+- **First Occurrence Due**: `firstDue = safeSubtract(anchorEpochMs, safeMultiply(rule.leadMinutes, 60_000L))`.
+- **Interval Offset**: For repeat index `i in 0 until rule.count`: `offset = safeMultiply(i, safeMultiply(intervalMinutes, 60_000L))`, with `due = safeAdd(firstDue, offset)`.
+- **Checked Arithmetic**: All operations invoke `safeMultiply`, `safeSubtract`, and `safeAdd`, throwing `ArithmeticException` on integer overflow.
+- **Repeat Invariants**:
+  - `rule.count` is constrained to `1..10`.
+  - Non-repeating rule (`count == 1`): `intervalMinutes` must be null; single occurrence at `firstDue`.
+  - Repeating rule (`count > 1`): `intervalMinutes` must be non-null and `>= 15`.
+  - Boundary check: `due <= anchorEpochMs` (last scheduled occurrence cannot exceed anchor instant).
+- **Strict 5-Minute Grace Evaluation (`evaluateGrace`)**:
+  Evaluates planned occurrences against current time `nowEpochMs` with constant `GRACE_PERIOD_MS = 300_000L`:
+  - **Exact Boundary**: Exactly 300,000ms is included (`now - due <= 300_000L`); 300,001ms is skipped (`now - due > 300_000L`).
+  - **Latest Opportunity Only**: If multiple past occurrences fall within the grace window, selects at most the single occurrence with the largest index (the latest opportunity).
+  - **Older Occurrences Skipped**: All unconsumed past occurrences older than the latest opportunity are returned in `skippedIndices` and marked `SKIPPED` in SQLite.
+  - **Consumed Barrier**: If the latest opportunity is already in `consumedIndices` (`CLAIMED` or `POSTED`), `eligibleOpportunity` returns null and fallback to older opportunities is strictly blocked (`isLatestConsumed = true`).
+  - **Future Retention**: All occurrences with `dueEpochMs > nowEpochMs` are retained for future alarm scheduling.
+
+### 8.2 Draft-Free Reactive Projection & Conflict Head Suppression (`PersistedScheduleProjector`)
+`PersistedScheduleProjector.computeProjection()` computes active task schedules exclusively from durable persistence:
+- **Zero Draft Contamination**: Schedule projections read solely from `server_base` overlaid with submitted `outbox` records (`PENDING`, `DISPATCHING`, `UNCERTAIN`). The `editor_drafts` table is strictly unread, guaranteeing uncommitted user input or draft editing dialogs never schedule alarms or cancel reminders.
+- **Submitted Intention Overlay**: Applies submitted outbox mutations in strictly ascending `localRevision` order:
+  - `CREATE`: Instantiates title, completed status, deadline, schedule token, and reminder rule.
+  - `UPDATE`: Inspects `intentMask` or field presence, updating title, completed flag, deadline, and reminder rule.
+  - `DELETE`: Sets `isDeleted = true`.
+- **Explicit Nullable Clearing**: Explicit deadline removal sets all deadline fields (`deadlineDate = null`, etc.) and `scheduleToken = null`, resetting reminder rule to `ReminderRule.DISABLED`. Updating deadline parameters recomputes schedule projection with the new temporal bounds.
+- **Conflict Head Suppression**: If the earliest outbox operation on a row has `deliveryState == STATE_CONFLICT` or `STATE_UNKNOWN_SUPERSEDED`, active schedule projection is suppressed (`hasUnresolvedConflict = true`). Unreviewed conflict drafts are never scheduled.
+- **Cancellation Barriers**: Task completion (`completed = true`), deletion (`isDeleted = true`), or disabled reminder rules act as an immediate cancellation barrier, de-scheduling alarms even while another rule on the row is conflicted.
+
+### 8.3 Durable Occurrence Ledger Lifecycle (`ReminderOccurrenceStore`)
+The ledger lifecycle is managed over `reminder_delivery_ledger` in SQLite:
+- **Composite Primary Key 5-Tuple**: `[accountKey, generation, taskId, scheduleToken, occurrenceIndex]`.
+- **Occurrence Idempotency & Reconciliation (`syncPlannedOccurrences`)**:
+  - New occurrences start with `claimOutcome = OUTCOME_PENDING` and `cancellationState = CANCELLATION_ACTIVE`.
+  - Reopened tasks: If an existing occurrence has `cancellationState == CANCELLED`, it transitions back to `ACTIVE` while preserving prior consumed claim outcomes (`CLAIMED`, `POSTED`), ensuring reopenings do not reset occurrence counters or duplicate alerts.
+  - Orphan and stale token cancellation: Occurrences belonging to superseded schedule tokens or deleted tasks transition to `cancellationState = CANCELLATION_CANCELLED`.
+- **Atomic Claim-Before-Post (`evaluateAndClaimDueOpportunity`)**:
+  1. Filters active ledger entries matching `taskId` and `scheduleToken`.
+  2. Gathers consumed indices (`OUTCOME_CLAIMED`, `OUTCOME_POSTED`).
+  3. Evaluates 5-minute grace window via `ReminderScheduleCalculator.evaluateGrace()`.
+  4. Marks skipped indices in SQLite via `DoggoDao.markOccurrencesSkippedAtomic()`.
+  5. Atomically claims the single eligible occurrence in SQLite via `DoggoDao.claimOccurrenceAtomic()` inside a Room `@Transaction`.
+- **Notification Removal Acknowledgment**: When an obsolete notification is removed via `adapter.removeOwnedNotification()`, `clearPostedNotificationId()` transactionally clears `postedPlatformId` in the ledger.
+
+### 8.4 Lock Hierarchy & Delivery Gate Concurrency (`ReminderDeliveryGate`)
+Coordinates concurrency across mutations, alarm callbacks, and account teardown:
+- **Strict Three-Tier Lock Hierarchy**:
+  `delivery gate admission -> store mutex -> DB transaction`
+  Inversion is prohibited. Gate admission tracks in-flight deliveries across native adapter operations so teardown can drain them, while the gate's internal mutex and SQLite transaction locks are never held across platform IPC or network socket calls.
+- **Gate Lifecycle States**:
+  - `OPEN`: Normal operation; permits mutation and callback admissions.
+  - `CLOSING`: Teardown initiated; blocks new callback admissions while existing in-flight work drains.
+  - `CLOSED`: Fully quiescent; database can be safely closed and deleted.
+- **Fail-Closed Callback Admission (`withDeliveryAdmission`)**:
+  1. Verifies gate state is `OPEN`.
+  2. Verifies absence of pending `wipe.marker` outside SQLite.
+  3. Verifies persisted generation equals callback's `expectedGeneration`.
+  Any check failure or exception aborts callback execution and returns `null` fail-closed.
+- **Teardown Quiescence & Drain Synchronization (`closeAndDrain`)**:
+  Transitions gate to `CLOSING`, rejects subsequent admissions, and polls with a 5000ms timeout until `inFlightDeliveries == 0` and `inFlightMutations == 0`. Returns true on clean drain; returns false on timeout, remaining frozen fail-closed.
+
+### 8.5 Per-Account Scheduling Coordinator & Native Adapter Interface (`ReminderSchedulingCoordinator`)
+Encapsulates the reminder lifecycle for an active account runtime:
+- **Mutation-Gated Alarm Reconciliation (`reconcile()`)**:
+  Executes under gate mutation admission (`withMutationAdmission`). Queries `store.getPersistedScheduleProjection()`, computes delta via `occurrenceStore.syncPlannedOccurrences()`, maps future alarms to opaque `ScheduledAlarmHandle` instances, calls `adapter.reconcileSchedule()`, removes obsolete notifications via `adapter.removeOwnedNotification()`, and acknowledges removals in SQLite.
+- **Fail-Closed Delivery Flow (`deliverReminder()`)**:
+  1. Acquires delivery gate admission (`withDeliveryAdmission`).
+  2. Queries platform capabilities (`adapter.queryCapabilities()`); aborts if delivery not permitted.
+  3. Re-reads current persisted task projection under store mutex to re-verify eligibility and fetch fresh title text.
+  4. Atomically claims occurrence in SQLite (`evaluateAndClaimDueOpportunity`).
+  5. Pre-post re-check: verifies gate is still `OPEN`, wipe marker absent, and task eligibility unchanged before calling native post.
+  6. Posts natively via `adapter.postOwnedNotification()`.
+  7. On success, records platform notification ID via `occurrenceStore.recordPosted()`. On failure, the occurrence remains claimed/attempted with no unconstrained retry loop.
+- **Opportunity Delivery Semantics**: Cross-process OS notification posting and SQLite commits cannot achieve two-phase atomic commit; claim-before-post enforces at most one posting attempt per durable occurrence identity (assuming atomic claims and preserved ledger state; crashes after claim may forfeit alerts to avoid double posting). Failed native posting is recorded as claimed/attempted with no retry loop.
+- **Teardown Cancellation Gate**: Implements `LeaveSchedulerCancelGate`, cancelling all alarms and posted notifications on account teardown via `adapter.cancelAllForAccount(accountKey)`.

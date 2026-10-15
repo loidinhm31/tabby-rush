@@ -221,9 +221,9 @@ class AccountLeaveProtocolTest {
         val success = protocol.executeLeave()
         assertFalse(success)
         assertFalse(dbDeleted) // Must NOT delete database if cancel fails!
-        assertFalse(store.isFrozen) // Unfrozen on abort
+        assertTrue(store.isFrozen) // Remains fail-closed on cancel failure
         assertTrue(markerWritten)
-        assertTrue(markerCleared) // Invariant N3: Wipe marker rolled back when cancel gate fails!
+        assertFalse(markerCleared) // Phase 07: Wipe marker retained when cancel gate fails!
     }
     @Test
     fun testCompletePendingWipeOnStartup() = runTest {

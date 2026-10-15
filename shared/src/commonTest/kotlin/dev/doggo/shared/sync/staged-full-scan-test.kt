@@ -207,6 +207,20 @@ class FakeDoggoDao : DoggoDao {
     override suspend fun getAllLedgerEntries(): List<ReminderDeliveryLedgerEntity> =
         ledger.values.sortedBy { it.dueEpochMs }
 
+    override suspend fun getActivePostedNotifications(accountKey: String, generation: Long): List<ReminderDeliveryLedgerEntity> =
+        ledger.values.filter { it.accountKey == accountKey && it.generation == generation && it.claimOutcome == "POSTED" && it.postedPlatformId != null && it.cancellationState == "ACTIVE" }
+
+    override suspend fun getAllPostedNotificationsForAccount(accountKey: String): List<ReminderDeliveryLedgerEntity> =
+        ledger.values.filter { it.accountKey == accountKey && it.claimOutcome == "POSTED" && it.postedPlatformId != null }
+    override suspend fun clearPostedNotificationId(accountKey: String, generation: Long, platformNotificationId: String, nowEpochMs: Long) {
+        for ((k, v) in ledger.toList()) {
+            if (v.accountKey == accountKey && v.generation == generation && v.postedPlatformId == platformNotificationId) {
+                ledger[k] = v.copy(postedPlatformId = null, updatedAtEpochMs = nowEpochMs)
+            }
+        }
+    }
+
+
     override suspend fun upsertLedgerEntry(entry: ReminderDeliveryLedgerEntity) {
         val key = "${entry.accountKey}:${entry.generation}:${entry.taskId}:${entry.scheduleToken}:${entry.occurrenceIndex}"
         ledger[key] = entry

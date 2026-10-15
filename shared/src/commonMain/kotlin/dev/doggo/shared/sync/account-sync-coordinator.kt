@@ -323,10 +323,12 @@ class AccountSyncCoordinator(
         val conflictOp = ops.firstOrNull {
             it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED
         }
-        if (conflictOp != null) {
-            store.dao.discardConflictAtomic(conflictOp.opId, rowId, conflictOp.localRevision)
-        } else {
-            store.dao.deleteDraft(rowId)
+        store.withMutationLock {
+            if (conflictOp != null) {
+                store.dao.discardConflictAtomic(conflictOp.opId, rowId, conflictOp.localRevision)
+            } else {
+                store.dao.deleteDraft(rowId)
+            }
         }
         refreshProgressState()
     }
@@ -430,6 +432,7 @@ class AccountSyncCoordinator(
             )
         }
 
+        store.withMutationLock {
         store.dao.replaceOutboxAtomic(
             conflictOp?.opId,
             OutboxEntity(
@@ -462,6 +465,7 @@ class AccountSyncCoordinator(
                 intentMask = if (kind == StrictOperationKind.DELETE) OutboxEntity.INTENT_DELETE else conflictOp?.intentMask
             )
         )
+        }
         refreshProgressState()
     }
 
@@ -515,10 +519,12 @@ class AccountSyncCoordinator(
         } else ReminderRule.DISABLED
 
         // Clean up conflicted identity
-        if (conflictOp != null) {
-            store.dao.deleteOutbox(conflictOp.opId)
+        store.withMutationLock {
+            if (conflictOp != null) {
+                store.dao.deleteOutbox(conflictOp.opId)
+            }
+            store.dao.deleteDraft(rowId)
         }
-        store.dao.deleteDraft(rowId)
 
         // Create new identity with fresh schedule token if deadline present
         val newId = generateUuid()

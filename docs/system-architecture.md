@@ -1,7 +1,7 @@
 # Doggo System Architecture
 
 Last Updated: 2026-10-15
-Phase: Phase 01 frozen (Gate G1 approved); Phase 02 strict timezone/DST contracts and platform candidate adapters delivered, with Gate G2 native delivery formally blocked pending platform testbed environments (Android SDK/device, active Linux notification daemon, Windows host runtime); Phase 03 backend contracts, admission guards, and in-place migration engine delivered (Gate G3 staging hold pending replica set acceptance); Phase 04 operator tooling delivered; Phase 05 Room database version 2 migration and shared temporal task model delivered; Phase 06 client version transition, safe replay, and intention preservation delivered (Gate G4 client transition delivered; connected platform & end-to-end sync acceptance pending Phase 11)
+Phase: Phase 01 frozen (Gate G1 approved); Phase 02 strict timezone/DST contracts and platform candidate adapters delivered, with Gate G2 native delivery formally blocked pending platform testbed environments (Android SDK/device, active Linux notification daemon, Windows host runtime); Phase 03 backend contracts, admission guards, and in-place migration engine delivered (Gate G3 staging hold pending replica set acceptance); Phase 04 operator tooling delivered; Phase 05 Room database version 2 migration and shared temporal task model delivered; Phase 06 client version transition, safe replay, and intention preservation delivered (Gate G4 client transition delivered); Phase 07 shared scheduling, persisted eligibility and account safety delivered (Gate G5 passed; physical native alarm/notification delivery adapters deferred to Phases 08–10, connected platform & end-to-end sync acceptance pending Phase 11)
 Related Docs: [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
@@ -120,6 +120,14 @@ flowchart TD
       AccountFiles["Platform Account Files\n(Android / JVM Partitioning)"]
     end
 
+    subgraph SchedulingSubsystem["Shared Scheduling & Delivery Safety (Phase 07)"]
+      SchedCoordinator["ReminderSchedulingCoordinator\n(Reconciliation & Claim-Before-Post)"]
+      DeliveryGate["ReminderDeliveryGate\n(Gate -> Mutex -> DB Lock Hierarchy)"]
+      OccStore["ReminderOccurrenceStore\n(Ledger Lifecycle & Atomic Claim)"]
+      Projector["PersistedScheduleProjector\n(Draft-Free Projection)"]
+      Calculator["ReminderScheduleCalculator\n(Checked Arithmetic & 5-Min Grace)"]
+    end
+
     subgraph AuthSubsystem["Auth & Protected Session Subsystem (Phase 04)"]
       AuthSession["HubAuthSession\n(State Machine & Gen Fencing)"]
       SingleFlight["SingleFlightRefreshCoordinator\n(Leader Concurrency Lock)"]
@@ -167,6 +175,14 @@ flowchart TD
   LeaveProtocol --> Store
   LeaveProtocol --> AccountFiles
   LeaveProtocol --> Vault
+  Store --> DeliveryGate
+  Store --> Projector
+  SchedCoordinator --> DeliveryGate
+  SchedCoordinator --> OccStore
+  SchedCoordinator --> Store
+  OccStore --> Calculator
+  OccStore --> RoomDB
+  LeaveProtocol --> DeliveryGate
   AuthSession --> SingleFlight
   AuthSession --> AuthClient
   AuthSession --> Vault
@@ -365,6 +381,46 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
    - `WindowsNotificationAdapter` configures stable AUMID `dev.doggo.desktop` and default group `doggo_reminders`.
    - `escapeXml()` sanitizes XML attribute and entity characters (`&`, `<`, `>`, `"`, `'`) for toast templates.
    - **Status: Unimplemented / Candidate**: `JnaWindowsToastBridge` explicitly returns `isAvailable() = false` and `WindowsNotificationStatus.Unavailable` for all operations. Real WinRT/COM toast delivery and MSI AUMID history removal remain outstanding implementation and runtime acceptance work in Phase 09.
+
+### 4.11 Shared Scheduling, Persisted Eligibility and Account Safety (Phase 07)
+
+1. **Deterministic Checked Arithmetic & Strict Grace Window (`ReminderScheduleCalculator`)**:
+   - Checked 64-bit integer operations (`safeMultiply`, `safeSubtract`, `safeAdd`) calculate first reminder due instant (`anchor - leadMs`) and successive repeat intervals (`offset = index * intervalMs`), throwing `ArithmeticException` rather than wrapping silently on overflow.
+   - Enforces strict repeat bounds: `rule.count` constrained to `1..10`. Non-repeating rules (`count == 1`) require null interval; repeating rules (`count > 1`) require non-null interval `>= 15m`. Last scheduled occurrence is verified `<= anchor`.
+   - Strict 5-minute grace window (`GRACE_PERIOD_MS = 300_000L`): evaluates occurrences against current epoch time. Exactly 300,000ms is included; 300,001ms is skipped.
+   - Opportunity selection: selects at most the single latest eligible occurrence per task (`dueEpochMs <= now && now - dueEpochMs <= 300_000L`). All older unconsumed occurrences are marked `SKIPPED`. If the latest opportunity was already consumed, fallback to older opportunities is strictly blocked (`isLatestConsumed = true`). All future occurrences (`dueEpochMs > nowEpochMs`) are retained.
+
+2. **Draft-Free Reactive Projection (`PersistedScheduleProjector`)**:
+   - Computes schedule projections solely from atomic SQLite snapshots of confirmed `server_base` overlaid with submitted `outbox` records (`PENDING`, `DISPATCHING`, `UNCERTAIN`).
+   - Strict isolation from `editor_drafts`: uncommitted user typing and draft dialog states are strictly excluded from projection calculations, guaranteeing unpersisted input never schedules alarms or cancels reminders.
+   - Explicit nullable clearing: explicit deadline removal clears all deadline fields and scheduleToken, resetting reminder rules to disabled (`ReminderRule.DISABLED`), while updating deadline parameters recomputes schedule projection with the new temporal bounds.
+   - Conflict head suppression: if the head outbox operation on a row has `deliveryState == STATE_CONFLICT` or `STATE_UNKNOWN_SUPERSEDED`, active schedule projection is suppressed (`hasUnresolvedConflict = true`).
+   - Cancellation barriers: task completion (`completed = true`), deletion (`isDeleted = true`), or disabled reminder rules act as immediate cancellation barriers, de-scheduling alarms even while another rule on the row is conflicted.
+
+3. **Durable Occurrence Ledger Lifecycle (`ReminderOccurrenceStore`)**:
+   - Manages `reminder_delivery_ledger` in SQLite under composite primary key 5-tuple (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`).
+   - Semantic schedule token rotation: schedule tokens rotate exclusively on temporal schedule changes; task title updates modify notification copy without altering schedule tokens or duplicating occurrence opportunities.
+   - Task reopen preservation: completing and reopening a task reactivates ledger records from `CANCELLED` to `ACTIVE` while preserving prior consumed claim outcomes (`CLAIMED`, `POSTED`), ensuring occurrence opportunities are not duplicated.
+   - Atomic claim-before-post (`evaluateAndClaimDueOpportunity`): evaluates the 5-minute grace window, marks older unconsumed opportunities `SKIPPED` in SQLite, and atomically transitions the eligible occurrence from `PENDING` to `CLAIMED` via Room `@Transaction` (`DoggoDao.claimOccurrenceAtomic`).
+   - Native notification removal acknowledgment: upon successful removal via `adapter.removeOwnedNotification()`, `clearPostedNotificationId()` transactionally clears `postedPlatformId` in SQLite.
+
+4. **Three-Tier Lock Hierarchy & Teardown Gate (`ReminderDeliveryGate`)**:
+   - Enforces strict hierarchical locking: `delivery gate admission -> store mutex -> DB transaction`. Inversion is strictly prohibited. Gate admission tracks in-flight deliveries across native adapter operations so teardown can drain them, while the gate's internal mutex and SQLite transaction locks are never held across platform IPC or network socket calls.
+   - Tri-state lifecycle: `OPEN`, `CLOSING`, `CLOSED`.
+   - Fail-closed callback admission (`withDeliveryAdmission`): verifies gate state is `OPEN`, no pending `wipe.marker` exists, and persisted generation counter equals the callback's expected generation; any mismatch or error returns `null` fail-closed.
+   - Teardown drain synchronization (`closeAndDrain(5000L)`): called during account teardown before Room database closure; transitions state to `CLOSING`, rejects new callback admissions, and waits up to 5s for in-flight callbacks (`inFlightDeliveries == 0`) and mutations (`inFlightMutations == 0`) to reach 0 before transitioning to `CLOSED`.
+
+5. **Per-Account Scheduling Coordinator (`ReminderSchedulingCoordinator`)**:
+   - Binds `RoomAccountStore`, `ReminderOccurrenceStore`, `NativeReminderAdapter`, and `ReminderDeliveryGate` per authenticated account runtime.
+   - Mutation-gated reconciliation (`reconcile()`): executes under gate mutation admission, computes planned occurrence deltas, reconciles future alarms (`adapter.reconcileSchedule`), removes obsolete notifications (`adapter.removeOwnedNotification`), and acknowledges removals in SQLite.
+   - Claim-before-post delivery flow (`deliverReminder()`): acquires delivery gate admission, verifies platform capabilities, re-reads current persisted task projection from SQLite (re-validating eligibility and fetching fresh title text), executes atomic SQLite claim, re-checks wipe marker and eligibility pre-post, posts natively via `adapter.postOwnedNotification()`, and commits platform notification ID via `occurrenceStore.recordPosted()`.
+   - Opportunity delivery semantics: cross-process OS posting and SQLite commits cannot achieve two-phase atomic commit; claim-before-post enforces at most one posting attempt per durable occurrence identity (assuming atomic claims and preserved ledger state; crashes after claim may forfeit alerts to avoid double posting). Failed native posting is recorded as claimed/attempted with no retry loop.
+   - Teardown cancellation: implements `LeaveSchedulerCancelGate`, establishing the required teardown cancellation contract via `adapter.cancelAllForAccount(accountKey)` (physical platform alarm/notification removal verified in Phases 08/09).
+
+6. **Fail-Closed Teardown & Startup Recovery (`AccountLeaveProtocol`)**:
+   - Drains in-flight deliveries and mutations via `deliveryGate.closeAndDrain(5000L)` before touching database files; drain timeout remains frozen fail-closed.
+   - Fail-closed marker retention: if background scheduler cancellation (`schedulerCancelGate.cancelAndAwait()`) fails or throws, `AccountLeaveProtocol.executeLeave()` retains `wipe.marker` and remains frozen fail-closed.
+   - Interrupted startup recovery (`completePendingWipe`): checks `hasPendingWipe(accountKey)`, cancels schedulers via `schedulerCancelGate`, deletes remaining database files (`doggo.db`, `doggo.db-wal`, `doggo.db-shm`), clears vault credentials, and clears `wipe.marker` fail-closed.
 ---
 
 ## 5. Security & Isolation Invariants
@@ -406,9 +462,15 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 34. **App-Scoped Admin Authorization for Schema Upgrades**: Strict upgrade administration endpoints (`/api/v1/apps/:app_id/strict-contract`, `/api/v1/apps/:app_id/strict-upgrades*`) require JWT claims with both `is_admin: true` and the target `app_id` present in `claims.apps`. Non-admin requests receive HTTP 401; admin tokens lacking the explicit target app grant receive HTTP 403.
 35. **Exclusive Fence Draining & In-Place Strict Migration**: Schema upgrades claim an exclusive fence (`fenced: true`, `fenceOwner`, incremented `fenceGeneration`) in `_coordination`, immediately rejecting client ingress with HTTP 503 `migrationInProgress`. Admitted permits drain before in-place data transformation begins in batches (`BATCH_SIZE = 500`) with idempotent `$exists: false` matching; resumption passes prior recorded counts, though exact mid-batch interruption accounting remains an open correctness item awaiting formal revalidation.
 36. **Strict-v1 Legacy Receipt Replay Verification**: Legacy receipt reconciliation (`POST /api/v1/sync/:app_id/strong/legacy-receipts`) enforces bounded batches (`<= 100`) and strictly validates `request.protocol == "strict-v1"`. Matching receipts execute durable replay confirmation nonces without mutating payload records or applying legacy mutations.
+37. **Strict Lock Hierarchy Ordering**: Reminder scheduling and store mutations enforce `delivery gate admission -> store mutex -> DB transaction`. Inversion is prohibited. Gate admission tracks in-flight deliveries across native adapter operations so teardown can drain them, while the gate's internal mutex and SQLite transaction locks are never held across platform IPC or network socket calls.
+38. **Draft-Free Persistence Isolation**: Schedule projections read solely from committed `server_base` and submitted outbox mutations (`PENDING`, `DISPATCHING`, `UNCERTAIN`). `editor_drafts` are strictly isolated from schedule projections; uncommitted typing never creates, updates, or cancels reminder schedules.
+39. **Strict 5-Minute Grace Window**: `ReminderScheduleCalculator` evaluates occurrences against current epoch time: exactly 300,000ms included, 300,001ms skipped. Delivers at most the single latest eligible opportunity; older past opportunities are marked `SKIPPED`. If the latest opportunity is already consumed, fallback to older opportunities is strictly blocked.
+40. **Atomic Claim-Before-Post Invariant**: Reminders execute claim-before-post in SQLite via `claimOccurrenceAtomic` inside a Room transaction before invoking native notification adapters, enforcing at most one posting attempt per durable occurrence identity. Crashes after claim may forfeit alerts to avoid double posting; unconstrained retry loops are prohibited.
+41. **Fail-Closed Teardown Marker Retention**: If background scheduler cancellation fails during `AccountLeaveProtocol.executeLeave()`, the process retains `wipe.marker` and remains frozen fail-closed. Rolling back to an unfrozen state with an un-cleared wipe marker is forbidden.
+42. **Opaque OS Alarm Handle Identity**: `ScheduledAlarmHandle` serializes strictly non-sensitive identity keys (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`, `triggerAtEpochMs`). Task titles and user payload text are never passed to OS alarm schedulers; title text is fetched freshly from SQLite at delivery time after account and generation validation.
 
 
-## 6. Deadlines, Reminders & Strict Upgrade Design (Phases 01–06 Status)
+## 6. Deadlines, Reminders & Strict Upgrade Design (Phases 01–07 Status)
 
 Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved). Phase 02 logic contracts and platform candidate adapters delivered on 2026-10-15 (Gate G2 physical native delivery formally recorded as BLOCKED pending missing host prerequisites). Phase 03 backend contracts, admission guards, and in-place migration engine delivered on 2026-10-15 with passing unit/contract checks; production admission remains on hold with Gate G3 live multi-instance replica-set acceptance unexecuted pending staging testbed, coordination-document compatibility/backfill for documents missing `permitCount` requiring live verification, and exact cumulative accounting across mid-batch crash interruption requiring formal revalidation. Phase 04 operator tooling delivered on 2026-10-15. Phase 05 Shared Task Model & Explicit Room v2 Migration delivered on 2026-10-15: Room database version 2 schema, explicit `MIGRATION_1_2`, shared temporal models (`TaskDeadline`, `ReminderRule`, checked 64-bit arithmetic in `Todo`), and new entities (`AccountLocalSettingsEntity`, `ReminderDeliveryLedgerEntity`) verified via `:shared:jvmTest` (128 passing tests). Phase 06 Client Version Transition, Safe Replay & Intention Preservation delivered on 2026-10-15: `ContractTransitionCoordinator` 7-state / 6-transition pipeline, legacy receipt reconciliation under `RouteClassification.DUAL_AUTH_STRICT`, intent-masked rebasing in `RoomAccountStore.reconcileAccepted()`, atomic cleanup via `DoggoDao.discardRegressiveReconcileAtomic()`, and migration-mode equal-revision temporal enrichment in `StagedFullScan` verified via reported test suites (243 passing checks with 0 failures); connected platform acceptance and live mixed-version cutover remain pending Phases 08–11.
 
@@ -470,3 +532,20 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
   5. `scripts/release-security-check.mjs --diagnose-source` (6/6 checks PASS: manifest flags, export audit, security XML, HTTPS origin, zero hardcoded secrets).
   6. `scripts/hub-strict-upgrade.test.mjs` (9/9 CLI test suites PASS).
 - **Gate G4 Delivery Boundaries & Remaining Holds**: Phase 06 client version transition and replay logic are delivered and verified on JVM/BundledSQLite. Connected platform acceptance remains bounded: (1) Android instrumented test execution (`:shared:connectedAndroidTest`) is deferred to Phase 08 emulator/device testbeds, (2) connected platform notification delivery (Android AlarmManager, Linux D-Bus, Windows toast) is deferred to Phase 08–10, and (3) live mixed-version multi-device cutover across network boundaries is scheduled for Phase 11.
+
+### 6.8 Shared Scheduling, Persisted Eligibility and Account Safety (Phase 07 / Gate G5 Passed)
+- **Delivered Logic Contracts**: `ReminderScheduleCalculator` (checked 64-bit arithmetic, 1..10 repeat bounds, strict 300,000ms grace evaluation), `PersistedScheduleProjector` (draft-free reactive projection, conflict head suppression, completion/delete cancellation barriers), `ReminderOccurrenceStore` (durable ledger lifecycle, atomic claim-before-post, task reopen preservation, orphan purging), `ReminderDeliveryGate` (three-tier lock hierarchy, fail-closed callback admission, teardown drain synchronization), `ReminderSchedulingCoordinator` (per-account coordination, mutation-gated alarm reconciliation, pre-post re-check, opportunity semantics), and `AccountLeaveProtocol` enhancements (fail-closed wipe marker retention on scheduler cancellation failure, startup wipe recovery).
+- **Code Review Remediations Applied**:
+  1. Outbox error state mutation admission: Wrapped all outbox error state transitions (retryable failures, malformed accepted revisions, unrecognized statuses) in `store.withMutationLock` to ensure gate admission tracking and schedule invalidation flow notifications.
+  2. Teardown abort fail-closed consistency: Retained frozen state and persistent `wipe.marker` on teardown abort if scheduler cancellation fails.
+  3. Ledger notification removal acknowledgment: Added `clearPostedNotificationId()` to acknowledged native removals in the SQLite ledger via `DoggoDao.clearPostedNotificationId`.
+  4. Volatile gate reference: Annotated `store.deliveryGate` with `@kotlin.jvm.Volatile` in `RoomAccountStore` for multi-threaded visibility across coroutine dispatchers.
+  5. Authoritative teardown barrier proof: Implemented `ReminderTeardownBarrierSqliteTest` demonstrating that `AccountLeaveProtocol.executeLeave()` enters `CLOSING` and drains in-flight delivery callbacks before closing Room or deleting database files.
+- **Automated Verification**: Total 270 executed checks passed with 0 failures:
+  1. `:shared:jvmTest` (182 tests PASS across 26 classes, executed with `--dependency-verification=off`).
+  2. `:desktopApp:test` (32 tests PASS across 6 classes).
+  3. `scripts/strict-v2-vector-runner.mjs` (23/23 checks PASS).
+  4. `scripts/hub-live-smoke.mjs --fixture-test` (18/18 checks PASS).
+  5. `scripts/release-security-check.mjs --diagnose-source` (6/6 checks PASS).
+  6. `scripts/hub-strict-upgrade.test.mjs` (9/9 CLI tests PASS).
+- **Gate G5 Delivery Status & Platform Downstream**: Phase 07 shared scheduling logic, persisted projection, ledger lifecycle, and account teardown safety are fully delivered and verified on JVM BundledSQLite (Gate G5 passed). Physical platform alarm scheduling and notification display are unlocked for Phase 08 (Android Exact Alarm / Notification Delivery) and Phase 09 (Linux Desktop Delivery). Connected platform testbed and multi-device network acceptance remain scheduled for Phase 11.

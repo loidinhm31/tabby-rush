@@ -225,7 +225,7 @@ class StagedFullScan(
 
     private suspend fun promoteStaging(
         preScanConfirmed: Map<String, ServerBaseEntity>
-    ): ApiResult<Int> {
+    ): ApiResult<Int> = store.withMutationLock {
         val stagedRecords = store.dao.getAllStagedRecords()
         val stagedByRowId = stagedRecords.associateBy { it.rowId }
 
@@ -233,7 +233,7 @@ class StagedFullScan(
         for ((rowId, preScanRecord) in preScanConfirmed) {
             if (preScanRecord.epoch == activeEpoch && !stagedByRowId.containsKey(rowId)) {
                 store.dao.clearStaging()
-                return ApiResult.Failure(
+                return@withMutationLock ApiResult.Failure(
                     SafeError.ResetRequired(
                         code = "CONSISTENCY_ERROR",
                         message = "Pre-scan confirmed record $rowId in epoch $activeEpoch missing from full scan"
@@ -338,7 +338,7 @@ class StagedFullScan(
 
                         if (!logicallyEqual) {
                             store.dao.clearStaging()
-                            return ApiResult.Failure(
+                            return@withMutationLock ApiResult.Failure(
                                 SafeError.ProtocolIncompatible(
                                     code = "DIVERGENT_REVISION",
                                     message = "Same revision ${staged.serverRevision} with differing logical data for row ${staged.rowId}"
@@ -384,7 +384,7 @@ class StagedFullScan(
         // Fencing check right before atomic promotion
         if (store.isFrozen || isFenced?.invoke() == true) {
             store.dao.clearStaging()
-            return ApiResult.Failure(
+            return@withMutationLock ApiResult.Failure(
                 SafeError.Unauthorized(
                     code = "STORE_FROZEN",
                     message = "Store frozen or fenced before scan promotion"
@@ -392,8 +392,8 @@ class StagedFullScan(
             )
         }
 
-        // Atomic promotion and staging clear (C1)
+        // Atomic promotion and staging clear under mutation lock (C1, Phase 07)
         store.dao.promoteStagingAtomic(basesToUpsert)
-        return ApiResult.Success(stagedRecords.size)
+        ApiResult.Success(stagedRecords.size)
     }
 }

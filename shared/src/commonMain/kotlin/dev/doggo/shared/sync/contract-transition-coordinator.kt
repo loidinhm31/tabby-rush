@@ -291,11 +291,13 @@ class ContractTransitionCoordinator(
 
         for (op in translatableOps) {
             if (op.intentMask == OutboxEntity.INTENT_REQUIRES_REVIEW) {
-                store.dao.updateDeliveryState(
-                    op.opId,
-                    OutboxEntity.STATE_CONFLICT,
-                    "Requires review from legacy Room v1 migration"
-                )
+                store.withMutationLock {
+                    store.dao.updateDeliveryState(
+                        op.opId,
+                        OutboxEntity.STATE_CONFLICT,
+                        "Requires review from legacy Room v1 migration"
+                    )
+                }
                 continue
             }
 
@@ -305,11 +307,13 @@ class ContractTransitionCoordinator(
             when (op.kind) {
                 StrictOperationKind.CREATE.wireName -> {
                     if (base != null && !base.deleted) {
-                        store.dao.updateDeliveryState(
-                            op.opId,
-                            OutboxEntity.STATE_CONFLICT,
-                            "Cannot translate create: row already exists on server (rev ${base.serverRevision})"
-                        )
+                        store.withMutationLock {
+                            store.dao.updateDeliveryState(
+                                op.opId,
+                                OutboxEntity.STATE_CONFLICT,
+                                "Cannot translate create: row already exists on server (rev ${base.serverRevision})"
+                            )
+                        }
                     } else {
                         val newV2Op = OutboxEntity(
                             opId = newOpId,
@@ -329,17 +333,21 @@ class ContractTransitionCoordinator(
                             intentMask = op.intentMask ?: "${OutboxEntity.INTENT_TITLE}|${OutboxEntity.INTENT_COMPLETED}",
                             transitionCheckpoint = "TRANSLATED_V2"
                         )
-                        store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newV2Op)
+                        store.withMutationLock {
+                            store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newV2Op)
+                        }
                     }
                 }
 
                 StrictOperationKind.UPDATE.wireName -> {
                     if (base == null || base.deleted) {
-                        store.dao.updateDeliveryState(
-                            op.opId,
-                            OutboxEntity.STATE_CONFLICT,
-                            "Cannot translate update: base row missing or deleted on server"
-                        )
+                        store.withMutationLock {
+                            store.dao.updateDeliveryState(
+                                op.opId,
+                                OutboxEntity.STATE_CONFLICT,
+                                "Cannot translate update: base row missing or deleted on server"
+                            )
+                        }
                     } else {
                         val newV2Op = OutboxEntity(
                             opId = newOpId,
@@ -371,13 +379,17 @@ class ContractTransitionCoordinator(
                             intentMask = op.intentMask ?: "${OutboxEntity.INTENT_TITLE}|${OutboxEntity.INTENT_COMPLETED}",
                             transitionCheckpoint = "TRANSLATED_V2"
                         )
-                        store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newV2Op)
+                        store.withMutationLock {
+                            store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newV2Op)
+                        }
                     }
                 }
 
                 StrictOperationKind.DELETE.wireName -> {
                     if (base == null || base.deleted) {
-                        store.dao.deleteOutbox(op.opId)
+                        store.withMutationLock {
+                            store.dao.deleteOutbox(op.opId)
+                        }
                     } else {
                         val newV2Op = OutboxEntity(
                             opId = newOpId,
@@ -397,7 +409,9 @@ class ContractTransitionCoordinator(
                             intentMask = OutboxEntity.INTENT_DELETE,
                             transitionCheckpoint = "TRANSLATED_V2"
                         )
-                        store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newV2Op)
+                        store.withMutationLock {
+                            store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newV2Op)
+                        }
                     }
                 }
             }

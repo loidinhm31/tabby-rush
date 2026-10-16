@@ -119,6 +119,13 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
   - Framed identity prefix: 8 length-prefixed strings (domain `strict-v2`, appId, userId, epoch, tableName, rowId, opId, kind) + 8-byte big-endian signed 64-bit revision.
   - Data payload: Exactly 0 bytes for `DELETE` operations. For `CREATE` and `UPDATE`, 4 base fields followed by 12 strict-v2 fields in canonical table order with explicit 1-byte presence tags (`0x00`/`0x01`).
 - **Automated Schema Fingerprint Parity**: Automated test runners across all platforms must assert that SHA-256 digests derived from canonical JSON schema definitions match frozen constants (`3361a80f...` for v1, `5f539551...` for v2) preventing unreviewed schema drift.
+### 3.7 Task Surface Contracts & Projection Standards
+- Keep task-surface value contracts and pure projections in `shared/src/commonMain`; do not introduce platform APIs, Room, or HTTP dependencies into them.
+- Bind surface work to `SurfaceAccountToken` (account key plus generation). Consumers must carry the token through actions and guarded publication/navigation instead of trusting a cached account snapshot.
+- Model completion as a desired state (`completed = true/false`) against the fresh store projection, not as a toggle on stale UI data. Preserve no-op results and avoid unnecessary persistence/invalidation.
+- Keep `partitionSurfaceTodos` single-pass, omit deleted records, and preserve input order. Keep `selectNextDeadline` deterministic: overdue before upcoming, then deadline boundary and task ID ascending; retain unresolved-conflict metadata and do not gate selection on reminder enablement.
+- Test account-generation rejection, deleted/tombstoned records, duplicate desired state, concurrent field preservation, overdue equality, ties, conflict retention, and reminder-disabled eligibility at the contract/store boundary.
+
 ---
 
 ## 4. Node.js Integration Script Standards

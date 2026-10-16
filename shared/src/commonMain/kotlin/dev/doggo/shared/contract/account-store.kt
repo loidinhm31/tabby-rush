@@ -15,6 +15,8 @@ interface AccountStore {
 
     suspend fun getPersistedScheduleProjection(): List<PersistedTaskSchedule>
     fun observePersistedSchedule(): Flow<List<PersistedTaskSchedule>>
+    fun observeTodos(): Flow<List<Todo>>
+    suspend fun setCompletedLocally(id: String, completed: Boolean, nowEpochMs: Long): CompletionChange
 }
 
 interface AccountStoreFactory {

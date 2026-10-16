@@ -32,6 +32,7 @@ The project prioritizes a clean multiplatform architecture, where the core domai
 | **FR-06** | Secure Authentication | Reuses Glean Hub auth service with single-flight refresh, generation fencing, no automatic POST replays, and platform OS credential custody (Android Keystore on mobile, Freedesktop Secret Service on Linux, and current-user DPAPI on Windows). |
 | **FR-07** | Task Deadlines & Reminders | Users can assign optional date-only or timed deadlines to tasks, with captured IANA timezone, explicit DST offset, overdue boundaries, and configurable local reminder rules (lead minutes, count 1..10, interval >= 15m). |
 | **FR-08** | Strict-v2 Protocol & Atomic Schema Evolution | End-to-end data synchronization supports versioned `strict-v2` wire contracts with cryptographic preimages, checked 64-bit integer arithmetic, in-place app-scoped migration fencing, legacy receipt durability verification, and safe intent rebasing without data loss. |
+| **FR-09** | Sticky Task Surface Foundation | Shared account-scoped observation, readiness/access contracts, task partitioning and deadline selection, desired-state completion mutation, and Android/Desktop host/model seams; native surfaces are delivered only by downstream phases. |
 
 ### 2.2 Non-Functional Requirements (NFR)
 
@@ -355,3 +356,18 @@ Progress across the Doggo project is tracked in the living [Project Roadmap](./p
   - **Gate G5 (Shared Scheduling & Account Fences)**: **PASSED** (`ReminderScheduleCalculator`, `PersistedScheduleProjector`, `ReminderOccurrenceStore` claim-before-post, and `CompositeLeaveSchedulerCancelGate`).
   - **Gate G6 (Adversarial Acceptance & 3-Device Proof)**: **LOGIC PASSED / LIVE HELD** (adversarial boundaries and file-backed SQLite persistence pass; live 3-device concurrent sync held pending physical hardware testbeds).
   - **Gate G7 (Coordinated Cutover & Release Runbook)**: **RUNBOOK DELIVERED / LIVE CUTOVER BLOCKED** (authoritative operator runbook `docs/strict-v2-cutover-runbook.md` and rehearsal tooling `scripts/strict-v2-cutover-rehearsal.mjs` delivered; live production cutover strictly blocked pending prerequisite gates G2, G3, G6, and formal operator authorization).
+
+## 15. Sticky Task Surfaces — Phase 01 Foundation Requirements & Status
+
+The separate Sticky Task Surfaces initiative (plan `261016-1409-sticky-task-surfaces`) delivered Phase 01 on 2026-10-16 (24h / 24h). This PDR covers the shared foundation, not a claim that native surfaces are complete.
+
+### 15.1 Acceptance Criteria
+- The shared contract models restoring, ready-with-account/generation-token, signed-out, locked, and unavailable states; it supplies token-bearing read/action/publication/navigation operations. Downstream access implementations must reject stale account-generation tokens.
+- `AccountStore.observeTodos()` exposes reactive task snapshots. `setCompletedLocally(id, completed, nowEpochMs)` performs fresh lookup and desired-state mutation under one mutation lock, returns `Missing` / `Unchanged` without writing when appropriate, and preserves concurrent task fields on change.
+- Pure projections partition non-deleted tasks without reordering and select overdue tasks before upcoming ones, with deterministic deadline/task-ID ordering and unresolved-conflict retention. Reminder enablement does not determine deadline-selection eligibility.
+- Android host (`TaskSurfaceHostOwner`, `AndroidTaskSurfaceHost`) and desktop compact state/action (`StickyQuickAddState`, `StickyTaskState`, `StickyTaskAction`) contracts are present. The Android build declares Glance 1.2.0 dependencies and lock entries; cryptographic artifact provenance is still pending.
+
+### 15.2 Verification and Remaining Scope
+The Phase 01 QA report records 307/307 Gradle tests passing (231 shared JVM, 64 desktop, 12 Android), 18/18 fixture smoke checks, 6/6 source-security diagnostics, and 8/8 strict-v2 self-test checks (`plans/reports/qa-261016-1911-phase-01-full-suite-validation.md`). Cycle 3 review records 9.4/10 and conditional terminal handoff authorization (`plans/reports/code-review-261016-1911-phase-01-shared-foundation-cycle-3.md`). Results are attributed to those reports and were not rerun for this documentation update.
+
+Widget rendering, notification/settings integration, desktop window/tray behavior, runtime/navigation/wipe integration, and platform acceptance remain downstream. Phase 01 evidence reports 149 unmatched root classpath checksums in the existing dependency verification baseline, and records Gradle checks run with `--dependency-verification=off`; Glance artifact provenance remains pending (`plans/261016-1409-sticky-task-surfaces/reports/phase-01-foundation-evidence.md`).

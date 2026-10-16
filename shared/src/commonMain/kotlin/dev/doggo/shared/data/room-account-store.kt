@@ -13,6 +13,7 @@ import dev.doggo.shared.contract.toStrictV2TodoData
 import dev.doggo.shared.contract.PersistedScheduleProjector
 import dev.doggo.shared.contract.PersistedTaskSchedule
 import dev.doggo.shared.sync.ReminderDeliveryGate
+import dev.doggo.shared.contract.CompletionChange
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,6 +22,12 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.random.Random
+
+private val PENDING_OUTBOX_STATES = setOf(
+    OutboxEntity.STATE_PENDING,
+    OutboxEntity.STATE_DISPATCHING,
+    OutboxEntity.STATE_UNCERTAIN
+)
 /**
  * RoomAccountStore implements the AccountStore interface using DoggoDatabase.
  * Coordinates visible todo projections from server_base, editor_drafts, and outbox,
@@ -46,7 +53,7 @@ class RoomAccountStore(
     @kotlin.jvm.Volatile
     var deliveryGate: ReminderDeliveryGate? = null
 
-    private val scheduleInvalidationFlow = MutableSharedFlow<Unit>(
+    private val taskInvalidationFlow = MutableSharedFlow<Unit>(
         replay = 1,
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -54,8 +61,8 @@ class RoomAccountStore(
         tryEmit(Unit)
     }
 
-    fun notifyScheduleChanged() {
-        scheduleInvalidationFlow.tryEmit(Unit)
+    private fun notifyInvalidated() {
+        taskInvalidationFlow.tryEmit(Unit)
     }
 
     suspend fun <T> withMutationLock(block: suspend () -> T): T {
@@ -66,7 +73,9 @@ class RoomAccountStore(
                 mutex.withLock {
                     check(!isFrozen) { "Cannot mutate store while account leave is in progress" }
                     val result = block()
-                    notifyScheduleChanged()
+                    if (result != CompletionChange.Unchanged && result != CompletionChange.Missing) {
+                        notifyInvalidated()
+                    }
                     result
                 }
             }
@@ -74,7 +83,9 @@ class RoomAccountStore(
             mutex.withLock {
                 check(!isFrozen) { "Cannot mutate store while account leave is in progress" }
                 val result = block()
-                notifyScheduleChanged()
+                if (result != CompletionChange.Unchanged && result != CompletionChange.Missing) {
+                    notifyInvalidated()
+                }
                 result
             }
         }
@@ -86,8 +97,14 @@ class RoomAccountStore(
     }
 
     override fun observePersistedSchedule(): Flow<List<PersistedTaskSchedule>> {
-        return scheduleInvalidationFlow.map {
+        return taskInvalidationFlow.map {
             getPersistedScheduleProjection()
+        }.distinctUntilChanged()
+    }
+
+    override fun observeTodos(): Flow<List<Todo>> {
+        return taskInvalidationFlow.map {
+            loadTodos()
         }.distinctUntilChanged()
     }
     /**
@@ -95,7 +112,79 @@ class RoomAccountStore(
      * with uncommitted editor_drafts and outbox intents.
      * Orders records by createdAt DESC, then id DESC.
      */
-    override suspend fun loadTodos(): List<Todo> = mutex.withLock {
+    private fun projectSingleTodo(
+        rowId: String,
+        base: ServerBaseEntity?,
+        draft: EditorDraftEntity?,
+        rowOps: List<OutboxEntity>,
+        latestOp: OutboxEntity?
+    ): Todo? {
+        val isDeletedLocally = when {
+            draft?.isDeleted == true -> true
+            latestOp != null && latestOp.kind == StrictOperationKind.DELETE.wireName -> true
+            draft == null && latestOp == null && base?.deleted == true -> true
+            else -> false
+        }
+
+        if (isDeletedLocally) {
+            return null
+        }
+
+        val title = draft?.draftTitle
+            ?: latestOp?.title
+            ?: base?.title
+            ?: return null
+
+        val completed = draft?.draftCompleted
+            ?: latestOp?.completed
+            ?: base?.completed
+            ?: false
+
+        val createdAt = base?.createdAt
+            ?: latestOp?.createdAt
+            ?: draft?.updatedAt
+            ?: 0L
+
+        val updatedAt = draft?.updatedAt
+            ?: base?.updatedAt
+            ?: createdAt
+
+        val serverRevision = base?.serverRevision ?: 0L
+
+        val hasPendingOp = rowOps.any {
+            it.deliveryState in PENDING_OUTBOX_STATES
+        }
+        val isPending = hasPendingOp || (draft != null && draft.localRevision > 0L)
+
+        val temporalProj = resolveTemporalProjection(draft, latestOp, base)
+        val deadline = toTaskDeadline(temporalProj)
+        val reminderRule = toReminderRule(temporalProj, deadline != null)
+        val scheduleToken = if (deadline != null) temporalProj.scheduleToken else null
+
+        return Todo(
+            id = rowId,
+            title = title,
+            completed = completed,
+            createdAt = createdAt,
+            updatedAt = if (updatedAt >= createdAt) updatedAt else createdAt,
+            serverRevision = serverRevision,
+            isPending = isPending,
+            isDeleted = false,
+            deadline = deadline,
+            reminderRule = reminderRule,
+            scheduleToken = scheduleToken
+        )
+    }
+
+    private suspend fun loadTodoLocked(id: String): Todo? {
+        val base = dao.getServerBase(id)
+        val draft = dao.getDraft(id)
+        val rowOps = dao.getOutboxByRowId(id)
+        val latestOp = rowOps.lastOrNull()
+        return projectSingleTodo(id, base, draft, rowOps, latestOp)
+    }
+
+    private suspend fun loadTodosLocked(): List<Todo> {
         val serverBaseMap = dao.getAllServerBase().associateBy { it.rowId }
         val draftsMap = dao.getAllDrafts().associateBy { it.rowId }
         val allOutbox = dao.getAllOutbox()
@@ -109,85 +198,27 @@ class RoomAccountStore(
             val draft = draftsMap[rowId]
             val rowOps = outboxByRow[rowId] ?: emptyList()
             val latestOp = rowOps.lastOrNull()
-
-            // Determine if the item is deleted locally
-            val isDeletedLocally = when {
-                draft?.isDeleted == true -> true
-                latestOp != null && latestOp.kind == StrictOperationKind.DELETE.wireName -> true
-                draft == null && latestOp == null && base?.deleted == true -> true
-                else -> false
+            val todo = projectSingleTodo(rowId, base, draft, rowOps, latestOp)
+            if (todo != null) {
+                result.add(todo)
             }
-
-            if (isDeletedLocally) {
-                continue
-            }
-
-            // Determine title, completed, createdAt, updatedAt
-            val title = draft?.draftTitle
-                ?: latestOp?.title
-                ?: base?.title
-                ?: continue
-
-            val completed = draft?.draftCompleted
-                ?: latestOp?.completed
-                ?: base?.completed
-                ?: false
-
-            val createdAt = base?.createdAt
-                ?: latestOp?.createdAt
-                ?: draft?.updatedAt
-                ?: 0L
-
-            val updatedAt = draft?.updatedAt
-                ?: base?.updatedAt
-                ?: createdAt
-
-            val serverRevision = base?.serverRevision ?: 0L
-
-            val hasPendingOp = rowOps.any {
-                it.deliveryState in setOf(
-                    OutboxEntity.STATE_PENDING,
-                    OutboxEntity.STATE_DISPATCHING,
-                    OutboxEntity.STATE_UNCERTAIN
-                )
-            }
-            val isPending = hasPendingOp || (draft != null && draft.localRevision > 0L)
-
-            // Temporal deadline & reminder projections from authoritative snapshot source
-            val temporalProj = resolveTemporalProjection(draft, latestOp, base)
-            val deadline = toTaskDeadline(temporalProj)
-            val reminderRule = toReminderRule(temporalProj, deadline != null)
-            val scheduleToken = if (deadline != null) temporalProj.scheduleToken else null
-
-            result.add(
-                Todo(
-                    id = rowId,
-                    title = title,
-                    completed = completed,
-                    createdAt = createdAt,
-                    updatedAt = if (updatedAt >= createdAt) updatedAt else createdAt,
-                    serverRevision = serverRevision,
-                    isPending = isPending,
-                    isDeleted = false,
-                    deadline = deadline,
-                    reminderRule = reminderRule,
-                    scheduleToken = scheduleToken
-                )
-            )
         }
 
-        // Sort UI order: createdAt desc then id desc
         return result.sortedWith(
             compareByDescending<Todo> { it.createdAt }
                 .thenByDescending { it.id }
         )
     }
 
+    override suspend fun loadTodos(): List<Todo> = mutex.withLock {
+        loadTodosLocked()
+    }
+
     /**
      * Saves a todo locally with atomic draft and outbox persistence before returning success.
      * Enforces tombstone non-mutation, account contract version guard, and semantic scheduleToken rotation.
      */
-    override suspend fun saveTodoLocally(todo: Todo): Unit = withMutationLock {
+    private suspend fun saveTodoLocallyLocked(todo: Todo) {
 
         val existingBase = dao.getServerBase(todo.id)
         if (existingBase != null && existingBase.deleted) {
@@ -381,6 +412,31 @@ class RoomAccountStore(
 
         // Atomic write (C1)
         dao.saveTodoAtomic(updatedMeta, draftEntity, outboxEntity)
+    }
+
+    override suspend fun saveTodoLocally(todo: Todo): Unit = withMutationLock {
+        saveTodoLocallyLocked(todo)
+    }
+
+    override suspend fun setCompletedLocally(
+        id: String,
+        completed: Boolean,
+        nowEpochMs: Long
+    ): CompletionChange = withMutationLock {
+        val existingBase = dao.getServerBase(id)
+        if (existingBase != null && existingBase.deleted) {
+            return@withMutationLock CompletionChange.Missing
+        }
+        val current = loadTodoLocked(id) ?: return@withMutationLock CompletionChange.Missing
+        if (current.completed == completed) {
+            return@withMutationLock CompletionChange.Unchanged
+        }
+        val updatedTodo = current.copy(
+            completed = completed,
+            updatedAt = maxOf(nowEpochMs, current.updatedAt, current.createdAt)
+        )
+        saveTodoLocallyLocked(updatedTodo)
+        CompletionChange.Changed
     }
 
     /**

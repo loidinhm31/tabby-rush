@@ -689,3 +689,19 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
     2. Gate G2 physical native hardware delivery (connected Android Doze/reboot, Linux desktop graphical bubble, Windows native WinRT/COM toast bridge).
     3. Gate G6 three-device concurrent live sync proof between Android, Linux, and Windows.
     4. Strict supply-chain dependency verification metadata regeneration.
+
+## 7. Sticky Task Surfaces — Phase 01 Shared Foundation Delivered
+
+The shared foundation for sticky task surfaces was delivered on 2026-10-16 under `plans/261016-1409-sticky-task-surfaces/phase-01-shared-foundation.md` (24h / 24h). The shared contracts and platform seams are available; native widget, notification, desktop window, and tray integrations remain downstream work. The current handoff and phase statuses are tracked in the [Project Roadmap](./project-roadmap.md).
+
+### Shared contracts, observation, and projection
+- **Account-scoped access:** `TaskSurfaceAccess` exposes readiness, snapshot reads, desired-state completion, guarded publication, and navigation validation. `SurfaceReadiness` distinguishes `Restoring`, `Ready(token)`, `SignedOut`, `Locked`, and `Unavailable`; `SurfaceAccountToken` binds an account key to a generation so consumers can reject stale work. `TaskSections`, `SurfaceSnapshot`, and `SurfaceResult` are shared value contracts.
+- **Reactive task data:** `AccountStore.observeTodos()` exposes task snapshots. `AccountStore.setCompletedLocally(id, completed, nowEpochMs)` accepts a desired completion state; `RoomAccountStore` performs the lookup and mutation through one mutation lock. Missing or tombstoned tasks return `Missing`, including tombstones with residual local draft/outbox overlays; repeated desired state returns `Unchanged` without a write or invalidation. A change preserves the latest task fields and sets `updatedAt` monotonically to at least the supplied time, prior update time, and creation time.
+- **Pure projections:** `partitionSurfaceTodos` omits deleted tasks and partitions incomplete/completed tasks in encounter order (the store input order is `createdAt DESC, id DESC`). `selectNextDeadline` excludes deleted, completed, and deadline-free schedules; it prioritizes any overdue task over all upcoming tasks, then orders by deadline boundary (`overdueEpochMs ASC`) and `taskId ASC`. Eligibility does not depend on reminder enablement, and the selected `DeadlineSelection` retains `hasUnresolvedConflict`.
+
+### Platform and build seams
+- **Android:** `TaskSurfaceHostOwner`, `AndroidTaskSurfaceHost`, and `SurfaceRefreshReason` expose the host/access boundary and refresh reasons. They are contracts, not a Glance widget implementation or account-runtime integration.
+- **Desktop:** `StickyQuickAddState`, `StickyTaskState`, and `StickyTaskAction` model compact task UI state and actions. They do not implement the sticky window, tray, lifecycle, or preference persistence.
+- **Glance:** The version catalog pins Glance 1.2.0 and declares `glance`, `glance-appwidget`, and `glance-material3` for `:androidApp`; dependency locking is present in `androidApp/gradle.lockfile`. Phase 01 evidence reports 149 unmatched root classpath checksums in the existing verification baseline; Gradle checks used `--dependency-verification=off`, so Glance artifact provenance remains unverified (`plans/261016-1409-sticky-task-surfaces/reports/phase-01-foundation-evidence.md`).
+
+Native surface behavior, account teardown integration, and platform acceptance remain assigned to downstream phases. Phase 01 evidence records shared/desktop/Android unit suites and tooling checks; those results do not establish native UX or device acceptance.

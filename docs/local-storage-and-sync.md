@@ -1,8 +1,8 @@
 # Doggo Local Storage and Strict Synchronization Specification
 
-Date: 2026-10-15  
-Phase: Phase 10 Shared Deadline Editor, Task List and Local Settings Delivered (Phases 08–10 Native Adapters & Editor Delivered in Logic; Gate G2 Physical Native Delivery & Platform Acceptance Pending Phase 11)  
-Plan: `plans/261015-0752-task-deadlines-reminders-strict-upgrades` (and `plans/261013-1540-doggo-glean-hub-reuse`)  
+Date: 2026-10-16  
+Phase: Phase 10 Shared Deadline Editor, Task List and Local Settings Delivered; Sticky Task Surfaces Phase 01 shared store contracts delivered (native integrations pending)  
+Plan: `plans/261015-0752-task-deadlines-reminders-strict-upgrades` (and `plans/261013-1540-doggo-glean-hub-reuse`); Sticky Task Surfaces Phase 01: `plans/261016-1409-sticky-task-surfaces`
 Related Docs: [System Architecture](./system-architecture.md) · [API Contract](./api-contract.md) · [Code Standards](./code-standards.md) · [Sync Acceptance](./sync-acceptance.md)
 
 ---
@@ -504,3 +504,21 @@ In `RoomAccountStore.getAccountLocalSettings()` and `updateAccountLocalSettings(
 - Manages singleton per-account settings in `account_local_settings`: `notificationsEnabled` (boolean), `defaultReminderEnabled` (boolean), `defaultReminderLeadMinutes` (Long), `defaultReminderIntervalMinutes` (Long?), `defaultReminderCount` (Long), and `defaultDateOnlyAnchorTime` (String, defaulting to `"09:00"`).
 - **Strictly Device- and Account-Local**: Defaults are applied to newly created tasks on the local device only. Settings changes do not rewrite existing stored tasks or sync across devices over the wire.
 - **Teardown Scrubbing**: Settings are wiped during account sign-out/leave alongside all account-partitioned SQLite databases.
+
+## 10. Sticky Task Surface Store Contracts (Phase 01 Delivered)
+
+### 10.1 Reactive Todo Observation
+`AccountStore.observeTodos(): Flow<List<Todo>>` exposes the current task projection for surface consumers. `RoomAccountStore` maps its shared task invalidation signal to a fresh `loadTodos()` result and applies `distinctUntilChanged()`. The signal replays its current invalidation to new collectors, has bounded extra capacity, and uses `DROP_OLDEST`; it is a change notification rather than a durable event log. Consumers should render the latest snapshot, not expect one emission per intermediate mutation.
+
+### 10.2 Desired-State Completion Mutation
+`AccountStore.setCompletedLocally(id, completed, nowEpochMs)` sets the requested completion value rather than toggling an old snapshot. In `RoomAccountStore`, the read and possible write run under one mutation lock (and the configured delivery-admission gate when present), using a fresh task projection:
+- Returns `Missing` for absent, deleted, or authoritatively tombstoned tasks, including a tombstone that still has a local draft or outbox overlay. This path does not throw or resurrect the task.
+- Returns `Unchanged` when the stored completion value already matches. It performs no write, revision bump, or task invalidation.
+- On a change, saves from the fresh projection so concurrent title and temporal fields are retained; `updatedAt` is set to `maxOf(nowEpochMs, current.updatedAt, current.createdAt)`. A frozen store rejects mutation during account leave.
+
+### 10.3 Shared Surface Projections
+- `partitionSurfaceTodos` is a pure single-pass projection: deleted tasks are omitted; incomplete and completed tasks retain the input encounter order. `RoomAccountStore.loadTodos()` supplies `createdAt DESC, id DESC` order.
+- `selectNextDeadline` is a pure single-pass projection over persisted schedules. It excludes deleted, completed, and deadline-free entries; unresolved conflicts remain eligible and the selected `DeadlineSelection` carries `hasUnresolvedConflict`. Reminder enablement does not affect eligibility.
+- At `nowEpochMs >= overdueEpochMs`, a schedule is overdue. If any overdue task exists, it wins over every upcoming task; within either class, the smallest `(overdueEpochMs, taskId)` pair wins. Date-only due/overdue interpretation is already represented by the persisted deadline boundary; this selector does not recalculate temporal rules.
+
+These contracts prepare downstream Android widget/notification and desktop compact integrations; they do not themselves implement native surface rendering or lifecycle handling.

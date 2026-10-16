@@ -3,6 +3,27 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Sticky Task Surfaces / Phase 01] - 2026-10-16: Shared Foundation & Contracts (Delivered; Conditional Handoff Authorized; Dependency Provenance Pending)
+
+*Note: Separate initiative from the Task Deadlines, Reminders & Strict Upgrades plan.*
+
+### Delivered
+- Added shared authoritative task-surface foundations: `AccountStore.observeTodos()`, desired-state `setCompletedLocally`, access/readiness/section contracts, and deadline/partition projections.
+- Added Android task-surface host contracts and desktop sticky task action/state contracts.
+- Selected Glance 1.2.0 and delivered Android dependency/build and lockfile foundations.
+- Resolved the Cycle 2 server-tombstone/local-draft-or-outbox overlay finding. `setCompletedLocally` now returns `Missing` for authoritative tombstones; residual-draft and residual-outbox SQLite regressions pass.
+
+### QA & Review
+- QA reports 307/307 Gradle tests passing (231 shared JVM, 64 desktop, 12 Android unit), plus 18/18 offline fixture smoke checks, 6/6 source-security diagnostics, and 8/8 strict-v2 cutover self-test checks.
+- Cycle 3 code review scored **9.4/10 (Conditional Pass — Terminal Handoff Authorized; External Provenance Gate Pending)** with no critical issues identified.
+- Terminal conditional handoff unblocks Phases 02, 03, and 04; their leaf implementations and native acceptance remain outstanding.
+
+### Open Gates
+- Glance artifact provenance is not verified in `gradle/verification-metadata.xml`; Gradle runs used `--dependency-verification=off`. Phase 01 evidence reports **149 unmatched root classpath checksums** ([foundation evidence](../plans/261016-1409-sticky-task-surfaces/reports/phase-01-foundation-evidence.md)).
+- Native widget, notification, desktop window/tray, and Linux-session proof remain downstream acceptance requirements; no runtime/native success is inferred from shared tests.
+
+---
+
 ## [Phase 12] - 2026-10-16: Coordinated Cutover Runbook, Rehearsal Tooling & Release Documentation (Runbook & Tooling Delivered; Live Production Cutover Blocked Pending Gates G2, G3, G6, G7)
 
 *Note: Part of the 2026-10-15 Task Deadlines, Reminders & Strict Upgrades initiative.*

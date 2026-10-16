@@ -1,7 +1,7 @@
 # Codebase Summary
 
 Generated on: 2026-10-16
-Based on Repomix compaction snapshot: `repomix-output.xml` (dated point-in-time partial snapshot taken prior to final Phase 12 documentation edits: 417 files packed, 5 excluded by security heuristic filter, 955,112 tokens, 4,132,666 chars)
+Based on Repomix compaction snapshot: `repomix-output.xml` (2026-10-16; 458 files packed, 6 excluded by scanner heuristics, 1,068,893 tokens, 4,705,084 chars)
 ---
 
 ## 1. Repository Overview
@@ -29,7 +29,7 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 ├── settings.gradle.kts                 # Staged module assembly (guards :androidApp and :desktopApp)
 ├── androidApp/                          # Native Android application module
 │   ├── build.gradle.kts                # Android application build configuration (AGP 8.7.3, minSdk 26, compileSdk 35)
-│   ├── gradle.lockfile                 # Dependency lockfile (stub empty=)
+│   ├── gradle.lockfile                 # Locked Android dependencies including Glance 1.2.0; artifact provenance remains pending
 │   └── src/
 │       ├── main/
 │       │   ├── AndroidManifest.xml     # Base manifest (exported MainActivity, cleartext disabled, backup rules)
@@ -49,7 +49,8 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 │       │   │   ├── reminder-restore-receiver.kt # Non-exported receiver for boot, unlock, upgrade, timezone restoration
 │       │   │   ├── reminder-permission-controller.kt # Sealed permission states, settings intents, POST_NOTIFICATIONS checks
 │       │   │   ├── android-reminder-capabilities.kt # Probes decoupling POST_NOTIFICATIONS from SCHEDULE_EXACT_ALARM
-│       │   │   └── composite-leave-scheduler-cancel-gate.kt # 4-stage coordinated teardown cancel gate
+│       │   │   ├── composite-leave-scheduler-cancel-gate.kt # 4-stage coordinated teardown cancel gate
+│       │   │   └── task-surface-host.kt # TaskSurfaceHostOwner, AndroidTaskSurfaceHost, refresh reason contract
 │       │   └── res/xml/
 │       │       ├── backup_rules.xml        # API <= 30 backup exclusions (databases, sharedprefs, account files)
 │       │       └── data_extraction_rules.xml # API >= 31 cloud and device transfer exclusions
@@ -75,7 +76,8 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 │       │   ├── credential-vault-provider.kt # CredentialVaultProvider SPI
 │       │   ├── platform-vault-dispatcher.kt # ServiceLoader vault dispatcher and target validation
 │       │   ├── desktop-sync-scheduler.kt # Foreground sync scheduler and LeaveSchedulerCancelGate
-│       │   └── single-instance-guard.kt # File-channel lock on doggo.lock
+│       │   ├── single-instance-guard.kt # File-channel lock on doggo.lock
+│       │   └── sticky-task-model.kt # Compact task state and action contracts; no window runtime
 │       ├── linuxMain/
 │       │   ├── kotlin/dev/doggo/desktop/linux/
 │       │   │   ├── linux-secret-service-vault.kt # Freedesktop Secret Service vault implementation
@@ -118,7 +120,10 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 │       │   ├── contract/               # Pure domain contracts & validation policies
 │       │   │   ├── strict-sync-v2-contract.kt # Strict-v2 models, checked arithmetic, error enums
 │       │   │   ├── strict-sync-v2-digest.kt   # Strict-v2 binary preimage framing and SHA-256
-│       │   │   └── strict-timezone-resolver.kt # StrictTimeZoneResolver contract and StrictZoneOffsetResult hierarchy
+│       │   │   ├── strict-timezone-resolver.kt # StrictTimeZoneResolver contract and StrictZoneOffsetResult hierarchy
+│       │   │   ├── task-surface-contracts.kt # Account-scoped readiness, surface access, snapshots, and results
+│       │   │   ├── task-surface-projector.kt # Pure task-section and next-deadline projections
+│       │   │   └── account-store.kt # AccountStore API, reactive todo observation, desired completion mutation
 │       │   ├── auth/                   # Hub authentication, HTTP client, and session state machine
 │       │   ├── data/                   # Room entities, DAO, Database, and RoomAccountStore
 │       │   │   ├── server-base-entity.kt       # Confirmed server base and permanent compact tombstones
@@ -485,20 +490,19 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 
 ---
 
-## 3. Repomix Compaction Metrics (Dated Generation Snapshot: 2026-10-16)
-
-- **Compaction Artifact:** Generated on 2026-10-16 at `repomix-output.xml` in repository root.
-- **Total Files Packed:** 418 files
-- **Total Character Count:** 4,163,193 characters
-- **Total Token Count:** 962,265 tokens
+## 3. Repomix Compaction Metrics (Generated: 2026-10-16)
+- **Compaction Artifact:** `repomix-output.xml` at the repository root; the generation command explicitly supplied `--ignore docs/authentication-and-credentials.md`.
+- **Total Files Packed:** 458
+- **Total Character Count:** 4,705,084
+- **Total Token Count:** 1,068,893
 - **Top 5 Files by Token Count:**
-  1. `docs/project-roadmap.md` (30,931 tokens, 133,991 chars, 3.2%)
-  2. `docs/codebase-summary.md` (23,810 tokens, 104,202 chars, 2.5%)
-  3. `docs/system-architecture.md` (23,175 tokens, 103,366 chars, 2.4%)
-  4. `docs/project-changelog.md` (20,180 tokens, 88,805 chars, 2.1%)
-  5. `plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md` (14,407 tokens, 62,295 chars, 1.5%)
-- **Security Check:** Repomix security scanner flagged 5 suspicious files that were excluded from the compaction output by default filter heuristics: `docs/security-and-recovery.md`, `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md`, `plans/reports/code-reviewer-261014-1638-phase-08-release-operations-cycle3.md`, `plans/reports/docs-manager-261014-1643-phase-08-docs-verification.md`, and `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`. These exclusions represent heuristic scanner flags (e.g. placeholder connection strings, test mock keys) and are not an affirmative clean security adjudication of those files.
-- **Snapshot Scope:** These counts describe a single point-in-time partial Repomix generation taken prior to final Phase 12 documentation edits, with 5 files excluded by the scanner.
+  1. `docs/project-roadmap.md` (31,856 tokens, 137,724 chars)
+  2. `docs/codebase-summary.md` (24,245 tokens, 106,592 chars)
+  3. `docs/system-architecture.md` (23,951 tokens, 107,437 chars)
+  4. `docs/project-changelog.md` (20,680 tokens, 91,398 chars)
+  5. `androidApp/gradle.lockfile` (18,584 tokens, 88,812 chars)
+- **Scanner Exclusions:** The Repomix security heuristic excluded 6 files: `docs/security-and-recovery.md`, three prior phase reports under `plans/reports/`, `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`, and one prior docs-manager report. These are heuristic exclusions, not an affirmative security assessment.
+- **Snapshot Scope:** The explicit ignore pattern was supplied with the intent to exclude the access-gated credentials document, but the resulting file selection was not directly inspected. Counts describe a point-in-time compaction only and do not establish completeness or security.
 ## 4. Current State & Invariants
 
 1. **Deliverable Scope & Verification**:
@@ -605,3 +609,7 @@ Following Phases 01–12, the repository contains the Android and shared Compose
     - Operational Documentation Reconciliation: Updated `docs/deployment-guide.md`, `docs/security-and-recovery.md`, `docs/release-acceptance.md`, `docs/system-architecture.md`, `docs/hub-schema-integration.md`, `docs/sync-acceptance.md`, `docs/android-acceptance.md`, `docs/linux-acceptance.md`, `docs/windows-acceptance.md`, `docs/project-roadmap.md`, `docs/project-changelog.md`, `README.md`, and Glean Hub `docs/doggo-strict-sync.md`.
     - Automated Verification: Total 404 reported verification targets across 15 verification groups (400 automated test, contract, and rehearsal checks: 399 passed, 0 failures, 1 ignored live Mongo test: `test_strong_sync_live_mongo_acceptance_gate` in `glean-hub-sync` when `MONGO_TEST_URI` is unset; plus 4 build, lint, and packaging targets passed).
     - Gate G7 Blocker Boundaries: Live production cutover remains formally blocked pending Gate G3 multi-instance MongoDB replica set migration and Phase 03 backend code remediations, Gate G2 physical native platform delivery (Android Doze, Linux session D-Bus, Windows COM/WinRT toast bridge), Gate G6 three-device sync proof, and formal operator authorization.
+51. **Sticky Task Surfaces — Phase 01 Shared Foundation**: Delivered on 2026-10-16 (24h / 24h; conditional handoff authorized). Added `AccountStore.observeTodos()` and lock-serialized desired-state `setCompletedLocally`, account/generation-aware surface readiness/access contracts, and pure projections (`partitionSurfaceTodos`, `selectNextDeadline`). Partitioning omits deleted records and preserves encounter order; next-deadline selection prioritizes overdue tasks, then orders by deadline boundary and task ID, independent of reminder enablement, while retaining the conflict flag. Android host and desktop compact state/action contracts are seams only; no widget, notification, sticky window, or tray integration is delivered by this phase.
+    - Android build foundation pins Glance 1.2.0 (`glance`, `glance-appwidget`, `glance-material3`) and records dependency locks. Phase 01 evidence reports 149 unmatched root classpath checksums; Gradle phase checks used `--dependency-verification=off`, so artifact provenance remains pending (`plans/261016-1409-sticky-task-surfaces/reports/phase-01-foundation-evidence.md`).
+    - QA reports 307/307 Gradle tests passing (231 shared JVM, 64 desktop, 12 Android), plus 18/18 fixture smoke, 6/6 source-security diagnostics, and 8/8 strict-v2 self-test checks (`plans/reports/qa-261016-1911-phase-01-full-suite-validation.md`). These are report-attributed results, not a fresh verification run in this documentation update.
+    - Cycle 3 review scored 9.4/10 and authorized conditional handoff to the downstream widget, notification, and desktop compact leaves (`plans/reports/code-review-261016-1911-phase-01-shared-foundation-cycle-3.md`). Their native behavior and platform acceptance remain unverified.

@@ -7,6 +7,7 @@ import dev.doggo.shared.contract.TaskDeadline
 import dev.doggo.shared.contract.StrictOperationKind
 import dev.doggo.shared.contract.StrictSyncV2Contract
 import dev.doggo.shared.contract.StrictSyncV2Digest
+import dev.doggo.shared.contract.CompletionChange
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -1054,5 +1055,85 @@ class RoomAccountStoreTest {
             data = null
         )
         assertEquals(expectedV2Digest, deleteOp.digest)
+    }
+
+    @Test
+    fun testSetCompletedLocallyPreservesScheduleTokenAndV2Contract() = runTest {
+        database.doggoDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = "singleton",
+                activeEpoch = "epoch-test",
+                syncStatus = "ready-v2"
+            )
+        )
+
+        val dl = TaskDeadline(
+            date = "2026-10-25",
+            time = "14:00",
+            zone = "UTC",
+            offsetSeconds = 0L,
+            reminderAnchorTime = null,
+            anchorEpochMs = 2_000_000L,
+            overdueEpochMs = 2_000_000L
+        )
+        database.doggoDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = "v2-complete-row",
+                serverRevision = 3L,
+                deleted = false,
+                title = "V2 Task",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-test",
+                deadlineDate = dl.date,
+                deadlineTime = dl.time,
+                deadlineZone = dl.zone,
+                deadlineOffsetSeconds = dl.offsetSeconds,
+                deadlineAnchorEpochMs = dl.anchorEpochMs,
+                deadlineOverdueEpochMs = dl.overdueEpochMs,
+                reminderEnabled = false,
+                reminderLeadMinutes = 0L,
+                reminderCount = 1L,
+                scheduleToken = "token-preserved-123"
+            )
+        )
+
+        val result = store.setCompletedLocally("v2-complete-row", completed = true, nowEpochMs = 5000L)
+        assertEquals(CompletionChange.Changed, result)
+
+        val ops = database.doggoDao().getOutboxByRowId("v2-complete-row")
+        assertEquals(1, ops.size)
+        val op = ops[0]
+        assertEquals(OutboxEntity.CONTRACT_VERSION_V2, op.contractVersion)
+        assertEquals(true, op.completed)
+        assertEquals("token-preserved-123", op.scheduleToken)
+        assertTrue(op.intentMask?.contains(OutboxEntity.INTENT_COMPLETED) == true)
+
+        val loaded = store.loadTodos().first { it.id == "v2-complete-row" }
+        assertTrue(loaded.completed)
+        assertEquals("token-preserved-123", loaded.scheduleToken)
+    }
+
+    @Test
+    fun testSetCompletedLocallyUncompletingTask() = runTest {
+        val now = 10_000L
+        val todo = Todo(
+            id = "t-uncomplete",
+            title = "Completed task",
+            completed = true,
+            createdAt = now,
+            updatedAt = now,
+            serverRevision = 0L,
+            isPending = false
+        )
+        store.saveTodoLocally(todo)
+
+        val result = store.setCompletedLocally("t-uncomplete", completed = false, nowEpochMs = now + 2000L)
+        assertEquals(CompletionChange.Changed, result)
+
+        val loaded = store.loadTodos().first { it.id == "t-uncomplete" }
+        assertFalse(loaded.completed)
+        assertEquals(now + 2000L, loaded.updatedAt)
     }
 }

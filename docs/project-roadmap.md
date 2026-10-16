@@ -78,6 +78,26 @@ Phases 01–12 of the Task Deadlines, Reminders, and Strict-Contract Upgrades pl
 \*\*\*\*\*\*\*\*\*\*Phase 11 delivered adversarial boundary regressions (`AdversarialSchedulerBoundaryTest.kt`), physical SQLite restart/crash invariance suites (`AdversarialSyncSqliteTest.kt`), debug fault-proxy test tooling (`scripts/debug-fault-proxy.mjs`, `scripts/debug-fault-proxy.test.mjs`), build packaging verification (`:desktopApp:createDistributable`, `:androidApp:assembleDebug`), and critical scheduler token fix in `PersistedScheduleProjector`. Validated with 394 reported passes, 0 failures, 1 ignored live Mongo gate across 395 cases/targets reported by QA across 14 test suites and build targets; code review scored 8.6/10 approved by `Phase11Reviewer` for automated regressions. Gate G2 physical native delivery (connected Android Doze/reboot, Linux desktop notification bubble display, Windows COM/WinRT toast bridge implementation gap), Gate G3 live cluster execution (multi-node MongoDB replica set live migration and 3 open Phase 03 backend findings), and Gate G6 full platform acceptance remain formally held pending physical testbeds and native Windows implementation. Downstream Phase 12 cutover runbook authoring is unblocked.
 
 \*\*\*\*\*\*\*\*\*\*\*Phase 12 delivered authoritative strict-v2 cutover and recovery runbook (`docs/strict-v2-cutover-runbook.md`), CLI upgrade rehearsal suite (`scripts/strict-v2-cutover-rehearsal.mjs` with 7/7 passing automated checks), operational docs reconciliation (`docs/deployment-guide.md`, `docs/security-and-recovery.md`, `docs/release-acceptance.md`, `docs/hub-schema-integration.md`, `docs/system-architecture.md`, and `glean-hub/docs/doggo-strict-sync.md`). Live production cutover (Gate G7) remains formally BLOCKED pending physical hardware testbeds (Gate G2), multi-node replica set cluster migration and backend code remediations (Gate G3), and three-device live sync proof (Gate G6).
+### 2.3 Sticky Task Surfaces (Plan 261016-1409 — 132h)
+
+**Status:** In progress. Phase 01 delivered / 100% (24h / 24h); technical acceptance conditional, dependency provenance pending. Overall effort credited: **18.2% (24h / 132h)**. Cycle 3 review authorized terminal conditional handoff; Phases 02/03/04 are unblocked, not yet started.
+
+| Phase | Description | Effort | Status | Progress |
+|:---|:---|---:|:---|---:|
+| 01 | [Shared contracts, authoritative store and build foundation](../plans/261016-1409-sticky-task-surfaces/phase-01-shared-foundation.md) | 24h | **DELIVERED; conditional acceptance, provenance gate pending** | 100% |
+| 02 | [Android Glance widget leaf](../plans/261016-1409-sticky-task-surfaces/phase-02-android-widget.md) | 16h | Pending; handoff authorized | 0% |
+| 03 | [Android notification/settings leaf](../plans/261016-1409-sticky-task-surfaces/phase-03-android-notification.md) | 20h | Pending; handoff authorized | 0% |
+| 04 | [Desktop compact UI/geometry/preferences](../plans/261016-1409-sticky-task-surfaces/phase-04-desktop-compact.md) | 12h | Pending; handoff authorized | 0% |
+| 05 | [Android runtime/navigation/wipe integration](../plans/261016-1409-sticky-task-surfaces/phase-05-android-integration.md) | 24h | Pending; waits for 02 and 03 | 0% |
+| 06 | [Desktop controller/window/tray integration](../plans/261016-1409-sticky-task-surfaces/phase-06-desktop-integration.md) | 16h | Pending; waits for 04 | 0% |
+| 07 | [Android/Windows acceptance and shared docs](../plans/261016-1409-sticky-task-surfaces/phase-07-acceptance-docs.md) | 12h | Pending; waits for 05 and 06 | 0% |
+| 08 | [Linux-only adaptation and real-session gate](../plans/261016-1409-sticky-task-surfaces/phase-08-linux-acceptance.md) | 8h | Pending; later Linux session gate | 0% |
+| **Total** | | **132h** | **In progress; 24h credited** | **18.2% effort** |
+
+Phase 01 delivered `AccountStore.observeTodos()` and `setCompletedLocally`, shared task-surface access/readiness/section contracts and projections, Android host and desktop sticky action/state contracts, plus Glance 1.2.0 build/lock foundations. [Full-suite QA](../plans/reports/qa-261016-1911-phase-01-full-suite-validation.md) reports 307/307 Gradle tests passing, 18/18 fixture smoke checks, 6/6 source-security diagnostics, and 8/8 strict-v2 self-test checks. [Cycle 3 review](../plans/reports/code-review-261016-1911-phase-01-shared-foundation-cycle-3.md) scores 9.4/10 and authorizes terminal conditional handoff to 02/03/04; it confirms the residual tombstone/draft/outbox finding is resolved.
+
+The external Glance provenance gate remains pending. Phase 01 evidence reports **149 unmatched root classpath checksums** ([foundation evidence](../plans/261016-1409-sticky-task-surfaces/reports/phase-01-foundation-evidence.md)); the QA Gradle runs used `--dependency-verification=off`. No strict dependency verification or leaf-native runtime proof is claimed. Native launcher, notification, desktop and later Linux session evidence remains due in the downstream phases. Counts and hours here are attributed to the linked reports and plan; they are not new validation runs.
+
 ---
 
 ## 3. Milestones & Timeline

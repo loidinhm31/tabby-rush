@@ -171,6 +171,11 @@ dependencies {
     // WorkManager for background sync scheduling
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
+    // Glance AppWidget
+    implementation(libs.androidx.glance)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
     // Android Test dependencies

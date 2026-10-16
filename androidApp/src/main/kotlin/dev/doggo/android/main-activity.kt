@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.Dialog
 import dev.doggo.shared.ui.DoggoApp
+import dev.doggo.shared.contract.TodoAction
 
 /**
  * MainActivity is the single exported Android launcher Activity for Doggo.
@@ -47,7 +48,49 @@ class MainActivity : ComponentActivity() {
             Surface(modifier = Modifier.fillMaxSize()) {
                 DoggoApp(
                     state = uiState,
-                    onAction = viewModel::onAction,
+                    onAction = { action ->
+                        when (action) {
+                            is TodoAction.OpenNotificationSettings -> {
+                                try {
+                                    startActivity(
+                                        ReminderPermissionController.createChannelNotificationSettingsIntent(
+                                            this@MainActivity
+                                        )
+                                    )
+                                } catch (_: Exception) {
+                                    try {
+                                        startActivity(
+                                            ReminderPermissionController.createAppNotificationSettingsIntent(
+                                                this@MainActivity
+                                            )
+                                        )
+                                    } catch (_: Exception) {
+                                        startActivity(
+                                            ReminderPermissionController.createAppDetailsSettingsIntent(
+                                                this@MainActivity
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            is TodoAction.RequestExactAlarmPermission -> {
+                                try {
+                                    startActivity(
+                                        ReminderPermissionController.createExactAlarmSettingsIntent(
+                                            this@MainActivity
+                                        )
+                                    )
+                                } catch (_: Exception) {
+                                    startActivity(
+                                        ReminderPermissionController.createAppDetailsSettingsIntent(
+                                            this@MainActivity
+                                        )
+                                    )
+                                }
+                            }
+                            else -> viewModel.onAction(action)
+                        }
+                    },
                     onAuthSubmit = viewModel::onAuthSubmit
                 )
 

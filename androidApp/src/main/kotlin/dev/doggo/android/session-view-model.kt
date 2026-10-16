@@ -1,5 +1,6 @@
 package dev.doggo.android
 import android.util.Log
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.doggo.shared.contract.AccessRequestInfo
@@ -147,8 +148,8 @@ class SessionViewModel : ViewModel() {
                 is TodoAction.OpenSettings -> openSettings()
                 is TodoAction.CloseSettings -> _uiState.value = _uiState.value.copy(settings = null)
                 is TodoAction.SaveSettings -> saveSettings(action.settings)
-                is TodoAction.RequestExactAlarmPermission -> { /* No-op or platform intent */ }
-                is TodoAction.OpenNotificationSettings -> { /* No-op or platform intent */ }
+                is TodoAction.RequestExactAlarmPermission -> requestExactAlarmPermission()
+                is TodoAction.OpenNotificationSettings -> openNotificationSettings()
                 is TodoAction.ClockTick -> _uiState.value = _uiState.value.copy(nowEpochMs = action.nowEpochMs)
                 is TodoAction.ToggleCompleted -> toggleCompleted(action.todo)
                 is TodoAction.RequestDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = action.todo)
@@ -284,6 +285,36 @@ class SessionViewModel : ViewModel() {
         )
         runtime.store.updateLocalSettings(entity)
         _uiState.value = _uiState.value.copy(settings = null)
+    }
+
+    private fun openNotificationSettings() {
+        try {
+            val intent = ReminderPermissionController.createChannelNotificationSettingsIntent(app)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            app.startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                val intent = ReminderPermissionController.createAppNotificationSettingsIntent(app)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                app.startActivity(intent)
+            } catch (_: Exception) {
+                val intent = ReminderPermissionController.createAppDetailsSettingsIntent(app)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                app.startActivity(intent)
+            }
+        }
+    }
+
+    private fun requestExactAlarmPermission() {
+        try {
+            val intent = ReminderPermissionController.createExactAlarmSettingsIntent(app)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            app.startActivity(intent)
+        } catch (_: Exception) {
+            val intent = ReminderPermissionController.createAppDetailsSettingsIntent(app)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            app.startActivity(intent)
+        }
     }
 
     private suspend fun submitEditor() {

@@ -493,7 +493,7 @@ class DesktopController(
                 is TodoAction.CloseSettings -> _uiState.value = _uiState.value.copy(settings = null)
                 is TodoAction.SaveSettings -> saveSettings(action.settings)
                 is TodoAction.RequestExactAlarmPermission -> { /* No-op on desktop */ }
-                is TodoAction.OpenNotificationSettings -> { /* No-op on desktop */ }
+                is TodoAction.OpenNotificationSettings -> openOsNotificationSettings()
                 is TodoAction.ClockTick -> _uiState.value = _uiState.value.copy(nowEpochMs = action.nowEpochMs)
                 is TodoAction.ToggleCompleted -> toggleCompleted(action.todo)
                 is TodoAction.RequestDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = action.todo)
@@ -522,6 +522,19 @@ class DesktopController(
             throw ce
         } catch (_: Exception) {
             _uiState.value = _uiState.value.copy(safeError = SafeError.Internal("INTERNAL_ERROR", "Action execution failed"))
+        }
+    }
+
+    private fun openOsNotificationSettings() {
+        try {
+            val osName = System.getProperty("os.name")?.lowercase() ?: ""
+            if (osName.contains("win")) {
+                ProcessBuilder("cmd", "/c", "start", "ms-settings:notifications").start()
+            } else if (osName.contains("linux")) {
+                ProcessBuilder("xdg-open", "gnome-control-center:notifications").start()
+            }
+        } catch (_: Exception) {
+            // Non-fatal
         }
     }
 

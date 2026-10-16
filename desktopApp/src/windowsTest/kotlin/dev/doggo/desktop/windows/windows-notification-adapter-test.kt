@@ -4,54 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertNotNull
 
-class FakeWindowsToastBridge(
-    var available: Boolean = true,
-    var shouldFail: Boolean = false
-) : WindowsToastBridge {
-    val dispatched = mutableListOf<Triple<String, String, String>>()
-    val cleared = mutableListOf<Pair<String, String>>()
-    var clearedAllCount = 0
-    val clearedGroups = mutableListOf<String>()
-
-    override fun isAvailable(): Boolean = available
-
-    override fun showToast(
-        aumid: String,
-        xmlPayload: String,
-        tag: String,
-        group: String
-    ): WindowsNotificationStatus {
-        if (!available) return WindowsNotificationStatus.Unavailable("Bridge not available")
-        if (shouldFail) return WindowsNotificationStatus.Error("Simulated bridge failure")
-        dispatched.add(Triple(aumid, tag, xmlPayload))
-        return WindowsNotificationStatus.Success(tag, group)
-    }
-
-    override fun clearToast(
-        aumid: String,
-        tag: String,
-        group: String
-    ): WindowsNotificationStatus {
-        if (!available) return WindowsNotificationStatus.Unavailable("Bridge not available")
-        if (shouldFail) return WindowsNotificationStatus.Error("Simulated clear failure")
-        cleared.add(Pair(tag, group))
-        return WindowsNotificationStatus.Cleared(tag, group)
-    }
-
-    override fun clearGroup(aumid: String, group: String): WindowsNotificationStatus {
-        if (!available) return WindowsNotificationStatus.Unavailable("Bridge not available")
-        if (shouldFail) return WindowsNotificationStatus.Error("Simulated clear group failure")
-        clearedGroups.add(group)
-        return WindowsNotificationStatus.Cleared("", group)
-    }
-
-    override fun clearAllToasts(aumid: String): WindowsNotificationStatus {
-        if (!available) return WindowsNotificationStatus.Unavailable("Bridge not available")
-        clearedAllCount++
-        return WindowsNotificationStatus.Cleared("*", "*")
-    }
-}
 
 class WindowsNotificationAdapterTest {
 
@@ -68,7 +22,22 @@ class WindowsNotificationAdapterTest {
         assertTrue(xml.startsWith("<toast><visual>"))
         assertTrue(xml.contains("<text>Title &amp; Co</text>"))
         assertTrue(xml.contains("<text>Body &lt;alert&gt;</text>"))
-        assertTrue(xml.endsWith("</visual></toast>"))
+        assertTrue(xml.contains("<audio src=\"ms-winsoundevent:Notification.Default\"/>"))
+        assertTrue(xml.endsWith("</toast>"))
+    }
+
+    @Test
+    fun testToastXmlParsesAsValidXmlDocument() {
+        val xml = WindowsNotificationAdapter.buildToastXml("Title & Co", "Body <alert>")
+        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+        val builder = factory.newDocumentBuilder()
+        val doc = builder.parse(org.xml.sax.InputSource(java.io.StringReader(xml)))
+        assertNotNull(doc)
+        assertEquals("toast", doc.documentElement.tagName)
+        val audioNodes = doc.getElementsByTagName("audio")
+        assertEquals(1, audioNodes.length)
+        val audioElement = audioNodes.item(0) as org.w3c.dom.Element
+        assertEquals("ms-winsoundevent:Notification.Default", audioElement.getAttribute("src"))
     }
 
     @Test
@@ -114,14 +83,88 @@ class WindowsNotificationAdapterTest {
     }
 
     @Test
-    fun testJnaBridgeSafeUnavailability() {
-        val bridge = JnaWindowsToastBridge()
-        assertFalse(bridge.isAvailable(), "JnaWindowsToastBridge must not report available until implemented in Phase 09")
-        val postStatus = bridge.showToast("dev.doggo.desktop", "<xml/>", "tag", "group")
-        assertTrue(postStatus is WindowsNotificationStatus.Unavailable)
-        val clearStatus = bridge.clearToast("dev.doggo.desktop", "tag", "group")
-        assertTrue(clearStatus is WindowsNotificationStatus.Unavailable)
-        val clearAllStatus = bridge.clearAllToasts("dev.doggo.desktop")
-        assertTrue(clearAllStatus is WindowsNotificationStatus.Unavailable)
+    fun testPowerShellBridgeWithMockExecutor() {
+        val mockExecutor: (String, Long) -> Pair<Int, String> = { script, _ ->
+            when {
+                script.contains("History.Remove") -> 0 to ""
+                script.contains("CreateToastNotifier") && script.contains("Setting") -> 0 to "Enabled"
+                script.contains("Show") -> 0 to ""
+                else -> 0 to ""
+            }
+        }
+        val bridge = PowerShellWindowsToastBridge(processExecutor = mockExecutor)
+        assertTrue(bridge.isAvailable())
+        assertEquals(WindowsNotificationSetting.ENABLED, bridge.querySetting("dev.doggo.desktop"))
+        val xml = WindowsNotificationAdapter.buildToastXml("Test", "Body")
+        val postStatus = bridge.showToast("dev.doggo.desktop", xml, "t1", "g1")
+        assertTrue(postStatus is WindowsNotificationStatus.Success)
+        val clearStatus = bridge.clearToast("dev.doggo.desktop", "t1", "g1")
+        assertTrue(clearStatus is WindowsNotificationStatus.Cleared)
+    }
+
+    @Test
+    fun testPowerShellBridgeSimulatedError() {
+        val errorExecutor: (String, Long) -> Pair<Int, String> = { script, _ ->
+            if (script.contains("XmlDocument") && !script.contains("Show")) {
+                0 to ""
+            } else {
+                1 to "Simulated PowerShell failure"
+            }
+        }
+        val bridge = PowerShellWindowsToastBridge(processExecutor = errorExecutor)
+        val xml = WindowsNotificationAdapter.buildToastXml("Test", "Body")
+        val status = bridge.showToast("dev.doggo.desktop", xml, "t1", "g1")
+        assertTrue(status is WindowsNotificationStatus.Error)
+        assertTrue((status as WindowsNotificationStatus.Error).message.contains("Simulated PowerShell failure"))
+    }
+
+    @Test
+    fun testPowerShellBridgeSettingParsingWithProgressOrMultiLine() {
+        val dirtyExecutor: (String, Long) -> Pair<Int, String> = { script, _ ->
+            when {
+                script.contains("CreateToastNotifier('app.enabled')") -> 0 to "#< CLIXML\nEnabled\n<Objs..."
+                script.contains("CreateToastNotifier('app.disabled')") -> 0 to "DisabledForApplication"
+                else -> 0 to ""
+            }
+        }
+        val bridge = PowerShellWindowsToastBridge(processExecutor = dirtyExecutor)
+        assertEquals(WindowsNotificationSetting.ENABLED, bridge.querySetting("app.enabled"))
+        assertEquals(WindowsNotificationSetting.DISABLED_FOR_APPLICATION, bridge.querySetting("app.disabled"))
+    }
+
+    @Test
+    fun testPowerShellBridgeCacheIsolationByAumid() {
+        var queryCount = 0
+        val countingExecutor: (String, Long) -> Pair<Int, String> = { script, _ ->
+            if (script.contains("CreateToastNotifier")) {
+                queryCount++
+                if (script.contains("app.a")) 0 to "Enabled" else 0 to "DisabledForApplication"
+            } else {
+                0 to ""
+            }
+        }
+        val bridge = PowerShellWindowsToastBridge(processExecutor = countingExecutor)
+        val settingA = bridge.querySetting("app.a")
+        val settingB = bridge.querySetting("app.b")
+        assertEquals(WindowsNotificationSetting.ENABLED, settingA)
+        assertEquals(WindowsNotificationSetting.DISABLED_FOR_APPLICATION, settingB)
+        // Cache hit for app.a within TTL
+        val cachedA = bridge.querySetting("app.a")
+        assertEquals(WindowsNotificationSetting.ENABLED, cachedA)
+        assertEquals(2, queryCount) // 1 for app.a, 1 for app.b, cachedA did not re-query
+    }
+
+    @Test
+    fun testLiveWindowsToastWhenEnabled() {
+        if (System.getProperty("doggo.test.liveToasts") != "true") return
+        val bridge = PowerShellWindowsToastBridge()
+        if (!bridge.isAvailable()) return
+        val xml = WindowsNotificationAdapter.buildToastXml("Test Live", "Body")
+        val status = bridge.showToast("dev.doggo.desktop", xml, "test-live-tag", "test-live-group")
+        try {
+            assertTrue(status is WindowsNotificationStatus.Success)
+        } finally {
+            bridge.clearToast("dev.doggo.desktop", "test-live-tag", "test-live-group")
+        }
     }
 }

@@ -61,6 +61,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -222,12 +223,18 @@ class DesktopController(
         reminderSched.start()
 
         val scheduleObserverJob = scope.launch(Dispatchers.IO) {
-            store.observePersistedSchedule().collect {
-                try {
-                    reminderCoord.reconcile()
-                } catch (ce: CancellationException) {
-                    throw ce
-                } catch (_: Exception) {}
+            try {
+                store.observePersistedSchedule().collect {
+                    try {
+                        reminderCoord.reconcile()
+                    } catch (ce: CancellationException) {
+                        throw ce
+                    } catch (_: Exception) {}
+                }
+            } catch (ce: CancellationException) {
+                // Expected cancellation on shutdown
+            } catch (_: Exception) {
+                // Gracefully handle database closure
             }
         }
 
@@ -480,6 +487,12 @@ class DesktopController(
     private suspend fun openSettings() {
         val runtime = activeRuntime
         val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
+        val capabilities = runtime?.reminderCoordinator?.adapter?.queryCapabilities()
+            ?: ReminderCapabilities(
+                canScheduleExactAlarms = true,
+                canPostNotifications = false,
+                areNotificationsEnabled = false
+            )
         _uiState.value = _uiState.value.copy(
             settings = ReminderSettingsState(
                 notificationsEnabled = settings.notificationsEnabled,
@@ -488,11 +501,7 @@ class DesktopController(
                 defaultReminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
                 defaultReminderCount = settings.defaultReminderCount,
                 defaultDateOnlyAnchorTime = settings.defaultDateOnlyAnchorTime,
-                capabilities = ReminderCapabilities(
-                    canScheduleExactAlarms = true,
-                    canPostNotifications = true,
-                    areNotificationsEnabled = true
-                ),
+                capabilities = capabilities,
                 platformName = "Desktop"
             )
         )
@@ -757,8 +766,20 @@ class DesktopController(
     suspend fun disposeSuspend() {
         syncJob?.cancel()
         syncJob = null
-        syncScheduler.disposeAndAwait()
-        activeRuntime?.let { closeRuntimeInternalSuspend(it) }
+        try {
+            withTimeoutOrNull(3000L) {
+                syncScheduler.disposeAndAwait()
+            }
+        } catch (e: Exception) {
+            System.err.println("Error draining sync scheduler: ${e.message}")
+        }
+        try {
+            withTimeoutOrNull(3000L) {
+                activeRuntime?.let { closeRuntimeInternalSuspend(it) }
+            }
+        } catch (e: Exception) {
+            System.err.println("Error draining active runtime: ${e.message}")
+        }
         activeRuntime = null
         scope.cancel()
         instanceGuard.close()
@@ -766,7 +787,15 @@ class DesktopController(
 
     fun dispose() {
         runBlocking(Dispatchers.IO) {
-            disposeSuspend()
+            try {
+                withTimeoutOrNull(5000L) {
+                    disposeSuspend()
+                }
+            } catch (e: Exception) {
+                System.err.println("Error disposing DesktopController: ${e.message}")
+            } finally {
+                try { instanceGuard.close() } catch (_: Exception) {}
+            }
         }
     }
 }
@@ -781,8 +810,8 @@ fun launchDesktop(mode: BuildMode) {
         exitProcess(0)
     }
 
-    val swingScope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
-    val controller = DesktopController(mode, swingScope, instanceGuard)
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val controller = DesktopController(mode, appScope, instanceGuard)
     println("[Doggo Desktop] Launched in $mode mode. Active canonicalOrigin: ${controller.hubConfig.canonicalOrigin}, appId: ${controller.hubConfig.appId}")
 
     application {

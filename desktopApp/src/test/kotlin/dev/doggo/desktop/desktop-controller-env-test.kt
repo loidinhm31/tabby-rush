@@ -66,8 +66,10 @@ class DesktopControllerEnvTest {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val controller = DesktopController(BuildMode.DEBUG, scope, guard)
             try {
-                assertEquals("http://127.0.0.1:3000", controller.hubConfig.canonicalOrigin)
-                assertEquals("", controller.hubConfig.appApiKey)
+                val expectedOrigin = System.getenv("APPROVED_HUB_ORIGIN")?.takeIf { it.isNotBlank() } ?: "http://127.0.0.1:3000"
+                val expectedApiKey = System.getenv("DOGGO_API_KEY")?.takeIf { it.isNotBlank() } ?: ""
+                assertEquals(expectedOrigin, controller.hubConfig.canonicalOrigin)
+                assertEquals(expectedApiKey, controller.hubConfig.appApiKey)
             } finally {
                 controller.dispose()
             }

@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -137,13 +138,17 @@ class DesktopReminderScheduler(
             if (waitTimeMs > 0 && !isDisposed) {
                 try {
                     withTimeoutOrNull(waitTimeMs) {
-                        val incoming = updateChannel.receive()
-                        stateMutex.withLock {
-                            alarms.clear()
-                            alarms.addAll(incoming)
+                        val result = updateChannel.receiveCatching()
+                        val incoming = result.getOrNull()
+                        if (incoming != null) {
+                            stateMutex.withLock {
+                                alarms.clear()
+                                alarms.addAll(incoming)
+                            }
                         }
                     }
                 } catch (ce: CancellationException) {
+                    if (isDisposed) break
                     throw ce
                 } catch (_: Exception) {}
             }
@@ -156,11 +161,9 @@ class DesktopReminderScheduler(
         stateMutex.withLock {
             alarms.clear()
         }
-        updateChannel.close()
         wakeLoopJob?.cancelAndJoin()
         wakeLoopJob = null
     }
-
     suspend fun disposeAndAwait() {
         cancelAndAwait(accountKey)
     }

@@ -1,6 +1,5 @@
 package dev.doggo.desktop.windows
 
-import com.sun.jna.Platform
 import dev.doggo.desktop.DesktopReminderAdapter
 import dev.doggo.desktop.DesktopReminderAdapterProvider
 import dev.doggo.shared.contract.AccountKey
@@ -23,61 +22,7 @@ sealed interface WindowsNotificationStatus {
 }
 
 /**
- * Interface abstracting Windows toast notification delivery and history removal.
- */
-interface WindowsToastBridge {
-    fun isAvailable(): Boolean
-    fun showToast(aumid: String, xmlPayload: String, tag: String, group: String): WindowsNotificationStatus
-    fun clearToast(aumid: String, tag: String, group: String): WindowsNotificationStatus
-    fun clearGroup(aumid: String, group: String): WindowsNotificationStatus
-    fun clearAllToasts(aumid: String): WindowsNotificationStatus
-}
-
-/**
- * Candidate Windows toast bridge using documented AppUserModelId (AUMID) route.
- * Note: Status is Candidate / Unproven pending live execution on an installed Windows host with MSI AUMID registration.
- */
-class JnaWindowsToastBridge : WindowsToastBridge {
-    override fun isAvailable(): Boolean {
-        // Pending Phase 09 live COM/WinRT implementation on installed Windows host
-        return false
-    }
-
-    override fun showToast(
-        aumid: String,
-        xmlPayload: String,
-        tag: String,
-        group: String
-    ): WindowsNotificationStatus {
-        return WindowsNotificationStatus.Unavailable(
-            "Native COM/WinRT toast bridge unproven; pending Phase 09 Windows testbed"
-        )
-    }
-
-    override fun clearToast(
-        aumid: String,
-        tag: String,
-        group: String
-    ): WindowsNotificationStatus {
-        return WindowsNotificationStatus.Unavailable(
-            "Native COM/WinRT toast bridge unproven; pending Phase 09 Windows testbed"
-        )
-    }
-    override fun clearGroup(aumid: String, group: String): WindowsNotificationStatus {
-        return WindowsNotificationStatus.Unavailable(
-            "Native COM/WinRT toast bridge unproven; pending Phase 09 Windows testbed"
-        )
-    }
-
-    override fun clearAllToasts(aumid: String): WindowsNotificationStatus {
-        return WindowsNotificationStatus.Unavailable(
-            "Native COM/WinRT toast bridge unproven; pending Phase 09 Windows testbed"
-        )
-    }
-}
-
-/**
- * Candidate Windows notification adapter managing AUMID toast presentation and history removal.
+ * Windows notification adapter managing AUMID toast presentation and history removal.
  */
 class WindowsNotificationAdapter(
     private val bridge: WindowsToastBridge = JnaWindowsToastBridge()
@@ -98,11 +43,12 @@ class WindowsNotificationAdapter(
         fun buildToastXml(title: String, message: String): String {
             val safeTitle = escapeXml(title)
             val safeMessage = escapeXml(message)
-            return """<toast><visual><binding template="ToastGeneric"><text>$safeTitle</text><text>$safeMessage</text></binding></visual></toast>"""
+            return """<toast><visual><binding template="ToastGeneric"><text>$safeTitle</text><text>$safeMessage</text></binding></visual><audio src="ms-winsoundevent:Notification.Default"/></toast>"""
         }
     }
 
     fun isAvailable(): Boolean = bridge.isAvailable()
+    fun querySetting(): WindowsNotificationSetting = bridge.querySetting(AUMID)
 
     fun postNotification(
         tag: String,
@@ -120,6 +66,7 @@ class WindowsNotificationAdapter(
     ): WindowsNotificationStatus {
         return bridge.clearToast(AUMID, tag, group)
     }
+
     fun cancelGroup(group: String): WindowsNotificationStatus {
         return bridge.clearGroup(AUMID, group)
     }
@@ -148,10 +95,12 @@ class WindowsNativeReminderAdapter(
 
     override suspend fun queryCapabilities(): ReminderCapabilities = withContext(ioDispatcher) {
         val available = windowsAdapter.isAvailable()
+        val setting = windowsAdapter.querySetting()
+        val isEnabled = available && (setting == WindowsNotificationSetting.ENABLED)
         ReminderCapabilities(
             canScheduleExactAlarms = true,
             canPostNotifications = available,
-            areNotificationsEnabled = available
+            areNotificationsEnabled = isEnabled
         )
     }
 

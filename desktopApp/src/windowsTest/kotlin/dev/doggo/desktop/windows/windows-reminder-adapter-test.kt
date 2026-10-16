@@ -31,6 +31,25 @@ class WindowsReminderAdapterTest {
     }
 
     @Test
+    fun testQueryCapabilitiesReflectsDisabledNotificationSettings() = runTest {
+        val fakeBridge = FakeWindowsToastBridge(available = true, setting = WindowsNotificationSetting.DISABLED_FOR_APPLICATION)
+        val adapter = WindowsNativeReminderAdapter(WindowsNotificationAdapter(fakeBridge))
+
+        val caps = adapter.queryCapabilities()
+        assertTrue(caps.canScheduleExactAlarms)
+        assertTrue(caps.canPostNotifications)
+        assertFalse(caps.areNotificationsEnabled, "Notifications must be reported disabled when setting is DISABLED_FOR_APPLICATION")
+
+        fakeBridge.setting = WindowsNotificationSetting.DISABLED_FOR_USER
+        val capsUser = adapter.queryCapabilities()
+        assertFalse(capsUser.areNotificationsEnabled, "Notifications must be reported disabled when setting is DISABLED_FOR_USER")
+
+        fakeBridge.setting = WindowsNotificationSetting.DISABLED_BY_GROUP_POLICY
+        val capsPolicy = adapter.queryCapabilities()
+        assertFalse(capsPolicy.areNotificationsEnabled, "Notifications must be reported disabled when setting is DISABLED_BY_GROUP_POLICY")
+    }
+
+    @Test
     fun testPostOwnedNotificationFormatsCompactTagAndGroup() = runTest {
         val fakeBridge = FakeWindowsToastBridge(available = true)
         val adapter = WindowsNativeReminderAdapter(WindowsNotificationAdapter(fakeBridge))
@@ -47,13 +66,13 @@ class WindowsReminderAdapterTest {
 
         assertNotNull(platformId)
         val expectedGroup = "d_111111111111"
-        val expectedTag = "t_01234567-89ab-c_2"
+        val expectedTag = "t_01234567-89ab-cd_2"
         assertEquals("$expectedGroup|$expectedTag", platformId)
 
         assertEquals(1, fakeBridge.dispatched.size)
-        val (tag, group, xml) = fakeBridge.dispatched.first()
+        val (aumid, tag, xml) = fakeBridge.dispatched.first()
+        assertEquals(WindowsNotificationAdapter.AUMID, aumid)
         assertEquals(expectedTag, tag)
-        assertEquals(expectedGroup, group)
         assertTrue(xml.contains("&lt;special&gt; &amp; characters"))
     }
 

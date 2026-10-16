@@ -14,6 +14,7 @@ class AndroidNotificationAdapterTest {
     @Test
     fun testIntentFactoryConstants() {
         assertEquals("doggo_reminders", AndroidNotificationIntentFactory.CHANNEL_ID)
+        assertEquals("dev.doggo.android.REMINDERS", AndroidNotificationIntentFactory.GROUP_KEY)
         assertEquals("dev.doggo.android.ACTION_DELIVER_REMINDER", AndroidNotificationIntentFactory.ACTION_DELIVER_REMINDER)
         assertEquals("dev.doggo.android.ACTION_VIEW_TASK", AndroidNotificationIntentFactory.ACTION_VIEW_TASK)
         assertEquals("extra_account_key", AndroidNotificationIntentFactory.EXTRA_ACCOUNT_KEY)

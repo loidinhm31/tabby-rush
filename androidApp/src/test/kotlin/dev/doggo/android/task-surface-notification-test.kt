@@ -110,7 +110,7 @@ class TaskSurfaceNotificationTest {
         assertEquals("doggo_task_surface_v2", TaskSurfaceIntents.CHANNEL_ID)
         assertEquals("doggo.task.surface", TaskSurfaceIntents.NOTIFICATION_TAG)
         assertEquals(4101, TaskSurfaceIntents.NOTIFICATION_ID)
-
+        assertEquals("dev.doggo.android.TASK_SURFACE", TaskSurfaceIntents.GROUP_KEY)
         val code1 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 1L, "t1")
         val code1Repeat = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 1L, "t1")
         val code2 = TaskSurfaceIntents.getRequestCode("open", testAccountKey, 1L, "t1")

@@ -6,8 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import dev.doggo.shared.contract.AccountKey
 
 /**
@@ -19,6 +22,7 @@ object AndroidNotificationIntentFactory {
     const val CHANNEL_ID = "doggo_reminders"
     const val CHANNEL_NAME = "Doggo Task Reminders"
     const val CHANNEL_DESCRIPTION = "Offline task deadline and reminder notifications"
+    const val GROUP_KEY = "dev.doggo.android.REMINDERS"
 
     const val ACTION_DELIVER_REMINDER = "dev.doggo.android.ACTION_DELIVER_REMINDER"
     const val ACTION_VIEW_TASK = "dev.doggo.android.ACTION_VIEW_TASK"
@@ -34,7 +38,18 @@ object AndroidNotificationIntentFactory {
     fun ensureNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+            val existing = nm.getNotificationChannel(CHANNEL_ID)
+            if (existing != null && (existing.importance < NotificationManager.IMPORTANCE_HIGH || existing.sound == null)) {
+                nm.deleteNotificationChannel(CHANNEL_ID)
+            }
             if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+                val audioAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                    .build()
+                val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                    ?: Settings.System.DEFAULT_NOTIFICATION_URI
+
                 val channel = NotificationChannel(
                     CHANNEL_ID,
                     CHANNEL_NAME,
@@ -43,6 +58,7 @@ object AndroidNotificationIntentFactory {
                     description = CHANNEL_DESCRIPTION
                     enableLights(true)
                     enableVibration(true)
+                    setSound(soundUri, audioAttributes)
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 }
                 nm.createNotificationChannel(channel)

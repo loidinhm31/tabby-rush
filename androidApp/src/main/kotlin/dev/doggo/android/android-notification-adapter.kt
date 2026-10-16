@@ -5,8 +5,12 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.RingtoneManager
+import android.provider.Settings
 import android.util.Log
 import dev.doggo.android.AndroidNotificationIntentFactory.CHANNEL_ID
+import dev.doggo.android.AndroidNotificationIntentFactory.GROUP_KEY
 import dev.doggo.android.AndroidNotificationIntentFactory.createAlarmIntent
 import dev.doggo.android.AndroidNotificationIntentFactory.createAlarmPendingIntent
 import dev.doggo.android.AndroidNotificationIntentFactory.createViewTaskPendingIntent
@@ -81,10 +85,18 @@ class AndroidNotificationAdapter(
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Doggo")
             .setContentText("Task reminder")
+            .setGroup(GROUP_KEY)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
 
         val clickPendingIntent = createViewTaskPendingIntent(context, accountKey, taskId)
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            ?: Settings.System.DEFAULT_NOTIFICATION_URI
+        val audioAttributes = AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+            .build()
+
         val notification = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
@@ -93,6 +105,10 @@ class AndroidNotificationAdapter(
             .setPublicVersion(publicVersion)
             .setContentIntent(clickPendingIntent)
             .setAutoCancel(true)
+            .setGroup(GROUP_KEY)
+            .setGroupAlertBehavior(Notification.GROUP_ALERT_CHILDREN)
+            .setSound(soundUri, audioAttributes)
+            .setDefaults(Notification.DEFAULT_ALL)
             .build()
 
         val notifId = (accountKey.value + taskId).hashCode() and 0x7FFFFFFF

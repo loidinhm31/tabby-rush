@@ -18,6 +18,7 @@ object TaskSurfaceIntents {
     const val CHANNEL_ID = "doggo_task_surface_v2"
     const val NOTIFICATION_TAG = "doggo.task.surface"
     const val NOTIFICATION_ID = 4101
+    const val GROUP_KEY = "dev.doggo.android.TASK_SURFACE"
 
     const val ACTION_COMPLETE_SURFACE_TASK = "dev.doggo.android.ACTION_COMPLETE_SURFACE_TASK"
     const val ACTION_DISMISS_SURFACE_NOTIFICATION = "dev.doggo.android.ACTION_DISMISS_SURFACE_NOTIFICATION"

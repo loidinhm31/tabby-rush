@@ -216,6 +216,8 @@ class TaskSurfaceNotificationCoordinator(
             .setContentTitle(publicTitle)
             .setContentText(publicContent)
             .setOngoing(true)
+            .setGroup(TaskSurfaceIntents.GROUP_KEY)
+            .setGroupAlertBehavior(Notification.GROUP_ALERT_CHILDREN)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
 
@@ -269,6 +271,8 @@ class TaskSurfaceNotificationCoordinator(
             .setDeleteIntent(dismissPendingIntent)
             .addAction(completeAction)
             .setCategory(Notification.CATEGORY_STATUS)
+            .setGroup(TaskSurfaceIntents.GROUP_KEY)
+            .setGroupAlertBehavior(Notification.GROUP_ALERT_CHILDREN)
             .build()
 
         // 7. Gate final publication through current token admission

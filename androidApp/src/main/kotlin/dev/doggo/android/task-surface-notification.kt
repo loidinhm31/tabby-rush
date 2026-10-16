@@ -42,6 +42,10 @@ class TaskSurfaceNotificationCoordinator(
         fun ensureNotificationChannel(context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+                val existing = nm.getNotificationChannel(TaskSurfaceIntents.CHANNEL_ID)
+                if (existing != null && existing.importance < NotificationManager.IMPORTANCE_DEFAULT) {
+                    nm.deleteNotificationChannel(TaskSurfaceIntents.CHANNEL_ID)
+                }
                 if (nm.getNotificationChannel(TaskSurfaceIntents.CHANNEL_ID) == null) {
                     val name = try {
                         context.getString(R.string.task_surface_channel_name)
@@ -57,7 +61,7 @@ class TaskSurfaceNotificationCoordinator(
                     val channel = NotificationChannel(
                         TaskSurfaceIntents.CHANNEL_ID,
                         name,
-                        NotificationManager.IMPORTANCE_LOW
+                        NotificationManager.IMPORTANCE_DEFAULT
                     ).apply {
                         this.description = description
                         enableLights(false)

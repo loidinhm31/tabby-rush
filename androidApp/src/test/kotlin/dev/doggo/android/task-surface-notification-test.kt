@@ -107,7 +107,7 @@ class TaskSurfaceNotificationTest {
 
     @Test
     fun testIntentConstantsAndRequestCodeDeterminism() {
-        assertEquals("doggo_task_surface_v1", TaskSurfaceIntents.CHANNEL_ID)
+        assertEquals("doggo_task_surface_v2", TaskSurfaceIntents.CHANNEL_ID)
         assertEquals("doggo.task.surface", TaskSurfaceIntents.NOTIFICATION_TAG)
         assertEquals(4101, TaskSurfaceIntents.NOTIFICATION_ID)
 

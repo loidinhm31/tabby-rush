@@ -15,7 +15,7 @@ import android.provider.Settings
 object TaskSurfacePermissionController {
 
     const val PERMISSION_POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"
-    const val DEFAULT_CHANNEL_ID = "doggo_task_surface_v1"
+    const val DEFAULT_CHANNEL_ID = "doggo_task_surface_v2"
 
     /**
      * Evaluates the availability of the task surface notification.

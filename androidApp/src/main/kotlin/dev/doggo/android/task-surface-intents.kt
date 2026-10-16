@@ -15,7 +15,7 @@ import dev.doggo.shared.contract.SurfaceAccountToken
  */
 object TaskSurfaceIntents {
 
-    const val CHANNEL_ID = "doggo_task_surface_v1"
+    const val CHANNEL_ID = "doggo_task_surface_v2"
     const val NOTIFICATION_TAG = "doggo.task.surface"
     const val NOTIFICATION_ID = 4101
 

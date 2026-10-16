@@ -284,6 +284,12 @@ class SessionViewModel : ViewModel() {
             defaultDateOnlyAnchorTime = s.defaultDateOnlyAnchorTime
         )
         runtime.store.updateLocalSettings(entity)
+        val readiness = app.taskSurfaces.access.readiness.value
+        if (readiness is dev.doggo.shared.contract.SurfaceReadiness.Ready) {
+            val surfacePrefs = TaskSurfacePreferences(app)
+            surfacePrefs.setEnabled(readiness.token, s.notificationsEnabled)
+            app.taskSurfaces.refresh(SurfaceRefreshReason.Capability)
+        }
         _uiState.value = _uiState.value.copy(settings = null)
     }
 

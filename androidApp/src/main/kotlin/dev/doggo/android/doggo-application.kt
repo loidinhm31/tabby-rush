@@ -174,6 +174,13 @@ class DoggoApplication : Application(), TaskSurfaceHostOwner {
         activeRuntime = runtime
         val token = SurfaceAccountToken(accountKey, persistedGen)
         taskSurfaceRuntimeCoordinator.setReady(token)
+        try {
+            val localSettings = runtime.store.getLocalSettings()
+            if (localSettings.notificationsEnabled) {
+                val surfacePrefs = TaskSurfacePreferences(this@DoggoApplication)
+                surfacePrefs.setEnabled(token, true)
+            }
+        } catch (_: Exception) {}
         taskSurfaceRuntimeCoordinator.refresh(SurfaceRefreshReason.Account)
         runtime
     }

@@ -1,0 +1,264 @@
+#!/usr/bin/env node
+/**
+ * scripts/release-security-check.test.mjs
+ *
+ * Automated test suite for release-security-check.mjs exported components validator.
+ * Validates the narrow allowlist policy:
+ * - MainActivity (exported=true) is allowed ONLY with exact canonical class name.
+ * - DoggoTaskWidgetReceiver (exported=true) is allowed ONLY with exact canonical class name,
+ *   exact APPWIDGET_UPDATE action inside <intent-filter>, no extra actions/categories/data,
+ *   and exact @xml/task_widget_info or @xml/task-widget-info provider meta-data.
+ * - All other exported activities, receivers, services, and providers are rejected.
+ */
+
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { validateExportedComponents } from './release-security-check.mjs';
+
+describe('Release Security Check: Exported Components Auditor', () => {
+
+  it('passes on canonical release manifest with MainActivity and verified DoggoTaskWidgetReceiver', () => {
+    const validManifest = `
+      <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <application android:name=".DoggoApplication">
+          <activity
+              android:name=".MainActivity"
+              android:exported="true">
+              <intent-filter>
+                  <action android:name="android.intent.action.MAIN" />
+                  <category android:name="android.intent.category.LAUNCHER" />
+              </intent-filter>
+          </activity>
+
+          <receiver
+              android:name=".DoggoTaskWidgetReceiver"
+              android:exported="true">
+              <intent-filter>
+                  <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+              </intent-filter>
+              <meta-data
+                  android:name="android.appwidget.provider"
+                  android:resource="@xml/task_widget_info" />
+          </receiver>
+
+          <receiver android:name=".TaskSurfaceActionReceiver" android:exported="false" />
+          <receiver android:name=".TaskSurfaceDismissReceiver" android:exported="false" />
+          <receiver android:name=".DoggoAlarmReceiver" android:exported="false" />
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(validManifest);
+    assert.deepEqual(issues, []);
+  });
+
+  it('rejects foreign-package lookalike for MainActivity (e.g. com.attacker.MainActivity)', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="com.attacker.MainActivity" android:exported="true" />
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /Exported activity is not MainActivity: com\.attacker\.MainActivity/);
+  });
+
+  it('rejects foreign-package lookalike for DoggoTaskWidgetReceiver', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name="com.malicious.DoggoTaskWidgetReceiver" android:exported="true">
+            <intent-filter>
+              <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/task_widget_info" />
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /Exported receiver is not DoggoTaskWidgetReceiver: com\.malicious\.DoggoTaskWidgetReceiver/);
+  });
+
+  it('rejects any exported service', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <service android:name=".InsecureSyncService" android:exported="true" />
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /Non-main service is exported: \.InsecureSyncService/);
+  });
+
+  it('rejects any exported content provider', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <provider android:name=".LeakContentProvider" android:exported="true" />
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /Non-main provider is exported: \.LeakContentProvider/);
+  });
+
+  it('rejects exported receiver other than DoggoTaskWidgetReceiver', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".ArbitraryExportedReceiver" android:exported="true" />
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /Exported receiver is not DoggoTaskWidgetReceiver: \.ArbitraryExportedReceiver/);
+  });
+
+  it('rejects DoggoTaskWidgetReceiver missing APPWIDGET_UPDATE action', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+            <intent-filter>
+              <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/task_widget_info" />
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.ok(issues.some(i => i.includes('missing android.appwidget.action.APPWIDGET_UPDATE')));
+    assert.ok(issues.some(i => i.includes('unauthorized exported action')));
+  });
+
+  it('rejects DoggoTaskWidgetReceiver containing unauthorized category in intent filter', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+            <intent-filter>
+              <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+              <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/task_widget_info" />
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /unauthorized <category>/);
+  });
+
+  it('rejects DoggoTaskWidgetReceiver containing unauthorized data in intent filter', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+            <intent-filter>
+              <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+              <data android:scheme="http" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/task_widget_info" />
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /unauthorized <data>/);
+  });
+
+  it('rejects DoggoTaskWidgetReceiver missing intent-filter', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/task_widget_info" />
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /missing <intent-filter>/);
+  });
+
+  it('rejects DoggoTaskWidgetReceiver missing provider meta-data', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+            <intent-filter>
+              <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /missing required @xml\/task-widget-info provider meta-data/);
+  });
+
+  it('ignores unexported private receivers with intent filters', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".ReminderRestoreReceiver" android:exported="false">
+            <intent-filter>
+              <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+          </receiver>
+          <receiver android:name=".TaskSurfaceTimeReceiver" android:exported="false">
+            <intent-filter>
+              <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.deepEqual(issues, []);
+  });
+});

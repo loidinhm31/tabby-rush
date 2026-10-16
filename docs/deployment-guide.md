@@ -1,8 +1,7 @@
 # Doggo Deployment & Operations Guide
 
-**Document Version**: 1.4.0
-**Phase**: 12 — Coordinated Cutover, Recovery Runbook & Release Documentation
-**Status**: Strict-v2 cutover runbook and operator tooling rehearsal delivered; live production cutover blocked pending Gates G2, G3, G6, and G7
+**Document Version**: 1.5.0
+**Phase**: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08; production cutover remains blocked by G3/G6/G7
 **Related Documents**: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
 ---
@@ -332,3 +331,31 @@ node scripts/strict-v2-cutover-rehearsal.mjs \
   --confirm-disposable-staging
 ```
 *Note: Tooling self-tests verify client-side CLI orchestration; physical Gate G3 multi-instance cluster migration must be verified on a live MongoDB replica set before production cutover.*
+
+---
+
+## 10. Sticky Task Surface Capabilities & Operating Limits (Phase 07)
+
+Phase 07 records implementation, automated tests, and build evidence. Native Android launcher/shade and Windows sticky-window/tray/multi-monitor acceptance remain conditionally held at Gate G2; the four sticky-surface PNGs are design baselines, not runtime captures. Linux acceptance requires a real session in Phase 08.
+
+### 10.1 Android Surface Capabilities
+- **Glance AppWidget**:
+  - Baseline: Supported on Android 8.0+ (API 26) through Android 15 (API 35).
+  - Launcher Host: Requires an Android home screen launcher supporting Jetpack Glance / AppWidgetManager.
+  - No Auto-Start / FGS: Does not register background auto-start broadcast receivers, exact alarm permissions, or foreground services. All updates are triggered reactively by database observers or WorkManager boundary wake.
+- **Quiet Deadline Notification**:
+  - Channel `doggo_task_surfaces`: Low-importance, no-sound, no-vibration alert for the single next task deadline.
+  - Opt-In Policy: Disabled by default; requires explicit user opt-in in task surface settings.
+  - Runtime Permissions: On Android 13+ (API 33+), requests `POST_NOTIFICATIONS` only upon explicit user enablement in settings. Rejection shows informative guidance without repeated nagging.
+  - Swipe Dismissal: On Android 14+ (API 34+), user swipe dismissal records a durable suppression key preventing re-posting of the same task and deadline until selection or deadline changes.
+
+### 10.2 Desktop Sticky Companion & Tray Capabilities
+- **Window Chrome & Pinning**:
+  - The sticky companion requests `alwaysOnTop = true` above ordinary windows. Real stacking behavior has not been accepted in an interactive Windows session and remains held at Gate G2.
+  - Geometry restoration is covered by unit tests for work areas, taskbar insets, DPI transforms, and negative virtual origins; actual multi-monitor/DPI restoration remains pending native acceptance.
+- **Tray Lifecycle & Fallback**:
+  - Conditional SystemTray integration: exposed only when the host environment reports usable tray support.
+  - Close-to-Hide: Window close hides window while background synchronization continues.
+- **Safe Fallback**: If the tray is unavailable or fails to initialize, the fallback logic restores a visible main window rather than allowing the process to become invisible. Automated coverage is recorded; native tray capability/init-failure behavior remains unobserved at Gate G2.
+- **Zero Auto-Start Registration**:
+  - The desktop application does not register Windows Run registry keys, startup folder shortcuts, or Linux systemd autostart services. Launch is strictly user-invoked.

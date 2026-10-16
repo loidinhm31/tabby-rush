@@ -1,14 +1,14 @@
 # Doggo Code Standards & Implementation Guidelines
 
-Last Updated: 2026-10-16
-Phase: Phases 01–12 implementation conventions; desktop installed-runtime and live production cutover remain operator gates
+Last Updated: 2026-10-17
+Phase: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
 Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md)
 
 ---
 
 ## 1. Overview & Purpose
 
-This document establishes engineering conventions, coding standards, error handling patterns, and testing requirements across the Doggo repository. Standards defined here are established in Phase 01 shell tooling and provide the foundation for subsequent Kotlin Multiplatform phases.
+This document establishes engineering conventions, coding standards, error handling patterns, and testing requirements across Doggo. It reflects the delivered Kotlin Multiplatform, Android, and desktop implementation, including account-scoped sticky task surfaces, while distinguishing standards from unresolved review findings and platform acceptance.
 
 ---
 
@@ -121,10 +121,17 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
 - **Automated Schema Fingerprint Parity**: Automated test runners across all platforms must assert that SHA-256 digests derived from canonical JSON schema definitions match frozen constants (`3361a80f...` for v1, `5f539551...` for v2) preventing unreviewed schema drift.
 ### 3.7 Task Surface Contracts & Projection Standards
 - Keep task-surface value contracts and pure projections in `shared/src/commonMain`; do not introduce platform APIs, Room, or HTTP dependencies into them.
-- Bind surface work to `SurfaceAccountToken` (account key plus generation). Consumers must carry the token through actions and guarded publication/navigation instead of trusting a cached account snapshot.
-- Model completion as a desired state (`completed = true/false`) against the fresh store projection, not as a toggle on stale UI data. Preserve no-op results and avoid unnecessary persistence/invalidation.
+- **Admission:** Bind every surface read, mutation, navigation request, and publication to `SurfaceAccountToken(accountKey, generation)`. Obtain readiness through `TaskSurfaceAccess`; require the matching active token before acting or publishing. Reject stale-generation work and do not route a surface action to an arbitrary or newly selected account.
+- **Desired-state setters:** Surface actions request `completed = true` or `false`; never toggle the value cached by a widget/window. `RoomAccountStore.setCompletedLocally` must read the current task inside the mutation lock and return `Missing`, `Unchanged`, or `Changed`. Missing includes deleted/tombstoned tasks; `Unchanged` performs no write or invalidation; `Changed` preserves current task fields, advances `updatedAt` monotonically, and is the only outcome that should enqueue sync.
 - Keep `partitionSurfaceTodos` single-pass, omit deleted records, and preserve input order. Keep `selectNextDeadline` deterministic: overdue before upcoming, then deadline boundary and task ID ascending; retain unresolved-conflict metadata and do not gate selection on reminder enablement.
-- Test account-generation rejection, deleted/tombstoned records, duplicate desired state, concurrent field preservation, overdue equality, ties, conflict retention, and reminder-disabled eligibility at the contract/store boundary.
+- Test account-generation rejection, deleted/tombstoned records, duplicate desired state, concurrent field preservation, overdue equality, ties, conflict retention, and reminder-disabled eligibility at contract/store boundaries.
+
+### 3.8 Native Surface Lifecycle & Platform Boundaries
+- Keep Glance, notification manager, Android receivers, Compose `Window`, tray APIs, and host-session checks in platform-specific source sets. Shared contracts and account stores must not own OS objects or process lifetimes.
+- Own surface observers in the account runtime/controller, not an `Activity` or individual composable. On account leave/wipe, reject new actions/publications, stop observers/work, cancel scheduled surface work and notifications, blank registered widgets, close native sessions, and clear presentation preferences before deleting account data. Await delivery gates when possible; log and surface incomplete cleanup rather than claiming OS-retained content was erased.
+- Keep Android component exposure narrow: only the explicitly intended app entry activity and the widget receiver for the exact `APPWIDGET_UPDATE` action may be exported. Surface action, dismiss, time, and reminder receivers remain unexported; do not add exported services/providers, extra widget actions, categories, or data filters. Preserve `scripts/release-security-check.mjs` allowlist/audit invariants and its tests.
+- For desktop, closing the compact window hides it; explicit Quit owns runtime teardown. Expose hide/show only when a usable tray exists and retain a visible way to recover the main application when it does not. Treat always-on-top and tray availability as host-session-dependent, not portable guarantees.
+- Record lifecycle limitations as explicit findings. The current Cycle 2 review warns that Android `closeRuntimeInternal()` catches/logs a delivery-gate drain timeout and returns before observer-job cancellation or Room closure; `closeActiveRuntime()` nevertheless clears `activeRuntime`. Glance blank/session-close failures are also caught and logged. These are not proof of fail-closed native cleanup. See [System Architecture](./system-architecture.md) and [Security & Recovery](./security-and-recovery.md).
 
 ---
 
@@ -261,3 +268,33 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - Resumed migrations must use the identical `migrationId`.
 - Contract assertions must verify 16 canonical columns, SHA-256 fingerprint, and active epoch invariance before exit 0.
 - Downward migration or restoring v1 backups after v2 publication is forbidden. Forward repair under fence is the only approved remediation.
+
+---
+
+## 10. Sticky Task Surface Engineering Standards (Phase 07)
+
+### 10.1 Generation & Admission Token Fencing
+- Every interaction from external OS surfaces (Glance widgets, quiet deadline notifications, desktop companion windows) must carry and validate an immutable `SurfaceAccountToken(accountKey, generation)`.
+- Handlers must reject requests presenting non-current tokens, mismatched account keys, or negative generations fail-closed without touching SQLite databases.
+- Arbitrary account sessions must never be initialized on-demand from untrusted external intents.
+
+### 10.2 Desired-State Atomic Completion
+- Surface task toggles must call `store.setCompletedLocally(id, desiredCompleted, nowEpochMs)` specifying the exact desired completion boolean rather than inverting an in-memory snapshot.
+- The mutation reloads current state under the database write lock, retaining concurrent title and temporal edits, and advancing `updatedAt` monotonically.
+- The call returns `CompletionChange.Changed`, `Unchanged`, or `Missing`. Background network sync is dispatched only on `Changed`.
+
+### 10.3 Native Surface Boundaries & Zero Second Stores
+- Sticky task surfaces must project directly from the single authoritative `RoomAccountStore` via `observeTodos()` and `observePersistedSchedule()`.
+- Creating secondary synchronization pipelines or duplicate cached task stores is strictly prohibited.
+- Surface preferences (window geometry, display coordinates, notification suppression keys) must be stored in presentation-only storage outside Room and must never contain user task titles, descriptions, or account secrets.
+
+### 10.4 Fail-Closed Teardown & Lifecycle Quiescence
+- Account sign-out and wipe must enforce structured sequential quiescence:
+  1. Transition surface host state to non-Ready (`SurfaceReadiness.Unavailable`).
+  2. Drain active surface delivery admissions under timeout.
+  3. Cancel and join reactive observation jobs.
+  4. Cancel background boundary wake and active notifications.
+  5. Blank all installed widget instances and close Glance sessions before deleting databases or removing wipe markers.
+- If delivery gate drainage times out, teardown must log and fail closed rather than proceeding with uncoordinated database closure.
+
+Current implementation divergence: Android `closeRuntimeInternal()` catches and logs a drain-timeout exception, then returns before observer-job cancellation or Room closure; `closeActiveRuntime()` nevertheless clears `activeRuntime`. This remains an open safety finding, not acceptable teardown behavior.

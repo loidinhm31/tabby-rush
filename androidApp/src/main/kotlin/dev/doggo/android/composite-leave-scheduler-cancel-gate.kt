@@ -1,5 +1,7 @@
 package dev.doggo.android
 
+import android.app.NotificationManager
+import android.content.Context
 import dev.doggo.shared.contract.AccountKey
 import dev.doggo.shared.sync.LeaveSchedulerCancelGate
 import dev.doggo.shared.sync.ReminderDeliveryGate
@@ -8,10 +10,12 @@ import kotlinx.coroutines.cancelAndJoin
 
 /**
  * Composite cancel gate coordinating clean quiescence across:
- * 1. ReminderDeliveryGate (stops new deliveries, drains active callbacks)
- * 2. Schedule observation job (cancels reactive schedule updates)
+ * 1. ReminderDeliveryGate (stops new deliveries, drains active admissions)
+ * 2. Schedule and task surface observation jobs (cancels reactive updates)
  * 3. SyncSchedulerCancelGate (cancels WorkManager tasks, awaits active sync rounds)
  * 4. ReminderCoordinatorCancelGate (cancels AlarmManager alarms, removes notifications)
+ * 5. Task surface OS state: WorkManager boundary wake, quiet task notification,
+ *    all installed widget instances (clearAllInstances), and account preferences.
  *
  * If any cancellation step fails, throws an exception so AccountLeaveProtocol
  * remains fail-closed with wipe markers intact.
@@ -20,7 +24,10 @@ class CompositeLeaveSchedulerCancelGate(
     private val deliveryGate: ReminderDeliveryGate,
     private val scheduleObserverJob: Job,
     private val syncCancelGate: LeaveSchedulerCancelGate,
-    private val reminderCancelGate: LeaveSchedulerCancelGate
+    private val reminderCancelGate: LeaveSchedulerCancelGate,
+    private val surfaceObserverJob: Job? = null,
+    private val context: Context? = null,
+    private val host: AndroidTaskSurfaceHost? = null
 ) : LeaveSchedulerCancelGate {
 
     override suspend fun cancelAndAwait(accountKey: AccountKey) {
@@ -30,13 +37,35 @@ class CompositeLeaveSchedulerCancelGate(
             throw IllegalStateException("Timed out draining in-flight reminder deliveries for $accountKey")
         }
 
-        // 2. Stop reactive schedule observation
+        // 2. Stop reactive schedule and surface observation
         scheduleObserverJob.cancelAndJoin()
+        surfaceObserverJob?.cancelAndJoin()
 
         // 3. Cancel and await background WorkManager sync jobs
         syncCancelGate.cancelAndAwait(accountKey)
 
-        // 4. Cancel all OS alarms and clear posted notifications
+        // 4. Cancel all OS alarms and clear posted reminder notifications
         reminderCancelGate.cancelAndAwait(accountKey)
+
+        // 5. Clear OS task surface state and cancel scheduled boundary wake
+        context?.let { ctx ->
+            TaskSurfaceRefreshWorker.cancelBoundaryWake(ctx, accountKey)
+
+            if (host != null) {
+                val preferences = TaskSurfacePreferences(ctx)
+                val notificationCoordinator = TaskSurfaceNotificationCoordinator(
+                    context = ctx,
+                    host = host,
+                    preferences = preferences
+                )
+                notificationCoordinator.cancelForAccount(accountKey)
+            } else {
+                val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                nm?.cancel(TaskSurfaceIntents.NOTIFICATION_TAG, TaskSurfaceIntents.NOTIFICATION_ID)
+            }
+
+            TaskWidgetUpdater.clearAllInstances(ctx)
+            TaskSurfacePreferences(ctx).clear(accountKey)
+        }
     }
 }

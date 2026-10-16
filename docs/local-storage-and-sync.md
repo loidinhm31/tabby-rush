@@ -1,8 +1,8 @@
 # Doggo Local Storage and Strict Synchronization Specification
 
-Date: 2026-10-16  
-Phase: Phase 10 Shared Deadline Editor, Task List and Local Settings Delivered; Sticky Task Surfaces Phase 01 shared store contracts delivered (native integrations pending)  
-Plan: `plans/261015-0752-task-deadlines-reminders-strict-upgrades` (and `plans/261013-1540-doggo-glean-hub-reuse`); Sticky Task Surfaces Phase 01: `plans/261016-1409-sticky-task-surfaces`
+Date: 2026-10-17  
+Phase: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
+Plan: `plans/261016-1409-sticky-task-surfaces` (and `plans/261015-0752-task-deadlines-reminders-strict-upgrades`, `plans/261013-1540-doggo-glean-hub-reuse`)
 Related Docs: [System Architecture](./system-architecture.md) · [API Contract](./api-contract.md) · [Code Standards](./code-standards.md) · [Sync Acceptance](./sync-acceptance.md)
 
 ---
@@ -505,7 +505,7 @@ In `RoomAccountStore.getAccountLocalSettings()` and `updateAccountLocalSettings(
 - **Strictly Device- and Account-Local**: Defaults are applied to newly created tasks on the local device only. Settings changes do not rewrite existing stored tasks or sync across devices over the wire.
 - **Teardown Scrubbing**: Settings are wiped during account sign-out/leave alongside all account-partitioned SQLite databases.
 
-## 10. Sticky Task Surface Store Contracts (Phase 01 Delivered)
+## 10. Sticky Task Surface Observation, Mutations & Preferences (Phases 01–06 Delivered)
 
 ### 10.1 Reactive Todo Observation
 `AccountStore.observeTodos(): Flow<List<Todo>>` exposes the current task projection for surface consumers. `RoomAccountStore` maps its shared task invalidation signal to a fresh `loadTodos()` result and applies `distinctUntilChanged()`. The signal replays its current invalidation to new collectors, has bounded extra capacity, and uses `DROP_OLDEST`; it is a change notification rather than a durable event log. Consumers should render the latest snapshot, not expect one emission per intermediate mutation.
@@ -521,4 +521,15 @@ In `RoomAccountStore.getAccountLocalSettings()` and `updateAccountLocalSettings(
 - `selectNextDeadline` is a pure single-pass projection over persisted schedules. It excludes deleted, completed, and deadline-free entries; unresolved conflicts remain eligible and the selected `DeadlineSelection` carries `hasUnresolvedConflict`. Reminder enablement does not affect eligibility.
 - At `nowEpochMs >= overdueEpochMs`, a schedule is overdue. If any overdue task exists, it wins over every upcoming task; within either class, the smallest `(overdueEpochMs, taskId)` pair wins. Date-only due/overdue interpretation is already represented by the persisted deadline boundary; this selector does not recalculate temporal rules.
 
-These contracts prepare downstream Android widget/notification and desktop compact integrations; they do not themselves implement native surface rendering or lifecycle handling.
+
+### 10.4 Surface Preference Storage
+- Android `TaskSurfacePreferences` uses private, account-keyed `SharedPreferences` named `doggo_task_surface_<accountKey>`, outside Room and task synchronization. It stores the notification opt-in (disabled by default), deadline suppression key, and active posted-notification key/receipt. The versioned `DeadlineSelectionKeyCodec` persists deadline identity/temporal fields without a task title. Account leave/wipe clears this preference file.
+- Desktop `StickyWindowPreferences` stores only presentation metadata—visibility, window geometry, and saved display scale—in `sticky-window.properties`, outside Room and synchronization. Its default is hidden; writes use a temporary file, fsync, and atomic move. It contains no account or task content.
+- These surface preferences are distinct from `AccountLocalSettingsEntity`, which stores device/account-local reminder defaults and existing reminder notification settings.
+
+### 10.5 Surface Observer Ownership
+
+Android account-runtime observers and the desktop sticky controller consume the shared task observation/mutation contracts. They do not create a second synchronized task store; native surface lifecycle and OS-retained content are described in [System Architecture](./system-architecture.md) and [Security & Recovery](./security-and-recovery.md).
+
+### 10.6 Phase 07 Integration and Acceptance Boundary
+The task-surface implementation consumes the existing Room task projection and persisted deadline projection; it does not add a second task store or synchronization protocol. Phase 07 records automated unit/security/build evidence only. Android launcher/shade interactions, Windows window/tray/multi-monitor behavior, process-death races, and live multi-device convergence remain unaccepted native scenarios; see the [Android evidence summary](./evidence/sticky-surfaces-android-summary.md) and [Windows evidence summary](./evidence/sticky-surfaces-windows-summary.md). Linux session behavior remains a Phase 08 gate.

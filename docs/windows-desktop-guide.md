@@ -11,6 +11,8 @@
 
 The Doggo Windows desktop application is built with Compose Multiplatform 1.7.3 and targets the Java 21 LTS runtime. It brings the full offline-first personal task management experience and strict-v1 Glean Hub synchronization to Windows workstations.
 
+**Phase 07 acceptance boundary:** The acceptance report records unit tests and a distributable build, not an interactive Windows session. Native sticky-window stacking, tray behavior, multi-monitor restoration, and lock reacquisition remain held at Gate G2. The sticky-surface PNGs are design baselines, not runtime captures; Windows native reminder toasts remain a separate unimplemented candidate.
+
 ### Key Architectural Invariants
 1. **OS-Protected Credential Custody**: Tokens are stored through Windows DPAPI using JNA `CryptProtectData` and `CryptUnprotectData` in current-user scope; `CRYPTPROTECT_LOCAL_MACHINE` and plaintext fallback are prohibited.
 2. **Atomic Replacement & ACL Attempt**: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-dpapi-vault.kt` writes encrypted token payloads to a temporary file and atomically moves them into place. `applyRestrictiveUserAcl()` attempts an owner ACL through `AclFileAttributeView`, but returns if the view/owner is unavailable and suppresses exceptions; effective owner-only ACL enforcement is not guaranteed.
@@ -138,3 +140,41 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**; technical acceptan
 
 ### 2. Multi-User Access
 - **Behavior**: Credentials are protected with current-user DPAPI scope. Cross-user behavior should be verified using an isolated Windows user profile; static package inspection and mock-protector tests do not establish this native boundary or a specific Windows error code.
+
+---
+
+## 8. Sticky Task Surfaces & System Tray Operations
+
+### 8.1 Pinned Sticky Companion Window
+Doggo provides a lightweight companion window designed to remain pinned on top of ordinary application windows (`alwaysOnTop = true`):
+- **Independent Quick-Add**: Enter a task title into the inline field and press `Enter` (or click `Add`). Titles are validated via `TitlePolicy` and committed directly to local Room SQLite storage without interfering with or overwriting unsaved drafts in the main window editor.
+- **Stable Task Ordering**: Unfiltered active tasks are presented in stable `createdAt DESC, id DESC` order, partitioned into Incomplete and Completed sections.
+- **Permanent Recovery Controls**: Even if the window title bar is obstructed, the header provides explicit `Open App` and `Quit` buttons to ensure user control is always retained.
+
+### 8.2 Close-to-Hide & Background Synchronization
+- **Closing Windows**: The implementation uses close-to-hide for the main and sticky windows; automated lifecycle tests cover visibility and process lifetime. Native close/tray behavior still requires the Gate G2 interactive run.
+- **Background Sync**: Hiding windows does not cancel the desktop scheduler; its automated lifecycle coverage is recorded. Actual hidden-window sync convergence remains a native acceptance scenario.
+- **Single-Instance Safety**: The OS file-channel lock at `%LOCALAPPDATA%\doggo\accounts\doggo.lock` is covered by lifecycle tests; native Quit and successful relaunch/lock reacquisition still require Gate G2 acceptance.
+
+### 8.3 System Tray Actions
+When a usable system tray is supported by the desktop session, Doggo displays an icon (`task-surface-tray.png`) in the Windows taskbar notification area:
+- **Open Doggo**: Restores the main application window and brings it to the foreground.
+- **Show / Hide Sticky Tasks**: Toggles the visibility of the sticky companion window.
+- **Quit**: The implementation routes Quit through `quitSuspend()` to flush geometry preferences, drain active surface admissions, close Room, cancel coroutine scopes, and release the profile lock. Automated lifecycle coverage is recorded; native process exit and lock reacquisition remain unobserved.
+
+### 8.4 No-Tray Fallback Protection
+If the system tray is unavailable, unsupported, or fails to initialize:
+- The implementation detects `!isTrayUsable` and enters fallback mode.
+- In that mode, closing the sticky companion restores the main window. This behavior is covered by implementation/tests; native tray availability and initialization-failure behavior remain unaccepted at Gate G2.
+- The fallback is intended to preserve a visible recovery path; native recovery controls have not been observed in an interactive session.
+
+### 8.5 Geometry Restoration & Multi-Monitor Support
+- **Presentation-Only Persistence**: Size and position coordinates are stored in local preferences without containing sensitive account keys, tokens, or task titles.
+- **Display Work-Area Clamping**: `restoreStickyGeometry()` is unit-tested for work areas, taskbar insets, DPI transforms, and negative virtual origins. Actual Windows multi-monitor move, unplug, DPI-change, and restart behavior remains pending Gate G2.
+
+### 8.6 Interactive Sticky-Surface Acceptance
+Run the development desktop application on the Windows host:
+```powershell
+.\gradlew.bat -PdesktopTarget=windows :desktopApp:runDebug
+```
+Use a controlled account/profile and follow [Windows Acceptance](./windows-acceptance.md) for real window, tray, close-to-hide, Quit, and monitor scenarios. A visual design baseline is not a substitute for a screenshot from the running application.

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Quiet task surface notification channel -->
+    <string name="task_surface_channel_name">Next task deadline</string>
+    <string name="task_surface_channel_description">Quiet notification showing the next overdue or upcoming task deadline</string>
+
+    <!-- Notification content -->
+    <string name="task_surface_public_title">Next task deadline</string>
+    <string name="task_surface_public_content">Open Doggo to view</string>
+    <string name="task_surface_action_complete">Complete</string>
+    <string name="task_surface_conflict_suffix"> (Sync conflict)</string>
+    <string name="task_surface_overdue">Overdue</string>
+    <string name="task_surface_due">Due %1$s</string>
+
+    <!-- Settings screen and rationale -->
+    <string name="task_surface_settings_title">Next Task Deadline</string>
+    <string name="task_surface_settings_rationale">Display a quiet, sticky notification showing your next overdue or upcoming task deadline on your notification shade and lock screen. Updates automatically without sound or vibration.</string>
+    <string name="task_surface_opt_in_label">Show next deadline notification</string>
+    <string name="task_surface_status_active">Active</string>
+    <string name="task_surface_status_opted_out">Turned off</string>
+    <string name="task_surface_status_permission_denied">Permission required</string>
+    <string name="task_surface_rationale_permission">Notification permission is required on Android 13+ to display the next deadline surface.</string>
+    <string name="task_surface_btn_grant_permission">Allow notifications</string>
+    <string name="task_surface_status_app_disabled">App notifications blocked</string>
+    <string name="task_surface_desc_app_disabled">Notifications for Doggo are disabled in system settings. Re-enable them to show your deadline.</string>
+    <string name="task_surface_status_channel_disabled">Notification channel muted</string>
+    <string name="task_surface_desc_channel_disabled">The Next task deadline notification channel is disabled. Turn it back on in channel settings.</string>
+    <string name="task_surface_btn_open_settings">System Settings</string>
+    <string name="task_surface_btn_close">Close</string>
+</resources>

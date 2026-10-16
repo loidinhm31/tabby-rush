@@ -1,8 +1,8 @@
 # Windows Desktop & Installed MSI Acceptance Specification
 
-**Document Version**: 1.2.0
-**Phase**: 12 — Coordinated cutover, recovery runbook and release documentation
-**Status**: Desktop Multiplatform Scheduler & Windows Candidate Adapter Delivered; Native WinRT/COM Toast Bridge Unimplemented (Candidate Stub); Gate G2 Live Installed MSI & Gate G7 Production Cutover Blocked on Windows Host Runner
+**Document Version**: 1.3.0
+**Phase**: Sticky Task Surfaces Phase 07 documentation and automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
+**Status**: Desktop sticky-window/tray implementation and automated tests delivered; native sticky-surface hardware acceptance remains pending Gate G2. The native WinRT/COM toast bridge is an unimplemented candidate stub; installed MSI acceptance and Gate G7 production cutover remain blocked.
 **Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
 
 ---
@@ -46,17 +46,16 @@ Status cells are transcribed from `docs/evidence/windows-test-summary.md`; comma
 | Gate | Requirement | Suggested Verification / Reported Result | Status |
 |---|---|---|---|
 | **Compilation** | Kotlin JVM 2.1.10, Compose 1.7.3, Room KMP | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:compileKotlin` | PASS (Zero errors) |
-| **Unit Test Suite** | Dispatcher, Lifecycle, Single Instance Guard, Windows DPAPI Vault | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:test` | PASS (25/25 passing; 121/121 total with shared) |
-| **ACL Enforcement** | Stored vault file contains an ALLOW ACL entry for the current owner on ACL-capable filesystems | `WindowsDpapiVaultTest.testAclEnforcementOnStoredVaultFile` | PASS (reported; see Windows test summary) |
-| **Shared Multiplatform** | Core contracts, digests, Room SQLite | `.\gradlew.bat :shared:jvmTest` | PASS (96/96 passing) |
-| **Dependency Locking** | `gradle-windows.lockfile` generated and verified | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:dependencies` | PASS (reported in Windows test summary) |
-| **Root-Level Strict Dependency Verification** | Windows target dependencies verified against Gradle verification metadata | Root Gradle strict dependency verification on Windows | PENDING (not completed; run on Windows and resolve any metadata gaps) |
+| **Unit Test Suite** | Desktop task surfaces, geometry, preferences, single instance guard, Windows DPAPI vault | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:test --rerun-tasks --dependency-verification=off` | PASS (99/99 passing across 13 test classes; 330/330 total with shared JVM) |
+| **ACL Enforcement** | Stored vault file contains an ALLOW ACL entry for the current owner on ACL-capable filesystems | `WindowsDpapiVaultTest.testAclEnforcementOnStoredVaultFile` | PASS (Live JNA DPAPI verified on Windows host) |
+| **Shared Multiplatform** | Core contracts, digests, Room SQLite, outbox, temporal model | `.\gradlew.bat :shared:jvmTest --rerun-tasks --dependency-verification=off` | PASS (231/231 passing) |
+| **Dependency Locking** | `gradle-windows.lockfile` generated and verified | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:dependencies` | PASS (Verified) |
+| **Root-Level Strict Dependency Verification** | Windows target dependencies verified against Gradle verification metadata | Root Gradle strict dependency verification on Windows | FAILED / HELD (149 unmatched classpath checksums in `gradle/verification-metadata.xml`; external hold) |
 | **Target Isolation** | Unsupported target mismatch rejection | `-PdesktopTarget=linux` on Windows | PASS (Fails immediately) |
-| **App Distributable** | Self-contained bundled runtime image | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:createDistributable` | PASS (Doggo.exe launcher verified) |
+| **App Distributable** | Self-contained bundled runtime image | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:createDistributable` | PASS (Doggo.exe launcher verified in `desktopApp/build/compose/binaries/main/app/Doggo/`) |
 | **Package Smoke** | Diagnostics, JAR inspection, absence of Linux D-Bus | `powershell -File scripts\windows-package-smoke.ps1 -DistDir ...` | PASS |
 | **MSI Packaging** | Native `.msi` package generation | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:packageMsi` | PASS (Doggo-1.0.0.msi, 100.68 MB, SHA-256 verified) |
-| **Installed MSI Test** | System installation via `msiexec.exe` | `msiexec /i Doggo-1.0.0.msi` | PENDING (package structure/metadata verified; interactive installation and installed-runtime acceptance not reported) |
-
+| **Installed MSI Test** | System installation via `msiexec.exe` | `msiexec /i Doggo-1.0.0.msi` | PENDING (Package structure verified; clean-host system installation remains a release hold) |
 ### 2.1 Phase 02 — Native Toast & AUMID Proof Status
 
 | Gate | Requirement | Verification Method | Status |
@@ -82,6 +81,21 @@ Status cells are transcribed from `docs/evidence/windows-test-summary.md`; comma
 3. **Truncated Identity Scoping**: Windows group identifier `d_${accountKey.value.take(12)}` truncates the 64-hex account key to 12 characters, and tag `t_${taskId.take(16)}_$occurrenceIndex` truncates the task UUID to 16 characters while omitting generation and schedule token. These identifiers are not globally collision-free.
 4. **Individual Removal Status**: `removeOwnedNotification()` calls `windowsAdapter.cancelNotification()` and immediately removes the local tracking entry without evaluating whether the bridge succeeded.
 
+
+### 2.3 Phase 07 — Sticky Task Surfaces & Desktop Companion Window Status
+
+| Gate | Requirement | Verification Method | Status |
+|---|---|---|---|
+| **Always-On-Top Companion Window** | Pinned Compose window (`alwaysOnTop = true`), stable `createdAt DESC, id DESC` task order | Desktop and geometry unit suites | Automated tests recorded; native stacking pending Gate G2 |
+| **Independent Quick-Add** | Inline title creation validates through `TitlePolicy` and does not mutate the main editor | `DesktopTaskSurfacesTest` | Automated test recorded; native interaction pending Gate G2 |
+| **Close-to-Hide & Tray Integration** | Close hides windows without terminating the process; sync continues; tray provides Open/Hide/Quit | Lifecycle tests and source | Automated coverage recorded; native tray/window flow pending Gate G2 |
+| **No-Tray Fallback Protection** | Unsupported/unavailable tray must retain a visible recovery path | Lifecycle tests and source | Automated coverage recorded; native no-tray/init-failure exercise pending Gate G2 |
+| **Geometry Clamping & Multi-Monitor** | Restore geometry within work areas, including insets, DPI changes, and negative origins | `StickyWindowGeometryTest` (15 tests in reported suite) | Unit coverage recorded; real monitor/DPI exercise pending Gate G2 |
+| **Unified Suspend Teardown & Locking** | Quit drains work, closes Room, and releases `doggo.lock` | `DesktopLifecycleTest`, `CompositeDesktopLeaveCancelGateTest` | Automated coverage recorded; native Quit/relaunch not observed |
+| **Visual Evidence Baselines** | Window and tray design references | `docs/evidence/sticky-surfaces-windows-window.png`, `docs/evidence/sticky-surfaces-windows-tray.png` | Design baselines only; not runtime captures |
+| **AC 12 Regression & Security** | Shared, desktop, Android and security regression suites | Phase 07 report | 364 Gradle and 12 Node checks recorded passing with dependency verification off; 149-checksum hold remains |
+
+Phase 07 credit is 6h / 12h; project progress is 118h / 132h (89.4%). Native Android and Windows acceptance remains conditionally held at Gate G2. The 149 unmatched classpath checksums and separate Glance provenance hold remain open; Linux session acceptance is pending Phase 08, and production release gates G3, G6, and G7 remain open.
 ---
 
 ## 3. UI Evidence Matrix

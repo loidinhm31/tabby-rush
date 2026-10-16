@@ -1,11 +1,17 @@
 package dev.doggo.desktop
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import dev.doggo.shared.auth.HubAuthSession
 import dev.doggo.shared.contract.AccessRequestInfo
 import dev.doggo.shared.contract.AccountIdentity
@@ -13,64 +19,67 @@ import dev.doggo.shared.contract.AccountKey
 import dev.doggo.shared.contract.ApiResult
 import dev.doggo.shared.contract.AuthState
 import dev.doggo.shared.contract.BuildMode
+import dev.doggo.shared.contract.CompletionChange
 import dev.doggo.shared.contract.ConflictState
 import dev.doggo.shared.contract.EditorState
 import dev.doggo.shared.contract.HubConfig
 import dev.doggo.shared.contract.LeaveGuardState
+import dev.doggo.shared.contract.ReminderCapabilities
+import dev.doggo.shared.contract.ReminderRule
+import dev.doggo.shared.contract.ReminderSettingsState
 import dev.doggo.shared.contract.SafeError
+import dev.doggo.shared.contract.SurfaceAccountToken
+import dev.doggo.shared.contract.TaskDeadline
 import dev.doggo.shared.contract.TitlePolicy
 import dev.doggo.shared.contract.Todo
 import dev.doggo.shared.contract.TodoAction
 import dev.doggo.shared.contract.TodoCounts
 import dev.doggo.shared.contract.TodoFilter
 import dev.doggo.shared.contract.TodoUiState
+import dev.doggo.shared.data.AccountLocalSettingsEntity
 import dev.doggo.shared.data.DoggoDatabase
 import dev.doggo.shared.data.JvmAccountFiles
 import dev.doggo.shared.data.OutboxEntity
+import dev.doggo.shared.data.ReminderOccurrenceStore
 import dev.doggo.shared.data.RoomAccountStore
 import dev.doggo.shared.data.createJvmDatabaseBuilder
 import dev.doggo.shared.sync.AccountLeaveProtocol
 import dev.doggo.shared.sync.AccountSyncCoordinator
-import dev.doggo.shared.theme.DoggoTheme
-import dev.doggo.shared.data.ReminderOccurrenceStore
 import dev.doggo.shared.sync.ReminderDeliveryGate
 import dev.doggo.shared.sync.ReminderSchedulingCoordinator
-import kotlinx.coroutines.cancelAndJoin
+import dev.doggo.shared.theme.DoggoTheme
 import dev.doggo.shared.ui.AuthSubmitAction
-import dev.doggo.shared.ui.DoggoApp
-import dev.doggo.shared.data.AccountLocalSettingsEntity
-import dev.doggo.shared.contract.ReminderSettingsState
-import dev.doggo.shared.contract.ReminderCapabilities
 import dev.doggo.shared.ui.DeadlineCalculatorHelpers
 import dev.doggo.shared.ui.DeadlineValidationResult
-import dev.doggo.shared.contract.TaskDeadline
-import dev.doggo.shared.contract.ReminderRule
-import java.time.ZoneId
-import kotlinx.coroutines.delay
+import dev.doggo.shared.ui.DoggoApp
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.time.ZoneId
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.system.exitProcess
 
 class DesktopAccountRuntime(
     val accountKey: AccountKey,
     val generation: Long,
+    val token: SurfaceAccountToken,
     val database: DoggoDatabase,
     val store: RoomAccountStore,
     val coordinator: AccountSyncCoordinator,
@@ -78,15 +87,19 @@ class DesktopAccountRuntime(
     val deliveryGate: ReminderDeliveryGate,
     val reminderScheduler: DesktopReminderScheduler,
     val scheduleObserverJob: Job,
+    val surfaceObserverJob: Job,
     val leaveProtocol: AccountLeaveProtocol
 )
 
 class DesktopController(
     val mode: BuildMode,
     val scope: CoroutineScope,
-    val instanceGuard: SingleInstanceGuard
+    val instanceGuard: SingleInstanceGuard,
+    val accountFiles: JvmAccountFiles = JvmAccountFiles(),
+    val preferences: StickyWindowPreferences = StickyWindowPreferences(File(accountFiles.baseDir, "sticky-window.properties")),
+    val platform: DesktopSurfacePlatform = DesktopSurfacePlatformDispatcher.current(),
+    initialStickyPresentation: StickyWindowPresentation = preferences.load()
 ) {
-    val accountFiles = JvmAccountFiles()
     val dotEnv = DotEnvLoader.load(baseDir = accountFiles.baseDir)
     val origin = System.getenv("APPROVED_HUB_ORIGIN")?.takeIf { it.isNotBlank() }
         ?: System.getProperty("doggo.hub.origin")?.takeIf { it.isNotBlank() }
@@ -111,6 +124,26 @@ class DesktopController(
     val syncScheduler = DesktopSyncScheduler(scope) { key ->
         activeRuntime?.takeIf { it.accountKey == key }?.coordinator?.triggerSync()
     }
+
+    // Task surface integration
+    val taskSurfaceAccess = DesktopTaskSurfaceAccess()
+    val stickyController = DesktopStickyTaskController(
+        access = taskSurfaceAccess,
+        scope = scope,
+        onOpenApp = { showMainWindow() },
+        onQuit = { quit() },
+        onTriggerSync = { triggerSync() }
+    )
+    val stickyState = stickyController.stickyState
+
+    // Window and tray presentation state
+    private val isQuitting = AtomicBoolean(false)
+    val isMainWindowVisible = MutableStateFlow(true)
+    val isStickyWindowVisible = MutableStateFlow(initialStickyPresentation.visible)
+    private val _isTrayUsable = MutableStateFlow(platform.traySupported())
+    val isTrayUsable: StateFlow<Boolean> = _isTrayUsable.asStateFlow()
+    private var currentStickyGeometry: StickyWindowGeometry = initialStickyPresentation.geometry
+
     private val runtimeMutex = Mutex()
     private var activeRuntime: DesktopAccountRuntime? = null
     private var syncJob: Job? = null
@@ -129,6 +162,79 @@ class DesktopController(
             }
         }
         scope.launch { checkAndRestoreEstablishedSession() }
+    }
+
+    fun updateStickyGeometry(geometry: StickyWindowGeometry) {
+        if (isValidStickyGeometry(geometry)) {
+            currentStickyGeometry = geometry
+        }
+    }
+
+    fun flushStickyGeometry() {
+        preferences.save(
+            StickyWindowPresentation(
+                visible = isStickyWindowVisible.value,
+                geometry = currentStickyGeometry
+            )
+        )
+    }
+
+    fun showMainWindow() {
+        isMainWindowVisible.value = true
+    }
+
+    fun hideMainWindow(): Boolean {
+        // Refuse hide if tray is unavailable and sticky window is not visible
+        if (!_isTrayUsable.value && !isStickyWindowVisible.value) {
+            return false
+        }
+        isMainWindowVisible.value = false
+        return true
+    }
+
+    fun toggleStickyWindow() {
+        if (isStickyWindowVisible.value) {
+            hideStickyWindow()
+        } else {
+            showStickyWindow()
+        }
+    }
+
+    fun showStickyWindow() {
+        isStickyWindowVisible.value = true
+    }
+
+    fun hideStickyWindow(): Boolean {
+        // Refuse hide if tray is unavailable and main window is not visible
+        if (!_isTrayUsable.value && !isMainWindowVisible.value) {
+            return false
+        }
+        isStickyWindowVisible.value = false
+        flushStickyGeometry()
+        return true
+    }
+
+    fun onCloseMainWindow() {
+        val hidden = hideMainWindow()
+        if (!hidden) {
+            _uiState.value = _uiState.value.copy(
+                safeError = SafeError.Validation(
+                    code = "TRAY_UNAVAILABLE",
+                    message = "System tray is unavailable. Keep Doggo open or use explicit Quit."
+                )
+            )
+        }
+    }
+
+    fun onCloseStickyWindow() {
+        val hidden = hideStickyWindow()
+        if (!hidden) {
+            showMainWindow()
+        }
+    }
+
+    fun onStickyAction(action: dev.doggo.desktop.StickyTaskAction) {
+        stickyController.onAction(action)
     }
 
     private fun completePendingWipesOnStartup() {
@@ -189,6 +295,8 @@ class DesktopController(
         }
         if (existing != null) closeRuntimeInternal(existing)
 
+        val token = SurfaceAccountToken(accountKey, gen)
+
         val db = createJvmDatabaseBuilder(accountFiles.getDatabaseFile(accountKey)).build()
         val store = RoomAccountStore(accountKey, authSession.currentIdentity.value?.userId ?: "default", db, hubConfig.appId)
 
@@ -238,12 +346,18 @@ class DesktopController(
             }
         }
 
+        // Install token on desktop task surface access and start observing unfiltered tasks
+        taskSurfaceAccess.onAccountAuthenticated(token, store)
+        val surfaceObserverJob = stickyController.startObserving(token, store)
+
         val compositeCancelGate = CompositeDesktopLeaveCancelGate(
             deliveryGate = deliveryGate,
             scheduleObserverJob = scheduleObserverJob,
             reminderScheduler = reminderSched,
             syncCancelGate = syncScheduler,
-            reminderCancelGate = reminderCoord
+            reminderCancelGate = reminderCoord,
+            surfaceObserverJob = surfaceObserverJob,
+            surfaceCancelGate = taskSurfaceAccess
         )
 
         lateinit var leaveProto: AccountLeaveProtocol
@@ -263,6 +377,7 @@ class DesktopController(
         DesktopAccountRuntime(
             accountKey = accountKey,
             generation = gen,
+            token = token,
             database = db,
             store = store,
             coordinator = coord,
@@ -270,12 +385,15 @@ class DesktopController(
             deliveryGate = deliveryGate,
             reminderScheduler = reminderSched,
             scheduleObserverJob = scheduleObserverJob,
+            surfaceObserverJob = surfaceObserverJob,
             leaveProtocol = leaveProto
         ).also { activeRuntime = it }
     }
 
     private suspend fun closeRuntimeInternalSuspend(r: DesktopAccountRuntime) {
         try { r.deliveryGate.closeAndDrain() } catch (_: Exception) {}
+        try { taskSurfaceAccess.closeAndDrain() } catch (_: Exception) {}
+        try { r.surfaceObserverJob.cancelAndJoin() } catch (_: Exception) {}
         try { r.scheduleObserverJob.cancelAndJoin() } catch (_: Exception) {}
         try { r.reminderScheduler.cancelAndAwait(r.accountKey) } catch (_: Exception) {}
         try { r.reminderCoordinator.cancelAndAwait(r.accountKey) } catch (_: Exception) {}
@@ -326,6 +444,8 @@ class DesktopController(
         syncJob = null
         clockJob?.cancel()
         clockJob = null
+        stickyController.stopObserving()
+        scope.launch { taskSurfaceAccess.onSignedOut() }
         activeRuntime?.let { closeRuntimeInternal(it) }
         activeRuntime = null
         allTodos = emptyList()
@@ -438,7 +558,6 @@ class DesktopController(
     private suspend fun openEdit(todo: Todo) {
         val runtime = activeRuntime
         val isV2 = runtime?.store?.isAccountV2() ?: true
-        val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
         val dl = todo.deadline
         val editor = if (dl != null) {
             EditorState(
@@ -455,13 +574,11 @@ class DesktopController(
                 reminderLeadMinutes = todo.reminderRule.leadMinutes,
                 reminderIntervalMinutes = todo.reminderRule.intervalMinutes,
                 reminderCount = todo.reminderRule.count,
-                isAccountV2 = isV2,
-                originalDeadline = dl,
-                originalReminderRule = todo.reminderRule,
-                originalScheduleToken = todo.scheduleToken
+                originalScheduleToken = todo.scheduleToken,
+                isAccountV2 = isV2
             )
         } else {
-            val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
+            val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
             EditorState(
                 id = todo.id,
                 rawTitle = todo.title,
@@ -470,15 +587,13 @@ class DesktopController(
                 hasTime = false,
                 deadlineTime = "",
                 deadlineZone = localZone,
-                reminderAnchorTime = settings.defaultDateOnlyAnchorTime,
-                reminderEnabled = settings.defaultReminderEnabled,
-                reminderLeadMinutes = settings.defaultReminderLeadMinutes,
-                reminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
-                reminderCount = settings.defaultReminderCount,
-                isAccountV2 = isV2,
-                originalDeadline = null,
-                originalReminderRule = ReminderRule.DISABLED,
-                originalScheduleToken = null
+                reminderAnchorTime = "09:00",
+                reminderEnabled = false,
+                reminderLeadMinutes = 0,
+                reminderIntervalMinutes = 15,
+                reminderCount = 1,
+                originalScheduleToken = null,
+                isAccountV2 = isV2
             )
         }
         _uiState.value = _uiState.value.copy(editor = editor)
@@ -560,18 +675,22 @@ class DesktopController(
         val now = System.currentTimeMillis()
         val token = if (deadline != null) (editor.originalScheduleToken ?: UUID.randomUUID().toString()) else null
         if (editor.id == null) {
-            runtime.store.saveTodoLocally(
-                Todo(
-                    id = UUID.randomUUID().toString().lowercase(),
-                    title = title,
-                    completed = false,
-                    createdAt = now,
-                    updatedAt = now,
-                    deadline = deadline,
-                    reminderRule = rule,
-                    scheduleToken = token
+            if (deadline == null) {
+                runtime.store.saveTodoLocally(createDefaultTodo(title, now))
+            } else {
+                runtime.store.saveTodoLocally(
+                    Todo(
+                        id = UUID.randomUUID().toString().lowercase(),
+                        title = title,
+                        completed = false,
+                        createdAt = now,
+                        updatedAt = now,
+                        deadline = deadline,
+                        reminderRule = rule,
+                        scheduleToken = token
+                    )
                 )
-            )
+            }
         } else {
             val existing = allTodos.firstOrNull { it.id == editor.id } ?: return
             runtime.store.saveTodoLocally(
@@ -590,9 +709,13 @@ class DesktopController(
     }
 
     private suspend fun toggleCompleted(todo: Todo) {
-        activeRuntime?.store?.saveTodoLocally(todo.copy(completed = !todo.completed, updatedAt = maxOf(System.currentTimeMillis(), todo.createdAt)))
-        reloadTodos()
-        triggerSync()
+        val r = activeRuntime ?: return
+        val desired = !todo.completed
+        val change = r.store.setCompletedLocally(todo.id, desired, System.currentTimeMillis())
+        if (change == CompletionChange.Changed) {
+            reloadTodos()
+            triggerSync()
+        }
     }
 
     private suspend fun confirmDelete() {
@@ -763,9 +886,36 @@ class DesktopController(
         else if (res is ApiResult.Success) _uiState.value = _uiState.value.copy(accessRequest = res.value as? AccessRequestInfo)
     }
 
-    suspend fun disposeSuspend() {
+    fun quit(onExited: (() -> Unit)? = null) {
+        if (!isQuitting.compareAndSet(false, true)) return
+        scope.launch(Dispatchers.IO) {
+            val success = quitSuspend()
+            if (success) {
+                try { onExited?.invoke() } catch (_: Exception) {}
+                exitProcess(0)
+            }
+        }
+    }
+
+    suspend fun quitSuspend(): Boolean {
+        try {
+            flushStickyGeometry()
+        } catch (_: Exception) {}
+
         syncJob?.cancel()
         syncJob = null
+        clockJob?.cancel()
+        clockJob = null
+        stickyController.stopObserving()
+
+        try {
+            withTimeoutOrNull(3000L) {
+                taskSurfaceAccess.closeAndDrain(2500L)
+            }
+        } catch (e: Exception) {
+            System.err.println("Error draining task surface access on quit: ${e.message}")
+        }
+
         try {
             withTimeoutOrNull(3000L) {
                 syncScheduler.disposeAndAwait()
@@ -773,6 +923,7 @@ class DesktopController(
         } catch (e: Exception) {
             System.err.println("Error draining sync scheduler: ${e.message}")
         }
+
         try {
             withTimeoutOrNull(3000L) {
                 activeRuntime?.let { closeRuntimeInternalSuspend(it) }
@@ -781,15 +932,27 @@ class DesktopController(
             System.err.println("Error draining active runtime: ${e.message}")
         }
         activeRuntime = null
-        scope.cancel()
-        instanceGuard.close()
+
+        try {
+            scope.cancel()
+        } catch (_: Exception) {}
+
+        try {
+            instanceGuard.close()
+        } catch (_: Exception) {}
+
+        return true
+    }
+
+    suspend fun disposeSuspend() {
+        quitSuspend()
     }
 
     fun dispose() {
         runBlocking(Dispatchers.IO) {
             try {
                 withTimeoutOrNull(5000L) {
-                    disposeSuspend()
+                    quitSuspend()
                 }
             } catch (e: Exception) {
                 System.err.println("Error disposing DesktopController: ${e.message}")
@@ -800,7 +963,11 @@ class DesktopController(
     }
 }
 
-fun launchDesktop(mode: BuildMode) {
+fun launchDesktop(
+    mode: BuildMode,
+    platform: DesktopSurfacePlatform = DesktopSurfacePlatformDispatcher.current(),
+    onAppStarted: ((DesktopController) -> Unit)? = null
+) {
     val accountFiles = JvmAccountFiles()
     val lockFile = File(accountFiles.baseDir, "doggo.lock")
     val instanceGuard = SingleInstanceGuard.tryAcquire(lockFile)
@@ -811,17 +978,61 @@ fun launchDesktop(mode: BuildMode) {
     }
 
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val controller = DesktopController(mode, appScope, instanceGuard)
+    val preferences = StickyWindowPreferences(File(accountFiles.baseDir, "sticky-window.properties"))
+    val initialPresentation = preferences.load()
+    val monitors = platform.monitorWorkAreas()
+    val initialClampedGeometry = restoreStickyGeometry(initialPresentation.geometry, monitors)
+
+    val controller = DesktopController(
+        mode = mode,
+        scope = appScope,
+        instanceGuard = instanceGuard,
+        accountFiles = accountFiles,
+        preferences = preferences,
+        platform = platform,
+        initialStickyPresentation = initialPresentation.copy(geometry = initialClampedGeometry)
+    )
+    onAppStarted?.invoke(controller)
     println("[Doggo Desktop] Launched in $mode mode. Active canonicalOrigin: ${controller.hubConfig.canonicalOrigin}, appId: ${controller.hubConfig.appId}")
 
     application {
+        val isTrayUsable by controller.isTrayUsable.collectAsState()
+        val isStickyVisible by controller.isStickyWindowVisible.collectAsState()
+        val isMainVisible by controller.isMainWindowVisible.collectAsState()
+
+        if (isTrayUsable) {
+            Tray(
+                icon = painterResource("task-surface-tray.png"),
+                tooltip = "Doggo",
+                onAction = { controller.showMainWindow() },
+                menu = {
+                    Item(
+                        text = "Open Doggo",
+                        onClick = { controller.showMainWindow() }
+                    )
+                    Item(
+                        text = if (isStickyVisible) "Hide Sticky Tasks" else "Show Sticky Tasks",
+                        onClick = { controller.toggleStickyWindow() }
+                    )
+                    Separator()
+                    Item(
+                        text = "Quit",
+                        onClick = {
+                            controller.quit(onExited = { exitApplication() })
+                        }
+                    )
+                }
+            )
+        }
+
+        val mainWindowState = rememberWindowState(width = 960.dp, height = 720.dp)
         Window(
             onCloseRequest = {
-                controller.dispose()
-                exitApplication()
+                controller.onCloseMainWindow()
             },
+            visible = isMainVisible,
             title = "Doggo",
-            state = WindowState(width = 960.dp, height = 720.dp)
+            state = mainWindowState
         ) {
             val state by controller.uiState.collectAsState()
             DoggoTheme {
@@ -829,6 +1040,44 @@ fun launchDesktop(mode: BuildMode) {
                     state = state,
                     onAction = { controller.onAction(it) },
                     onAuthSubmit = { controller.onAuthSubmit(it) }
+                )
+            }
+        }
+
+        val stickyWindowState = rememberWindowState(
+            position = WindowPosition(initialClampedGeometry.xDp.dp, initialClampedGeometry.yDp.dp),
+            size = DpSize(initialClampedGeometry.widthDp.dp, initialClampedGeometry.heightDp.dp)
+        )
+
+        LaunchedEffect(stickyWindowState.position, stickyWindowState.size) {
+            if (!stickyWindowState.isMinimized) {
+                controller.updateStickyGeometry(
+                    StickyWindowGeometry(
+                        xDp = stickyWindowState.position.x.value.toDouble(),
+                        yDp = stickyWindowState.position.y.value.toDouble(),
+                        widthDp = stickyWindowState.size.width.value.toDouble(),
+                        heightDp = stickyWindowState.size.height.value.toDouble(),
+                        savedScaleX = initialClampedGeometry.savedScaleX,
+                        savedScaleY = initialClampedGeometry.savedScaleY
+                    )
+                )
+            }
+        }
+
+        Window(
+            onCloseRequest = {
+                controller.onCloseStickyWindow()
+            },
+            visible = isStickyVisible,
+            alwaysOnTop = true,
+            title = "Doggo - Sticky Tasks",
+            state = stickyWindowState
+        ) {
+            val stickyState by controller.stickyState.collectAsState()
+            DoggoTheme {
+                StickyTaskContent(
+                    state = stickyState,
+                    onAction = { controller.onStickyAction(it) }
                 )
             }
         }

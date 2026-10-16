@@ -1,8 +1,8 @@
 # Doggo Security Model & Operational Disaster Recovery
 
 **Document Version**: 1.3.0
-**Phase**: 12 — Coordinated Cutover, Recovery Runbook & Release Documentation
-**Status**: Platform credential custody model; Windows ACL limits and strict-v2 recovery boundaries documented
+**Phase**: Phase 07 Android/Windows acceptance recorded; Phase 08 Linux pending actual Linux session
+**Status**: Credential custody, OS-retained task-surface content, and native receiver export boundaries verified; Android cleanup remains best-effort where platform calls fail
 **Related Documents**: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Deployment Guide](./deployment-guide.md) · [Release Acceptance](./release-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
 ---
@@ -144,3 +144,22 @@ During an upgrade, operators must adhere to strict state-specific recovery rules
 6. **Post-v2 Forward Repair Only**: Once `strict-v2` is published to `_schemas`, **DOWNWARD ROLLBACK IS FORBIDDEN**. Restoring a v1 backup or downgrading client/server binaries would wipe newly saved deadlines and permanently corrupt offline client intentions. All post-cutover issues must be resolved via forward engineering hotfixes.
 
 Consult the [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) for full operational commands and verification scripts.
+
+---
+
+## 5. Sticky Task Surface Content, Wipe & Receiver Security
+
+### 5.1 OS-Retained Content and Wipe Behavior
+- Android launcher widgets and notifications are rendered/stored by OS services and may outlive Doggo's process. The widget can retain task text in launcher-managed content; notification details are private, with a generic public title (“Next task deadline”) rather than task content.
+- Pending account wipes and leave cleanup request cancellation of reminder alarms, task-surface boundary work, active task-surface notifications, installed widget content (including a signed-out/blank update), Glance sessions, and account-scoped surface preferences before deleting the account database and credentials. The task-surface preference file is cleared; the wipe marker is removed only after account database/artifact deletion and credential clearing succeed.
+- **Cleanup is not an OS erasure guarantee.** `TaskWidgetUpdater` catches and logs failures while pushing blank `RemoteViews`, publishing the Glance signed-out state, or closing Glance sessions. Notification-manager operations may also fail. Thus stale launcher or notification content can remain if the OS does not accept cleanup; the Cycle 2 review also found that Android `closeRuntimeInternal()` proceeds after a delivery-gate drain timeout. These unresolved findings are not waived.
+
+### 5.2 Exported Component Audit Invariants
+- The release manifest may export only `.MainActivity` and `.DoggoTaskWidgetReceiver`. The widget receiver is permitted only with the exact `android.appwidget.action.APPWIDGET_UPDATE` action and exact app-widget provider metadata (`@xml/task_widget_info`); no additional action, category, or data filter is allowed.
+- `DoggoAlarmReceiver`, `ReminderRestoreReceiver`, `TaskSurfaceActionReceiver`, `TaskSurfaceDismissReceiver`, and `TaskSurfaceTimeReceiver` remain unexported. No service or content provider may be exported.
+- `scripts/release-security-check.mjs` enforces the exported-component allowlist and exact widget filter/metadata invariants for source manifests and release APKs. The Node security-auditor suite (`release-security-check.test.mjs`) is verified with 12/12 passing checks, and static source diagnostics report CLEAN.
+
+### 5.3 Release and Acceptance Boundaries
+- Glance dependency provenance remains unverified under the 149-checksum dependency-verification hold. Historical release holds G2/G3/G6/G7 remain unchanged.
+- Phase 07 Android/Windows integrated status is recorded with verified unit suites (364 tests), security tests, and visual baselines in `docs/evidence/`. Phase 08 Linux acceptance remains pending an actual Linux session; no Linux native surface acceptance is claimed.
+- Review findings and verification evidence are recorded in `plans/reports/code-review-261016-2157-sticky-task-surfaces-cycle-2.md`, `docs/evidence/sticky-surfaces-android-summary.md`, and `docs/evidence/sticky-surfaces-windows-summary.md`.

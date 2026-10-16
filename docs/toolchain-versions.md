@@ -1,8 +1,8 @@
 # Doggo Frozen Toolchain Versions & Compatibility Tuple
 
-Date: 2026-10-14  
-Phase: Phase 02 Frozen Foundation & Contracts  
-Plan: `plans/261013-1540-doggo-glean-hub-reuse`  
+Date: 2026-10-17  
+Phase: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
+Plan: `plans/261016-1409-sticky-task-surfaces` (and `plans/261013-1540-doggo-glean-hub-reuse`)  
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [API Contract](./api-contract.md) · [Foundation Evidence](./foundation-evidence.md)
 
 ---
@@ -29,6 +29,7 @@ The following version tuple is frozen for Phase 02 and governs all downstream im
 | **Kotlinx Coroutines** | `1.10.1` | Async & StateFlow | Reactive UI state management and structured concurrency |
 | **Kotlinx Serialization** | `1.8.0` | JSON serialization | Format-agnostic typed DTO encoding/decoding |
 | **Kotlinx DateTime** | `0.6.1` | Timestamp handling | UTC epoch millisecond manipulations |
+| **Jetpack Glance** | `1.2.0` | Native Android task widget | `androidx.glance:glance`, `glance-appwidget`, `glance-material3`. Compatible with AGP 8.7.3, minSdk 26, compileSdk 35. Artifact provenance under root strict dependency verification remains an external hold. |
 
 ---
 
@@ -53,6 +54,9 @@ The following version tuple is frozen for Phase 02 and governs all downstream im
    - URL: `https://developer.android.com/kotlin/multiplatform/room`
    - Verified: Room KMP 2.7.0+ supports CommonMain, Android, and JVM targets with `androidx.sqlite:sqlite-bundled`.
 
+7. **AndroidX Glance Guide**:
+   - URL: `https://developer.android.com/jetpack/compose/glance`
+   - Verified: Glance 1.2.0 provides declarative widget composition, `SizeMode.Responsive`, and AppWidgetManager interoperability on Android minSdk 26 through compileSdk 35.
 ---
 
 ## 3. Staged Module Assembly Architecture
@@ -62,3 +66,8 @@ To maintain strict file ownership and prevent broken builds during multi-phase i
 2. `androidApp` is included conditionally: only when `/home/loidinh/WS/doggo/androidApp/build.gradle.kts` exists on disk.
 3. `desktopApp` is included conditionally: only when `/home/loidinh/WS/doggo/desktopApp/build.gradle.kts` exists on disk.
 4. **Zero Stub Applications**: Neither `androidApp` nor `desktopApp` stubs are created in Phase 02. Phase 07 owns `androidApp`; Phase 09 owns `desktopApp`.
+
+## 4. Phase 07 Reported Build and Test Environment
+The Phase 07 acceptance report identifies Windows 11 Build 26200 (AMD64), OpenJDK 21.0.9 LTS, Android SDK Platform 35, Build-Tools 35.0.0, and AGP 8.7.3. It records 364 passing Gradle tests (231 shared JVM, 99 desktop, 34 Android unit), 12 Node security tests, a debug APK build, and a Windows distributable build. These results were run with Gradle dependency verification disabled; they do not resolve the 149 unmatched checksum baseline or the separate Glance provenance hold.
+
+This report records automated verification, not interactive Android launcher/shade or Windows window/tray/multi-monitor acceptance. Those native scenarios remain conditionally held at Gate G2. Linux acceptance remains pending a real Linux session in Phase 08.

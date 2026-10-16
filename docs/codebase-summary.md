@@ -1,7 +1,7 @@
 # Codebase Summary
 
-Generated on: 2026-10-16
-Based on Repomix compaction snapshot: `repomix-output.xml` (2026-10-16; 458 files packed, 6 excluded by scanner heuristics, 1,068,893 tokens, 4,705,084 chars)
+Generated on: 2026-10-17
+Based on Repomix compaction snapshot: `repomix-output.xml` (2026-10-17; 235 source/config files included, 1 security-scanner exclusion, 343,808 tokens, 1,663,246 chars; compressed allowlist, not a full-repository snapshot)
 ---
 
 ## 1. Repository Overview
@@ -11,8 +11,8 @@ The `doggo` repository contains the implementation, build configuration, domain 
 Following Phases 01–12, the repository contains the Android and shared Compose Multiplatform clients, Linux desktop source/distribution tooling, Windows desktop DPAPI provider, comprehensive adversarial integration and SQLite crash invariance test harnesses, and authoritative strict-v2 cutover runbook and rehearsal tooling:
 1. **Root Build & Version Catalog**: Staged Gradle build system, official SHA-256 pinned wrapper, and dependency catalog.
 2. **Shared Kotlin Multiplatform Module (`shared/`)**: Domain models (`TaskDeadline`, `ReminderRule`, `Todo`), UI state/actions (`EditorState`, `ReminderSettingsState`, `TodoUiState`, `TodoAction`, `ClockTick`), identity/authentication contracts, strict sync canonical framing (`strict-v1` and `strict-v2`), `StrictV2Constants`, `StrictV2TodoData`, `StrictV2SyncOp`, `LegacyReceiptStatus`, `LegacyReceiptResult`, checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`), `StrictSyncV2Digest` binary preimage engine, `StrictTimeZoneResolver` and `StrictZoneOffsetResult` (`Single`, `Overlap`, `Gap`) with `ZoneRules` platform actuals, validation policies, Ktor HTTP transport, Hub auth client, auth session state machine, single-flight refresh coordinator, Android Keystore vault, Room KMP database (version 2, 7 entities, `DatabaseMigrations.MIGRATION_1_2`), BundledSQLiteDriver, local outbox mutation engine with intent masks and provenance tracking, staged full scan reconciler, fail-closed account leave protocol, `RoomAccountStore` authoritative temporal snapshot projection hierarchy (preventing cleared deadline resurrection) and schedule-token rotation on semantic temporal changes, shared Compose UI components (`DeadlineEditorSection`, `DeadlineCalculatorHelpers`, `ReminderSettingsDialog`, `TodoEditor`, `TodoList`, `ConflictReview`), accessible light theme tokens, and comprehensive unit/instrumented/semantics/vector tests.
-3. **Android Application Module (`androidApp/`)**: Native Android client hosting shared Compose UI, `DoggoApplication` process container, `SessionViewModel` reactive UI state orchestration with cold-start `pendingTarget` routing, notification deep-link selection routed through `openEdit(task)` full hydration, reminder settings flow, periodic 15s `ClockTick` emission, `AccountRuntime` / `AccountRuntimeFactory` runtime isolation, `AndroidSyncScheduler` WorkManager scheduling, `DoggoSyncWorker` background sync worker with generation/auth fencing, `AndroidNotificationAdapter` exact/inexact AlarmManager scheduling and private notification delivery, `AndroidAlarmRegistry` synchronized alarm tracking, `DoggoAlarmReceiver` and `ReminderRestoreReceiver` direct-boot/wipe-first receivers, `CompositeLeaveSchedulerCancelGate` 4-stage teardown, `ReminderPermissionController` sealed capability evaluations, debug network security configuration with strict loopback cleartext whitelist, backup/extraction security exclusions, release signing task-graph enforcement, and authored unit/instrumented test suites.
-4. **Desktop Application Module (`desktopApp/`)**: Compose Multiplatform JVM app with target-isolated Linux and Windows source sets; shared `CredentialVaultProvider` SPI, fail-closed `PlatformVaultDispatcher`, `SingleInstanceGuard`, `DesktopSyncScheduler`, `DesktopController` with settings actions, submit validation, and 15s `ClockTick` flow, Linux Secret Service provider, Windows current-user DPAPI provider, `DbusLinuxNotificationAdapter` with safe unavailability fallback, and candidate `WindowsNotificationAdapter` with XML escaping and explicit unavailable stub bridge.
+3. **Android Application Module (`androidApp/`)**: Native Android client hosting shared Compose UI, `DoggoApplication` process container, `AccountRuntime` lifecycle, reminder scheduling, and account-scoped sticky surfaces. `task-surface-access.kt` and `task-surface-runtime-coordinator.kt` connect account-generation admission and runtime observers to task projections. `task-widget.kt` implements the Glance widget; `task-surface-notification.kt` provides the quiet deadline notification; supporting files handle preferences, intents, actions, receivers, refresh, settings, and widget updates. Android instrumented tests cover account admission, navigation, preferences, and widget behavior.
+4. **Desktop Application Module (`desktopApp/`)**: Compose Multiplatform JVM app with Linux and Windows source sets, shared credential-vault SPI, `DesktopController`, and account-scoped `DesktopStickyTaskController`. `sticky-task-content.kt` renders the compact sticky window; `desktop-surface-platform.kt` owns tray capability and native operations; `sticky-window-preferences.kt` and `sticky-window-geometry.kt` persist and constrain presentation-only state. The tray is conditional on host support. Linux sticky-surface acceptance remains pending a real Linux session.
 5. **Host Virtualization, Security & Operations Tooling (`scripts/`)**: Headless Xpra display orchestration, Android SDK/JDK environment configuration, emulator management, Hub schema provisioning (`hub-schema-provision.mjs`), live Hub strict smoke harness (`hub-live-smoke.mjs`), release security and integrity auditor (`release-security-check.mjs`), maintenance recovery script (`hub-strict-recovery.js`, quarantined for legacy strict-v1 emergency cold restores), device smoke runner (`android-smoke.sh`), loopback sync fault-injection proxy (`debug-fault-proxy.mjs`), Linux/Windows package smoke runners, strict-v2 vector runner (`strict-v2-vector-runner.mjs`), vector generator (`generate-strict-v2-vectors.mjs`), CLI upgrade runner (`hub-strict-upgrade.mjs`), and operator cutover rehearsal runner (`strict-v2-cutover-rehearsal.mjs`).
 6. **Hub Integration Artifacts (`integration/`)**: Canonical JSON schema definitions for `strict-v1` (`doggo-schema-v1.json`) and `strict-v2` (`doggo-schema-v2.json`), active schema (`doggo-schema.json`), and cryptographic reference test vector fixture (`strict-v2-vectors.json`).
 7. **Automated Verification Harness (`tests/`)**: Automated shell suites validating scripts, Gradle contracts, Kotlin sources, and cryptographic digest vectors.
@@ -32,52 +32,81 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 │   ├── gradle.lockfile                 # Locked Android dependencies including Glance 1.2.0; artifact provenance remains pending
 │   └── src/
 │       ├── main/
-│       │   ├── AndroidManifest.xml     # Base manifest (exported MainActivity, cleartext disabled, backup rules)
+│       │   ├── AndroidManifest.xml # MainActivity and narrowly scoped widget receiver exports
 │       │   ├── kotlin/dev/doggo/android/
-│       │   │   ├── doggo-application.kt    # Application container, singletons, cold-start persistence, wipe recovery
-│       │   │   ├── main-activity.kt        # Single exported Activity hosting DoggoApp and SessionViewModel
-│       │   │   ├── session-view-model.kt   # Retained ViewModel, reactive UI state flows, pendingTarget cold-start routing
-│       │   │   ├── android-account-state-manager.kt # active_account.dat atomic file swaps and pending wipe recovery
-│       │   │   ├── account-runtime.kt      # Account-scoped container for Room DB, stores, and coordinators
-│       │   │   ├── account-runtime-factory.kt # Factory for isolated account runtimes and leave protocols
-│       │   │   ├── android-sync-scheduler.kt # WorkManager one-shot/periodic scheduler and fail-closed cancelAndAwait gate
-│       │   │   ├── doggo-sync-worker.kt    # Background sync worker with wipe, auth, account, and generation fencing
-│       │   │   ├── android-notification-adapter.kt # Native reminder adapter & AlarmManager intent preparation
-│       │   │   ├── android-notification-intent-factory.kt # Immutable PendingIntents, identity URIs without user text
-│       │   │   ├── android-alarm-registry.kt # SharedPreferences-backed scheduled alarms & active notifications
-│       │   │   ├── doggo-alarm-receiver.kt # Non-exported receiver handling offline reminder alarm dispatch under goAsync
-│       │   │   ├── reminder-restore-receiver.kt # Non-exported receiver for boot, unlock, upgrade, timezone restoration
-│       │   │   ├── reminder-permission-controller.kt # Sealed permission states, settings intents, POST_NOTIFICATIONS checks
-│       │   │   ├── android-reminder-capabilities.kt # Probes decoupling POST_NOTIFICATIONS from SCHEDULE_EXACT_ALARM
-│       │   │   ├── composite-leave-scheduler-cancel-gate.kt # 4-stage coordinated teardown cancel gate
-│       │   │   └── task-surface-host.kt # TaskSurfaceHostOwner, AndroidTaskSurfaceHost, refresh reason contract
+│       │   │   ├── doggo-application.kt # Process container and wipe recovery
+│       │   │   ├── main-activity.kt # Shared Compose UI host
+│       │   │   ├── session-view-model.kt # Reactive UI state and cold-start routing
+│       │   │   ├── android-account-state-manager.kt # Active account identity and wipe markers
+│       │   │   ├── account-runtime.kt # Account-scoped Room/store runtime
+│       │   │   ├── account-runtime-factory.kt # Runtime construction and leave protocols
+│       │   │   ├── android-sync-scheduler.kt # WorkManager scheduling and cancellation gate
+│       │   │   ├── doggo-sync-worker.kt # Generation-fenced background sync
+│       │   │   ├── android-notification-adapter.kt # Native reminder scheduling and delivery
+│       │   │   ├── android-notification-intent-factory.kt # Immutable identity-only reminder intents
+│       │   │   ├── android-alarm-registry.kt # Scheduled alarms and active notifications
+│       │   │   ├── doggo-alarm-receiver.kt # Private reminder alarm receiver
+│       │   │   ├── reminder-restore-receiver.kt # Boot/unlock/timezone reminder restoration
+│       │   │   ├── reminder-permission-controller.kt # Reminder permission states
+│       │   │   ├── android-reminder-capabilities.kt # POST_NOTIFICATIONS and exact-alarm capability probes
+│       │   │   ├── composite-leave-scheduler-cancel-gate.kt # Coordinated account teardown gate
+│       │   │   ├── task-surface-host.kt # Surface host ownership and refresh reasons
+│       │   │   ├── task-surface-access.kt # Account-token admission and action/navigation access
+│       │   │   ├── task-surface-runtime-coordinator.kt # Account observers and surface publication
+│       │   │   ├── task-surface-notification.kt # Opt-in quiet deadline notification
+│       │   │   ├── task-surface-preferences.kt # Account-local surface preference state
+│       │   │   ├── task-surface-intents.kt # Explicit immutable surface action intents
+│       │   │   ├── task-surface-action-receiver.kt # Surface task-action receiver
+│       │   │   ├── task-surface-dismiss-receiver.kt # Notification dismissal receiver
+│       │   │   ├── task-surface-time-receiver.kt # Deadline-boundary receiver
+│       │   │   ├── task-surface-refresh-worker.kt # Persisted surface refresh worker
+│       │   │   ├── task-surface-settings.kt # Surface opt-in/settings UI
+│       │   │   ├── task-surface-create-screen.kt # Widget quick-create destination
+│       │   │   ├── task-surface-permission-controller.kt # Notification permission boundary
+│       │   │   ├── task-widget.kt # Responsive Glance task widget
+│       │   │   ├── task-widget-actions.kt # Widget open, create, and completion actions
+│       │   │   ├── task-widget-receiver.kt # App widget provider receiver
+│       │   │   └── task-widget-updater.kt # Refresh, blanking, and Glance session cleanup
+│       │   ├── res/drawable/task_surface_notification_icon.xml # Notification icon
+│       │   ├── res/layout/task_widget_initial.xml # Initial widget layout
+│       │   ├── res/values/task-widget-strings.xml # Widget strings
+│       │   ├── res/values/task-surface-strings.xml # Surface notification/settings strings
 │       │   └── res/xml/
-│       │       ├── backup_rules.xml        # API <= 30 backup exclusions (databases, sharedprefs, account files)
-│       │       └── data_extraction_rules.xml # API >= 31 cloud and device transfer exclusions
-│       ├── debug/
-│       │   ├── AndroidManifest.xml     # Debug manifest overriding network security config
-│       │   └── res/xml/
-│       │       └── network_security_config.xml # Debug cleartext whitelist (127.0.0.1, localhost, 10.0.2.2)
+│       │       ├── backup_rules.xml # API <= 30 backup exclusions
+│       │       ├── data_extraction_rules.xml # API >= 31 transfer exclusions
+│       │       └── task_widget_info.xml # Glance widget metadata
+│       ├── debug/AndroidManifest.xml # Debug-only network security configuration
 │       ├── test/kotlin/dev/doggo/android/
-│       │   ├── android-notification-adapter-test.kt # Unit tests for adapter constants, intent generation, and capabilities
-│       │   ├── build-config-test.kt        # Unit tests for BuildConfig constants and origin URLs
-│       │   ├── composite-leave-scheduler-cancel-gate-test.kt # Direct gate tests: 4-stage order, timeout, exceptions
-│       │   └── reminder-permission-controller-test.kt # Permission string constants and sealed class hierarchy
+│       │   ├── task-surface-notification-test.kt # Quiet notification behavior
+│       │   ├── task-widget-model-test.kt # Widget model and action behavior
+│       │   ├── android-notification-adapter-test.kt # Reminder adapter behavior
+│       │   ├── composite-leave-scheduler-cancel-gate-test.kt # Leave cancel gate
+│       │   ├── reminder-permission-controller-test.kt # Permission states
+│       │   └── build-config-test.kt # Build configuration
 │       └── androidTest/kotlin/dev/doggo/android/
-│           ├── todo-device-test.kt     # Authored instrumented device tests for ViewModel and store (unexecuted)
-│           └── background-isolation-test.kt # Authored instrumented tests for WorkManager and isolation (unexecuted)
+│           ├── task-surface-account-device-test.kt # Account admission and stale actions
+│           ├── task-surface-navigation-device-test.kt # Surface navigation and task creation
+│           ├── task-surface-preferences-device-test.kt # Preference persistence
+│           ├── task-widget-device-test.kt # Widget rendering/actions
+│           ├── todo-device-test.kt # ViewModel and store behavior
+│           └── background-isolation-test.kt # WorkManager/account isolation
 ├── desktopApp/                         # Desktop application module (Kotlin JVM 2.1.10, Compose 1.7.3)
 │   ├── build.gradle.kts                # Desktop build script, target detection (linux/windows), RPM/MSI config
 │   ├── gradle-linux.lockfile           # Linux dependency lockfile (161 locked artifacts)
 │   ├── gradle-windows.lockfile         # Windows target-specific dependency lockfile
 │   └── src/
 │       ├── main/kotlin/dev/doggo/desktop/
-│       │   ├── main.kt                 # MainKt (RELEASE) and DevelopmentLauncher (DEBUG), window scaffold
+│       │   ├── main.kt # MainKt and DevelopmentLauncher window/application entry points
 │       │   ├── credential-vault-provider.kt # CredentialVaultProvider SPI
 │       │   ├── platform-vault-dispatcher.kt # ServiceLoader vault dispatcher and target validation
-│       │   ├── desktop-sync-scheduler.kt # Foreground sync scheduler and LeaveSchedulerCancelGate
-│       │   ├── single-instance-guard.kt # File-channel lock on doggo.lock
-│       │   └── sticky-task-model.kt # Compact task state and action contracts; no window runtime
+│       │   ├── desktop-sync-scheduler.kt # Foreground sync scheduling and cancellation gate
+│       │   ├── single-instance-guard.kt # File-channel single-instance lock
+│       │   ├── sticky-task-model.kt # Compact task state and action contracts
+│       │   ├── desktop-task-surfaces.kt # Account-scoped sticky controller, observation, and tray lifecycle
+│       │   ├── sticky-task-content.kt # Compact Compose sticky window content
+│       │   ├── desktop-surface-platform.kt # Tray capability and native desktop surface operations
+│       │   ├── sticky-window-preferences.kt # Presentation-only sticky window preferences
+│       │   └── sticky-window-geometry.kt # Sticky window geometry and scale constraints
 │       ├── linuxMain/
 │       │   ├── kotlin/dev/doggo/desktop/linux/
 │       │   │   ├── linux-secret-service-vault.kt # Freedesktop Secret Service vault implementation
@@ -91,8 +120,14 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 │       │   └── resources/META-INF/services/
 │       │       └── dev.doggo.desktop.CredentialVaultProvider # Windows ServiceLoader descriptor
 │       ├── test/kotlin/dev/doggo/desktop/
-│       │   ├── platform-vault-dispatcher-test.kt # SPI resolution, zero/duplicate/target validation tests
-│       │   └── desktop-lifecycle-test.kt # Single instance lock, sync scheduling, and build mode tests
+│       │   ├── desktop-task-surfaces-test.kt # Controller actions, lifecycle, and tray behavior
+│       │   ├── sticky-window-geometry-test.kt # Geometry normalization and constraints
+│       │   ├── sticky-window-preferences-test.kt # Sticky preference persistence
+│       │   ├── platform-vault-dispatcher-test.kt # SPI resolution and target validation
+│       │   ├── desktop-lifecycle-test.kt # Single-instance lock, sync, and build mode
+│       │   ├── desktop-controller-env-test.kt # Desktop controller environment behavior
+│       │   ├── composite-desktop-leave-cancel-gate-test.kt # Leave cleanup coordination
+│       │   └── desktop-reminder-scheduler-test.kt # Reminder scheduling behavior
 │       ├── linuxTest/kotlin/dev/doggo/desktop/linux/
 │       │   ├── linux-secret-service-vault-test.kt # Secret Service status, store, replace, clear tests
 │       │   └── linux-notification-adapter-test.kt # Unit tests for capabilities, missing daemon, and missing bus
@@ -117,50 +152,50 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 │       │   └── values/
 │       │       └── strings.xml             # UI string resource catalog
 │       ├── commonMain/kotlin/dev/doggo/shared/
-│       │   ├── contract/               # Pure domain contracts & validation policies
+│       │   ├── contract/ # Pure domain contracts and validation policies
 │       │   │   ├── strict-sync-v2-contract.kt # Strict-v2 models, checked arithmetic, error enums
-│       │   │   ├── strict-sync-v2-digest.kt   # Strict-v2 binary preimage framing and SHA-256
-│       │   │   ├── strict-timezone-resolver.kt # StrictTimeZoneResolver contract and StrictZoneOffsetResult hierarchy
-│       │   │   ├── task-surface-contracts.kt # Account-scoped readiness, surface access, snapshots, and results
+│       │   │   ├── strict-sync-v2-digest.kt # Strict-v2 binary preimage framing and SHA-256
+│       │   │   ├── strict-timezone-resolver.kt # Timezone contract and result hierarchy
+│       │   │   ├── task-surface-contracts.kt # Account-scoped readiness, access, snapshots, and results
 │       │   │   ├── task-surface-projector.kt # Pure task-section and next-deadline projections
-│       │   │   └── account-store.kt # AccountStore API, reactive todo observation, desired completion mutation
-│       │   ├── auth/                   # Hub authentication, HTTP client, and session state machine
-│       │   ├── data/                   # Room entities, DAO, Database, and RoomAccountStore
-│       │   │   ├── server-base-entity.kt       # Confirmed server base and permanent compact tombstones
-│       │   │   ├── outbox-entity.kt            # Frozen strict mutations and delivery states
-│       │   │   ├── editor-draft-entity.kt      # Uncommitted local user edits
-│       │   │   ├── scan-staging-entity.kt      # Cursor pagination staging table
+│       │   │   └── account-store.kt # Reactive task observation and desired completion mutation API
+│       │   ├── auth/ # Hub authentication, HTTP client, and session state machine
+│       │   ├── data/ # Room entities, DAO, database, and RoomAccountStore
+│       │   │   ├── server-base-entity.kt # Confirmed server base and permanent compact tombstones
+│       │   │   ├── outbox-entity.kt # Frozen strict mutations and delivery states
+│       │   │   ├── editor-draft-entity.kt # Uncommitted local user edits
+│       │   │   ├── scan-staging-entity.kt # Cursor pagination staging table
 │       │   │   ├── account-sync-meta-entity.kt # Account sync metadata and active epoch
-│   │   │   ├── doggo-dao.kt                # Atomic @Transaction DAO methods and queries
-│   │   │   ├── doggo-database.kt           # RoomDatabase definition (version 2, 7 entities)
-│   │   │   ├── database-migrations.kt      # Migration registry (DatabaseMigrations.MIGRATION_1_2)
-│   │   │   ├── account-local-settings-entity.kt # Account/device reminder and notification defaults
-│   │   │   ├── reminder-delivery-ledger-entity.kt # Durable native reminder delivery ledger and claims
-│   │   │   └── room-account-store.kt       # Mutex-guarded AccountStore with SQLite persistence
-│       │   └── sync/                   # Strict synchronization protocol orchestration
-│       │       ├── contract-transition-coordinator.kt # 6-phase upgrade state machine, receipt match & safe translation
-│       │       ├── hub-sync-dtos.kt            # Wire DTOs for bootstrap, push, pull, and legacy receipts
-│       │       ├── hub-sync-client.kt          # HTTP transport adapter for sync routes and legacy receipts
-│       │       ├── staged-full-scan.kt         # Monotonic staging, pagination loop & consistency checks
-│       │       ├── outbox-reconciliation.kt    # FIFO dispatch, CAS ack matching, and UnknownSuperseded
-│       │       ├── account-sync-coordinator.kt # 3-stage sync round, transition trigger, conflict actions, generation fencing
-│       │       └── account-leave-protocol.kt   # Fail-closed guarded leave & wipe marker protocol
-│       │   ├── theme/                  # Accessible light theme and typography
-│       │   │   ├── doggo-theme.kt              # Color tokens, WCAG 2.1 AA contrast palette, Theme wrapper
-│       │   │   └── doggo-typography.kt         # Type scale, line heights, system SansSerif basis
-│       │   └── ui/                     # Shared Compose Multiplatform UI components
-│       │       ├── doggo-app.kt                # Root responsive scaffold (compact stack / expanded sidebar)
-│       │       ├── account-form.kt             # Login & registration form with transient password masking
-│       │       ├── access-request-panel.kt     # App access request, status reload, and admin guidance
-│       │       ├── todo-list.kt                # LazyColumn task list, stable keys, deadline/overdue badges, clock tick awareness
-│       │       ├── todo-editor.kt              # Task creation/editing dialog with TitlePolicy and strict-v2 upgrade validation
-│       │       ├── deadline-editor-section.kt  # Deadline/reminder controls, DST overlap filter chips, opportunity preview
-│       │       ├── deadline-calculator-helpers.kt # validateAndComputeDeadline, calendar date parsing, day boundary logic
-│       │       ├── reminder-settings.kt        # ReminderSettingsDialog, platform capabilities card, account-local defaults
-│       │       ├── sync-feedback.kt            # Sync progress, last reconciled timestamp, status chips
-│       │       ├── conflict-review.kt          # Conflict dialog (Discard, Reapply, CopyAsNew) with full temporal inspection
-│       │       ├── leave-guard.kt              # Guarded account sign-out dialog with unsynced tallies
-│       │       └── license-notices.kt          # Bundled open-source dependency license viewer
+│       │   │   ├── doggo-dao.kt # Atomic @Transaction DAO methods and queries
+│       │   │   ├── doggo-database.kt # RoomDatabase definition (version 2, 7 entities)
+│       │   │   ├── database-migrations.kt # Migration registry
+│       │   │   ├── account-local-settings-entity.kt # Account/device reminder and notification defaults
+│       │   │   ├── reminder-delivery-ledger-entity.kt # Durable native reminder delivery ledger and claims
+│       │   │   └── room-account-store.kt # Mutex-guarded AccountStore with SQLite persistence
+│       │   ├── sync/ # Strict synchronization protocol orchestration
+│       │   │   ├── contract-transition-coordinator.kt # Upgrade state machine and receipt matching
+│       │   │   ├── hub-sync-dtos.kt # Wire DTOs for bootstrap, push, pull, and legacy receipts
+│       │   │   ├── hub-sync-client.kt # HTTP transport adapter
+│       │   │   ├── staged-full-scan.kt # Monotonic staging and pagination
+│       │   │   ├── outbox-reconciliation.kt # FIFO dispatch, CAS acknowledgements, and UnknownSuperseded
+│       │   │   ├── account-sync-coordinator.kt # Sync rounds, conflict actions, and generation fencing
+│       │   │   └── account-leave-protocol.kt # Guarded leave and wipe marker protocol
+│       │   ├── theme/ # Accessible light theme and typography
+│       │   │   ├── doggo-theme.kt # Color tokens, contrast palette, and theme wrapper
+│       │   │   └── doggo-typography.kt # Type scale and system SansSerif basis
+│       │   └── ui/ # Shared Compose Multiplatform UI components
+│       │       ├── doggo-app.kt # Responsive application scaffold
+│       │       ├── account-form.kt # Login and registration form
+│       │       ├── access-request-panel.kt # App access request and admin guidance
+│       │       ├── todo-list.kt # Lazy task list and deadline/overdue badges
+│       │       ├── todo-editor.kt # Task editor and strict-v2 upgrade validation
+│       │       ├── deadline-editor-section.kt # Deadline/reminder controls and DST offsets
+│       │       ├── deadline-calculator-helpers.kt # Deadline validation and calendar boundaries
+│       │       ├── reminder-settings.kt # Reminder settings and platform capabilities
+│       │       ├── sync-feedback.kt # Sync progress and status
+│       │       ├── conflict-review.kt # Conflict comparison and actions
+│       │       ├── leave-guard.kt # Guarded account sign-out and unsynced tallies
+│       │       └── license-notices.kt # Open-source dependency notices
 │       ├── androidMain/kotlin/dev/doggo/shared/
 │       │   ├── auth/                   # Android OkHttp engine and Keystore vault
 │       │   ├── contract/               # Platform actual contracts
@@ -176,28 +211,31 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 │       │       ├── jvm-database-builder.kt     # Desktop BundledSQLiteDriver Room database builder
 │       │       └── jvm-account-files.kt        # Desktop account directory partitioning and wipe markers
 │       ├── commonTest/kotlin/dev/doggo/shared/
-│   │   ├── contract/               # Contract unit tests (digest, policy, keys)
-│   │   │   ├── task-deadline-reminder-models-test.kt # Temporal domain models and overflow arithmetic tests
-│   │   │   ├── strict-v2-digest-vector-test.kt   # Strict-v2 vector fixtures (5 tests)
-│   │   │   ├── strict-v2-digest-extended-test.kt # Strict-v2 edge cases & checked overflow (5 tests)
-│   │   │   └── strict-timezone-resolver-test.kt  # 7 timezone & DST transition vectors (gap, overlap, boundaries)
-│       │   ├── auth/                   # Auth client, session, and refresh tests
-│       │   └── sync/                   # Phase 05-06 sync test suites
-│       │       ├── contract-transition-test.kt # Transition states, durable resume, review gating (4 tests)
-│       │       ├── hub-sync-client-test.kt     # Push, pull, bootstrap, legacy receipts, and batch bounds tests (12 tests)
-│       │       ├── staged-full-scan-test.kt    # Pagination, loops, overflow, migration enrichment tests (13 tests)
-│       │       ├── outbox-reconciliation-test.kt # CAS acks, FIFO, UnknownSuperseded, retries (12 tests)
-│       │       ├── account-sync-coordinator-test.kt # Sync loop, transition trigger, conflict actions, cancellation (9 tests)
-│       │       └── account-leave-protocol-test.kt # Review guards, teardown order, wipe recovery (7 tests)
-│       │   └── ui/                     # UI semantics, deadline validation & theme test suites
-│       │       └── todo-semantics-test.kt      # Contrast, password redaction, deadline validation, DST, overdue, settings tests (15 tests)
+│       │   ├── contract/
+│       │   │   ├── task-deadline-reminder-models-test.kt # Temporal models and checked arithmetic
+│       │   │   ├── strict-v2-digest-vector-test.kt # Strict-v2 vector fixtures
+│       │   │   ├── strict-v2-digest-extended-test.kt # Digest edge cases and overflow
+│       │   │   ├── strict-timezone-resolver-test.kt # Timezone and DST transition vectors
+│       │   │   └── task-surface-projector-test.kt # Task partitioning and deadline selection
+│       │   ├── auth/ # Auth client, session, and refresh tests
+│       │   ├── sync/
+│       │   │   ├── contract-transition-test.kt # Transition states and durable resume
+│       │   │   ├── hub-sync-client-test.kt # Push, pull, bootstrap, and receipts
+│       │   │   ├── staged-full-scan-test.kt # Pagination and migration enrichment
+│       │   │   ├── outbox-reconciliation-test.kt # CAS acknowledgements and retries
+│       │   │   ├── account-sync-coordinator-test.kt # Sync rounds, conflicts, and cancellation
+│       │   │   └── account-leave-protocol-test.kt # Teardown order and wipe recovery
+│       │   └── ui/
+│       │       └── todo-semantics-test.kt # Accessibility, deadline validation, and UI semantics
 │       ├── jvmTest/kotlin/dev/doggo/shared/data/
-│   │   ├── room-migration-v1-to-v2-test.kt     # Explicit v1->v2 SQLite migration verification
-│   │   └── room-account-store-test.kt      # BundledSQLite driver tests, projection hierarchy, cleared deadline non-resurrection (23 tests)
+│       │   ├── room-migration-v1-to-v2-test.kt # Explicit SQLite migration verification
+│       │   ├── room-account-store-test.kt # Room projections and deadline clearing behavior
+│       │   ├── task-surface-store-sqlite-test.kt # Desired completion mutation and observation behavior
+│       │   └── task-surface-sync-sqlite-test.kt # Surface behavior through SQLite sync projections
 │       └── androidInstrumentedTest/kotlin/dev/doggo/shared/
-│           ├── auth/                   # Keystore vault instrumented tests
+│           ├── auth/ # Keystore vault instrumented tests
 │           └── data/
-│               └── room-account-store-test.kt  # Android Room instrumented tests
+│               └── room-account-store-test.kt # Android Room instrumented tests
 ├── integration/                         # Integration schemas and specifications
 │   └── glean-hub/
 │       ├── doggo-schema.json             # Exact strict-v1 todos schema specification
@@ -262,7 +300,13 @@ Following Phases 01–12, the repository contains the Android and shared Compose
         ├── linux-test-summary.md       # Phase 09 Linux desktop verification test summary
         ├── windows-test-summary.md     # Phase 10 Windows tests, bundle, and MSI evidence
         ├── linux-*.png                 # 7 visual design mockups for Linux desktop screen states
-        └── windows-*.png               # 7 visual design mockups for Windows desktop screen states
+        ├── windows-*.png               # 7 visual design mockups for Windows desktop screen states
+        ├── sticky-surfaces-android-summary.md # Phase 07 Android sticky surfaces acceptance summary
+        ├── sticky-surfaces-windows-summary.md # Phase 07 Windows sticky surfaces acceptance summary
+        ├── sticky-surfaces-android-widget.png # Visual design baseline for Glance task widget
+        ├── sticky-surfaces-android-notification.png # Visual design baseline for quiet deadline notification
+        ├── sticky-surfaces-windows-window.png # Visual design baseline for sticky companion window
+        └── sticky-surfaces-windows-tray.png # Visual design baseline for Windows system tray menu
 ```
 
 ---
@@ -490,19 +534,13 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 
 ---
 
-## 3. Repomix Compaction Metrics (Generated: 2026-10-16)
-- **Compaction Artifact:** `repomix-output.xml` at the repository root; the generation command explicitly supplied `--ignore docs/authentication-and-credentials.md`.
-- **Total Files Packed:** 458
-- **Total Character Count:** 4,705,084
-- **Total Token Count:** 1,068,893
-- **Top 5 Files by Token Count:**
-  1. `docs/project-roadmap.md` (31,856 tokens, 137,724 chars)
-  2. `docs/codebase-summary.md` (24,245 tokens, 106,592 chars)
-  3. `docs/system-architecture.md` (23,951 tokens, 107,437 chars)
-  4. `docs/project-changelog.md` (20,680 tokens, 91,398 chars)
-  5. `androidApp/gradle.lockfile` (18,584 tokens, 88,812 chars)
-- **Scanner Exclusions:** The Repomix security heuristic excluded 6 files: `docs/security-and-recovery.md`, three prior phase reports under `plans/reports/`, `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`, and one prior docs-manager report. These are heuristic exclusions, not an affirmative security assessment.
-- **Snapshot Scope:** The explicit ignore pattern was supplied with the intent to exclude the access-gated credentials document, but the resulting file selection was not directly inspected. Counts describe a point-in-time compaction only and do not establish completeness or security.
+## 3. Repomix Compaction Metrics (Generated: 2026-10-17)
+- **Compaction Artifact:** `repomix-output.xml` at the repository root; generated with `repomix --style xml --compress` and an explicit source/config allowlist.
+- **Included Files:** 235 files; one additional file was excluded by Repomix's security scanner.
+- **Packed Size:** 1,663,246 characters and 343,808 tokens.
+- **Scope:** README plus Kotlin/Java/XML/Gradle, Node, shell, PowerShell, TOML, and Gradle properties files; documentation files were not included other than README.
+- **Top 5 Files by Token Count:** `room-account-store-test.kt` (9,727), desktop `main.kt` (8,989), `staged-full-scan-test.kt` (7,911), `room-account-store.kt` (7,111), and Android `session-view-model.kt` (6,102).
+- **Security Boundary:** The scanner excluded `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt`; this snapshot is compressed and incomplete, not a security assessment or substitute for source review.
 ## 4. Current State & Invariants
 
 1. **Deliverable Scope & Verification**:
@@ -524,10 +562,10 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 7. **UnknownSuperseded Disambiguation**: A conflict returned for an operation that had previous uncertain delivery history is classified as `UNKNOWN_SUPERSEDED` rather than plain `CONFLICT`, acknowledging that the mutation may have committed before a subsequent edit bumped the revision.
 8. **Crash Recovery**: Interrupted dispatches (`DISPATCHING`) are reset to `UNCERTAIN` on startup. Push coroutine cancellation uses `NonCancellable` to ensure in-flight batches are marked `UNCERTAIN`.
 9. **Fail-Closed Teardown Sequence**: Teardown checks 5 categories of unresolved work, freezes the store, writes generation and `wipe.marker` outside SQLite before deleting any data, cancels background schedulers, closes database handles, deletes DB files, and clears credentials before removing the marker.
-10. **WCAG 2.1 AA Palette Contrast**: Baseline mathematical pairing verified for 16 opaque token pairs (text >= 4.5:1, interactive outline borders >= 3.0:1); decorative mint is restricted to non-text accents. Rendered UI contrast across devices is deferred to Phase 07.
+10. **WCAG 2.1 AA Palette Contrast**: Baseline mathematical pairing is verified for 16 opaque token pairs (text >= 4.5:1, interactive outline borders >= 3.0:1); decorative mint is restricted to non-text accents. Rendered contrast, large-font layout, and assistive-technology behavior remain platform acceptance work; the separate sticky-surface Phase 07 does not close these checks.
 11. **Transient Masked Password Memory**: Password fields configure `PasswordVisualTransformation`, emit `semantics { password() }`, and dereference transient strings upon submission, mode switch, or disposal; `AuthSubmitAction.toString()` masks passwords with `[REDACTED]`. (JVM string immutability precludes guaranteed memory erasure; device screen-reader behavior unverified).
 12. **Non-Color State Conveyance**: Completion, conflict, error, and leave status indicators provide explicit icons, text descriptions, and accessibility state descriptions without relying solely on color.
-13. **Responsive Breakpoint Layout**: Single unified UI hierarchy adapts between a vertical compact stack (<840dp) and a fixed-sidebar desktop workspace (>=840dp). Note: compact top bar is non-scrolling in `Scaffold.topBar`, tracked for 200% font scale device testing in Phase 07.
+13. **Responsive Breakpoint Layout**: Single unified UI hierarchy adapts between a vertical compact stack (<840dp) and a fixed-sidebar desktop workspace (>=840dp). The compact top bar is non-scrolling in `Scaffold.topBar`; 200% font-scale and constrained-viewport behavior remain unverified on native devices.
 14. **Process Container & Account Runtime Isolation**: `DoggoApplication` manages process singletons (`vault`, `accountFiles`, `hubConfig`, `authSession`, `syncScheduler`). `AccountRuntime` encapsulates `DoggoDatabase`, `RoomAccountStore`, `AccountSyncCoordinator`, and `AccountLeaveProtocol` bound to an `AccountKey` and generation counter. Foreground UI (`SessionViewModel`) and background work (`DoggoSyncWorker`) share the identical runtime instance and coordinator mutex.
 15. **Cold-Start Identity Persistence**: Active account key and identity are persisted in app-private `active_account.dat` via temporary file write and `StandardCopyOption.ATOMIC_MOVE` to allow deterministic session restoration on application launch.
 16. **WorkManager Account-Tag Cancellation**: All background synchronization tasks are tagged with `doggo_sync_account_<accountKey>`, allowing `cancel(accountKey)` to cancel all one-shot and periodic work across generation increments.
@@ -609,7 +647,7 @@ Following Phases 01–12, the repository contains the Android and shared Compose
     - Operational Documentation Reconciliation: Updated `docs/deployment-guide.md`, `docs/security-and-recovery.md`, `docs/release-acceptance.md`, `docs/system-architecture.md`, `docs/hub-schema-integration.md`, `docs/sync-acceptance.md`, `docs/android-acceptance.md`, `docs/linux-acceptance.md`, `docs/windows-acceptance.md`, `docs/project-roadmap.md`, `docs/project-changelog.md`, `README.md`, and Glean Hub `docs/doggo-strict-sync.md`.
     - Automated Verification: Total 404 reported verification targets across 15 verification groups (400 automated test, contract, and rehearsal checks: 399 passed, 0 failures, 1 ignored live Mongo test: `test_strong_sync_live_mongo_acceptance_gate` in `glean-hub-sync` when `MONGO_TEST_URI` is unset; plus 4 build, lint, and packaging targets passed).
     - Gate G7 Blocker Boundaries: Live production cutover remains formally blocked pending Gate G3 multi-instance MongoDB replica set migration and Phase 03 backend code remediations, Gate G2 physical native platform delivery (Android Doze, Linux session D-Bus, Windows COM/WinRT toast bridge), Gate G6 three-device sync proof, and formal operator authorization.
-51. **Sticky Task Surfaces — Phase 01 Shared Foundation**: Delivered on 2026-10-16 (24h / 24h; conditional handoff authorized). Added `AccountStore.observeTodos()` and lock-serialized desired-state `setCompletedLocally`, account/generation-aware surface readiness/access contracts, and pure projections (`partitionSurfaceTodos`, `selectNextDeadline`). Partitioning omits deleted records and preserves encounter order; next-deadline selection prioritizes overdue tasks, then orders by deadline boundary and task ID, independent of reminder enablement, while retaining the conflict flag. Android host and desktop compact state/action contracts are seams only; no widget, notification, sticky window, or tray integration is delivered by this phase.
-    - Android build foundation pins Glance 1.2.0 (`glance`, `glance-appwidget`, `glance-material3`) and records dependency locks. Phase 01 evidence reports 149 unmatched root classpath checksums; Gradle phase checks used `--dependency-verification=off`, so artifact provenance remains pending (`plans/261016-1409-sticky-task-surfaces/reports/phase-01-foundation-evidence.md`).
-    - QA reports 307/307 Gradle tests passing (231 shared JVM, 64 desktop, 12 Android), plus 18/18 fixture smoke, 6/6 source-security diagnostics, and 8/8 strict-v2 self-test checks (`plans/reports/qa-261016-1911-phase-01-full-suite-validation.md`). These are report-attributed results, not a fresh verification run in this documentation update.
-    - Cycle 3 review scored 9.4/10 and authorized conditional handoff to the downstream widget, notification, and desktop compact leaves (`plans/reports/code-review-261016-1911-phase-01-shared-foundation-cycle-3.md`). Their native behavior and platform acceptance remain unverified.
+51. **Sticky Task Surfaces — Phases 01–07**: Shared account-scoped contracts/projections back the Android Glance widget, opt-in quiet deadline notification, and Compose Multiplatform desktop sticky window/tray. Phase 07 delivered documentation and automated verification evidence; 6h / 12h credited, bringing the plan total to 118h / 132h (89.4%).
+    - **Reported verification**: 364 Gradle tests (231 shared JVM, 99 desktop, 34 Android unit), 12 Node security tests, 6 source diagnostics, 18 Hub fixture checks, 8 strict-v2 rehearsal checks, `:androidApp:assembleDebug`, and `:desktopApp:createDistributable` are recorded as passing. The build/test runs used `--dependency-verification=off`; these are not fresh results from this documentation update.
+    - **Acceptance boundary**: Android launcher/shade and Windows sticky-window/tray/multi-monitor hardware acceptance remain conditionally held at Gate G2. Four PNGs are design baselines, not runtime captures. Linux requires an actual session in Phase 08. The 149-checksum root verification baseline and separate Glance artifact-provenance hold remain open; G3/G6/G7 are unchanged.
+    - **Open Android safety findings**: A delivery-gate drain timeout is caught/logged by `closeRuntimeInternal()`, which returns before observer cancellation or Room closure; `closeActiveRuntime()` then clears the active runtime reference. Glance blanking/session-close errors are also caught and logged, so cleanup is not guaranteed.

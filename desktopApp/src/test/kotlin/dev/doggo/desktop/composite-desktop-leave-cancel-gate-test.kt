@@ -18,8 +18,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-
 @OptIn(ExperimentalCoroutinesApi::class)
 class CompositeDesktopLeaveCancelGateTest {
 
@@ -39,11 +39,24 @@ class CompositeDesktopLeaveCancelGateTest {
 
         val deliveryGate = ReminderDeliveryGate(accountKey, { 1L }, { false })
 
-        val observerJob = launch {
+        val surfaceCancelGate = object : LeaveSchedulerCancelGate {
+            override suspend fun cancelAndAwait(accountKey: AccountKey) {
+                executionOrder.add("surface_drained")
+            }
+        }
+
+        val surfaceObserverJob = launch {
             delay(Long.MAX_VALUE)
         }
-        observerJob.invokeOnCompletion {
-            executionOrder.add("observer_cancelled")
+        surfaceObserverJob.invokeOnCompletion {
+            executionOrder.add("surface_observer_cancelled")
+        }
+
+        val scheduleObserverJob = launch {
+            delay(Long.MAX_VALUE)
+        }
+        scheduleObserverJob.invokeOnCompletion {
+            executionOrder.add("schedule_observer_cancelled")
         }
 
         val db = createInMemoryJvmDatabaseBuilder().build()
@@ -70,27 +83,29 @@ class CompositeDesktopLeaveCancelGateTest {
 
         val compositeGate = CompositeDesktopLeaveCancelGate(
             deliveryGate = deliveryGate,
-            scheduleObserverJob = observerJob,
+            scheduleObserverJob = scheduleObserverJob,
             reminderScheduler = reminderScheduler,
             syncCancelGate = syncCancelGate,
-            reminderCancelGate = reminderCancelGate
+            reminderCancelGate = reminderCancelGate,
+            surfaceObserverJob = surfaceObserverJob,
+            surfaceCancelGate = surfaceCancelGate
         )
 
         compositeGate.cancelAndAwait(accountKey)
 
-        assertEquals("observer_cancelled", executionOrder[0])
-        assertEquals("sync_cancelled", executionOrder[1])
-        assertEquals("reminders_cancelled", executionOrder[2])
+        assertEquals("surface_drained", executionOrder[0])
+        assertEquals("surface_observer_cancelled", executionOrder[1])
+        assertEquals("schedule_observer_cancelled", executionOrder[2])
+        assertEquals("sync_cancelled", executionOrder[3])
+        assertEquals("reminders_cancelled", executionOrder[4])
 
         db.close()
     }
 
     @Test
     fun testDrainFailureFailsClosedWithoutProceeding() = runTest {
-        // Create delivery gate with admission held open
         val deliveryGate = ReminderDeliveryGate(accountKey, { 1L }, { false })
 
-        // Acquire an admission and hold it
         val admissionAcquired = kotlinx.coroutines.CompletableDeferred<Unit>()
         val admissionHoldJob = launch {
             deliveryGate.withDeliveryAdmission(1L) {
@@ -136,6 +151,53 @@ class CompositeDesktopLeaveCancelGateTest {
         assertTrue(!syncCancelled)
 
         admissionHoldJob.cancel()
+        db.close()
+    }
+
+    @Test
+    fun testSurfaceDrainFailureFailsClosed() = runTest {
+        val deliveryGate = ReminderDeliveryGate(accountKey, { 1L }, { false })
+
+        val failingSurfaceCancelGate = object : LeaveSchedulerCancelGate {
+            override suspend fun cancelAndAwait(accountKey: AccountKey) {
+                throw IllegalStateException("Timed out draining desktop task surface operations for $accountKey")
+            }
+        }
+
+        val observerJob = Job()
+        val db = createInMemoryJvmDatabaseBuilder().build()
+        val store = RoomAccountStore(accountKey, "user", db, "doggo")
+        val occStore = ReminderOccurrenceStore(accountKey, db.doggoDao())
+        val coord = ReminderSchedulingCoordinator(
+            accountKey, store, occStore, RecordingNativeAdapter(), deliveryGate, { 1L }, { false }
+        )
+        val reminderScheduler = DesktopReminderScheduler(accountKey, coord, this)
+
+        var syncCancelled = false
+        val syncCancelGate = object : LeaveSchedulerCancelGate {
+            override suspend fun cancelAndAwait(accountKey: AccountKey) {
+                syncCancelled = true
+            }
+        }
+
+        val reminderCancelGate = object : LeaveSchedulerCancelGate {
+            override suspend fun cancelAndAwait(accountKey: AccountKey) {}
+        }
+
+        val compositeGate = CompositeDesktopLeaveCancelGate(
+            deliveryGate = deliveryGate,
+            scheduleObserverJob = observerJob,
+            reminderScheduler = reminderScheduler,
+            syncCancelGate = syncCancelGate,
+            reminderCancelGate = reminderCancelGate,
+            surfaceCancelGate = failingSurfaceCancelGate
+        )
+
+        assertFailsWith<IllegalStateException> {
+            compositeGate.cancelAndAwait(accountKey)
+        }
+
+        assertFalse(syncCancelled, "Sync cancel must not be invoked if surface draining fails")
         db.close()
     }
 }

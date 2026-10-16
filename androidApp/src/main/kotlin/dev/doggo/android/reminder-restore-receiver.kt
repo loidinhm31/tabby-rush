@@ -52,6 +52,7 @@ class ReminderRestoreReceiver : BroadcastReceiver() {
                     val active = app.readActiveAccountSync()
                     if (active == null) {
                         Log.i(TAG, "No active persisted account found; skipping restore")
+                        TaskWidgetUpdater.clearAll(context)
                         return@withTimeoutOrNull
                     }
 
@@ -64,6 +65,21 @@ class ReminderRestoreReceiver : BroadcastReceiver() {
                     val runtime = app.getOrCreateAccountRuntime(accountKey)
                     runtime.reminderCoordinator.reconcile()
                     Log.i(TAG, "Reminders reconciled successfully for $accountKey on $action")
+
+                    val refreshReason = when (action) {
+                        Intent.ACTION_BOOT_COMPLETED,
+                        Intent.ACTION_USER_UNLOCKED,
+                        Intent.ACTION_MY_PACKAGE_REPLACED -> SurfaceRefreshReason.Startup
+                        Intent.ACTION_TIME_CHANGED,
+                        Intent.ACTION_TIMEZONE_CHANGED -> SurfaceRefreshReason.Clock
+                        ACTION_EXACT_ALARM_CHANGED -> SurfaceRefreshReason.Capability
+                        else -> SurfaceRefreshReason.Startup
+                    }
+                    try {
+                        app.taskSurfaces.refresh(refreshReason)
+                    } catch (re: Exception) {
+                        Log.w(TAG, "Error refreshing surfaces on $action: ${re.message}")
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Error reconciling reminders on $action: ${e.message}", e)

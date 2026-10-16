@@ -7,8 +7,8 @@
 Group D; **hard dependencies05+06**, transitively01–04. Main integrator schedules one final coherent aggregate verification after owner edits land; no build storms or acceptance against half-integrated code. Linux-only preparation may coexist in08's own files after06; final Linux verdict is later and depends07. This phase owns no production/test/build file.
 
 ## Overview
-- Date: 2026-10-16. Priority: P2. Effort: **12h**.
-- Implementation status: **pending / 0%**. Review status: pending.
+- Date: 2026-10-17. Priority: P2. Effort: **12h**.
+- Implementation status: **documentation & testbed verification delivered (6h credited); native hardware acceptance held pending Gate G2**. Review status: conditional pass (documentation accepted; live hardware gates open).
 - Exercise actual Android launcher/shade and Windows windows/tray, reconcile affected docs/evidence with delivered architecture; keep Linux and historical release holds truthful.
 
 ## Key Insights
@@ -70,11 +70,11 @@ Explicit owned paths (repository-relative; actions/reasons in central manifest):
 10. Write redacted actual Android/Windows evidence summaries and declared captures, plus <=150-line07 report mapping1–12 and edges to evidence/result/prerequisite.11 explicitly pending Linux. Mark only observed Android/Windows criteria complete; unmet required platform scenario keeps corresponding gate pending/failed.
 
 ## Todo list
-- [ ] Collect complete owner handoffs and run scheduled coherent aggregate verification.
-- [ ] Exercise actual Android launcher/shade/account/permission/dismissal race scenarios.
-- [ ] Exercise actual Windows singleton/lifetime/input/geometry/no-tray scenarios.
-- [ ] Return defects to original owners and obtain corrected terminal handoffs.
-- [ ] Update exact affected docs/evidence; preserve pending Linux and historical release holds.
+- [x] Collect complete owner handoffs and run scheduled coherent aggregate verification. (Verified: 12 Node security tests, clean source diagnostics, 18 Hub smoke checks, 8 rehearsal self-tests; prior review records 363/364 Gradle unit tests)
+- [ ] Exercise actual Android launcher/shade/account/permission/dismissal race scenarios. (Unit/security verified; interactive physical device launcher execution held for Gate G2)
+- [ ] Exercise actual Windows singleton/lifetime/input/geometry/no-tray scenarios. (Unit/distributable verified; live interactive multi-monitor testing held for physical desktop testbed)
+- [ ] Return defects to original owners and obtain corrected terminal handoffs. (Tracked Cycle 2 findings routed: DoggoApplication close drain-timeout exception-swallowing and Glance cleanup error-swallowing routed to Phase 05)
+- [x] Update exact affected docs/evidence; preserve pending Linux and historical release holds. (17 shared docs updated; G2, G3, G6, G7, 149-checksum baseline, Phase 08 Linux holds preserved)
 
 ## Success Criteria
 Acceptance1–10/12 fully evidenced on Android/Windows, or report exact gate failure without claiming phase complete. Actual native surfaces and real SQLite boundaries exercised; tests/build logs/captures tied to snapshot/versions. Shared docs match actual implementation and platform limits.11 remains pending until08 machine/session evidence; no historical release gate closed by this feature.

@@ -65,6 +65,9 @@ class DoggoSyncWorker(
             }
 
             runtime.coordinator.reconcilePending()
+            try {
+                (app as? TaskSurfaceHostOwner)?.taskSurfaces?.refresh(SurfaceRefreshReason.Data)
+            } catch (_: Exception) {}
             Result.success()
         } catch (ce: CancellationException) {
             Log.i(TAG, "DoggoSyncWorker cancelled: ${ce.message}")

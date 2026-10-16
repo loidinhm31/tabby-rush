@@ -1,17 +1,19 @@
 package dev.doggo.android
 
+import android.app.NotificationManager
 import android.content.Context
 import android.util.Log
 import dev.doggo.shared.auth.AndroidKeystoreVault
 import dev.doggo.shared.contract.AccountIdentity
 import dev.doggo.shared.contract.AccountKey
 import dev.doggo.shared.data.AndroidAccountFiles
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 /**
  * Manages active account file state and startup pending wipe recovery.
@@ -29,29 +31,35 @@ object AndroidAccountStateManager {
             val lines = file.readLines()
             if (lines.size >= 4) {
                 val key = AccountKey(lines[0])
-                val identity = AccountIdentity(userId = lines[1], username = lines[2], email = lines[3])
+                val identity = AccountIdentity(
+                    userId = lines[1],
+                    username = lines[2],
+                    email = lines[3]
+                )
                 Pair(key, identity)
-            } else {
-                null
-            }
-        } catch (_: Exception) {
+            } else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading active account file: ${e.message}", e)
             null
         }
     }
 
     fun saveActiveAccount(filesDir: File, identity: AccountIdentity, key: AccountKey) {
+        val file = File(filesDir, FILE_ACTIVE_ACCOUNT)
+        val tmpFile = File(filesDir, FILE_ACTIVE_ACCOUNT_TMP)
         try {
-            val tmp = File(filesDir, FILE_ACTIVE_ACCOUNT_TMP)
-            val dest = File(filesDir, FILE_ACTIVE_ACCOUNT)
-            tmp.writeText("${key.value}\n${identity.userId}\n${identity.username}\n${identity.email}\n")
-            Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-        } catch (_: Exception) {}
+            tmpFile.writeText("${key.value}\n${identity.userId}\n${identity.username}\n${identity.email}\n")
+            Files.move(tmpFile.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error writing active account file: ${e.message}", e)
+        }
     }
 
     fun clearActiveAccount(filesDir: File) {
-        try {
-            File(filesDir, FILE_ACTIVE_ACCOUNT).delete()
-        } catch (_: Exception) {}
+        val file = File(filesDir, FILE_ACTIVE_ACCOUNT)
+        if (file.exists()) {
+            file.delete()
+        }
     }
 
     suspend fun completePendingWipesSuspend(
@@ -71,8 +79,31 @@ object AndroidAccountStateManager {
                     val key = AccountKey(name)
                     if (accountFiles.hasPendingWipe(key)) {
                         Log.w(TAG, "Pending wipe marker detected for $key on startup. Completing fail-closed wipe.")
+                        // 1. Cancel background sync
                         syncScheduler.cancelAndAwait(key)
+
+                        // 2. Cancel reminders
                         AndroidNotificationAdapter(context).cancelAllForAccount(key)
+
+                        // 3. Cancel task surface boundary work, notifications, widget state, preferences
+                        TaskSurfaceRefreshWorker.cancelBoundaryWake(context, key)
+                        TaskWidgetUpdater.clearAllInstances(context)
+
+                        val hostOwner = context.applicationContext as? TaskSurfaceHostOwner
+                        if (hostOwner != null) {
+                            val preferences = TaskSurfacePreferences(context)
+                            TaskSurfaceNotificationCoordinator(
+                                context = context,
+                                host = hostOwner.taskSurfaces,
+                                preferences = preferences
+                            ).cancelForAccount(key)
+                        } else {
+                            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                            nm?.cancel(TaskSurfaceIntents.NOTIFICATION_TAG, TaskSurfaceIntents.NOTIFICATION_ID)
+                        }
+                        TaskSurfacePreferences(context).clear(key)
+
+                        // 4. Delete database and credentials, clear marker only on success
                         if (accountFiles.deleteDatabaseAndArtifacts(key)) {
                             withContext(Dispatchers.IO) { vault.clear(key) }
                             accountFiles.clearWipeMarker(key)
@@ -84,6 +115,8 @@ object AndroidAccountStateManager {
                     }
                 }
             }
+        } catch (ce: CancellationException) {
+            throw ce
         } catch (e: Exception) {
             Log.e(TAG, "Error in completePendingWipesSuspend: ${e.message}", e)
         }

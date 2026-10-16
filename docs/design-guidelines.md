@@ -1,8 +1,8 @@
 # Doggo Design Guidelines & UI Standards
 
-**Date:** 2026-10-14
-**Applies to:** Shared Compose UI (Android, Linux, Windows)
-**Status:** Administratively complete per user directive; technical acceptance withheld (Review Cycle 3 score 6.5/10; outstanding integration gaps deferred to Phase 07)
+**Date:** 2026-10-17
+**Applies to:** Shared Compose UI (Android, Linux, Windows) and Android/desktop task-surface presentation
+**Status:** Token contrast calculations are automated; rendered UI/accessibility acceptance is not established by Phase 07 design baselines and remains platform-specific.
 
 ---
 
@@ -11,7 +11,7 @@
 Doggo's shared visual language is derived from the measured ForumFlash light theme (`https://forumflash.vercel.app/`), adapted for native task management.
 - **Tone:** Focused, calm, clean geometric aesthetic with deep teal structure, soft mint containers, warm cream headers, and disciplined coral alert accents.
 - **Mode:** Accessible light theme only. Dark theme is out of scope for initial multiplatform release.
-- **Dynamic Color:** Disabled to avoid OS-level palette overrides that would alter calculated contrast ratios; rendered UI contrast across OEM devices requires Phase 07 device testing.
+- **Dynamic Color:** Disabled to avoid OS-level palette overrides that would alter calculated contrast ratios. Calculations are automated; rendered UI contrast across OEM devices remains pending platform acceptance.
 
 ---
 
@@ -69,7 +69,7 @@ These mathematical token calculations are verified by automated unit assertions 
 - **Display / Headings:** Sans-serif bold geometric styling. Display large is 34sp, headline large is 22sp.
 - **Body:** Standard primary body text is strictly `>= 16sp` (`bodyLarge` at 16sp and `bodyMedium` at 16sp). Secondary helper copy, form error text, and metadata use `bodySmall` at 14sp.
 - **Metadata / Labels:** Minimum text size is strictly `>= 12sp` (`labelSmall` and `labelMedium` at 12sp; interactive filter chips use `labelLarge` at 14sp).
-- **Dynamic Text Scaling:** All typography uses scalable `sp` units to support system font scaling up to `200%`. Verification of layout wrapping (especially in compact top bar and todo rows) requires device-level testing in Phase 07.
+- **Dynamic Text Scaling:** All typography uses scalable `sp` units to support system font scaling up to `200%`. Layout wrapping and accessibility at large font scales remain unverified on native devices; the Phase 07 sticky-surface evidence does not close this gate.
 
 ### 3.2 Spacing & Radii
 - **Spacing Scale:**
@@ -92,7 +92,7 @@ These mathematical token calculations are verified by automated unit assertions 
 Doggo implements a single unified Compose tree with responsive breakpoint adaptation:
 1. **Compact Layout (< 840dp):**
    - Vertical layout with scrolling list container.
-   - Warm cream top header showing account info, action buttons ("Add", "Notices", "Leave"), and sync feedback. Note: In the current implementation, the top bar is placed within non-scrolling `Scaffold.topBar`; handling of vertical viewport constraints under 200% font scaling or landscape orientation is tracked as a Phase 07 verification item.
+   - Warm cream top header showing account info, action buttons ("Add", "Notices", "Leave"), and sync feedback. The top bar is in non-scrolling `Scaffold.topBar`; viewport constraints at 200% font scale or landscape remain unverified.
    - Horizontal scrolling filter chips (`All`, `Active`, `Completed`).
    - Todo items list with unconstrained title wrapping.
 2. **Expanded Desktop Layout (>= 840dp):**
@@ -105,7 +105,7 @@ Doggo implements a single unified Compose tree with responsive breakpoint adapta
 ## 5. Accessibility, Semantics & Interaction Standards
 
 1. **Non-Color Conveyance:** Status (completed, active, conflict, error) does not rely on color alone. Checkboxes visually display checkmarks and emit accessibility state (`stateDescription`). Error callouts include descriptive text.
-2. **Keyboard Navigation:** Tab, Shift-Tab, and Enter (submit/activate) navigation support. Dialogs provide explicit Cancel/Dismiss buttons. Hardware Escape key dismiss and system back-handler trapping are deferred to platform integration in Phase 07.
+2. **Keyboard Navigation:** Tab, Shift-Tab, and Enter (submit/activate) navigation support. Dialogs provide explicit Cancel/Dismiss buttons. Hardware Escape and system back-handler behavior require platform acceptance and remain unverified.
 3. **Screen Readers (TalkBack, Orca, Narrator):**
    - Explicit semantics: distinct `contentDescription` on interactive actions (e.g., `"Edit [Title]"`).
    - Heading roles on section titles.
@@ -132,3 +132,26 @@ Per project dependency architecture, Phase 02 contracts (`shared/src/commonMain/
 8. **Reauth and Sync Recovery States:** Detailed multi-step reauth flows and explicit copy differentiation between regular conflicts and UnknownSuperseded mutations are deferred to Phase 07.
 9. **Compact Top Bar & Todo Row at 200% Scale:** The compact top bar is currently non-scrolling in `Scaffold.topBar`, and todo row actions are laid out in a fixed `Row`. Verification and layout adjustments for large font scales are deferred to Phase 07 device testing.
 10. **Missing States & UI Granularity:** REAUTH local-only data access with prefilled email, distinct copy for UnknownSuperseded vs regular conflicts, and explicit sync-then-leave options in `LeaveGuardDialog` are deferred to Phase 07.
+
+---
+
+## 7. Sticky Task Surfaces & Companion UI Standards (Phase 07)
+
+### 7.1 Android Glance Task Widget
+- **Responsive Grid Layouts**: Uses Glance `SizeMode.Responsive` for 120×120dp (2×2), 240×120dp (3×2), 240×240dp (3×3), and 320×360dp (4×4+) grid configurations.
+- **Section Partitioning**: A single scrollable column partitioned into Incomplete tasks and Completed tasks in stable `createdAt DESC, id DESC` order.
+- **Touch Targets**: All interactive controls (checkboxes, Add button, Open App icon) adhere strictly to >= 48dp minimum touch bounds.
+- **Privacy-Preserving Non-Ready States**: When unauthenticated, locked, or during initial cold load (`WidgetDisplayState.Loading`, `SignedOut`, `Locked`, `Unavailable`), the widget displays clean generic guidance with **zero private task titles** rendered.
+
+### 7.2 Quiet Deadline Notification
+- **Quiet System Alerts**: Low-importance channel (`doggo_task_surfaces`), sound and vibration disabled.
+- **WCAG AA Status Badging**: Overdue deadlines use high-contrast `DoggoCoral` (`#C62828`) text on `DoggoCoralSurface` (`#FFEBEB`), exceeding 4.5:1 text contrast.
+- **Lockscreen Masking**: Private view displays full task title; lockscreen public version (`setPublicVersion`) renders generic text ("Task deadline reminder", "Unlock device to view task title and details") protecting sensitive task titles.
+
+### 7.3 Desktop Sticky Companion Window
+- **Always-On-Top Chrome**: Pinned companion window floating `alwaysOnTop = true` above ordinary desktop workspaces.
+- **Independent Quick-Add**: Inline text input validated against `TitlePolicy` (1–200 Unicode scalars), submitting on `Enter` or `Add` click without overwriting unsaved drafts in the main window.
+- **Permanent Top Recovery Controls**: Window header embeds explicit `Open App` and `Quit` buttons to ensure application control is retained even if OS window controls are obstructed.
+
+### 7.4 Acceptance Evidence Boundary
+The sticky-surface PNGs in `docs/evidence/` are visual design baselines only, not native application captures or proof of launcher, notification-shade, window-stacking, tray, screen-reader, or multi-monitor behavior. See the [Android acceptance evidence](./evidence/sticky-surfaces-android-summary.md) and [Windows acceptance evidence](./evidence/sticky-surfaces-windows-summary.md) for the recorded automated scope and Gate G2 holds.

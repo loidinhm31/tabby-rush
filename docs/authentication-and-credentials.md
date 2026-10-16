@@ -82,3 +82,24 @@ Any request to non-allowlisted paths or legacy endpoints (`/api/v1/sync/:app_id`
 - **Access Token**: Glean Hub JWT, signed with HS256, 6-hour lifespan.
 - **Refresh Token**: Glean Hub cryptographically random 32-byte string, SHA-256 hashed on server, 30-day lifespan.
 - **Server Grant Enforcement**: Server JWT claims contain `apps` list at time of issuance. When an admin grants or revokes `doggo` access, the change takes effect upon next token refresh or login. Doggo verifies `/me.apps` before every sync cycle.
+
+
+---
+
+## 6. Task Surface Generation Admission & Bounded Cold Restore (Phase 07)
+
+### 6.1 Surface Account Token Fencing
+All sticky task surface operations—including Glance widget completion/add, quiet notification display/action, and desktop quick-add/toggle—are strictly fenced by an immutable `SurfaceAccountToken(accountKey, generation)`:
+- **Generation Isolation**: Every account switch, sign-out, or restore cycle increments the durable account `generation` counter (`generation.dat`).
+- **Zero-Trust Intent Validation**: Deep-link intents (`ACTION_VIEW_TASK`, `ACTION_ADD_TASK`) and action broadcasts carry opaque identity extras (`accountKey`, `generation`, `taskId`). Handlers in `SessionViewModel` and `AndroidTaskSurfaceAccess` verify that `accountKey` is non-blank, matches the active session, and `generation >= 0L` matches `currentToken.generation`.
+- **Fail-Closed Stale Rejection**: PendingIntents or desktop actions minted under a prior account generation are discarded immediately without opening or mutating SQLite databases.
+
+### 6.2 Bounded Cold-Start Readiness Wait
+On application startup or background worker invocation, surfaces must not execute against uninitialized stores:
+- `awaitReadiness(timeoutMs = 4000L)` suspends for up to 4 seconds awaiting the `Ready(token)` lifecycle transition from `DoggoApplication`.
+- If the credential vault remains locked or cold restoration does not complete within 4 seconds, the surface transitions to `SurfaceReadiness.Unavailable` and renders safe fallback states with zero private task titles exposed.
+
+### 6.3 Serialized Publication Mutex
+- State publication to external OS surfaces (AppWidgetManager RemoteViews and NotificationManager notifications) is strictly serialized under a dedicated `publicationMutex`.
+- Before executing any publication payload, `publishIfCurrent(token)` re-verifies that `token == currentToken` while holding the mutex.
+- During account sign-out or leave, surfaces are marked non-Ready and admissions drained before the database is closed, preventing race conditions where departing account data could be published after account teardown.

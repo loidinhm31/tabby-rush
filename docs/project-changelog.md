@@ -3,6 +3,42 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Sticky Task Surfaces / Phase 07] - 2026-10-17: Android/Windows Acceptance & Shared Documentation (Delivered; Native Gate G2 Conditionally Held)
+
+### Delivered
+- Updated shared project documentation and added Android/Windows acceptance summaries and a Phase 07 evidence report.
+- Recorded 6h / 12h credited for Phase 07; project progress is 118h / 132h (89.4%).
+- Four PNGs in `docs/evidence/` are visual design baselines/design mockups only, not screenshots or runtime OS captures.
+
+### Reported Automated Evidence
+- The Phase 07 report records 364 Gradle tests passing (231 shared, 99 desktop, 34 Android), 12 Node auditor tests passing, six source diagnostics clean, 18 Hub fixture checks passing, and eight strict-v2 rehearsal checks passing.
+- The report records Android `assembleDebug` and Windows distributable builds as successful. Gradle commands used `--dependency-verification=off`; this is recorded evidence, not a fresh rerun for this changelog.
+
+### Preserved Holds & Safety Disclosures
+- Android and Windows native interaction acceptance remains conditionally held at Gate G2. The native WinRT/COM toast bridge remains a candidate stub; installed MSI system acceptance is also held.
+- The 149 unmatched classpath checksums and the separate Glance provenance hold remain unresolved. Linux session/tray acceptance is pending Phase 08. Production release gates G3, G6, and G7 remain open.
+- Android `DoggoApplication.closeRuntimeInternal()` catches and logs a delivery-gate drain timeout, then returns before observer-job cancellation or Room closure. `closeActiveRuntime()` nevertheless clears `activeRuntime`, leaving jobs active and the Room database open. This remains an open safety finding.
+- Glance cleanup error swallowing remains an open safety finding; no out-of-boundary code changes are claimed.
+
+---
+
+## [Sticky Task Surfaces / Phases 01–06] - 2026-10-16: Android Glance, Quiet Deadline Notification & Desktop Sticky Window (Delivered; Cycle 2 Conditional Approval)
+
+### Delivered
+- Completed shared account-token admission, task observation, desired-state completion mutation, and surface projections; connected them to the Android Glance task widget and opt-in quiet deadline notification.
+- Delivered the compact Compose Multiplatform desktop sticky window with tray controls when supported by the host session. Android and desktop preferences remain local presentation/notification state, outside task synchronization.
+- Integrated account lifecycle cleanup for task-surface notifications, boundary work, widget content, Glance sessions, and Android surface preferences.
+
+### Review & Reported Verification
+- Cycle 2 review scored **8.8/10 (Conditional Pass)** with 0 critical issues and 3 warnings. It records 363/363 Gradle tests (231 shared JVM, 98 desktop, 34 Android unit), 12/12 Node security auditor tests, 6/6 diagnostic source security checks, 18/18 Hub live-fixture smoke checks, and 8/8 strict-v2 rehearsal checks. These are report-attributed results, not fresh runs for this changelog entry (`plans/reports/code-review-261016-2157-sticky-task-surfaces-cycle-2.md`).
+- Cycle 2 review warnings include Android `closeRuntimeInternal()` catching/logging a drain timeout and returning before observer-job cancellation or Room closure while `closeActiveRuntime()` clears `activeRuntime`; Glance blanking and session-close failures can also leave OS-retained content.
+
+### Acceptance & Release Holds
+- At the time of this 2026-10-16 entry, Phase 07 Android/Windows integration was ready for acceptance recording, not claimed as native acceptance passed. Current Phase 07 status is recorded above; Linux acceptance remains pending a real session in Phase 08.
+- The 149-checksum dependency-verification hold and Glance provenance gap remain. Historical release holds G2/G3/G6/G7 remain unchanged.
+
+---
+
 ## [Sticky Task Surfaces / Phase 01] - 2026-10-16: Shared Foundation & Contracts (Delivered; Conditional Handoff Authorized; Dependency Provenance Pending)
 
 *Note: Separate initiative from the Task Deadlines, Reminders & Strict Upgrades plan.*

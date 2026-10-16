@@ -8,8 +8,8 @@ Group B; **hard dependency01** selection/account/access signatures and dependenc
 
 ## Overview
 - Date: 2026-10-16. Priority: P2. Effort: **20h**.
-- Implementation status: **pending / 0%**. Review status: pending.
-- Implement one optional quiet next-deadline notification, durable dismissal/opt-in, private receivers, inexact refresh and standalone settings UI.
+- Implementation status: **delivered / 100%**. Review status: **Cycle 2 8.8/10 Conditional Pass; approved for implementation handoff, 0 critical issues**.
+- Delivered the quiet notification/settings leaf, durable suppression logic, tests and Phase 05 handoff. Native shade/permission/dismissal acceptance remains Phase 07.
 
 ## Key Insights
 Reminder projection has conflict knowledge; reminder eligibility additionally requires enabled rule/conflict-free/token. Display must not inherit those conditions. Android13+ permission is actual runtime flow; Android14+ ongoing can be swiped away. Persistent suppression and programmatic-cancel receipt distinction are necessary to avoid repost loops and stale dismissals.
@@ -61,11 +61,11 @@ Explicit owned paths (repository-relative; all proposed creates):
 10. Handoff native entry components/settings callbacks/cancel contract and leaf evidence to05. Native shade/permission/swipe proof remains05/07 gate; no fake runtime acceptance.
 
 ## Todo list
-- [ ] Implement preferences, selection/capability and private notification identities.
-- [ ] Implement durable suppression/posted-receipt cancellation distinction.
-- [ ] Implement settings/permission support and bounded inexact triggers.
-- [ ] Author production behavior and actual preferences reopen tests.
-- [ ] Deliver real leaf handoff and pending native scenarios to05.
+- [x] Implement preferences, selection/capability and private notification identities.
+- [x] Implement durable suppression/posted-receipt cancellation distinction.
+- [x] Implement settings/permission support and bounded inexact triggers.
+- [x] Author production behavior and actual preferences reopen tests.
+- [x] Deliver real leaf handoff and pending native scenarios to05.
 
 ## Success Criteria
 Acceptance4/5/6/7/12 notification logic fully represented. Same selected key never immediately reposts after user dismissal across title edit/sync/restart; no credential/task-text preference leakage. Reminder-disabled deadline is selected, conflict knowledge explicit, no drafts. Future API32/33/34+ actual UI proof is required and stays pending until observed.
@@ -80,7 +80,7 @@ Delete intents may not fire for every OS removal; do not infer callbacks. Persis
 Explicit private receivers, immutable intents, stale generation rejection and final publication fence. Private lock-screen title/generic public version. Default-off/account-scoped preference deletion on wipe; no FGS/overlay/exact-alarm escalation. Permission result cannot grant stale account opt-in without revalidation.
 
 ## Next steps
-Terminal03 plus02 enables05 integration. Main integrator runs future unit/device checks and07 real shade/permission/dismissal acceptance; baseline reminder holds stay unchanged.
+Phase 03 implementation and tests are delivered; actual API32/33/34+ shade, permission, and dismissal scenarios remain Phase 07. Existing baseline reminder holds remain unchanged.
 
 ## Unresolved questions
 No product decisions left. Actual API34+ delete-callback behavior and supported clock-wake coverage require native evidence, not guarantee.

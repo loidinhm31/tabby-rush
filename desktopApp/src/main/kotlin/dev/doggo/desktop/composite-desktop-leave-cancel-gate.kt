@@ -8,15 +8,18 @@ import kotlinx.coroutines.cancelAndJoin
 
 /**
  * Composite cancel gate coordinating clean quiescence across desktop runtime producers:
- * 1. [ReminderDeliveryGate] (stops new deliveries, drains active callbacks)
- * 2. Schedule observation job (cancels reactive Room schedule updates)
- * 3. [DesktopReminderScheduler] (cancels desktop wake loop and clears pending alarm handles)
- * 4. Sync scheduler cancel gate (cancels periodic/immediate sync rounds, awaits active sync jobs)
- * 5. Reminder coordinator cancel gate (cancels and clears native platform notifications)
+ * 1. [ReminderDeliveryGate] (stops new reminder deliveries, drains active callbacks)
+ * 2. Surface cancel gate (stops new surface operations/mutations, drains in-flight surface work)
+ * 3. Surface observer job (cancels reactive Room surface todos observation)
+ * 4. Schedule observation job (cancels reactive Room schedule updates)
+ * 5. [DesktopReminderScheduler] (cancels desktop wake loop and clears pending alarm handles)
+ * 6. Sync scheduler cancel gate (cancels periodic/immediate sync rounds, awaits active sync jobs)
+ * 7. Reminder coordinator cancel gate (cancels and clears native platform notifications)
  *
  * Invariants:
- * If any cancellation step fails, throws an exception so [dev.doggo.shared.sync.AccountLeaveProtocol]
- * remains fail-closed with wipe markers intact and database files protected.
+ * If any cancellation or drain step fails or times out, throws an exception so
+ * [dev.doggo.shared.sync.AccountLeaveProtocol] remains fail-closed with wipe markers intact
+ * and database files protected.
  */
 class CompositeDesktopLeaveCancelGate(
     private val deliveryGate: ReminderDeliveryGate,
@@ -24,6 +27,8 @@ class CompositeDesktopLeaveCancelGate(
     private val reminderScheduler: DesktopReminderScheduler,
     private val syncCancelGate: LeaveSchedulerCancelGate,
     private val reminderCancelGate: LeaveSchedulerCancelGate,
+    private val surfaceObserverJob: Job? = null,
+    private val surfaceCancelGate: LeaveSchedulerCancelGate? = null,
     private val drainTimeoutMs: Long = 5000L
 ) : LeaveSchedulerCancelGate {
 
@@ -34,16 +39,22 @@ class CompositeDesktopLeaveCancelGate(
             throw IllegalStateException("Timed out draining in-flight reminder deliveries for $accountKey")
         }
 
-        // 2. Stop reactive schedule observation
+        // 2. Drain surface admissions before stopping observers
+        surfaceCancelGate?.cancelAndAwait(accountKey)
+
+        // 3. Stop reactive task surface observer
+        surfaceObserverJob?.cancelAndJoin()
+
+        // 4. Stop reactive schedule observation
         scheduleObserverJob.cancelAndJoin()
 
-        // 3. Stop desktop wake loop and clear pending alarms
+        // 5. Stop desktop wake loop and clear pending alarms
         reminderScheduler.cancelAndAwait(accountKey)
 
-        // 4. Cancel and await sync jobs
+        // 6. Cancel and await sync jobs
         syncCancelGate.cancelAndAwait(accountKey)
 
-        // 5. Cancel and remove all platform notifications
+        // 7. Cancel and remove all platform notifications
         reminderCancelGate.cancelAndAwait(accountKey)
     }
 }

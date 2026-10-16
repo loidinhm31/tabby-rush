@@ -5,6 +5,7 @@ import dev.doggo.shared.sync.LeaveSchedulerCancelGate
 import dev.doggo.shared.sync.ReminderDeliveryGate
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
@@ -27,9 +28,16 @@ class CompositeLeaveSchedulerCancelGateTest {
             hasPendingWipeMarker = { false }
         )
 
+        val observerStarted = CompletableDeferred<Unit>()
         val observerJob = launch {
-            // Simulated active observer coroutine
+            try {
+                observerStarted.complete(Unit)
+                awaitCancellation()
+            } finally {
+                actions.add("schedule_observer_cleaned_up")
+            }
         }
+        observerStarted.await()
 
         val syncCancelGate = LeaveSchedulerCancelGate {
             actions.add("sync_cancelled")
@@ -39,7 +47,6 @@ class CompositeLeaveSchedulerCancelGateTest {
             actions.add("reminders_cancelled")
         }
 
-        // Test the production CompositeLeaveSchedulerCancelGate directly
         val compositeGate = CompositeLeaveSchedulerCancelGate(
             deliveryGate = gate,
             scheduleObserverJob = observerJob,
@@ -50,10 +57,74 @@ class CompositeLeaveSchedulerCancelGateTest {
         compositeGate.cancelAndAwait(testAccountKey)
 
         assertEquals(
-            listOf("sync_cancelled", "reminders_cancelled"),
+            listOf("schedule_observer_cleaned_up", "sync_cancelled", "reminders_cancelled"),
             actions
         )
         assertTrue(observerJob.isCancelled, "Observer job must be cancelled and joined")
+        assertEquals(dev.doggo.shared.sync.DeliveryGateState.CLOSED, gate.getState())
+    }
+
+    @Test
+    fun testProductionGateCancelsSurfaceObserverAndMaintainsQuiescenceOrder() = runTest {
+        val actions = mutableListOf<String>()
+
+        val gate = ReminderDeliveryGate(
+            accountKey = testAccountKey,
+            getPersistedGeneration = { 1L },
+            hasPendingWipeMarker = { false }
+        )
+
+        val scheduleStarted = CompletableDeferred<Unit>()
+        val scheduleJob = launch {
+            try {
+                scheduleStarted.complete(Unit)
+                awaitCancellation()
+            } finally {
+                actions.add("schedule_observer_cleaned_up")
+            }
+        }
+        scheduleStarted.await()
+
+        val surfaceStarted = CompletableDeferred<Unit>()
+        val surfaceJob = launch {
+            try {
+                surfaceStarted.complete(Unit)
+                awaitCancellation()
+            } finally {
+                actions.add("surface_observer_cleaned_up")
+            }
+        }
+        surfaceStarted.await()
+
+        val syncCancelGate = LeaveSchedulerCancelGate {
+            actions.add("sync_cancelled")
+        }
+
+        val reminderCancelGate = LeaveSchedulerCancelGate {
+            actions.add("reminders_cancelled")
+        }
+
+        val compositeGate = CompositeLeaveSchedulerCancelGate(
+            deliveryGate = gate,
+            scheduleObserverJob = scheduleJob,
+            syncCancelGate = syncCancelGate,
+            reminderCancelGate = reminderCancelGate,
+            surfaceObserverJob = surfaceJob
+        )
+
+        compositeGate.cancelAndAwait(testAccountKey)
+
+        assertEquals(
+            listOf(
+                "schedule_observer_cleaned_up",
+                "surface_observer_cleaned_up",
+                "sync_cancelled",
+                "reminders_cancelled"
+            ),
+            actions
+        )
+        assertTrue(scheduleJob.isCancelled, "Schedule observer must be cancelled")
+        assertTrue(surfaceJob.isCancelled, "Surface observer must be cancelled and joined")
         assertEquals(dev.doggo.shared.sync.DeliveryGateState.CLOSED, gate.getState())
     }
 
@@ -65,33 +136,38 @@ class CompositeLeaveSchedulerCancelGateTest {
             hasPendingWipeMarker = { false }
         )
 
-        // Simulate blocked delivery admission that prevents draining
-        val blockCompleted = CompletableDeferred<Unit>()
-        val inFlightJob = launch {
-            gate.withDeliveryAdmission(expectedGeneration = 1L) {
-                blockCompleted.await()
+        val inFlightAdmission = CompletableDeferred<Unit>()
+        val releaseAdmission = CompletableDeferred<Unit>()
+
+        // Hold an in-flight delivery admission
+        val holderJob = launch {
+            gate.withDeliveryAdmission(1L) {
+                inFlightAdmission.complete(Unit)
+                releaseAdmission.await()
             }
         }
-        yield()
+
+        inFlightAdmission.await()
 
         val observerJob = launch {}
-
-        // Mock delivery gate with zero timeout by closing ahead
-        gate.closeAndDrain(timeoutMs = 10L)
+        val syncCancelGate = LeaveSchedulerCancelGate {}
+        val reminderCancelGate = LeaveSchedulerCancelGate {}
 
         val compositeGate = CompositeLeaveSchedulerCancelGate(
             deliveryGate = gate,
             scheduleObserverJob = observerJob,
-            syncCancelGate = { /* should not be called */ },
-            reminderCancelGate = { /* should not be called */ }
+            syncCancelGate = syncCancelGate,
+            reminderCancelGate = reminderCancelGate
         )
 
+        // Drain timeout must throw and fail-closed
         assertFailsWith<IllegalStateException> {
             compositeGate.cancelAndAwait(testAccountKey)
         }
 
-        blockCompleted.complete(Unit)
-        inFlightJob.join()
+        // Release the held admission and wait for coroutine to finish
+        releaseAdmission.complete(Unit)
+        holderJob.join()
     }
 
     @Test
@@ -101,16 +177,21 @@ class CompositeLeaveSchedulerCancelGateTest {
             getPersistedGeneration = { 1L },
             hasPendingWipeMarker = { false }
         )
+
         val observerJob = launch {}
+        val syncCancelGate = LeaveSchedulerCancelGate {
+            throw RuntimeException("Simulated WorkManager cancellation failure")
+        }
+        val reminderCancelGate = LeaveSchedulerCancelGate {}
 
         val compositeGate = CompositeLeaveSchedulerCancelGate(
             deliveryGate = gate,
             scheduleObserverJob = observerJob,
-            syncCancelGate = { throw IllegalStateException("Sync cancellation failure") },
-            reminderCancelGate = { /* should not be reached */ }
+            syncCancelGate = syncCancelGate,
+            reminderCancelGate = reminderCancelGate
         )
 
-        assertFailsWith<IllegalStateException> {
+        assertFailsWith<RuntimeException> {
             compositeGate.cancelAndAwait(testAccountKey)
         }
     }

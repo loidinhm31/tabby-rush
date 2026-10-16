@@ -1,5 +1,5 @@
 package dev.doggo.android
-
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.doggo.shared.contract.AccessRequestInfo
@@ -39,10 +39,27 @@ import java.util.UUID
  */
 class SessionViewModel : ViewModel() {
 
+    companion object {
+        private const val TAG = "SessionViewModel"
+    }
+
     private val app = DoggoApplication.instance
     private val _uiState = MutableStateFlow(TodoUiState())
     val uiState: StateFlow<TodoUiState> = _uiState.asStateFlow()
 
+    private val _surfaceCreateVisible = MutableStateFlow(false)
+    val surfaceCreateVisible: StateFlow<Boolean> = _surfaceCreateVisible.asStateFlow()
+
+    private val _surfaceSettingsVisible = MutableStateFlow(false)
+    val surfaceSettingsVisible: StateFlow<Boolean> = _surfaceSettingsVisible.asStateFlow()
+
+    private val _surfacePreferenceState = MutableStateFlow(TaskSurfacePreferenceState())
+    val surfacePreferenceState: StateFlow<TaskSurfacePreferenceState> = _surfacePreferenceState.asStateFlow()
+
+    private val _surfaceAvailability = MutableStateFlow(TaskSurfaceAvailability.OptedOut)
+    val surfaceAvailability: StateFlow<TaskSurfaceAvailability> = _surfaceAvailability.asStateFlow()
+
+    private var pendingIntentAction: (() -> Unit)? = null
     private var allTodos: List<Todo> = emptyList()
     private var isTodosLoaded = false; private var accountJob: Job? = null; private var syncJob: Job? = null; private var clockJob: Job? = null
     private var pendingTarget: Pair<String, String>? = null
@@ -86,7 +103,9 @@ class SessionViewModel : ViewModel() {
 
     private fun onUnauthenticated() {
         accountJob?.cancel(); accountJob = null; syncJob?.cancel(); syncJob = null; clockJob?.cancel(); clockJob = null
-        allTodos = emptyList(); isTodosLoaded = false; _uiState.value = TodoUiState()
+        allTodos = emptyList(); isTodosLoaded = false; pendingIntentAction = null
+        _surfaceCreateVisible.value = false; _surfaceSettingsVisible.value = false
+        _uiState.value = TodoUiState()
     }
 
     private suspend fun reloadTodos() {
@@ -97,6 +116,10 @@ class SessionViewModel : ViewModel() {
             _uiState.value = _uiState.value.copy(isAccountV2 = isV2)
             isTodosLoaded = true
             pendingTarget?.let { (k, t) -> dispatchTaskSelection(k, t) }
+            pendingIntentAction?.let { action ->
+                pendingIntentAction = null
+                action()
+            }
         } catch (ce: CancellationException) { throw ce } catch (_: Exception) {}
     }
 
@@ -331,8 +354,14 @@ class SessionViewModel : ViewModel() {
     }
 
     private suspend fun toggleCompleted(todo: Todo) {
-        app.getActiveRuntime()?.store?.saveTodoLocally(todo.copy(completed = !todo.completed, updatedAt = maxOf(System.currentTimeMillis(), todo.createdAt)))
-        reloadTodos(); triggerSync()
+        val runtime = app.getActiveRuntime() ?: return
+        val desired = !todo.completed
+        val now = System.currentTimeMillis()
+        val change = runtime.store.setCompletedLocally(todo.id, desired, now)
+        if (change == dev.doggo.shared.contract.CompletionChange.Changed) {
+            reloadTodos()
+            triggerSync()
+        }
     }
 
     private suspend fun confirmDelete() {
@@ -459,9 +488,146 @@ class SessionViewModel : ViewModel() {
     private fun handleAuth(res: ApiResult<*>) { if (res is ApiResult.Failure) _uiState.value = _uiState.value.copy(safeError = res.error) }
     private fun handleAccess(res: ApiResult<*>) { if (res is ApiResult.Failure) _uiState.value = _uiState.value.copy(safeError = res.error) else if (res is ApiResult.Success) _uiState.value = _uiState.value.copy(accessRequest = res.value as? AccessRequestInfo) }
     fun selectTaskFromNotification(accountKey: String, taskId: String) = viewModelScope.launch {
-        if (app.authSession.currentAccountKey.value?.value == null || !isTodosLoaded) { pendingTarget = Pair(accountKey, taskId); return@launch }
-        dispatchTaskSelection(accountKey, taskId)
+        selectTaskFromIntent(accountKey, -1L, taskId)
     }
+
+    fun selectTaskFromIntent(
+        accountKey: String?,
+        generation: Long,
+        taskId: String,
+        isSurfaceAction: Boolean = true
+    ) = viewModelScope.launch {
+        if (app.authSession.currentAccountKey.value?.value == null || !isTodosLoaded) {
+            pendingIntentAction = {
+                viewModelScope.launch {
+                    dispatchTaskSelectionWithToken(accountKey, generation, taskId, isSurfaceAction)
+                }
+            }
+            return@launch
+        }
+        dispatchTaskSelectionWithToken(accountKey, generation, taskId, isSurfaceAction)
+    }
+
+    private suspend fun dispatchTaskSelectionWithToken(
+        accountKey: String?,
+        generation: Long,
+        taskId: String,
+        isSurfaceAction: Boolean
+    ) {
+        val readiness = app.taskSurfaces.access.readiness.value
+        if (readiness !is dev.doggo.shared.contract.SurfaceReadiness.Ready) return
+        val currentToken = readiness.token
+        if (accountKey.isNullOrBlank() || currentToken.accountKey.value != accountKey) {
+            Log.w(TAG, "Rejecting task selection: mismatched or missing accountKey")
+            return
+        }
+        if (isSurfaceAction) {
+            if (generation < 0L || currentToken.generation != generation) {
+                Log.w(TAG, "Rejecting surface task selection: mismatched or missing generation token ($generation vs ${currentToken.generation})")
+                return
+            }
+        }
+        val isValid = app.taskSurfaces.access.validateNavigation(currentToken, taskId)
+        if (!isValid) return
+
+        val task = allTodos.find { it.id == taskId && !it.isDeleted } ?: return
+        openEdit(task)
+    }
+
+    fun openCreateFromIntent(accountKey: String?, generation: Long) = viewModelScope.launch {
+        if (app.authSession.currentAccountKey.value?.value == null || !isTodosLoaded) {
+            pendingIntentAction = {
+                viewModelScope.launch { dispatchCreateWithToken(accountKey, generation) }
+            }
+            return@launch
+        }
+        dispatchCreateWithToken(accountKey, generation)
+    }
+
+    private suspend fun dispatchCreateWithToken(accountKey: String?, generation: Long) {
+        val readiness = app.taskSurfaces.access.readiness.value
+        if (readiness !is dev.doggo.shared.contract.SurfaceReadiness.Ready) return
+        val currentToken = readiness.token
+        if (accountKey.isNullOrBlank() || generation < 0L) {
+            Log.w(TAG, "Rejecting create intent: missing accountKey or generation token")
+            return
+        }
+        if (currentToken.accountKey.value != accountKey || currentToken.generation != generation) {
+            Log.w(TAG, "Rejecting create intent: mismatched or stale surface token")
+            return
+        }
+        val isValid = app.taskSurfaces.access.validateNavigation(currentToken, null)
+        if (!isValid) return
+
+        _surfaceCreateVisible.value = true
+    }
+
+    fun openSurfaceSettings() {
+        loadSurfaceSettingsState()
+        _surfaceSettingsVisible.value = true
+    }
+
+    fun closeSurfaceSettings() {
+        _surfaceSettingsVisible.value = false
+    }
+
+    fun closeSurfaceCreate() {
+        _surfaceCreateVisible.value = false
+    }
+
+    fun loadSurfaceSettingsState() = viewModelScope.launch {
+        val key = app.authSession.currentAccountKey.value ?: return@launch
+        val prefs = TaskSurfacePreferences(app)
+        val state = prefs.read(key)
+        _surfacePreferenceState.value = state
+        _surfaceAvailability.value = TaskSurfacePermissionController.evaluateAvailability(
+            context = app,
+            enabled = state.enabled,
+            channelId = TaskSurfaceIntents.CHANNEL_ID
+        )
+    }
+
+    fun setSurfaceNotificationsEnabled(enabled: Boolean) = viewModelScope.launch {
+        val readiness = app.taskSurfaces.access.readiness.value
+        if (readiness !is dev.doggo.shared.contract.SurfaceReadiness.Ready) return@launch
+        val token = readiness.token
+        val prefs = TaskSurfacePreferences(app)
+        prefs.setEnabled(token, enabled)
+        loadSurfaceSettingsState()
+        app.taskSurfaces.refresh(SurfaceRefreshReason.Capability)
+    }
+
+    fun onNotificationPermissionResult(isGranted: Boolean) = viewModelScope.launch {
+        loadSurfaceSettingsState()
+        app.taskSurfaces.refresh(SurfaceRefreshReason.Capability)
+    }
+
+    fun onActivityResume() = viewModelScope.launch {
+        loadSurfaceSettingsState()
+        app.taskSurfaces.refresh(SurfaceRefreshReason.Capability)
+    }
+
+    fun createTaskFromSurface(rawTitle: String) = viewModelScope.launch {
+        val validation = TitlePolicy.normalizeAndValidate(rawTitle)
+        if (validation !is ApiResult.Success) return@launch
+        val validTitle = validation.value
+
+        val runtime = app.getActiveRuntime() ?: return@launch
+        val id = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val newTodo = Todo(
+            id = id,
+            title = validTitle,
+            completed = false,
+            createdAt = now,
+            updatedAt = now
+        )
+        runtime.store.saveTodoLocally(newTodo)
+        _surfaceCreateVisible.value = false
+        reloadTodos()
+        triggerSync()
+    }
+
     private suspend fun dispatchTaskSelection(accountKey: String, taskId: String) {
         val currentKey = app.authSession.currentAccountKey.value?.value; pendingTarget = null
         if (currentKey != accountKey || app.accountFiles.hasPendingWipe(dev.doggo.shared.contract.AccountKey(accountKey))) return

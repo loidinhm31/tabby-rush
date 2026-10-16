@@ -8,8 +8,8 @@ Group C; **hard dependencies01+04**, completed real contracts/helpers. Can overl
 
 ## Overview
 - Date: 2026-10-16. Priority: P2. Effort: **16h**.
-- Implementation status: **pending / 0%**. Review status: pending.
-- Share one authoritative runtime/controller across main+sticky, preserve hidden background work, isolate compact input and move teardown exclusively to explicit Quit.
+- Implementation status: **delivered / 100%**. Review status: **Cycle 2 8.8/10 Conditional Pass; approved for implementation handoff, 0 critical issues**.
+- Delivered one desktop controller/runtime, singleton main/sticky windows, tray and no-tray recovery, geometry/preferences, desired-state actions, and explicit Quit teardown with integration tests. Windows/Linux native acceptance remains pending.
 
 ## Key Insights
 Existing main Close disposes controller/exits; filtered uiState cannot feed sticky. SingleInstanceGuard already refuses lock contention rather than forwarding activation. Pinned Compose1.7.3 Window supports visible/alwaysOnTop; native tray/focus and exact API compatibility still require compile/native proof. Process-scoped reminder lifetime changes with close-to-hide and must be documented/tested, not expanded into Windows toast work.
@@ -59,11 +59,11 @@ Explicit owned paths (repository-relative; actions/reasons in central manifest):
 12. Handoff Windows owner smoke and exact future commands (`gradlew.bat :desktopApp:runDebug -PdesktopTarget=windows`), pending native geometry/stacking/tray scenarios and generic seam to07/08. Source host guard remains unchanged.
 
 ## Todo list
-- [ ] Integrate authoritative sections/desired completion and independent compact creation.
-- [ ] Implement singleton Window/Tray visibility and no-tray recovery.
-- [ ] Integrate real display geometry/preferences and Linux provider seam.
-- [ ] Move all teardown to explicit idempotent Quit and account-leave drains.
-- [ ] Author real controller/lifetime tests and deliver terminal06 handoff.
+- [x] Integrate authoritative sections/desired completion and independent compact creation.
+- [x] Implement singleton Window/Tray visibility and no-tray recovery.
+- [x] Integrate real display geometry/preferences and Linux provider seam.
+- [x] Move all teardown to explicit idempotent Quit and account-leave drains.
+- [x] Author real controller/lifetime tests and deliver terminal06 handoff.
 
 ## Success Criteria
 Production paths satisfy8–10 plus desktop2/3/7/12; hidden main retains authoritative state and schedulers. Native Windows evidence proves singleton tray/window, ordinary-app stacking, Close restore, manual geometry and Quit/profile release; until07 exercised, no runtime certification. Compact submit cannot overwrite/cancel main editor, geometry no account text, no autostart/activation expansion.
@@ -78,7 +78,7 @@ Nested runBlocking/disposal under UI thread can deadlock: one suspend Quit path 
 One profile lock protects runtime; no second store/companion. Current-token callback validation and immediate state blank on leave prevent cross-account display/actions. Geometry file stores presentation only; compact raw text clears on account change. Runtime lifetime expands while hidden intentionally; explicit Quit drains secrets/database before process exit.
 
 ## Next steps
-Terminal06 plus05 enables07.08 may prepare Linux-only provider after06 but cannot certify until07 + actual Linux session. Main integrator owns scheduled future desktop compile/test/native acceptance, not planner.
+Phase 06 and its integration tests are delivered; Windows tray/window/geometry acceptance remains Phase 07. Linux final verdict remains Phase 08 and requires the actual target/session.
 
 ## Unresolved questions
 No product blocker. Native Tray initialization/focus behavior under pinned Compose and actual monitor/session proof remain implementation gates; lock contention intentionally stays exit-only.

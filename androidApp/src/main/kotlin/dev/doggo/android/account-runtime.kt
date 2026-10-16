@@ -11,7 +11,8 @@ import kotlinx.coroutines.Job
 
 /**
  * Isolated account runtime encapsulating local Room SQLite persistence,
- * strict sync coordination, reactive schedule observation, and native reminder scheduling.
+ * strict sync coordination, reactive schedule observation, task surface observation,
+ * and native reminder scheduling.
  */
 class AccountRuntime(
     val accountKey: AccountKey,
@@ -22,5 +23,6 @@ class AccountRuntime(
     val reminderCoordinator: ReminderSchedulingCoordinator,
     val deliveryGate: ReminderDeliveryGate,
     val scheduleObserverJob: Job,
-    val leaveProtocol: AccountLeaveProtocol
+    val leaveProtocol: AccountLeaveProtocol,
+    val surfaceObserverJob: Job? = null
 )

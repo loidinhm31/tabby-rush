@@ -12,8 +12,11 @@ The application reuses the **Glean Hub** backend infrastructure with an opt-in, 
 - **Strict-v1 Sync Protocol**: Opt-in strong per-record sync protocol featuring insert-only create, explicit revision Compare-And-Swap (CAS), structured per-operation acknowledgements, stable cursor scans, and permanent empty tombstones.
 - **Hardware-Backed Credential Vault**: Token storage backed by platform security primitives (Android KeyStore with AES-256 GCM on mobile; Secret Service on Linux; DPAPI on Windows).
 - **Single-Flight Refresh & Token Fencing**: Concurrent network operations coalesce behind a single mutex-protected token refresh coordinator.
-- **Fail-Closed Account Lifecycle**: Account logout synchronously wipes local databases, shared preferences, and vault credentials before clearing fail-closed markers.
+- **Account Lifecycle**: Account leave coordinates local database/credential cleanup with sync, reminder, and task-surface cancellation. Android OS-retained widget and notification content is cleared on a best-effort basis; see [Security & Recovery](docs/security-and-recovery.md) for the lifecycle caveats.
 - **Accessible Light UI**: Clean, high-contrast light theme conforming to WCAG 2.1 AA contrast requirements and ForumFlash design guidelines.
+- **Sticky Task Surfaces**: Android provides a native Glance task widget and an opt-in, quiet deadline notification; Desktop provides a compact Compose Multiplatform sticky window with tray controls when the host session supports a usable tray.
+
+Sticky Task Surfaces Phase 07 is delivered: documentation and automated verification are evidenced, with 6h of 12h credited (118h / 132h overall, 89.4%). The recorded suites report 364 Gradle tests and 12 Node security tests passing; build/test runs used `--dependency-verification=off`. Native Android and Windows hardware acceptance remains conditionally held at Gate G2, and Linux session acceptance remains pending Phase 08. The 149-checksum verification baseline, separate Glance provenance hold, and release holds G3/G6/G7 remain open.
 
 ---
 
@@ -22,11 +25,13 @@ The application reuses the **Glean Hub** backend infrastructure with an opt-in, 
 ```
 .
 ├── androidApp/          # Native Android application module (AGP 8.7.3, minSdk 26, compileSdk 35)
-│   ├── src/main/        # Application container, MainActivity, WorkManager background workers
-│   └── src/androidTest/ # Authored instrumented device and isolation test suites
+│   ├── src/main/        # Application container, Glance widget, task-surface notification and receivers
+│   └── src/androidTest/ # Instrumented account, navigation, preference and widget tests
+├── desktopApp/          # Compose Multiplatform JVM desktop application
+│   └── src/             # Shared sticky window/tray integration and target-specific Linux/Windows code
 ├── shared/              # Shared Kotlin Multiplatform core library
-│   ├── src/commonMain/  # Domain models, strict-v1 protocol contracts, auth session, Room DB, Compose UI
-│   └── src/commonTest/  # Unit tests, digest vectors, and in-memory SQLite integration tests
+│   ├── src/commonMain/  # Domain, sync, Room, Compose UI and account-token-fenced task-surface contracts
+│   └── src/commonTest/  # Unit tests, digest vectors and in-memory SQLite integration tests
 ├── scripts/             # Host tooling, emulator orchestration, Hub smoke runners, and recovery scripts
 │   ├── hub-strict-upgrade.mjs          # Strict-v2 Hub migration CLI runner
 │   ├── strict-v2-cutover-rehearsal.mjs # Strict-v2 operator tooling rehearsal and self-test harness
@@ -35,8 +40,8 @@ The application reuses the **Glean Hub** backend infrastructure with an opt-in, 
 │   ├── hub-strict-recovery.js          # Maintenance-only fresh-epoch recovery script (strict-v1 only)
 │   ├── hub-schema-provision.mjs        # Schema registration and admission runner
 │   └── android-smoke.sh                # Device smoke runner with reverse port-forwarding
-├── integration/         # Canonical strict-v1 schema specifications
-│   └── glean-hub/doggo-schema.json
+├── integration/         # Canonical strict-v1/strict-v2 schema specifications and vectors
+│   └── glean-hub/        # Active schema, versioned schemas, and strict-v2 vectors
 └── docs/                # Architecture specifications, operational runbooks, and test evidence
 ```
 
@@ -97,13 +102,20 @@ node scripts/strict-v2-cutover-rehearsal.mjs --self-test
 - [Project Overview & PDR](docs/project-overview-pdr.md)
 - [System Architecture](docs/system-architecture.md)
 - [Code Standards](docs/code-standards.md)
-- [Deployment Guide](docs/deployment-guide.md)
-- [Strict-v2 Cutover Runbook](docs/strict-v2-cutover-runbook.md)
-- [Windows Desktop Guide](docs/windows-desktop-guide.md)
-- [Windows Acceptance](docs/windows-acceptance.md)
-- [Security & Recovery](docs/security-and-recovery.md)
-- [Release Acceptance](docs/release-acceptance.md)
-- [Android Integration Acceptance](docs/android-acceptance.md)
+- [Codebase Summary](docs/codebase-summary.md)
+- [Design Guidelines](docs/design-guidelines.md)
 - [Local Storage & Sync](docs/local-storage-and-sync.md)
+- [Authentication & Credentials](docs/authentication-and-credentials.md)
+- [Security & Recovery](docs/security-and-recovery.md)
+- [Android Acceptance](docs/android-acceptance.md)
+- [Windows Acceptance](docs/windows-acceptance.md)
+- [Windows Desktop Guide](docs/windows-desktop-guide.md)
+- [Deployment Guide](docs/deployment-guide.md)
+- [Toolchain Versions](docs/toolchain-versions.md)
+- [Strict-v2 Cutover Runbook](docs/strict-v2-cutover-runbook.md)
+- [Release Acceptance](docs/release-acceptance.md)
 - [Project Roadmap](docs/project-roadmap.md)
+- [Development Roadmap](docs/development-roadmap.md)
 - [Project Changelog](docs/project-changelog.md)
+- [Android Sticky-Surface Evidence](docs/evidence/sticky-surfaces-android-summary.md)
+- [Windows Sticky-Surface Evidence](docs/evidence/sticky-surfaces-windows-summary.md)

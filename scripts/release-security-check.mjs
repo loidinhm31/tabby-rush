@@ -12,7 +12,7 @@
  *      * android:debuggable="false" (must explicitly be false; fails if true or absent).
  *      * android:usesCleartextTraffic="false" (fails if true or absent).
  *      * android:allowBackup="false" (must explicitly be false; fails if missing or true).
- *      * Exported components: ONLY MainActivity is exported; checks activities, services, receivers, providers.
+ *      * Exported components: ONLY MainActivity and narrowly verified DoggoTaskWidgetReceiver are exported.
  *      * Network security config: Debug loopback config must be absent in release APK.
  * 2. Origin & Network Invariants:
  *    - Asserts release endpoint targets approved HTTPS origin.
@@ -28,6 +28,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 function loadDotEnv() {
   const envPath = resolve(process.cwd(), '.env');
@@ -55,6 +56,7 @@ function loadDotEnv() {
   }
 }
 loadDotEnv();
+
 function parseCliArgs() {
   const options = {
     apk: { type: 'string', default: 'androidApp/build/outputs/apk/release/androidApp-release.apk' },
@@ -135,6 +137,95 @@ function scanForSecrets(repoRoot) {
   return violations;
 }
 
+/**
+ * Validates exported components against strict release security policy:
+ * - Only MainActivity (.MainActivity, MainActivity, dev.doggo.android.MainActivity) is permitted as an exported activity.
+ * - Services and content providers must NEVER be exported.
+ * - Only DoggoTaskWidgetReceiver (.DoggoTaskWidgetReceiver, DoggoTaskWidgetReceiver, dev.doggo.android.DoggoTaskWidgetReceiver)
+ *   is permitted as an exported receiver, and ONLY with:
+ *     * An explicit <intent-filter> containing exact action: android.appwidget.action.APPWIDGET_UPDATE
+ *     * No unauthorized extra actions, categories, or data tags inside the widget receiver.
+ *     * Exact meta-data: android:name="android.appwidget.provider" referencing @xml/task-widget-info or @xml/task_widget_info.
+ */
+export function validateExportedComponents(manifestXml) {
+  const issues = [];
+  const componentTags = ['activity', 'service', 'receiver', 'provider'];
+
+  for (const tag of componentTags) {
+    const fullBlockRegex = new RegExp(`<${tag}\\b([\\s\\S]*?)(?:\\/>|>([\\s\\S]*?)<\\/${tag}>)`, 'gi');
+    let match;
+    while ((match = fullBlockRegex.exec(manifestXml)) !== null) {
+      const openTagAttrs = match[1] || '';
+      const innerContent = match[2] || '';
+      const isExported = /android:exported\s*=\s*"true"/i.test(openTagAttrs);
+      if (!isExported) {
+        continue;
+      }
+
+      const nameMatch = openTagAttrs.match(/android:name\s*=\s*"([^"]+)"/i);
+      const componentName = nameMatch ? nameMatch[1].trim() : '(unknown)';
+
+      if (tag === 'activity') {
+        const isMain = componentName === '.MainActivity' ||
+                       componentName === 'MainActivity' ||
+                       componentName === 'dev.doggo.android.MainActivity';
+        if (!isMain) {
+          issues.push(`Exported activity is not MainActivity: ${componentName}`);
+        }
+      } else if (tag === 'receiver') {
+        const isWidget = componentName === '.DoggoTaskWidgetReceiver' ||
+                         componentName === 'DoggoTaskWidgetReceiver' ||
+                         componentName === 'dev.doggo.android.DoggoTaskWidgetReceiver';
+        if (!isWidget) {
+          issues.push(`Exported receiver is not DoggoTaskWidgetReceiver: ${componentName}`);
+        } else {
+          // Narrow verification for DoggoTaskWidgetReceiver:
+          // 1. Must contain an explicit intent-filter
+          const intentFilterMatch = innerContent.match(/<intent-filter\b[^>]*>([\s\S]*?)<\/intent-filter>/i);
+          if (!intentFilterMatch) {
+            issues.push(`DoggoTaskWidgetReceiver is exported but missing <intent-filter>`);
+          } else {
+            const filterContent = intentFilterMatch[1];
+            // Must contain exact APPWIDGET_UPDATE action
+            const hasAppWidgetUpdate = /<action\s+[^>]*android:name\s*=\s*"android\.appwidget\.action\.APPWIDGET_UPDATE"[^>]*\/?>/i.test(filterContent);
+            if (!hasAppWidgetUpdate) {
+              issues.push(`DoggoTaskWidgetReceiver is exported but missing android.appwidget.action.APPWIDGET_UPDATE intent filter`);
+            }
+
+            // Must not contain any other action
+            const actionMatches = filterContent.matchAll(/<action\s+[^>]*android:name\s*=\s*"([^"]+)"[^>]*\/?>/gi);
+            for (const actionMatch of actionMatches) {
+              const actionName = actionMatch[1];
+              if (actionName !== 'android.appwidget.action.APPWIDGET_UPDATE') {
+                issues.push(`DoggoTaskWidgetReceiver contains unauthorized exported action: ${actionName}`);
+              }
+            }
+
+            // Must not contain categories or data in widget update filter
+            if (/<category\b/i.test(filterContent)) {
+              issues.push(`DoggoTaskWidgetReceiver contains unauthorized <category> in intent filter`);
+            }
+            if (/<data\b/i.test(filterContent)) {
+              issues.push(`DoggoTaskWidgetReceiver contains unauthorized <data> in intent filter`);
+            }
+          }
+
+          // 2. Must contain exact provider meta-data
+          const hasProviderMetadata = /<meta-data\s+[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*android:resource\s*=\s*"@xml\/task[_-]widget[_-]info"[^>]*\/?>/i.test(innerContent) ||
+            /<meta-data\s+[^>]*android:resource\s*=\s*"@xml\/task[_-]widget[_-]info"[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*\/?>/i.test(innerContent);
+          if (!hasProviderMetadata) {
+            issues.push(`DoggoTaskWidgetReceiver is missing required @xml/task-widget-info provider meta-data`);
+          }
+        }
+      } else {
+        issues.push(`Non-main ${tag} is exported: ${componentName}`);
+      }
+    }
+  }
+
+  return issues;
+}
+
 function runSourceDiagnostic(repoRoot, approvedOrigin) {
   console.log(`\n=== Running Diagnostic Static Source Audit ===`);
   let issues = 0;
@@ -158,23 +249,14 @@ function runSourceDiagnostic(repoRoot, approvedOrigin) {
     }
 
     // Check exported components across activities, services, receivers, providers
-    const componentTags = ['activity', 'service', 'receiver', 'provider'];
-    let nonMainExported = false;
-    for (const tag of componentTags) {
-      const regex = new RegExp(`<${tag}[^>]*>`, 'gi');
-      const matches = manifest.match(regex) || [];
-      for (const m of matches) {
-        const isExported = /android:exported\s*=\s*"true"/i.test(m);
-        const isMain = tag === 'activity' && /MainActivity/i.test(m);
-        if (isExported && !isMain) {
-          console.log(`[FAIL] Non-main ${tag} is exported: ${m}`);
-          issues++;
-          nonMainExported = true;
-        }
+    const exportedIssues = validateExportedComponents(manifest);
+    if (exportedIssues.length > 0) {
+      for (const err of exportedIssues) {
+        console.log(`[FAIL] ${err}`);
       }
-    }
-    if (!nonMainExported) {
-      console.log(`[PASS] Exported components audit: Only MainActivity is exported.`);
+      issues += exportedIssues.length;
+    } else {
+      console.log(`[PASS] Exported components audit: Only MainActivity and verified DoggoTaskWidgetReceiver are exported.`);
     }
   } else {
     console.log(`[WARN] AndroidManifest.xml not found at ${manifestPath}`);
@@ -296,23 +378,14 @@ function runApkAudit(apkPath, approvedOrigin) {
     }
 
     // Check exported components across activities, services, receivers, providers
-    const componentTags = ['activity', 'service', 'receiver', 'provider'];
-    let nonMainExported = false;
-    for (const tag of componentTags) {
-      const regex = new RegExp(`<${tag}[^>]*>`, 'gi');
-      const matches = manifestXml.match(regex) || [];
-      for (const m of matches) {
-        const isExported = /android:exported\s*=\s*"true"/i.test(m);
-        const isMain = tag === 'activity' && /MainActivity/i.test(m);
-        if (isExported && !isMain) {
-          console.error(`[FAIL] Non-main ${tag} exported in release APK: ${m}`);
-          issues++;
-          nonMainExported = true;
-        }
+    const apkExportedIssues = validateExportedComponents(manifestXml);
+    if (apkExportedIssues.length > 0) {
+      for (const err of apkExportedIssues) {
+        console.error(`[FAIL] ${err}`);
       }
-    }
-    if (!nonMainExported) {
-      console.log(`[PASS] Exported components audit: Only MainActivity is exported.`);
+      issues += apkExportedIssues.length;
+    } else {
+      console.log(`[PASS] Exported components audit: Only MainActivity and verified DoggoTaskWidgetReceiver are exported.`);
     }
 
     if (/networkSecurityConfig/i.test(manifestXml)) {
@@ -359,4 +432,6 @@ function main() {
   process.exit(success ? 0 : 1);
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  main();
+}

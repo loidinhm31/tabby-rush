@@ -8,8 +8,8 @@ Group B; **hard dependency01** complete/frozen Glance/access/section contracts a
 
 ## Overview
 - Date: 2026-10-16. Priority: P2. Effort: **16h**.
-- Implementation status: **pending / 0%**. Review status: pending.
-- Implement complete Glance renderer/receiver/actions/all-instance updater with bounded cold account access and quiescent clearing.
+- Implementation status: **delivered / 100%**. Review status: **Cycle 2 8.8/10 Conditional Pass; approved for implementation handoff, 0 critical issues**.
+- Delivered the Glance renderer/receiver/actions/all-instance updater, bounded account access, tests and handoff. Native launcher/session acceptance remains Phase 07.
 
 ## Key Insights
 Glance uses RemoteViews, not ordinary shared Compose UI. Launcher owns widget IDs and bounds; no Activity/ViewModel dependency or per-widget account configuration. OS-retained content and update sessions require lifecycle clearing, not just setting an in-memory list empty. `provideContent` can live beyond a callback; admission must cover actual bounded RemoteViews update handoff, never permanent composition lifetime.
@@ -55,11 +55,11 @@ Explicit owned paths (repository-relative; all proposed creates):
 9. Handoff updater clear/refresh/quiescence behavior and tests to05 with all pending native scenarios, including delayed update vs leave, launcher restore and multiple IDs.
 
 ## Todo list
-- [ ] Implement real responsive Glance sections/controls and provider resources.
-- [ ] Implement token-bound callbacks and Add/Open intents.
-- [ ] Implement all-ID refresh/clear with bounded session quiescence.
-- [ ] Author model and native widget tests; record real integration prerequisites.
-- [ ] Deliver leaf evidence/API handoff to05.
+- [x] Implement real responsive Glance sections/controls and provider resources.
+- [x] Implement token-bound callbacks and Add/Open intents.
+- [x] Implement all-ID refresh/clear and bounded quiescence (leave-path cleanup failure propagation remains an open Cycle 2 finding).
+- [x] Author model and instrumented widget tests; record real integration prerequisites (device acceptance remains pending).
+- [x] Deliver leaf evidence/API handoff to05.
 
 ## Success Criteria
 Acceptance1,2,3,5,7,12 widget requirements implemented with no Activity dependence, stale DB opening, duplicate sections or direct DAO writes. Future native checks show real scroll/toggle/Add/Open at supported sizes and all IDs clearing. Until05/07 exercise actual launcher/account races, leaf report explicitly marks those pending; authored tests are not native proof.
@@ -74,7 +74,7 @@ Glance session timing, launcher sizing/restore and RemoteViews scroll quirks req
 Home screen intentionally exposes titles; initial/locked/signed-out/wipe state must not. Immutable action tokens are untrusted and validated at runtime. No current-account key is accepted as permission to open a runtime; final publication fence prevents account-switch snapshot leaks. Exported receiver policy must be least-privilege and audited in05.
 
 ## Next steps
-Terminal02 plus terminal03 unblocks05. Main integrator later runs Android compile/device tests and07 actual launcher acceptance. No runtime source implementation authorized by this plan.
+Phase 02 implementation and handoff are delivered; the reported integrated suite includes the widget code, but launcher/account-race and process-death proof remains Phase 07. Cycle 2 flags cleanup/session safety as unwaived: blanking and session-close failures in the leave path can be swallowed; the original Phase 02 owner must resolve or justify this before account-leave safety is accepted. Linux still requires Phase 08's actual target/session.
 
 ## Unresolved questions
-Exact stable Glance update-session cancellation/completion behavior and receiver export requirements need library/device proof; no product question.
+Cycle 2 identifies Glance blanking/session cleanup errors swallowed during account leave as an open safety finding. Phase 07 must route remediation to the original Phase 02 owner and retain launcher/session proof as pending. Exact session cancellation and artifact provenance remain unverified.

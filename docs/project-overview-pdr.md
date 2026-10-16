@@ -1,7 +1,7 @@
 # Doggo Project Overview & Product Development Requirements (PDR)
 
-Last Updated: 2026-10-16
-Document Version: 1.9.0
+Last Updated: 2026-10-17
+Document Version: 1.10.0
 Status: Active
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
@@ -12,9 +12,11 @@ Related Docs: [System Architecture](./system-architecture.md) · [Code Standards
 Doggo is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization.
 
 The project prioritizes a clean multiplatform architecture, where the core domain logic, state management, and user interface are planned in Kotlin Multiplatform and Compose Multiplatform:
-1. **Android Application (`androidApp/`)**: Native mobile client delivered in source (Phase 07); AGP bytecode compilation, instrumented tests, and runtime device gates pending host SDK provisioning in Phase 08.
+1. **Android Application (`androidApp/`)**: Native mobile client and sticky task surfaces are implemented. The Phase 07 report records a successful debug APK build; instrumented device and interactive launcher/shade acceptance remain pending the Gate G2 hardware run.
 2. **Desktop Application (`desktopApp/`)**: Linux desktop source and a standalone distributable were delivered in Phase 09; RPM installation and a live Secret Service session remain operator acceptance gates. Phase 10 Windows implementation was delivered and recorded at 100% (2026-10-14), including the x64 DPAPI provider, isolated dependency lock, package audit harness, self-contained `Doggo.exe` bundle, and unsigned MSI. Technical acceptance remains blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification.
 3. **Headless Development Infrastructure**: Immediate development, IDE execution, and emulator testing on headless Fedora Linux servers via secure Xpra virtual display sessions (delivered in Phase 01).
+
+The primary task-management UI is shared Compose Multiplatform. Task surfaces extend it with an Android Glance app widget, an opt-in low-importance deadline notification, and a compact desktop Compose window with a system-tray entry when the desktop session exposes a usable tray. Phase 07 records automated Android/Windows integration evidence and design baselines, not native hardware acceptance; Linux session acceptance remains pending Phase 08.
 
 ---
 
@@ -32,7 +34,7 @@ The project prioritizes a clean multiplatform architecture, where the core domai
 | **FR-06** | Secure Authentication | Reuses Glean Hub auth service with single-flight refresh, generation fencing, no automatic POST replays, and platform OS credential custody (Android Keystore on mobile, Freedesktop Secret Service on Linux, and current-user DPAPI on Windows). |
 | **FR-07** | Task Deadlines & Reminders | Users can assign optional date-only or timed deadlines to tasks, with captured IANA timezone, explicit DST offset, overdue boundaries, and configurable local reminder rules (lead minutes, count 1..10, interval >= 15m). |
 | **FR-08** | Strict-v2 Protocol & Atomic Schema Evolution | End-to-end data synchronization supports versioned `strict-v2` wire contracts with cryptographic preimages, checked 64-bit integer arithmetic, in-place app-scoped migration fencing, legacy receipt durability verification, and safe intent rebasing without data loss. |
-| **FR-09** | Sticky Task Surface Foundation | Shared account-scoped observation, readiness/access contracts, task partitioning and deadline selection, desired-state completion mutation, and Android/Desktop host/model seams; native surfaces are delivered only by downstream phases. |
+| **FR-09** | Sticky Task Surfaces | Share account- and generation-fenced task observation and completion actions across a native Android Glance widget, an opt-in quiet deadline notification, and a compact Compose Multiplatform desktop window with conditional tray controls. Presentation preferences remain local and are not synced as task data. |
 
 ### 2.2 Non-Functional Requirements (NFR)
 
@@ -40,7 +42,7 @@ The project prioritizes a clean multiplatform architecture, where the core domai
 |---|---|---|
 | **NFR-01** | Performance | Smooth, responsive UI interactions without main-thread blocking during network or disk I/O. |
 | **NFR-02** | Security | Zero unauthenticated network listeners; HTTPS-only external transport; encrypted credential storage; no secrets in logs or code. |
-| **NFR-03** | Portability | 100% shared Compose Multiplatform UI across Android and JVM desktop targets. |
+| **NFR-03** | Portability | The primary task-management UI is shared Compose Multiplatform across Android and JVM desktop; platform-specific task surfaces use native host APIs while consuming shared account-scoped contracts. |
 | **NFR-04** | Maintainability | Strict package modularity, unidirectional data flow, immutable state models, and automated test coverage. |
 | **NFR-05** | Reliability | Bounded network timeouts, deterministic error envelopes, and graceful handling of network transitions. |
 
@@ -357,17 +359,19 @@ Progress across the Doggo project is tracked in the living [Project Roadmap](./p
   - **Gate G6 (Adversarial Acceptance & 3-Device Proof)**: **LOGIC PASSED / LIVE HELD** (adversarial boundaries and file-backed SQLite persistence pass; live 3-device concurrent sync held pending physical hardware testbeds).
   - **Gate G7 (Coordinated Cutover & Release Runbook)**: **RUNBOOK DELIVERED / LIVE CUTOVER BLOCKED** (authoritative operator runbook `docs/strict-v2-cutover-runbook.md` and rehearsal tooling `scripts/strict-v2-cutover-rehearsal.mjs` delivered; live production cutover strictly blocked pending prerequisite gates G2, G3, G6, and formal operator authorization).
 
-## 15. Sticky Task Surfaces — Phase 01 Foundation Requirements & Status
+## 15. Sticky Task Surfaces — Delivered Architecture & Status
 
-The separate Sticky Task Surfaces initiative (plan `261016-1409-sticky-task-surfaces`) delivered Phase 01 on 2026-10-16 (24h / 24h). This PDR covers the shared foundation, not a claim that native surfaces are complete.
+The separate Sticky Task Surfaces initiative (`plans/261016-1409-sticky-task-surfaces/`) delivers shared task-surface contracts, the Android Glance widget and quiet deadline notification, and the desktop Compose sticky window/tray integration. Phase 07 is delivered with documentation and automated verification evidenced; **6h / 12h credited (118h / 132h overall; 89.4%)**. Native Android/Windows acceptance remains conditionally held at Gate G2, and Linux session acceptance remains pending Phase 08.
+### 15.1 Surface Requirements and Implemented Behavior
+- `SurfaceAccountToken` binds an `AccountKey` to its runtime generation. `TaskSurfaceAccess` admits reads, desired-state completion, publication and navigation only for the current token; non-ready states do not publish task content.
+- `AccountStore.observeTodos()` feeds current task snapshots to the surfaces. `setCompletedLocally(id, completed, nowEpochMs)` performs an atomic desired-state update from a fresh projection, preserving other current fields.
+- Shared projections partition non-deleted tasks without reordering and select overdue deadlines before upcoming ones, with deterministic deadline/task-ID ordering and conflict metadata. Reminder enablement does not gate deadline selection.
+- Android `DoggoTaskWidget` is a responsive Glance app widget with Incomplete and Completed sections and Open, Add and desired-completion actions. `TaskSurfaceNotificationCoordinator` publishes one opt-in, low-importance notification without sound, vibration or badge; task detail is private, with generic public lock-screen text.
+- Desktop `StickyTaskContent` is composed in a separate compact Compose `Window` requesting `alwaysOnTop`; the tray offers Open Doggo, Show/Hide Sticky Tasks and Quit when supported. Quick-add is isolated from the main editor. Closing a window hides it; explicit Quit performs runtime teardown. A missing/unusable tray must not strand the process with every window hidden.
+- Android task-surface preferences and desktop sticky-window geometry/visibility are local presentation state, not synchronized task fields. Linux-specific session acceptance is not inferred from shared desktop behavior.
 
-### 15.1 Acceptance Criteria
-- The shared contract models restoring, ready-with-account/generation-token, signed-out, locked, and unavailable states; it supplies token-bearing read/action/publication/navigation operations. Downstream access implementations must reject stale account-generation tokens.
-- `AccountStore.observeTodos()` exposes reactive task snapshots. `setCompletedLocally(id, completed, nowEpochMs)` performs fresh lookup and desired-state mutation under one mutation lock, returns `Missing` / `Unchanged` without writing when appropriate, and preserves concurrent task fields on change.
-- Pure projections partition non-deleted tasks without reordering and select overdue tasks before upcoming ones, with deterministic deadline/task-ID ordering and unresolved-conflict retention. Reminder enablement does not determine deadline-selection eligibility.
-- Android host (`TaskSurfaceHostOwner`, `AndroidTaskSurfaceHost`) and desktop compact state/action (`StickyQuickAddState`, `StickyTaskState`, `StickyTaskAction`) contracts are present. The Android build declares Glance 1.2.0 dependencies and lock entries; cryptographic artifact provenance is still pending.
-
-### 15.2 Verification and Remaining Scope
-The Phase 01 QA report records 307/307 Gradle tests passing (231 shared JVM, 64 desktop, 12 Android), 18/18 fixture smoke checks, 6/6 source-security diagnostics, and 8/8 strict-v2 self-test checks (`plans/reports/qa-261016-1911-phase-01-full-suite-validation.md`). Cycle 3 review records 9.4/10 and conditional terminal handoff authorization (`plans/reports/code-review-261016-1911-phase-01-shared-foundation-cycle-3.md`). Results are attributed to those reports and were not rerun for this documentation update.
-
-Widget rendering, notification/settings integration, desktop window/tray behavior, runtime/navigation/wipe integration, and platform acceptance remain downstream. Phase 01 evidence reports 149 unmatched root classpath checksums in the existing dependency verification baseline, and records Gradle checks run with `--dependency-verification=off`; Glance artifact provenance remains pending (`plans/261016-1409-sticky-task-surfaces/reports/phase-01-foundation-evidence.md`).
+### 15.2 Review, Verification and Remaining Gates
+- Phase 07 records 364 passing Gradle tests (231 shared JVM, 99 desktop, 34 Android unit), 12/12 Node security tests, 6/6 source diagnostics, 18/18 Hub fixture checks, 8/8 strict-v2 rehearsal checks, `:androidApp:assembleDebug`, and `:desktopApp:createDistributable`. These are report-attributed results, not fresh runs in this documentation update; Gradle commands used `--dependency-verification=off`.
+- The Android and Windows PNGs are visual design baselines, not runtime OS captures. Interactive Android launcher/shade and Windows window/tray/multi-monitor acceptance remain held at G2.
+- The review's Android safety findings remain open: on delivery-gate drain timeout, `closeRuntimeInternal()` catches and logs the exception, then returns before canceling observer jobs or closing Room; `closeActiveRuntime()` still clears `activeRuntime`. Glance blanking/session-close failures are also caught and logged, so stale OS-retained content may remain.
+- The 149-checksum dependency-verification hold and separate Glance artifact-provenance hold remain open. Linux acceptance needs a real Linux session; historical release holds G3/G6/G7 are unchanged.

@@ -8,8 +8,8 @@ Group C; **hard dependencies01+02+03**, all terminal and real. Can overlap06 onc
 
 ## Overview
 - Date: 2026-10-16. Priority: P2. Effort: **24h**.
-- Implementation status: **pending / 0%**. Review status: pending.
-- Install cold-safe account access and lifetime-independent refresh, actual Add/Open/permission UX, exhaustive teardown/recovery and least-privilege Android registration.
+- Implementation status: **delivered / 100%**. Review status: **Cycle 2 8.8/10 Conditional Pass; approved for implementation handoff, 0 critical issues**.
+- Delivered real Android readiness/access/publication, process observers, navigation/settings, wipe cleanup, registration and security audit integration. Cycle 2 downstream acceptance and safety findings remain open.
 
 ## Key Insights
 Session restoration is asynchronous; stale `getOrCreateAccountRuntime(key)` can displace current runtime. Current navigation only account-checks and main toggle copies stale Todo. Startup wipe recovery cancels reminders but not launcher contents/new jobs. Existing release audit rejects all exported components except MainActivity; widget exception, if needed, must be narrowly justified.
@@ -69,11 +69,11 @@ Explicit owned paths (repository-relative; actions/reasons in central manifest):
 12. Handoff integration report with owned tests and future Android commands. Required native API32/33/34+ launcher/shade/permission process-death smoke is07 gate; no compile-only claim.
 
 ## Todo list
-- [ ] Implement real readiness/access/publication/drain and UI-independent refresh.
-- [ ] Integrate exhaustive normal/startup wipe clearing and account replacement.
-- [ ] Wire fresh completion/navigation/compact create and actual opt-in permission UX.
-- [ ] Register complete components and narrowly update security auditor.
-- [ ] Author real integration/security behavior tests; deliver terminal05 evidence.
+- [x] Implement real readiness/access/publication/drain (close-after-drain-timeout behavior remains open).
+- [x] Integrate normal/startup wipe clearing and account replacement (Glance cleanup failure propagation remains open with Phase 02 owner).
+- [x] Wire fresh completion/navigation/compact create and actual opt-in permission UX.
+- [x] Register complete components and narrowly update security auditor.
+- [x] Author real integration/security behavior tests; deliver terminal05 evidence.
 
 ## Success Criteria
 All Android acceptance1–7 and12 production paths are wired, not just leaf code.4s readiness and bounded publication/drain proven, no stale account runtime opening or publication after blank. Logout/recovery failure retains marker; hidden/dead Activity does not prevent refresh. Actual opt-in permission request exists. Auditor remains fail-closed; real OS launcher/shade evidence required during07.
@@ -88,7 +88,7 @@ Publication/drain deadlock: never wait drain under publication/store mutex; test
 Current identity/key/generation/unlock/marker/admission checked for every external action/publication. Explicit immutable PendingIntent identities are untrusted; no arbitrary runtime fallback. Home-screen exposure intentional only for current account; lock-screen notification remains generic. No old titles in persisted geometry or suppression. Least-exported manifest audited at source and merged APK.
 
 ## Next steps
-Terminal05 plus06 unblocks07 integrated acceptance/docs. Main integrator runs declared Android compile/unit/connected/security checks after coherent snapshot; no implementation/build authorization granted by this planning file.
+Phase 05 implementation, unit/security checks and handoff are delivered. Phase 07 owns native Android launcher/shade/account acceptance and must route the Cycle 2 drain-timeout finding to the original Phase 05 owner; do not treat logging followed by Room closure as resolved fail-closed behavior.
 
 ## Unresolved questions
-Glance receiver/session behavior and device/signing prerequisites require proof. No product question or deferred lifecycle decision.
+Cycle 2 warning: if `deliveryGate.closeAndDrain()` times out, runtime closure currently logs and proceeds toward Room closure. Fail-closed correction/decision and native acceptance remain open with the original Phase 05 owner. Glance cleanup failure-swallowing is also open with the original Phase 02 widget owner. These warnings do not negate delivered implementation or test results, but must not be waived by the 8.8/10 review.

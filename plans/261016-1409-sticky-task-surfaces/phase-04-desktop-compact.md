@@ -8,8 +8,8 @@ Group B; **hard dependency01** completed compact task/action/section signatures.
 
 ## Overview
 - Date: 2026-10-16. Priority: P2. Effort: **12h**.
-- Implementation status: **pending / 0%**. Review status: pending.
-- Deliver compact task UI, independent quick-add view contract and real atomic local geometry/visibility persistence with monitor-safe restoration.
+- Implementation status: **delivered / 100%**. Review status: **Cycle 2 8.8/10 Conditional Pass; approved for implementation handoff, 0 critical issues**.
+- Delivered compact task UI, independent quick-add contract, atomic presentation preferences and monitor-safe geometry helpers with tests. Native display acceptance remains Phase 07/08.
 
 ## Key Insights
 Main `TodoUiState.items` is filtered and its editor is shared mutable controller state; compact UI must consume separate authoritative sections/buffer. AWT display bounds can be negative and per-monitor scaled; usable work areas exclude insets. Valid saved bounds on yesterday's monitor may strand today's window.
@@ -50,11 +50,11 @@ Explicit owned paths (repository-relative; all proposed creates):
 8. Handoff UI/geometry/preferences APIs and leaf evidence to06. No preview/mock window counts as sticky/native acceptance; actual Windows stacking/restore belongs integration.
 
 ## Todo list
-- [ ] Implement compact sections/inline input/recovery controls against frozen actions.
-- [ ] Implement real versioned atomic presentation preferences.
-- [ ] Implement work-area/DPI/negative-coordinate restoration helpers.
-- [ ] Author production geometry and real-file persistence tests.
-- [ ] Deliver complete leaf handoff to06.
+- [x] Implement compact sections/inline input/recovery controls against frozen actions.
+- [x] Implement real versioned atomic presentation preferences.
+- [x] Implement work-area/DPI/negative-coordinate restoration helpers.
+- [x] Author production geometry and real-file persistence tests.
+- [x] Deliver complete leaf handoff to06.
 
 ## Success Criteria
 Acceptance1/2 desktop counterparts and8/10/12 presentation foundations complete. Compact UI never consumes filtered main items or shared main-editor input. Geometry tests cover every specified edge; actual Windows restore/stacking still pending06/07. Preferences contain presentation values only; no schema/sync or autostart registration.
@@ -69,7 +69,7 @@ Logical/physical coordinate mismatch can pass pure geometry tests but fail nativ
 No task titles/account data in geometry file, minimal private local presentation storage. Clear stale task/input through06 account transition; unavailable UI never offers mutation against old token. No auto-start/IPC/new runtime.
 
 ## Next steps
-Terminal04 unblocks06 single-owner integration; main integrator later runs desktop tests and07 native Windows monitor/tray/stacking proof. Linux behavior remains08 gate.
+Phase 04 is delivered and its implementation tests are reported passing. Phase 07 still needs actual Windows monitor/stacking acceptance; Linux-specific acceptance remains held for Phase 08's target/session.
 
 ## Unresolved questions
 No product decisions left. Runtime coordinate conversion and focus behavior on actual Windows/Linux displays require native proof.

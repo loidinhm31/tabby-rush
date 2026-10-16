@@ -71,12 +71,36 @@ object AccountRuntimeFactory {
                 }
             }
         }
+        val hostOwner = context.applicationContext as? TaskSurfaceHostOwner
+        val surfaceObserverJob = scope.launch {
+            launch {
+                store.observeTodos().collect {
+                    try {
+                        hostOwner?.taskSurfaces?.refresh(SurfaceRefreshReason.Data)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Todos surface observation refresh failed: ${e.message}")
+                    }
+                }
+            }
+            launch {
+                store.observePersistedSchedule().collect {
+                    try {
+                        hostOwner?.taskSurfaces?.refresh(SurfaceRefreshReason.Data)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Schedule surface observation refresh failed: ${e.message}")
+                    }
+                }
+            }
+        }
 
         val compositeCancelGate = CompositeLeaveSchedulerCancelGate(
             deliveryGate = deliveryGate,
             scheduleObserverJob = scheduleObserverJob,
             syncCancelGate = syncScheduler,
-            reminderCancelGate = reminderCoordinator
+            reminderCancelGate = reminderCoordinator,
+            surfaceObserverJob = surfaceObserverJob,
+            context = context.applicationContext,
+            host = hostOwner?.taskSurfaces
         )
 
         lateinit var leaveProto: AccountLeaveProtocol
@@ -97,7 +121,8 @@ object AccountRuntimeFactory {
             reminderCoordinator = reminderCoordinator,
             deliveryGate = deliveryGate,
             scheduleObserverJob = scheduleObserverJob,
-            leaveProtocol = leaveProto
+            leaveProtocol = leaveProto,
+            surfaceObserverJob = surfaceObserverJob
         )
     }
 

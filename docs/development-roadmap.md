@@ -1,7 +1,7 @@
 # Doggo Development Roadmap
 
-**Document Version**: 1.2.0  
-**Last Updated**: 2026-10-16
+**Document Version**: 1.3.0  
+**Last Updated**: 2026-10-17
 **Primary Reference**: [Project Roadmap](./project-roadmap.md) · [Project Overview PDR](./project-overview-pdr.md)
 
 ---
@@ -16,7 +16,9 @@
 | **Milestone 4** | E | Authorized Hub Operations & Signed Android Release | [Phase 08](../plans/261013-1540-doggo-glean-hub-reuse/phase-08-android-release-operations.md) | **Tooling Operational; Live Release Gates Pending** |
 | **Milestone 5** | F | Linux Desktop Distribution (Native RPM & Secret Service) | [Phase 09](../plans/261013-1540-doggo-glean-hub-reuse/phase-09-linux-distribution.md) | **Implementation Delivered; RPM Acceptance Pending** |
 | **Milestone 6** | G | Windows Desktop Distribution (Native MSI & DPAPI) | [Phase 10](../plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md) | **Implementation Delivered / 100% (2026-10-14); Technical Acceptance Blocked** |
-| **Cross-cutting initiative** | — | Sticky Task Surfaces foundation and platform leaves | [Plan 261016-1409](../plans/261016-1409-sticky-task-surfaces/phase-01-shared-foundation.md) | **Phase 01 delivered (conditional); 02–04 handoff authorized; provenance pending** |
+| **Cross-cutting initiative** | — | Sticky Task Surfaces | [Plan 261016-1409](../plans/261016-1409-sticky-task-surfaces/plan.md) | **Phase 07 documentation and automated-verification evidence delivered (6h/12h); native Android/Windows hardware acceptance held (G2); Phase 08 Linux session pending; 118h/132h credited (89.4%)** |
+
+**Sticky Task Surfaces:** Phases 01–06 delivered; Phase 07 delivered Android/Windows acceptance documentation and automated-verification evidence (6h/12h credited), with native hardware acceptance conditionally held under Gate G2. Phase 08 requires an actual Linux target/session. The Phase 07 acceptance and code-review reports each list 364/364 Gradle tests; the earlier Cycle 2 review lists 363/363 (231 shared, 98 desktop, 34 Android). These totals are attributed to their respective reports; no tests were rerun in this roadmap update. The four PNGs in `docs/evidence/` are visual design baselines, not runtime OS captures. The 149-checksum root verification baseline and separate Glance artifact-provenance hold remain; Android `closeRuntimeInternal()` catches/logs a delivery-drain timeout and returns, after which `closeActiveRuntime()` clears the runtime reference while coroutine cleanup and Room closure are skipped. Glance cleanup failures and release gates G2/G3/G6/G7 remain open.
 
 - **Phase 08:** Tooling, security audit scripts, disaster recovery runbooks, and offline harnesses are implemented; live compilation and device acceptance require operator SDK setup and Phase 07 remediation.
 - **Phase 09:** Source and standalone distributable were delivered; live RPM packaging/installation and Secret Service runtime gates remain pending operator prerequisites.

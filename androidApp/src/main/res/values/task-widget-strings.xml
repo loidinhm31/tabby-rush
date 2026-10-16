@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="task_widget_title">Doggo Tasks</string>
+    <string name="task_widget_description">Sticky tasks and completion checkboxes</string>
+    <string name="task_widget_loading">Loading tasks…</string>
+    <string name="task_widget_signed_out">Sign in to view tasks</string>
+    <string name="task_widget_locked">Device locked. Unlock to view tasks</string>
+    <string name="task_widget_unavailable">Tasks unavailable. Tap to open app</string>
+    <string name="task_widget_empty">No tasks yet. Tap + to add one.</string>
+    <string name="task_widget_add_task">Add task</string>
+    <string name="task_widget_open_app">Open Doggo</string>
+    <string name="task_widget_incomplete_header">Incomplete (%1$d)</string>
+    <string name="task_widget_completed_header">Completed (%1$d)</string>
+    <string name="task_widget_checkbox_incomplete">Mark %1$s as complete</string>
+    <string name="task_widget_checkbox_completed">Mark %1$s as incomplete</string>
+</resources>

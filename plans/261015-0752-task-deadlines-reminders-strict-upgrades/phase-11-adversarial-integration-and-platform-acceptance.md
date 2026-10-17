@@ -22,7 +22,7 @@ Tests alone cannot prove native visible delivery or distributed migration fencin
 - Automation checks correctness; actual manual/native surfaces prove appearance/permission/system behavior. Final shared/platform suites run once after implementation stabilizes, then only affected failing paths rerun after fix.
 
 ## Related code files
-Doggo root `/home/loidinh/WS/doggo`: extend meaningful existing common/JVM sync/storage/account-leave tests; Android `background-isolation-test.kt` and device tests; desktop lifecycle/platform suites; `scripts/{hub-live-smoke,hub-compatibility-smoke,debug-fault-proxy}.mjs`, `scripts/android-smoke.sh`, existing Linux/Windows package smoke scripts.
+TabbyRush root `/home/loidinh/WS/tabbyrush`: extend meaningful existing common/JVM sync/storage/account-leave tests; Android `background-isolation-test.kt` and device tests; desktop lifecycle/platform suites; `scripts/{hub-live-smoke,hub-compatibility-smoke,debug-fault-proxy}.mjs`, `scripts/android-smoke.sh`, existing Linux/Windows package smoke scripts.
 Hub root `/home/loidinh/WS/glean-hub`: sync plugin contract/service/migration/route tests and admin app behavior tests. Feature acceptance docs and sanitized evidence under `docs/` in appropriate repo; no permanent throwaway spike harnesses.
 
 ## Implementation Steps
@@ -46,9 +46,9 @@ Hub root `/home/loidinh/WS/glean-hub`: sync plugin contract/service/migration/ro
 - **Completion Date:** 2026-10-16.
 - **Effort Credited:** 100% planned implementation effort (20h credited).
 - **Automated Test & Packaging Metrics:** 395 total executed checks/targets (394 PASS, 0 failures, 1 ignored live Mongo gate):
-  - Doggo Shared KMP JVM & SQLite Suite (`:shared:jvmTest --dependency-verification=off --rerun-tasks`): 202 passed across 28 test classes.
-  - Doggo Desktop App Suite (`:desktopApp:test --dependency-verification=off --rerun-tasks`): 49 passed across 10 test classes.
-  - Doggo Android Debug Unit Suite (`:androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks`): 12 passed across 4 test classes.
+  - TabbyRush Shared KMP JVM & SQLite Suite (`:shared:jvmTest --dependency-verification=off --rerun-tasks`): 202 passed across 28 test classes.
+  - TabbyRush Desktop App Suite (`:desktopApp:test --dependency-verification=off --rerun-tasks`): 49 passed across 10 test classes.
+  - TabbyRush Android Debug Unit Suite (`:androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks`): 12 passed across 4 test classes.
   - Strict-v2 Wire Vectors (`node scripts/strict-v2-vector-runner.mjs`): 23 passed (2 canonical fingerprints, 10 valid vectors, 11 negative rejections).
   - Hub Fixture Smoke Harness (`node scripts/hub-live-smoke.mjs --fixture-test`): 18 passed across 5 suites.
   - Release Security Audit (`node scripts/release-security-check.mjs --diagnose-source`): 6 passed.
@@ -62,7 +62,7 @@ Hub root `/home/loidinh/WS/glean-hub`: sync plugin contract/service/migration/ro
 - **Code Review Score:** 8.6 / 10 APPROVED for automated regression subset (Report: `plans/reports/code-review-261015-2345-phase-11-adversarial-acceptance.md`).
 - **Delivered Code Remediations:**
   1. `PersistedScheduleProjector`: Corrected `INTENT_REMINDER` outbox folding to assign `scheduleToken = op.scheduleToken` when `deadline != null && op.scheduleToken != null`, resolving a critical scheduler desynchronization where reminder-only updates emitted stale tokens.
-  2. `debug-fault-proxy.mjs`: Added `/api/v1/sync/doggo/strong/legacy-receipts` route, implemented `drop-legacy-receipts-response` scenario, added client socket abort cleanup, and suppressed unverified client URL path reflection in 403 logs.
+  2. `debug-fault-proxy.mjs`: Added `/api/v1/sync/tabby-rush/strong/legacy-receipts` route, implemented `drop-legacy-receipts-response` scenario, added client socket abort cleanup, and suppressed unverified client URL path reflection in 403 logs.
   3. Boundary Test Fixtures: Corrected `America/New_York` offsets for `2026-11-01` from `-14400L` to `-18000L` (EST) across `AdversarialSchedulerBoundaryTest.kt` and `AdversarialSyncSqliteTest.kt` to mathematically align with the 02:00 DST fallback.
 - **Formal Platform & Infrastructure Gate Accounting:**
   - *Gate G2 (Platform Hardware & Adapters)*: Physical connected Android device/emulator Doze timing (`setExactAndAllowWhileIdle`), graphical Linux desktop notification bubble display (`org.freedesktop.Notifications`), and Windows COM/WinRT toast bridge (currently unimplemented stub returning safe `Unavailable`) remain held pending physical testbeds and native Windows implementation.

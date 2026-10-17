@@ -11,17 +11,17 @@
 
 | Category | File Path | Status | LOC |
 |---|---|---|---|
-| **Core Vault** | `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-dpapi-vault.kt` | Created | 246 |
-| **Service SPI** | `desktopApp/src/windowsMain/resources/META-INF/services/dev.doggo.desktop.CredentialVaultProvider` | Created | 1 |
-| **Unit Tests** | `desktopApp/src/windowsTest/kotlin/dev/doggo/desktop/windows/windows-dpapi-vault-test.kt` | Created | 235 |
-| **Integration Fix** | `desktopApp/src/test/kotlin/dev/doggo/desktop/platform-vault-dispatcher-test.kt` | Modified | 88 |
+| **Core Vault** | `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-dpapi-vault.kt` | Created | 246 |
+| **Service SPI** | `desktopApp/src/windowsMain/resources/META-INF/services/dev.tabbyrush.desktop.CredentialVaultProvider` | Created | 1 |
+| **Unit Tests** | `desktopApp/src/windowsTest/kotlin/dev/tabbyrush/desktop/windows/windows-dpapi-vault-test.kt` | Created | 235 |
+| **Integration Fix** | `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/platform-vault-dispatcher-test.kt` | Modified | 88 |
 | **Lockfile** | `desktopApp/gradle-windows.lockfile` | Created | 160 entries |
 | **Smoke Harness** | `scripts/windows-package-smoke.ps1` | Created | 279 |
 | **Documentation** | `docs/windows-desktop-guide.md` | Created | 138 |
 | **Acceptance Spec**| `docs/windows-acceptance.md` | Created | 79 |
 | **Test Summary** | `docs/evidence/windows-test-summary.md` | Created | 82 |
 | **UI Mockups** | `docs/evidence/windows-*.png` (7 files: empty, populated, completed, editor, error, conflict, expanded) | Created | 960x720 PNGs |
-| **Plan Tracking** | `plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md` | Updated | 89 |
+| **Plan Tracking** | `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-10-windows-distribution.md` | Updated | 89 |
 
 ---
 
@@ -33,7 +33,7 @@ The core Windows DPAPI credential vault demonstrates strong adherence to Windows
 - **Fail-Closed Semantics:** Corrupted files, tampering, or logon credential mismatch transition status to `VaultStatus.CORRUPT` and preserve local SQLite databases.
 - **Memory Hygiene:** Plaintext byte buffers are explicitly wiped via `ByteArray.fill(0)` in finally blocks.
 - **Atomic Replacement:** Vault writes use temporary files and `StandardCopyOption.ATOMIC_MOVE` with `REPLACE_EXISTING`.
-- **Automated Verification:** 120/120 tests pass cleanly (24 desktop, 96 shared), including live native DPAPI roundtrip on Windows 11. Standalone `Doggo.exe` distributable (547.5 KB) and native MSI `Doggo-1.0.0.msi` (105,894,224 bytes, 100.99 MB) build cleanly.
+- **Automated Verification:** 120/120 tests pass cleanly (24 desktop, 96 shared), including live native DPAPI roundtrip on Windows 11. Standalone `TabbyRush.exe` distributable (547.5 KB) and native MSI `TabbyRush-1.0.0.msi` (105,894,224 bytes, 100.99 MB) build cleanly.
 
 However, cross-phase target isolation is violated: two Linux D-Bus libraries leaked into the Windows distribution, and the smoke script failed to catch them due to an improper regex pattern.
 
@@ -42,7 +42,7 @@ However, cross-phase target isolation is violated: two Linux D-Bus libraries lea
 ## 3. Critical Issues
 
 ### CRIT-1: Target Isolation Violation — Linux D-Bus JARs Packaged in Windows Distribution
-- **Impact:** `dbus-java-core-5.1.0-*.jar` and `dbus-java-transport-native-unixsocket-5.1.0-*.jar` are present in `desktopApp/build/compose/binaries/main/app/Doggo/app/` and included in the MSI installer.
+- **Impact:** `dbus-java-core-5.1.0-*.jar` and `dbus-java-transport-native-unixsocket-5.1.0-*.jar` are present in `desktopApp/build/compose/binaries/main/app/TabbyRush/app/` and included in the MSI installer.
 - **Root Cause:** In Phase 02 (`shared/build.gradle.kts:57`), `implementation(libs.dbus.java)` was added unconditionally to `jvmMain.dependencies`. Because `:desktopApp` depends on `:shared`, Gradle pulls D-Bus transitively into `:desktopApp` runtimeClasspath.
 - **Remediation:**
   1. Phase 02 owner removes `implementation(libs.dbus.java)` from `shared/build.gradle.kts` `jvmMain` (D-Bus is unused in `:shared`).
@@ -102,7 +102,7 @@ However, cross-phase target isolation is violated: two Linux D-Bus libraries lea
 - In `WindowsDpapiVault.kt:123`, the check `if (payload.accountKey.isNotBlank() && payload.accountKey != accountKey.value)` permits a blank account key in stored JSON. Since `AccountKey` requires a 64-character hex string, change to `if (payload.accountKey != accountKey.value)` to ensure blank or missing keys fail closed immediately.
 
 ### SUGG-2: Add Windows Host Detection Assertion in Dispatcher Test
-- In `desktopApp/src/test/kotlin/dev/doggo/desktop/platform-vault-dispatcher-test.kt`, `testDetectHostTargetOnLinux` was made conditional for Linux. Add a symmetrical test `testDetectHostTargetOnWindows` asserting that `PlatformVaultDispatcher.detectHostTarget() == "windows"` when running on Windows.
+- In `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/platform-vault-dispatcher-test.kt`, `testDetectHostTargetOnLinux` was made conditional for Linux. Add a symmetrical test `testDetectHostTargetOnWindows` asserting that `PlatformVaultDispatcher.detectHostTarget() == "windows"` when running on Windows.
 
 ### SUGG-3: Replace Deprecated URL Constructor in Test Classloader Mock
 - In `platform-vault-dispatcher-test.kt:69`, `new URL(...)` constructor is deprecated in Java 20+. Replace with `URI.create("mock://localhost/").toURL()` or use standard URI creation.
@@ -131,8 +131,8 @@ However, cross-phase target isolation is violated: two Linux D-Bus libraries lea
 | **Shared Tests (`:shared:jvmTest`)** | 96 / 96 PASSED (100%) |
 | **Total Tests** | 120 / 120 PASSED (100%) |
 | **Live Native DPAPI Roundtrip** | Verified PASSED on Windows 11 Build 26200 |
-| **Distributable Image** | `Doggo.exe` launcher (547.5 KB) + Bundled JRE verified |
-| **MSI Installer Package** | `Doggo-1.0.0.msi` (105,894,224 bytes, 100.99 MB) |
+| **Distributable Image** | `TabbyRush.exe` launcher (547.5 KB) + Bundled JRE verified |
+| **MSI Installer Package** | `TabbyRush-1.0.0.msi` (105,894,224 bytes, 100.99 MB) |
 | **MSI SHA-256 Digest** | `84E58505C0B1E8D51FE0B17A661907676EE473F63DA7895FEE55407F7D3BE8A6` |
 | **Authenticode Status** | NotSigned (Disclosed developmental build) |
 | **UI Design Baselines** | 7 PNGs (960x720) in `docs/evidence/` verified |

@@ -51,8 +51,8 @@ Total 96/96 tests passed across Room migrations, SQLite transactions, outbox rec
 - Repeatability: Verified without `--write-locks`.
 
 ### 2.2 Distributable Application Bundle
-- Target Directory: `desktopApp/build/compose/binaries/main/app/Doggo`
-- Launcher: `bin/Doggo` (executable application launcher)
+- Target Directory: `desktopApp/build/compose/binaries/main/app/TabbyRush`
+- Launcher: `bin/TabbyRush` (executable application launcher)
 - Package Audit: `scripts/linux-package-smoke.sh --dist ...` verified presence of `LinuxSecretServiceVaultProvider` and complete absence of Windows DLLs or DPAPI classes.
 
 ---

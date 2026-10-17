@@ -1,0 +1,27 @@
+{
+  "appId": "tabby-rush",
+  "syncMode": "strict-v2",
+  "schema": {
+    "todos": {
+      "columns": [
+        { "name": "id", "type": "string", "nullable": false },
+        { "name": "title", "type": "string", "nullable": false },
+        { "name": "completed", "type": "boolean", "nullable": false },
+        { "name": "createdAt", "type": "integer", "nullable": false },
+        { "name": "deadlineDate", "type": "string", "nullable": true },
+        { "name": "deadlineTime", "type": "string", "nullable": true },
+        { "name": "deadlineZone", "type": "string", "nullable": true },
+        { "name": "deadlineOffsetSeconds", "type": "integer", "nullable": true },
+        { "name": "reminderAnchorTime", "type": "string", "nullable": true },
+        { "name": "deadlineAnchorEpochMs", "type": "integer", "nullable": true },
+        { "name": "deadlineOverdueEpochMs", "type": "integer", "nullable": true },
+        { "name": "reminderEnabled", "type": "boolean", "nullable": false },
+        { "name": "reminderLeadMinutes", "type": "integer", "nullable": false },
+        { "name": "reminderIntervalMinutes", "type": "integer", "nullable": true },
+        { "name": "reminderCount", "type": "integer", "nullable": false },
+        { "name": "scheduleToken", "type": "string", "nullable": true }
+      ],
+      "primaryKey": "id"
+    }
+  }
+}

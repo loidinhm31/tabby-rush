@@ -1,4 +1,4 @@
-# Doggo Windows Desktop Guide & Runbook
+# TabbyRush Windows Desktop Guide & Runbook
 
 **Document Version**: 1.1.0
 **Target Operating System**: Windows (Windows 10 Build 19041+, Windows 11 Build 22000+)
@@ -9,14 +9,14 @@
 
 ## 1. Overview
 
-The Doggo Windows desktop application is built with Compose Multiplatform 1.7.3 and targets the Java 21 LTS runtime. It brings the full offline-first personal task management experience and strict-v1 Glean Hub synchronization to Windows workstations.
+The TabbyRush Windows desktop application is built with Compose Multiplatform 1.7.3 and targets the Java 21 LTS runtime. It brings the full offline-first personal task management experience and strict-v1 Glean Hub synchronization to Windows workstations.
 
 **Phase 07 acceptance boundary:** The acceptance report records unit tests and a distributable build, not an interactive Windows session. Native sticky-window stacking, tray behavior, multi-monitor restoration, and lock reacquisition remain held at Gate G2. The sticky-surface PNGs are design baselines, not runtime captures; Windows native reminder toasts remain a separate unimplemented candidate.
 
 ### Key Architectural Invariants
 1. **OS-Protected Credential Custody**: Tokens are stored through Windows DPAPI using JNA `CryptProtectData` and `CryptUnprotectData` in current-user scope; `CRYPTPROTECT_LOCAL_MACHINE` and plaintext fallback are prohibited.
-2. **Atomic Replacement & ACL Attempt**: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-dpapi-vault.kt` writes encrypted token payloads to a temporary file and atomically moves them into place. `applyRestrictiveUserAcl()` attempts an owner ACL through `AclFileAttributeView`, but returns if the view/owner is unavailable and suppresses exceptions; effective owner-only ACL enforcement is not guaranteed.
-3. **Single Instance Guard**: A file-channel lock on `%LOCALAPPDATA%\doggo\accounts\doggo.lock` prevents multiple running processes from racing token refresh or corrupting local SQLite databases.
+2. **Atomic Replacement & ACL Attempt**: `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-dpapi-vault.kt` writes encrypted token payloads to a temporary file and atomically moves them into place. `applyRestrictiveUserAcl()` attempts an owner ACL through `AclFileAttributeView`, but returns if the view/owner is unavailable and suppresses exceptions; effective owner-only ACL enforcement is not guaranteed.
+3. **Single Instance Guard**: A file-channel lock on `%LOCALAPPDATA%\tabbyrush\accounts\tabbyrush.lock` prevents multiple running processes from racing token refresh or corrupting local SQLite databases.
 4. **Fail-Closed Session Lifecycle**: DPAPI unprotect/decode failures and nonblank account-key mismatches transition to a recoverable sign-in state without destroying local offline databases. Missing or zero-length files are treated as no saved credentials; a blank serialized account key is not rejected by the current implementation.
 5. **Foreground Sync Scheduling**: Sync intervals run in the application scope and quiesce prior to any account leave or database teardown.
 6. **No Cross-Platform Leakage**: Packaging and dependency resolution strictly isolate Windows artifacts. Zero Linux D-Bus jars or Secret Service classes are included in the Windows distribution.
@@ -38,7 +38,7 @@ powershell -ExecutionPolicy Bypass -File scripts\windows-package-smoke.ps1 -Diag
 
 Sample expected output:
 ```
-=== Doggo Windows Desktop Environment Diagnostics ===
+=== TabbyRush Windows Desktop Environment Diagnostics ===
 1. Host OS: Windows 10.0.26200.0 (AMD64)
 2. Java Runtime: PRESENT (java version "21.0.9" 2025-10-21 LTS) at ...\bin\java.exe
 3. jpackage tool: PRESENT (21.0.9) at ...\bin\jpackage.exe
@@ -49,7 +49,7 @@ Sample expected output:
 
 ---
 
-## 3. Building Doggo Desktop
+## 3. Building TabbyRush Desktop
 
 ### Build Commands (Windows Command Prompt or PowerShell)
 
@@ -64,11 +64,11 @@ Sample expected output:
 ```
 
 #### 3. Create Self-Contained Distributable Bundle
-Generates a standalone application directory with a bundled JRE, required DLLs, and the `Doggo.exe` launcher:
+Generates a standalone application directory with a bundled JRE, required DLLs, and the `TabbyRush.exe` launcher:
 ```cmd
 .\gradlew.bat -PdesktopTarget=windows :desktopApp:createDistributable
 ```
-Output path: `desktopApp\build\compose\binaries\main\app\Doggo\`
+Output path: `desktopApp\build\compose\binaries\main\app\TabbyRush\`
 
 #### 4. Package Windows MSI Installer
 Packages a per-user MSI installer with Start Menu shortcut and upgrade GUID:
@@ -93,14 +93,14 @@ The Windows target-specific lockfile is `desktopApp\gradle-windows.lockfile`; or
 ## 5. Security & DPAPI Storage Architecture
 
 ### File Layout
-Per-user account data is located under `%LOCALAPPDATA%\doggo\accounts\<accountKeyHash>\`:
+Per-user account data is located under `%LOCALAPPDATA%\tabbyrush\accounts\<accountKeyHash>\`:
 ```
-%LOCALAPPDATA%\doggo\accounts\
-├── doggo.lock                          # Single instance OS file lock
+%LOCALAPPDATA%\tabbyrush\accounts\
+├── tabbyrush.lock                          # Single instance OS file lock
 └── <accountKeyHash>\                   # SHA-256 hash of AccountKey
     ├── credentials.dpapi               # User-scoped DPAPI encrypted token payload
-    ├── doggo.db                        # SQLite Room database (tasks, outbox)
-    ├── doggo.db-wal                    # SQLite WAL journal
+    ├── tabbyrush.db                        # SQLite Room database (tasks, outbox)
+    ├── tabbyrush.db-wal                    # SQLite WAL journal
     ├── generation.dat                  # Durable generation counter
     └── wipe.marker                     # Fail-closed account wipe marker (transient)
 ```
@@ -118,12 +118,12 @@ Per-user account data is located under `%LOCALAPPDATA%\doggo\accounts\<accountKe
 
 Audit the distributable application bundle using the PowerShell verification harness:
 ```powershell
-powershell -File scripts\windows-package-smoke.ps1 -DistDir desktopApp\build\compose\binaries\main\app\Doggo
+powershell -File scripts\windows-package-smoke.ps1 -DistDir desktopApp\build\compose\binaries\main\app\TabbyRush
 ```
 *(Note: Under strict enterprise policies, ensure scripts are signed or execution policy allows local scripts, e.g. `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`)*
 
 Audited checks include:
-1. `Doggo.exe` launcher existence and size.
+1. `TabbyRush.exe` launcher existence and size.
 2. Bundled Java runtime existence (`runtime\bin\java.exe`).
 3. Verification that `WindowsDpapiVault` and `WindowsDpapiVaultProvider` are packaged.
 4. Target Isolation: Complete absence of Linux D-Bus and Secret Service classes.
@@ -146,7 +146,7 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**; technical acceptan
 ## 8. Sticky Task Surfaces & System Tray Operations
 
 ### 8.1 Pinned Sticky Companion Window
-Doggo provides a lightweight companion window designed to remain pinned on top of ordinary application windows (`alwaysOnTop = true`):
+TabbyRush provides a lightweight companion window designed to remain pinned on top of ordinary application windows (`alwaysOnTop = true`):
 - **Independent Quick-Add**: Enter a task title into the inline field and press `Enter` (or click `Add`). Titles are validated via `TitlePolicy` and committed directly to local Room SQLite storage without interfering with or overwriting unsaved drafts in the main window editor.
 - **Stable Task Ordering**: Unfiltered active tasks are presented in stable `createdAt DESC, id DESC` order, partitioned into Incomplete and Completed sections.
 - **Permanent Recovery Controls**: Even if the window title bar is obstructed, the header provides explicit `Open App` and `Quit` buttons to ensure user control is always retained.
@@ -154,11 +154,11 @@ Doggo provides a lightweight companion window designed to remain pinned on top o
 ### 8.2 Close-to-Hide & Background Synchronization
 - **Closing Windows**: The implementation uses close-to-hide for the main and sticky windows; automated lifecycle tests cover visibility and process lifetime. Native close/tray behavior still requires the Gate G2 interactive run.
 - **Background Sync**: Hiding windows does not cancel the desktop scheduler; its automated lifecycle coverage is recorded. Actual hidden-window sync convergence remains a native acceptance scenario.
-- **Single-Instance Safety**: The OS file-channel lock at `%LOCALAPPDATA%\doggo\accounts\doggo.lock` is covered by lifecycle tests; native Quit and successful relaunch/lock reacquisition still require Gate G2 acceptance.
+- **Single-Instance Safety**: The OS file-channel lock at `%LOCALAPPDATA%\tabbyrush\accounts\tabbyrush.lock` is covered by lifecycle tests; native Quit and successful relaunch/lock reacquisition still require Gate G2 acceptance.
 
 ### 8.3 System Tray Actions
-When a usable system tray is supported by the desktop session, Doggo displays an icon (`task-surface-tray.png`) in the Windows taskbar notification area:
-- **Open Doggo**: Restores the main application window and brings it to the foreground.
+When a usable system tray is supported by the desktop session, TabbyRush displays an icon (`task-surface-tray.png`) in the Windows taskbar notification area:
+- **Open TabbyRush**: Restores the main application window and brings it to the foreground.
 - **Show / Hide Sticky Tasks**: Toggles the visibility of the sticky companion window.
 - **Quit**: The implementation routes Quit through `quitSuspend()` to flush geometry preferences, drain active surface admissions, close Room, cancel coroutine scopes, and release the profile lock. Automated lifecycle coverage is recorded; native process exit and lock reacquisition remain unobserved.
 

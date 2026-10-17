@@ -3,17 +3,17 @@
 Date: 2026-10-15. Source: terminal report from `ReminderLifecycleResearch`; parent verified datetime dependency, migration registry and desktop packaging. Status: read-only feasibility evidence, no notification runtime proof.
 
 ## Current source map
-Paths relative to `/home/loidinh/WS/doggo`.
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-models.kt`, `strict-sync-contract.kt:35-39,89-101`; `sync/hub-sync-dtos.kt`: no deadline/reminder fields.
-- `shared/src/commonMain/kotlin/dev/doggo/shared/data/doggo-database.kt:9-24`, `database-migrations.kt:1-17`: Room v1; empty explicit migration registry.
-- `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt:35-115,118-203`: UI reads draft overlays; save atomically persists draft+submitted outbox. Use outbox intentions, not drafts, for eligibility.
-- `shared/src/commonMain/kotlin/dev/doggo/shared/data/doggo-dao.kt`: suspend queries/atomic transactions; no observable reminder projection.
-- `shared/src/commonMain/kotlin/dev/doggo/shared/sync/{staged-full-scan,outbox-reconciliation,account-sync-coordinator,account-leave-protocol}.kt`: scan/ack/conflict changes and wipe cancellation gates.
+Paths relative to `/home/loidinh/WS/tabbyrush`.
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-models.kt`, `strict-sync-contract.kt:35-39,89-101`; `sync/hub-sync-dtos.kt`: no deadline/reminder fields.
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/tabbyrush-database.kt:9-24`, `database-migrations.kt:1-17`: Room v1; empty explicit migration registry.
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt:35-115,118-203`: UI reads draft overlays; save atomically persists draft+submitted outbox. Use outbox intentions, not drafts, for eligibility.
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/tabbyrush-dao.kt`: suspend queries/atomic transactions; no observable reminder projection.
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/{staged-full-scan,outbox-reconciliation,account-sync-coordinator,account-leave-protocol}.kt`: scan/ack/conflict changes and wipe cancellation gates.
 - `shared/build.gradle.kts:24-38`: kotlinx-datetime already in commonMain. Strict gap/overlap resolution requires proof; default conversion must not silently pick an offset.
 - `androidApp/src/main/AndroidManifest.xml:1-29`: no current reminder/boot/exact/notification declarations.
-- `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt:55-189`: wipe recovery precedes restored runtime; dedicated local reminder path needed.
-- `androidApp/src/main/kotlin/dev/doggo/android/doggo-sync-worker.kt:18-78`: network/auth-oriented sync worker; not offline reminder receiver.
-- `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt`: account controller/window disposal; X exits.
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt:55-189`: wipe recovery precedes restored runtime; dedicated local reminder path needed.
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-sync-worker.kt:18-78`: network/auth-oriented sync worker; not offline reminder receiver.
+- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt`: account controller/window disposal; X exits.
 - `desktopApp/build.gradle.kts:18-24,49-54,79-86`: host-matched target guard; Linux D-Bus, Windows JNA; per-user MSI/shortcut, no observed AUMID toast registration.
 
 ## Proposed design

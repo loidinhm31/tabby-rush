@@ -36,7 +36,7 @@ Smoke script now matches frozen contract (real gain). Recovery script still cann
 - No post-import `countDocuments(target)` vs validated count; pre-CAS failure leaves orphan candidate collection (document it).
 - Dead dry-run branch in `runRecoveryInDatabase` (main exits first).
 ### docs
-- `security-and-recovery.md` Step 2: `mongorestore --drop --nsInclude="glean_hub.staging_doggo_restore" backup/doggo/` — no `--nsFrom/--nsTo` mapping, `--drop` into live DB, comment "environment credentials" false (mongorestore has no such env). Plan: restore into sanitized isolated SOURCE.
+- `security-and-recovery.md` Step 2: `mongorestore --drop --nsInclude="glean_hub.staging_tabbyrush_restore" backup/tabbyrush/` — no `--nsFrom/--nsTo` mapping, `--drop` into live DB, comment "environment credentials" false (mongorestore has no such env). Plan: restore into sanitized isolated SOURCE.
 - Step 6/7 omit Rust active readmission + old-epoch-409 test before reopening traffic (script banner says it; doc must).
 - `deployment-guide.md`: still no rollback/version-guard/`ProtocolIncompatible`, no key-loss/no-rotation, JWT non-revocation, admin-sign-in warning; `adb install -r` vs debug-signature uninstall approval.
 - `README.md`: hardcoded `/home/loidinh/...` JAVA_HOME; features listed with no Phase 07 NOT-ACCEPTED blocker note.
@@ -47,7 +47,7 @@ Smoke script now matches frozen contract (real gain). Recovery script still cann
 - Share one `push()/pull()` helper in smoke; generate fixture vectors from Rust/Kotlin digest vectors; verify returned `digest` against §4 encoding.
 - Parse manifest with XML parser (not regex on `apkanalyzer manifest print`); use `apkanalyzer files list`/`dex strings` to prove origin literal and reject other `https?://`.
 - Recovery: print target namespace not epoch for "old"; require `--nodb`; emit "TRAFFIC REMAINS BLOCKED until readmission + old-epoch 409 verified".
-- Reconcile plan §3 flags (`--environment production --confirm-app doggo`) with actual `hub-schema-provision.mjs` flags.
+- Reconcile plan §3 flags (`--environment production --confirm-app tabbyrush`) with actual `hub-schema-provision.mjs` flags.
 
 ## Positive
 - Smoke: register `{username,email,password}`, login, refresh, `accessToken`, `GET /api/v1/apps/:id` read-back with `syncMode/strictEpoch/columns`, dual-auth + `X-App-Id`, `protocol/epoch/kind/expectedRevision`, structured `results`, 409 epochMismatch, 426 legacy in fixture; creds via env (no argv secrets); no-redirect handling; 16/16 fixture pass.

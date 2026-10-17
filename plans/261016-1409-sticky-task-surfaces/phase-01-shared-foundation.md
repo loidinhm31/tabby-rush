@@ -35,16 +35,16 @@ Existing `withMutationLock` â†’ private `loadTodosLocked`/fresh-ID projection â†
 Phase01 alone owns every phase01 row in manifest, including shared tests and all target lockfiles even if Linux resolution occurs later. Shared/desktop lock rows are inspect/retain unless actually affected. No generated Room schema allowed. Any discovered AccountStore implementor/double must be concretely added to01 manifest before change. Later findings return to01; no ownership transfer to acceptance or Linux owner.
 
 Explicit owned paths (repository-relative; actions/reasons in central manifest):
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-store.kt`
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-contracts.kt`
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-projector.kt`
-- `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt`
-- `shared/src/commonTest/kotlin/dev/doggo/shared/contract/task-surface-projector-test.kt`
-- `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-store-sqlite-test.kt`
-- `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt`
-- `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-host.kt`
-- `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-task-model.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-store.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-contracts.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt`
+- `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-surface-projector-test.kt`
+- `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt`
+- `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt`
+- `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-host.kt`
+- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-model.kt`
 - `gradle/libs.versions.toml`
 - `androidApp/build.gradle.kts`
 - `gradle/verification-metadata.xml`

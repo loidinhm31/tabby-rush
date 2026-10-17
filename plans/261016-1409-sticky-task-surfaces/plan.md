@@ -1,5 +1,5 @@
 ---
-title: "Doggo sticky task surfaces"
+title: "TabbyRush sticky task surfaces"
 description: "Plan account-safe Android widget and deadline notification plus one desktop sticky window and tray, with separate Linux acceptance."
 status: in-progress
 priority: P2
@@ -8,7 +8,7 @@ branch: main
 tags: [feature, frontend, android, desktop, auth]
 created: 2026-10-16
 ---
-# Doggo sticky task surfaces
+# TabbyRush sticky task surfaces
 
 As of 2026-10-17, Phases 01–06 are delivered (112h); Phase 07 documentation and automated-verification evidence are delivered, with 6h of 12h credited (**118h / 132h; 89.4%**). The evidence includes Android and Windows acceptance summaries and four visual design baselines; these PNGs are not runtime OS captures. The Phase 07 acceptance and code-review reports each list 364/364 Gradle tests; the earlier Cycle 2 review lists 363/363 (231 shared, 98 desktop, 34 Android). These totals are attributed to their respective reports; no tests were rerun here. Native Android/Windows hardware acceptance remains conditionally held under Gate G2; Phase 08 is pending an actual Linux target/session. Root dependency provenance (149 unmatched classpath checksums) and separate Glance artifact provenance remain held, as do release gates G2/G3/G6/G7. Android's delivery-drain timeout is caught/logged; `closeActiveRuntime()` then clears the active runtime reference while coroutine cleanup and Room closure are skipped. Glance cleanup failures also remain open.
 

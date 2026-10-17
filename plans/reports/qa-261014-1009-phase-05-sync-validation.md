@@ -3,7 +3,7 @@
 **Date:** 2026-10-14
 **Target:** Phase 05 Durable Local State & Strict Per-Record Sync Test Suites
 **Command:** `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`
-**Environment:** Linux x86_64 Fedora (`/home/loidinh/WS/doggo`), OpenJDK 21.0.8 (`$HOME/.local/share/jvm/jdk-21`), Gradle 8.11.1
+**Environment:** Linux x86_64 Fedora (`/home/loidinh/WS/tabbyrush`), OpenJDK 21.0.8 (`$HOME/.local/share/jvm/jdk-21`), Gradle 8.11.1
 **Scope:** Working tree containing Phase 05 shared implementation and common/JVM test suites.
 
 ---
@@ -12,19 +12,19 @@
 
 | Test Suite | Class FQCN | Test Doubles / Backend | Total | Passed | Failed | Skipped | Status |
 |---|---|---|---:|---:|---:|---:|:---:|
-| **Hub Sync Client** | `dev.doggo.shared.sync.HubSyncClientTest` | Mock Ktor Engine | 6 | 6 | 0 | 0 | **PASS** |
-| **Staged Full Scan** | `dev.doggo.shared.sync.StagedFullScanTest` | Fake DAO + Mock Ktor | 6 | 6 | 0 | 0 | **PASS** |
-| **Outbox Reconciliation** | `dev.doggo.shared.sync.OutboxReconciliationTest` | Fake DAO | 6 | 6 | 0 | 0 | **PASS** |
-| **Account Sync Coordinator** | `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | Fake DAO + Mock Ktor | 5 | 5 | 0 | 0 | **PASS** |
-| **Account Leave Protocol** | `dev.doggo.shared.sync.AccountLeaveProtocolTest` | Fake DAO + Callback Spy | 5 | 5 | 0 | 0 | **PASS** |
-| **Room Account Store (JVM)** | `dev.doggo.shared.data.RoomAccountStoreTest` | Real Bundled SQLite (JVM) | 7 | 7 | 0 | 0 | **PASS** |
-| **Hub Auth Client** | `dev.doggo.shared.auth.HubAuthClientTest` | Mock Ktor Engine | 8 | 8 | 0 | 0 | **PASS** |
-| **Hub Auth Session** | `dev.doggo.shared.auth.HubAuthSessionTest` | Fake Vault + Mock Ktor | 8 | 8 | 0 | 0 | **PASS** |
-| **Single-Flight Refresh** | `dev.doggo.shared.auth.SingleFlightRefreshTest` | Coroutine Coordinator | 3 | 3 | 0 | 0 | **PASS** |
-| **Account Key Contract** | `dev.doggo.shared.contract.AccountKeyTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
-| **Endpoint Policy Contract** | `dev.doggo.shared.contract.EndpointPolicyTest` | Pure Common Kotlin | 8 | 8 | 0 | 0 | **PASS** |
-| **Strict Digest Contract** | `dev.doggo.shared.contract.StrictDigestTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
-| **Title Policy Contract** | `dev.doggo.shared.contract.TitlePolicyTest` | Pure Common Kotlin | 6 | 6 | 0 | 0 | **PASS** |
+| **Hub Sync Client** | `dev.tabbyrush.shared.sync.HubSyncClientTest` | Mock Ktor Engine | 6 | 6 | 0 | 0 | **PASS** |
+| **Staged Full Scan** | `dev.tabbyrush.shared.sync.StagedFullScanTest` | Fake DAO + Mock Ktor | 6 | 6 | 0 | 0 | **PASS** |
+| **Outbox Reconciliation** | `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | Fake DAO | 6 | 6 | 0 | 0 | **PASS** |
+| **Account Sync Coordinator** | `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | Fake DAO + Mock Ktor | 5 | 5 | 0 | 0 | **PASS** |
+| **Account Leave Protocol** | `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | Fake DAO + Callback Spy | 5 | 5 | 0 | 0 | **PASS** |
+| **Room Account Store (JVM)** | `dev.tabbyrush.shared.data.RoomAccountStoreTest` | Real Bundled SQLite (JVM) | 7 | 7 | 0 | 0 | **PASS** |
+| **Hub Auth Client** | `dev.tabbyrush.shared.auth.HubAuthClientTest` | Mock Ktor Engine | 8 | 8 | 0 | 0 | **PASS** |
+| **Hub Auth Session** | `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Fake Vault + Mock Ktor | 8 | 8 | 0 | 0 | **PASS** |
+| **Single-Flight Refresh** | `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Coroutine Coordinator | 3 | 3 | 0 | 0 | **PASS** |
+| **Account Key Contract** | `dev.tabbyrush.shared.contract.AccountKeyTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
+| **Endpoint Policy Contract** | `dev.tabbyrush.shared.contract.EndpointPolicyTest` | Pure Common Kotlin | 8 | 8 | 0 | 0 | **PASS** |
+| **Strict Digest Contract** | `dev.tabbyrush.shared.contract.StrictDigestTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
+| **Title Policy Contract** | `dev.tabbyrush.shared.contract.TitlePolicyTest` | Pure Common Kotlin | 6 | 6 | 0 | 0 | **PASS** |
 | **TOTAL (JVM Execution)** | *All 13 Suites* | — | **78** | **78** | **0** | **0** | **PASS (100%)** |
 
 ---
@@ -32,15 +32,15 @@
 ## 2. Phase 05 Sync Test Suites Execution Details
 
 ### 2.1 HubSyncClientTest (6/6 PASS)
-- `testBootstrapSuccess`: PASS. Validates `POST /api/v1/sync/doggo/strong/bootstrap` with Dual-Auth (`Authorization: Bearer <jwt>`, `X-API-Key`, `X-App-Id`). Verifies parsing of `StrictSyncContract.PROTOCOL_VERSION ("strict-v1")`, `epoch`, and table registration.
+- `testBootstrapSuccess`: PASS. Validates `POST /api/v1/sync/tabby-rush/strong/bootstrap` with Dual-Auth (`Authorization: Bearer <jwt>`, `X-API-Key`, `X-App-Id`). Verifies parsing of `StrictSyncContract.PROTOCOL_VERSION ("strict-v1")`, `epoch`, and table registration.
 - `testBootstrapProtocolMismatchFails`: PASS. Server returning non-"strict-v1" protocol version maps to `SafeError.ProtocolIncompatible`.
 - `testPushSuccess`: PASS. Serializes push batch with Dual-Auth; parses 200 OK push response and unpacks per-record operation results (`accepted`, `acceptedRevision: 1`).
 - `testPushBatchBoundsEnforcedClientSide`: PASS. Enforces push batch limit `<= 100` operations (`BATCH_TOO_LARGE`); enforces unique `rowId` per batch (`DUPLICATE_ROW_IDS`).
 - `testPushErrorEnvelopesMapped`: PASS. HTTP 409 `epochMismatch` maps to `SafeError.ResetRequired`; HTTP 426 `protocolUnsupported` maps to `SafeError.ProtocolIncompatible`; HTTP 503 `notAdmitted` maps to `SafeError.Network`.
-- `testPullSuccessAndPagination`: PASS. Pulls paginated record stream (`/api/v1/sync/doggo/strong/pull`); deserializes payload records, cursor token, and `hasMore` pagination boolean.
+- `testPullSuccessAndPagination`: PASS. Pulls paginated record stream (`/api/v1/sync/tabby-rush/strong/pull`); deserializes payload records, cursor token, and `hasMore` pagination boolean.
 
 ### 2.2 StagedFullScanTest (6/6 PASS)
-*Note: Staged scan tests execute against in-memory FakeDoggoDao, testing staging state management and promotion logic.*
+*Note: Staged scan tests execute against in-memory FakeTabbyRushDao, testing staging state management and promotion logic.*
 - `testFullScanMultiPageSuccess`: PASS. Pulls multi-page scan records into staging store; promotes staged records to `server_base`; verifies staging rows cleared after promotion.
 - `testCursorLoopDetectionAborts`: PASS. Aborts scan when identical pagination cursor repeats with `hasMore: true`, returning `SafeError.ProtocolIncompatible("CURSOR_LOOP")` and cleaning staging rows.
 - `testMissingPreScanConfirmedIdentityTriggersConsistencyError`: PASS. Catches omission of pre-scan confirmed row identity from full scan results; aborts promotion with fail-closed `SafeError.ResetRequired("CONSISTENCY_ERROR")`.
@@ -49,7 +49,7 @@
 - `testMonotonicPromotionLowerRevisionRetainsLocal`: PASS. Server record with lower revision (`rev 2 < rev 3`) ignored, keeping newer local base.
 
 ### 2.3 OutboxReconciliationTest (6/6 PASS)
-*Note: Reconciliation tests execute against in-memory FakeDoggoDao, verifying state transitions on outbox and base entities.*
+*Note: Reconciliation tests execute against in-memory FakeTabbyRushDao, verifying state transitions on outbox and base entities.*
 - `testEligibleBatchFifoOrder`: PASS. Filters outbox to select the earliest pending operation per distinct `rowId` (`op-1` for `row-1` and `op-3` for `row-2`), excluding subsequent uncommitted operations on the same `rowId` (`op-2`).
 - `testExactCasAckAdvancesBaseAndRemovesOutbox`: PASS. On server `accepted` result, updates `server_base` with `acceptedRevision` and removes corresponding outbox row.
 - `testAckPreservesNewerDraft`: PASS. Acknowledged operation clears draft only if `draft.localRevision <= outbox.localRevision`; preserves newer uncommitted local draft (`localRevision: 11 > 10`).
@@ -96,8 +96,8 @@
 - `testSanitizeErrorMessageStripsHtml`: PASS. Strips raw HTML error envelopes (e.g. 502 Bad Gateway) to prevent UI injection and log pollution.
 
 ### 3.2 HubAuthSessionTest (8/8 PASS)
-- `testLoginSuccessWithDoggoAccess`: PASS. Full login with verified doggo app permission transitions session to `AuthState.AUTHENTICATED`.
-- `testLoginSuccessWithoutDoggoAccessTransitionsToAccessPending`: PASS. Missing doggo permission transitions session to `AuthState.ACCESS_PENDING`.
+- `testLoginSuccessWithTabbyRushAccess`: PASS. Full login with verified tabbyrush app permission transitions session to `AuthState.AUTHENTICATED`.
+- `testLoginSuccessWithoutTabbyRushAccessTransitionsToAccessPending`: PASS. Missing tabbyrush permission transitions session to `AuthState.ACCESS_PENDING`.
 - `testLoginMismatchedUserIdRejected`: PASS. Detects user ID mismatch between `/login` and `/me`, aborting session authentication.
 - `testOfflineSessionRestore`: PASS. Restores authenticated session from cached vault credentials when offline.
 - `testAuthorizedRequest401DoesNotReplayPostAutomatically`: PASS. Refreshing on 401 returns `TOKEN_REFRESHED` without auto-replaying POST, preserving caller idempotency.

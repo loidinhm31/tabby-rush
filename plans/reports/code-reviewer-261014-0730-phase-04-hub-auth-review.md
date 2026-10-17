@@ -1,6 +1,6 @@
 # Code Review: Phase 04 Hub Authentication & Protected Session
 
-Date: 2026-10-14 | Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md`
+Date: 2026-10-14 | Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-04-auth-session.md`
 Score: **5/10**: not acceptable as-is; fix blockers B1-B5 before Phase 05 consumes `HubAuthSession`.
 
 ## Scope

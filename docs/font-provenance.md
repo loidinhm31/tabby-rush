@@ -8,7 +8,7 @@
 
 ## 1. Upstream Typography Investigation
 
-The visual design reference for Doggo is inspired by the ForumFlash light theme (`https://forumflash.vercel.app/`). Inspection of the reference CSS revealed two primary font families:
+The visual design reference for TabbyRush is inspired by the ForumFlash light theme (`https://forumflash.vercel.app/`). Inspection of the reference CSS revealed two primary font families:
 1. **Cal Sans** (`Cal Sans SemiBold`): Used in web reference headings.
 2. **Alexandria** (`Alexandria Regular`, `Alexandria SemiBold`): Used in web reference body and metadata copy.
 
@@ -48,6 +48,6 @@ Per `phase-06-compose-ui-theme.md` Implementation Step 1 and the ownership regis
 
 In accordance with Phase 06 contract specifications:
 1. **Decision:** Omit bundling conditional binary font assets (`cal_sans_regular.ttf`, `alexandria_regular.ttf`, `alexandria_semibold.ttf`) and their respective standalone license files.
-2. **Implementation:** `DoggoTypography` uses Compose `FontFamily.SansSerif` with custom letter-spacing, line-heights, and font weights matching the geometric proportions of the ForumFlash reference.
+2. **Implementation:** `TabbyRushTypography` uses Compose `FontFamily.SansSerif` with custom letter-spacing, line-heights, and font weights matching the geometric proportions of the ForumFlash reference.
 3. **Audit Trails:** The ownership table rows for the 5 conditional font and license files are formally fulfilled through this documented omission decision.
-4. **License Notice:** An in-app open-source license acknowledgement viewer (`dev.doggo.shared.ui.LicenseNotices`) is implemented to display notices for all bundled open-source dependencies.
+4. **License Notice:** An in-app open-source license acknowledgement viewer (`dev.tabbyrush.shared.ui.LicenseNotices`) is implemented to display notices for all bundled open-source dependencies.

@@ -1,7 +1,7 @@
 # Sticky surfaces — repository analysis and phase contracts
 
 Date: 2026-10-16. Planning only; no builds, tests, or UI runtime verification performed.
-Root: `G:/ws/sharing/doggo`; Windows x64; branch `main` from injected context.
+Root: `G:/ws/sharing/tabbyrush`; Windows x64; branch `main` from injected context.
 
 ## Inputs and workflow evidence
 - Approved scope: [brainstorm](../../reports/brainstorm-261016-1302-sticky-task-surfaces.md), especially requirements and acceptance 1–12.
@@ -15,19 +15,19 @@ Root: `G:/ws/sharing/doggo`; Windows x64; branch `main` from injected context.
 ## Verified source seams
 | Files | Observed behavior / planning consequence |
 | --- | --- |
-| `shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-store.kt:5-18` | Snapshot load/save/delete; schedule Flow only. No general task-list observation or explicit idempotent completion setter. |
-| `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt:49-98,179-190` | Replayed conflated invalidation after mutations; loadTodos overlays base/drafts/outbox, sorted createdAt DESC then id DESC. Save under gate admission + mutex. Reuse existing invalidation, not polling or a second store. |
-| `shared/src/commonMain/kotlin/dev/doggo/shared/contract/persisted-task-schedule.kt:8-33` | Committed scheduling snapshot; reminder predicate additionally requires enabled rule and conflict-free state. Deadline notification needs separate eligibility; do not change reminder eligibility. |
-| `shared/src/commonMain/kotlin/dev/doggo/shared/contract/persisted-schedule-projector.kt:12-184` | Base plus submitted outbox projection; no editor drafts. Reuse deadline projection without computing times from strings. |
-| `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt:46-121` | Wipe recovery synchronous, session restoration asynchronous. getOrCreateAccountRuntime accepts an explicit key and can close prior runtime. External callers must resolve only current account after readiness, never invoke this with a stale action account. |
+| `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-store.kt:5-18` | Snapshot load/save/delete; schedule Flow only. No general task-list observation or explicit idempotent completion setter. |
+| `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt:49-98,179-190` | Replayed conflated invalidation after mutations; loadTodos overlays base/drafts/outbox, sorted createdAt DESC then id DESC. Save under gate admission + mutex. Reuse existing invalidation, not polling or a second store. |
+| `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-task-schedule.kt:8-33` | Committed scheduling snapshot; reminder predicate additionally requires enabled rule and conflict-free state. Deadline notification needs separate eligibility; do not change reminder eligibility. |
+| `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-schedule-projector.kt:12-184` | Base plus submitted outbox projection; no editor drafts. Reuse deadline projection without computing times from strings. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt:46-121` | Wipe recovery synchronous, session restoration asynchronous. getOrCreateAccountRuntime accepts an explicit key and can close prior runtime. External callers must resolve only current account after readiness, never invoke this with a stale action account. |
 | Android `session-view-model.kt:58-111,301-345,437-469` | allTodos separate from filtered uiState; reload tied to ViewModel. Toggle copies potentially stale Todo. Existing quick-add uses full existing editor/validation. Pending notification task routing only account-checks today. |
 | Android `main-activity.kt:27-63` | Handles task deep-link, no widget create route/runtime permission request. onResume discards reminder capability result. New surface permission flow must be real, not reuse no-op TodoAction handlers. |
-| Android `doggo-sync-worker.kt:29-68` | Auth/generation/wipe checks and reconcilePending; cold auth retries. Integrate surface refresh without new network cadence. |
+| Android `tabbyrush-sync-worker.kt:29-68` | Auth/generation/wipe checks and reconcilePending; cold auth retries. Integrate surface refresh without new network cadence. |
 | Android `account-runtime-factory.kt:48-100` | Runtime holds reminder observer and composite leave gate. One integration owner must wire surface sink, action admission, observers and teardown. |
 | Android `android-account-state-manager.kt:57-89` | Startup wipe cleanup cancels existing reminders only. Must clear new notification, jobs, preferences, launcher-retained contents before removing marker. |
 | Android `AndroidManifest.xml:21-47` | Single exported MainActivity; alarm/restore receivers private. Widget receiver launch mechanism needs carefully justified platform configuration and merged manifest audit. |
 | `scripts/release-security-check.mjs:15,160+` | Existing audit allows only MainActivity exported. Prefer private widget receiver if supported; otherwise narrow audited widget exception, never blanket receiver allowance. |
-| `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt:84-128,291-405,592-610,766-835` | Controller/runtime and application windows in one file. Main Close calls dispose/exit. Sole integration phase owns this file. Separate sticky model must not consume filtered uiState.items. |
+| `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt:84-128,291-405,592-610,766-835` | Controller/runtime and application windows in one file. Main Close calls dispose/exit. Sole integration phase owns this file. Separate sticky model must not consume filtered uiState.items. |
 | `desktopApp/build.gradle.kts:10-35,94-104` | Rejects host/target mismatch; runDebug custom task. Linux acceptance cannot run on Windows. |
 | `docs/system-architecture.md:589-600` | Existing process scheduler lifetime is window-bound today. Planned Close hides changes this documented contract. Windows toast bridge remains unrelated unavailable candidate; don't expand scope into fixing it. |
 

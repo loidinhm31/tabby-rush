@@ -3,8 +3,8 @@
 **Date:** 2026-10-14
 **Agent:** EvcDocsManagerPhase05
 **Scope:** Phase 05 Durable Local State & Strict Per-Record Sync Documentation
-**Target Plan:** `plans/261013-1540-doggo-glean-hub-reuse/plan.md`
-**Phase File:** `plans/261013-1540-doggo-glean-hub-reuse/phase-05-local-sync-state.md`
+**Target Plan:** `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md`
+**Phase File:** `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-05-local-sync-state.md`
 
 ---
 
@@ -17,7 +17,7 @@ Documentation across `docs/` has been systematically synchronized with the actua
 - **`docs/sync-acceptance.md`**: Acceptance criteria matrix establishing GATE-05-01 through GATE-05-16, test verification matrix covering all 7 test suites, and explicitly documenting JVM test status vs deferred Phase 07 runtime gates (Android instrumented Room tests and live Hub / MongoDB e2e sync).
 - **`docs/codebase-summary.md`**: Updated to catalog all Phase 05 data, sync, schema, and test artifacts in the repository tree; updated Repomix compaction metrics (192 packed files, 333,226 tokens, 1,428,852 chars); added Phase 05 status invariants.
 - **`docs/project-overview-pdr.md`**: Added Section 7 detailing Phase 05 Functional Requirements (FR-STORE-01 through FR-STORE-08), deliverables matrix, and updated Section 9 Traceability marking Phase 05 implementation complete with runtime acceptance pending Phase 07 device gates.
-- **`docs/system-architecture.md`**: Expanded Section 4 with Phase 05 local persistence & sync architecture (Subsections 4.4 through 4.6), diagramming `RoomAccountStore`, `DoggoDatabase`, `OutboxReconciliation`, `StagedFullScan`, `AccountLeaveProtocol`, and platform account files; preserved the backend durability policy topology fallback observation; added Section 5 invariants 13–16.
+- **`docs/system-architecture.md`**: Expanded Section 4 with Phase 05 local persistence & sync architecture (Subsections 4.4 through 4.6), diagramming `RoomAccountStore`, `TabbyRushDatabase`, `OutboxReconciliation`, `StagedFullScan`, `AccountLeaveProtocol`, and platform account files; preserved the backend durability policy topology fallback observation; added Section 5 invariants 13–16.
 - **`docs/code-standards.md`**: Added Section 6 covering Room entity conventions, DAO transaction patterns (`@Transaction`), coroutine/mutex serialization, cancellation handling, and atomic file safety; restored Bash execution caveats, non-destructive test rules, and explicit Rust error code mappings.
 - **`docs/project-roadmap.md`**: Confirmed Phase 05 status as `Implementation Complete*` (89 common/Room JVM tests pass) with Phase 07 runtime deferrals; documented `[0.5.0-alpha.1]` changelog entry.
 
@@ -54,7 +54,7 @@ Documentation across `docs/` has been systematically synchronized with the actua
    - Updated Section 9 Traceability.
 
 5. **`docs/system-architecture.md`**:
-   - Expanded Section 4 architecture diagram with Phase 05 components (`RoomAccountStore`, `DoggoDatabase`, `OutboxReconciliation`, `StagedFullScan`, `AccountLeaveProtocol`, `AccountFiles`).
+   - Expanded Section 4 architecture diagram with Phase 05 components (`RoomAccountStore`, `TabbyRushDatabase`, `OutboxReconciliation`, `StagedFullScan`, `AccountLeaveProtocol`, `AccountFiles`).
    - Restored Subsection 4.4 documenting Glean Hub durability policy and the backend `hello` topology fallback observation.
    - Added Subsection 4.6 detailing local persistence, directory partitioning, FIFO queueing, staged scan promotion, CAS acks, and fail-closed wipe protocol.
    - Added Section 5 security invariants 13–16.

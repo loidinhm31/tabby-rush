@@ -1,18 +1,18 @@
-# Doggo Phase 02 Foundation Evidence & Verification
+# TabbyRush Phase 02 Foundation Evidence & Verification
 
 Date: 2026-10-14  
 Phase: Phase 02 Frozen Foundation & Contracts  
-Plan: `plans/261013-1540-doggo-glean-hub-reuse`  
+Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse`  
 Related Docs: [Toolchain Versions](./toolchain-versions.md) · [System Architecture](./system-architecture.md) · [API Contract](./api-contract.md)
 
 ---
 
 ## 1. Scope Assessment & Implementation Invariants
 
-Phase 02 establishes the immutable foundational contracts, root Gradle configuration, dependency catalog, and core domain policies for the Doggo repository:
+Phase 02 establishes the immutable foundational contracts, root Gradle configuration, dependency catalog, and core domain policies for the TabbyRush repository:
 - **No Stubs**: Zero empty application entrypoints or fake repositories created.
 - **Staged Module Assembly**: Root `settings.gradle.kts` unconditionally includes `:shared`, but conditionally guards `:androidApp` and `:desktopApp` upon existence of their respective build scripts.
-- **Pure Contracts**: Common interfaces in `shared/src/commonMain/kotlin/dev/doggo/shared/contract/` define complete function signatures, data classes, and sealed interfaces without leaking Room or Ktor implementations.
+- **Pure Contracts**: Common interfaces in `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/` define complete function signatures, data classes, and sealed interfaces without leaking Room or Ktor implementations.
 - **Verified Policies**: Pure Kotlin implementations of `TitlePolicy`, `EndpointPolicy`, `AccountKey`, and canonical `StrictSyncContract` SHA-256 digest computation with test vectors matching documented strict specification layout and NIST SHA-256 standards (cross-language live runtime execution verification pending integration).
 
 ---

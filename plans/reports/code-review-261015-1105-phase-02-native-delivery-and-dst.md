@@ -13,7 +13,7 @@
 Phase 02 introduces:
 1. Strict timezone and DST resolution contract (`StrictTimeZoneResolver`, `StrictZoneOffsetResult`) in `:shared` with JVM and Android platform actuals using standard `java.time.zone.ZoneRules`.
 2. Candidate native notification adapters in `:androidApp` (AlarmManager + NotificationManager) and `:desktopApp` (Linux D-Bus + Windows WinRT/COM toast candidate).
-3. Manifest hardening (`SCHEDULE_EXACT_ALARM`, `POST_NOTIFICATIONS`, non-exported `DoggoAlarmReceiver`).
+3. Manifest hardening (`SCHEDULE_EXACT_ALARM`, `POST_NOTIFICATIONS`, non-exported `TabbyRushAlarmReceiver`).
 4. Reconciled Linux dependency locking in `desktopApp/gradle-linux.lockfile`.
 5. Updated acceptance specifications in `docs/android-acceptance.md`, `docs/linux-acceptance.md`, and `docs/windows-acceptance.md`.
 
@@ -24,7 +24,7 @@ The implementation correctly adheres to the Gate G2 specification by not faking 
 ## 2. Critical Issues (Remediated)
 
 ### [CRITICAL-1] Windows Toast Bridge Returned False-Positive `Success` Without WinRT
-- **Location**: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-notification-adapter.kt`
+- **Location**: `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-notification-adapter.kt`
 - **Impact**: `JnaWindowsToastBridge.showToast()` returned `WindowsNotificationStatus.Success` and `clearToast()` returned `Cleared` without executing WinRT/COM native code. If executed on Windows, the application would report successful notification delivery and history clearing while posting nothing.
 - **Remediation**: Updated `JnaWindowsToastBridge` to return `isAvailable() = false` and return `WindowsNotificationStatus.Unavailable("Native COM/WinRT toast bridge unproven; pending Phase 09 Windows testbed")` for all operations. Added regression test `testJnaBridgeSafeUnavailability` in `windows-notification-adapter-test.kt`.
 
@@ -52,17 +52,17 @@ The implementation correctly adheres to the Gate G2 specification by not faking 
 ## 4. Suggestions (Low Priority / Maintainability)
 
 ### [SUGG-1] Android Notification Missing `ContentIntent` Deep Link
-- **Location**: `androidApp/src/main/kotlin/dev/doggo/android/android-notification-adapter.kt:146`
+- **Location**: `androidApp/src/main/kotlin/dev/tabbyrush/android/android-notification-adapter.kt:146`
 - **Issue**: Notification builder configures title, content, icon, and auto-cancel, but does not attach a `PendingIntent` via `setContentIntent(...)`. Tapping the notification dismisses it without opening `MainActivity`.
 - **Action**: Add explicit pending intent targeting `MainActivity` with task navigation extras when implementing full Phase 08 reminder receiver.
 
 ### [SUGG-2] D-Bus Session Connection Lifecycle in Linux Adapter
-- **Location**: `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-notification-adapter.kt:40`
+- **Location**: `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-notification-adapter.kt:40`
 - **Issue**: `SessionBusNotificationTransport.withProxy()` connects and disconnects from the session bus on every operation. While safe against connection leaks, establishing a local socket per notification introduces minor latency.
 - **Action**: In Phase 09 desktop scheduler, consider a lazily initialized persistent connection that reconnects on disconnect.
 
 ### [SUGG-3] Unused Extra Extraction in Alarm Receiver
-- **Location**: `androidApp/src/main/kotlin/dev/doggo/android/doggo-alarm-receiver.kt:18`
+- **Location**: `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-alarm-receiver.kt:18`
 - **Issue**: `occurrenceIndex` is extracted from intent extras but never validated or passed to `postNotification`.
 - **Action**: In Phase 08, integrate `occurrenceIndex` with recurring reminder state tracking.
 
@@ -79,7 +79,7 @@ The implementation correctly adheres to the Gate G2 specification by not faking 
 | `androidApp/src/main/AndroidManifest.xml` | Clean | `SCHEDULE_EXACT_ALARM`, `POST_NOTIFICATIONS`, unexported receiver |
 | `androidApp/.../android-notification-adapter.kt` | Clean | Channel setup, capabilities check, AlarmManager scheduling |
 | `androidApp/.../android-reminder-capabilities.kt` | Clean | Decouples notification permission from exact alarm capability |
-| `androidApp/.../doggo-alarm-receiver.kt` | Clean | Validates extras before offline dispatch |
+| `androidApp/.../tabbyrush-alarm-receiver.kt` | Clean | Validates extras before offline dispatch |
 | `androidApp/.../android-notification-adapter-test.kt` | Clean (Limited) | Unit tests model and constants; execution requires SDK |
 | `desktopApp/gradle-linux.lockfile` | Clean | Reconciled stale JNA dependencies |
 | `desktopApp/.../linux-notification-adapter.kt` | Clean | D-Bus `/org/freedesktop/Notifications` adapter with safe error handling |

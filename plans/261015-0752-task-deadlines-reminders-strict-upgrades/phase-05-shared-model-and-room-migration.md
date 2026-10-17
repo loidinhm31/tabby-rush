@@ -26,9 +26,9 @@ Every persisted representation carries task intentions. Outbox schema extension 
 - Migration registered in existing builders on Android/JVM/controller paths; no fallbackToDestructiveMigration, no downward auto-migration.
 
 ## Related code files
-Doggo root `/home/loidinh/WS/doggo`.
-Modify `shared/src/commonMain/kotlin/dev/doggo/shared/contract/{todo-models,todo-action,todo-ui-state,account-store,strict-sync-contract}.kt`; data `{server-base-entity,outbox-entity,editor-draft-entity,scan-staging-entity,account-sync-meta-entity,doggo-dao,doggo-database,database-migrations,room-account-store}.kt`; shared Android/JVM `data/{android,jvm}-database-builder.kt`; desktop `main.kt` Room builder as required.
-Create focused deadline/rule policy/calculator, local settings/ledger entities and DAO methods within existing `contract/` and `data/`; exported `shared/schemas/dev.doggo.shared.data.DoggoDatabase/2.json` alongside v1 export. Extend `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt`; create meaningful migration behavior suite in same test source set. No obsolete v1 export deletion.
+TabbyRush root `/home/loidinh/WS/tabbyrush`.
+Modify `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/{todo-models,todo-action,todo-ui-state,account-store,strict-sync-contract}.kt`; data `{server-base-entity,outbox-entity,editor-draft-entity,scan-staging-entity,account-sync-meta-entity,tabbyrush-dao,tabbyrush-database,database-migrations,room-account-store}.kt`; shared Android/JVM `data/{android,jvm}-database-builder.kt`; desktop `main.kt` Room builder as required.
+Create focused deadline/rule policy/calculator, local settings/ledger entities and DAO methods within existing `contract/` and `data/`; exported `shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/2.json` alongside v1 export. Extend `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt`; create meaningful migration behavior suite in same test source set. No obsolete v1 export deletion.
 
 ## Implementation Steps
 1. Add immutable grouped model and canonical flattened mapping; central checked schedule/consistency validation. Update all constructor/copy/save/toggle/delete/conflict callsites; use LSP references if available at execution.
@@ -48,9 +48,9 @@ Create focused deadline/rule policy/calculator, local settings/ledger entities a
 - **Completion Date:** 2026-10-15 (100% progress / 20h credited).
 - **Scope Delivered:**
   - **Domain Model & Invariants:** Immutable grouped models `TaskDeadline` and `ReminderRule` in `todo-models.kt`. Enforces checked 64-bit integer arithmetic with overflow guards (`safeMultiply`, `safeSubtract`, `safeAdd`), repetition limits (`1..10`), anchor boundary checks (`last <= anchor`), and semantic `scheduleToken` lifecycle (generated on deadline/rule change, preserved across title edits, cleared when deadline removed).
-  - **Explicit Room Migration (`MIGRATION_1_2`):** Implemented in `DatabaseMigrations.kt` and registered in `AndroidDatabaseBuilder` and `JvmDatabaseBuilder`. Explicit non-destructive schema migration from version 1 to 2; no fallback to destructive migration. Exported Room schema in `shared/schemas/dev.doggo.shared.data.DoggoDatabase/2.json`.
+  - **Explicit Room Migration (`MIGRATION_1_2`):** Implemented in `DatabaseMigrations.kt` and registered in `AndroidDatabaseBuilder` and `JvmDatabaseBuilder`. Explicit non-destructive schema migration from version 1 to 2; no fallback to destructive migration. Exported Room schema in `shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/2.json`.
   - **Extended Entities:** `ServerBaseEntity`, `EditorDraftEntity`, `ScanStagingEntity`, and `OutboxEntity` updated with 12 temporal fields, `contractVersion` (defaults to v1), `dispatchHistory`, `intentMask` (`TITLE`, `COMPLETED`, `DEADLINE`, `REMINDER_RULE`, `DELETE`, `REQUIRES_REVIEW`), and `transitionCheckpoint`.
-  - **New Account-Partitioned Entities:** `AccountLocalSettingsEntity` (`account_local_settings`) for device-local reminder preferences and `ReminderDeliveryLedgerEntity` (`reminder_delivery_ledger`) for local dispatch tracking. Both entities are account-isolated, excluded from sync/backup, and wiped cleanly in `DoggoDao.wipeAllTablesAtomic()` upon account teardown.
+  - **New Account-Partitioned Entities:** `AccountLocalSettingsEntity` (`account_local_settings`) for device-local reminder preferences and `ReminderDeliveryLedgerEntity` (`reminder_delivery_ledger`) for local dispatch tracking. Both entities are account-isolated, excluded from sync/backup, and wiped cleanly in `TabbyRushDao.wipeAllTablesAtomic()` upon account teardown.
   - **Tombstone & Coalescing Invariants:** Non-mutation of tombstones enforced via `IllegalStateException`. Unsent create-delete cancellation and outbox coalescing explicitly require `transitionCheckpoint == null` to prevent corruption of migrated/historical entries.
 
 ### QA Test Execution Summary
@@ -66,7 +66,7 @@ Create focused deadline/rule policy/calculator, local settings/ledger entities a
 - **Overall Score:** 8.8 / 10 (Approved with technical qualifications).
 - **Post-Review Remediations Implemented & Verified in Phase 05:**
   1. *Cross-Version Base Reconciliation Remediation (`RoomAccountStore.reconcileAccepted`)*: Updated to preserve existing remote v2 deadline/rule/token metadata from `currentBase` when reconciling legacy strict-v1 non-delete operations (`op.contractVersion == OutboxEntity.CONTRACT_VERSION_V1`). Verified by regression test `testV1AckPreservesV2DeadlineFieldsOnServerBase`.
-  2. *Atomic Stale Outbox Cleanup on Regressive Server Revision*: Implemented `@Transaction suspend fun purgeStaleOutboxAtomic(opId, rowId, clearDraft)` in `DoggoDao` and wired in `RoomAccountStore.reconcileAccepted`. Verified by regression test `testStaleAckPurgesOutboxAndRetainsNewerDraft`.
+  2. *Atomic Stale Outbox Cleanup on Regressive Server Revision*: Implemented `@Transaction suspend fun purgeStaleOutboxAtomic(opId, rowId, clearDraft)` in `TabbyRushDao` and wired in `RoomAccountStore.reconcileAccepted`. Verified by regression test `testStaleAckPurgesOutboxAndRetainsNewerDraft`.
   3. *Semantic Schedule Helper*: Hardened `hasScheduleSemanticChange` so that when both deadlines are null, differences in disabled rules return false (no schedule change). Verified by unit assertions.
   4. *Token Generation & Coalescing*: Added regression tests verifying token generation when caller supplies null (`testTokenGeneratedWhenCallerSuppliesNull`) and pre-acknowledgement title edit coalescing with unsent create (`testPreAckTitleEditCoalescesWithUnsentCreate`).
 ### Validation Boundaries & Environment Gates

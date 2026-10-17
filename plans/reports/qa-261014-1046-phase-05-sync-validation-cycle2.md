@@ -3,7 +3,7 @@
 **Date:** 2026-10-14
 **Target:** Phase 05 Durable Local State & Strict Per-Record Sync Test Suites
 **Command:** `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`
-**Environment:** Linux x86_64 Fedora (`/home/loidinh/WS/doggo`), OpenJDK 21.0.8 (`$HOME/.local/share/jvm/jdk-21`), Gradle 8.11.1
+**Environment:** Linux x86_64 Fedora (`/home/loidinh/WS/tabbyrush`), OpenJDK 21.0.8 (`$HOME/.local/share/jvm/jdk-21`), Gradle 8.11.1
 **Scope:** Working tree containing Phase 05 shared implementation and common/JVM test suites following C1-C8 remediations.
 
 ---
@@ -12,19 +12,19 @@
 
 | Test Suite | Class FQCN | Test Doubles / Backend | Total | Passed | Failed | Skipped | Status |
 |---|---|---|---:|---:|---:|---:|:---:|
-| **Hub Auth Client** | `dev.doggo.shared.auth.HubAuthClientTest` | Mock Ktor Engine | 8 | 8 | 0 | 0 | **PASS** |
-| **Hub Auth Session** | `dev.doggo.shared.auth.HubAuthSessionTest` | Fake Vault + Mock Ktor | 8 | 8 | 0 | 0 | **PASS** |
-| **Single-Flight Refresh** | `dev.doggo.shared.auth.SingleFlightRefreshTest` | Coroutine Coordinator | 3 | 3 | 0 | 0 | **PASS** |
-| **Account Key Contract** | `dev.doggo.shared.contract.AccountKeyTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
-| **Endpoint Policy Contract** | `dev.doggo.shared.contract.EndpointPolicyTest` | Pure Common Kotlin | 8 | 8 | 0 | 0 | **PASS** |
-| **Strict Digest Contract** | `dev.doggo.shared.contract.StrictDigestTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
-| **Title Policy Contract** | `dev.doggo.shared.contract.TitlePolicyTest` | Pure Common Kotlin | 6 | 6 | 0 | 0 | **PASS** |
-| **Room Account Store (JVM)** | `dev.doggo.shared.data.RoomAccountStoreTest` | Real Bundled SQLite (JVM) | 9 | 9 | 0 | 0 | **PASS** |
-| **Account Leave Protocol** | `dev.doggo.shared.sync.AccountLeaveProtocolTest` | Fake Store/Session + Callbacks | 7 | 7 | 0 | 0 | **PASS** |
-| **Account Sync Coordinator** | `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | Fake DAO + Mock Ktor | 5 | 5 | 0 | 0 | **PASS** |
-| **Hub Sync Client** | `dev.doggo.shared.sync.HubSyncClientTest` | Mock Ktor Engine | 6 | 6 | 0 | 0 | **PASS** |
-| **Outbox Reconciliation** | `dev.doggo.shared.sync.OutboxReconciliationTest` | Fake Store/DAO | 8 | 8 | 0 | 0 | **PASS** |
-| **Staged Full Scan** | `dev.doggo.shared.sync.StagedFullScanTest` | Fake DAO + Mock Ktor | 9 | 9 | 0 | 0 | **PASS** |
+| **Hub Auth Client** | `dev.tabbyrush.shared.auth.HubAuthClientTest` | Mock Ktor Engine | 8 | 8 | 0 | 0 | **PASS** |
+| **Hub Auth Session** | `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Fake Vault + Mock Ktor | 8 | 8 | 0 | 0 | **PASS** |
+| **Single-Flight Refresh** | `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Coroutine Coordinator | 3 | 3 | 0 | 0 | **PASS** |
+| **Account Key Contract** | `dev.tabbyrush.shared.contract.AccountKeyTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
+| **Endpoint Policy Contract** | `dev.tabbyrush.shared.contract.EndpointPolicyTest` | Pure Common Kotlin | 8 | 8 | 0 | 0 | **PASS** |
+| **Strict Digest Contract** | `dev.tabbyrush.shared.contract.StrictDigestTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
+| **Title Policy Contract** | `dev.tabbyrush.shared.contract.TitlePolicyTest` | Pure Common Kotlin | 6 | 6 | 0 | 0 | **PASS** |
+| **Room Account Store (JVM)** | `dev.tabbyrush.shared.data.RoomAccountStoreTest` | Real Bundled SQLite (JVM) | 9 | 9 | 0 | 0 | **PASS** |
+| **Account Leave Protocol** | `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | Fake Store/Session + Callbacks | 7 | 7 | 0 | 0 | **PASS** |
+| **Account Sync Coordinator** | `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | Fake DAO + Mock Ktor | 5 | 5 | 0 | 0 | **PASS** |
+| **Hub Sync Client** | `dev.tabbyrush.shared.sync.HubSyncClientTest` | Mock Ktor Engine | 6 | 6 | 0 | 0 | **PASS** |
+| **Outbox Reconciliation** | `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | Fake Store/DAO | 8 | 8 | 0 | 0 | **PASS** |
+| **Staged Full Scan** | `dev.tabbyrush.shared.sync.StagedFullScanTest` | Fake DAO + Mock Ktor | 9 | 9 | 0 | 0 | **PASS** |
 | **TOTAL (JVM Execution)** | *All 13 Suites* | — | **87** | **87** | **0** | **0** | **PASS (100%)** |
 
 ---
@@ -73,7 +73,7 @@
 - `testEmptyPageWithHasMoreFails` *(NEW - C8)*: PASS. Non-progress empty record page with `hasMore: true` rejected as `SafeError.ProtocolIncompatible`.
 
 ### 2.5 HubSyncClientTest (6/6 PASS)
-- `testBootstrapSuccess`: PASS. Validates `POST /api/v1/sync/doggo/strong/bootstrap` with Dual-Auth (`Authorization: Bearer <jwt>`, `X-API-Key`, `X-App-Id`).
+- `testBootstrapSuccess`: PASS. Validates `POST /api/v1/sync/tabby-rush/strong/bootstrap` with Dual-Auth (`Authorization: Bearer <jwt>`, `X-API-Key`, `X-App-Id`).
 - `testBootstrapProtocolMismatchFails`: PASS. Server non-"strict-v1" protocol rejected.
 - `testPushSuccess`: PASS. Serializes push batch; parses 200 OK response and per-record operation results.
 - `testPushBatchBoundsEnforcedClientSide`: PASS. Batch limit `<= 100` and unique `rowId` rules enforced.
@@ -152,7 +152,7 @@
 
 ## 7. Recommendations
 
-1. Move `reapplyConflict` and `discardConflict` mutations into a dedicated Room `@Transaction` DAO method in `DoggoDao` or `RoomAccountStore` using the incremented `localRevisionCounter`.
+1. Move `reapplyConflict` and `discardConflict` mutations into a dedicated Room `@Transaction` DAO method in `TabbyRushDao` or `RoomAccountStore` using the incremented `localRevisionCounter`.
 2. Safeguard `discardConflict` to delete draft only when `draft.localRevision <= conflictOp.localRevision`.
 3. Add a multi-operation test covering: create in-flight -> concurrent local edit -> predecessor acknowledgment -> successor dispatch.
 4. Update `gradle/verification-metadata.xml` with trusted checksums during Phase 07 to eliminate `--dependency-verification=lenient`.

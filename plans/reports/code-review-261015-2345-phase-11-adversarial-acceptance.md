@@ -13,11 +13,11 @@
 
 ### Scope
 - **Files Reviewed (6 files)**:
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/persisted-schedule-projector.kt` (token assignment and preservation in draft-free projection)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-schedule-projector.kt` (token assignment and preservation in draft-free projection)
   - `scripts/debug-fault-proxy.mjs` (route allowlist, sensitive URL path redaction in 403 logs, client abort cleanup, fault injection scenarios)
   - `scripts/debug-fault-proxy.test.mjs` (route allowlist, pass-through, sensitive path log redaction, fault drop, and upstream 502 error tests)
-  - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/adversarial-scheduler-boundary-test.kt` (repetition bounds, arithmetic overflow, date-only 09:00 morning overdue, grace window 300,000ms vs 300,001ms, draft isolation, cancellation barrier, token preservation)
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/adversarial-sync-sqlite-test.kt` (crash recovery, frozen retry invariance, v1 title rebase over v2 deadline, local deadline removal, UNKNOWN_SUPERSEDED conflict lock)
+  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/adversarial-scheduler-boundary-test.kt` (repetition bounds, arithmetic overflow, date-only 09:00 morning overdue, grace window 300,000ms vs 300,001ms, draft isolation, cancellation barrier, token preservation)
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/adversarial-sync-sqlite-test.kt` (crash recovery, frozen retry invariance, v1 title rebase over v2 deadline, local deadline removal, UNKNOWN_SUPERSEDED conflict lock)
   - `plans/reports/qa-261015-2330-phase-11-validation.md` (399 targets: 398 passed, 0 failed, 1 ignored live Mongo gate)
 - **Lines of Code Analyzed**: ~1,120 lines of new and modified code across Kotlin, JavaScript, and Markdown.
 - **Review Focus**: Security, Performance, Architecture (DRY, KISS, YAGNI), Token Invariance, SQLite Crash Boundaries, and Honest Platform Gate Accounting.
@@ -29,14 +29,14 @@
 
 ### Overall Assessment
 Phase 11 delivers rigorous adversarial boundary regressions, physical SQLite restart/crash invariance suites, debug fault-injection tooling, and verified desktop/Android packaging. In `PersistedScheduleProjector`, a critical scheduler desynchronization bug was fixed where reminder-only edits failed to advance `scheduleToken`, risking missed alarm updates. Security hardening in `debug-fault-proxy.mjs` completely prevents sensitive URL path leakage into logs and guarantees client abort cleanup.
-All 399 automated targets across Doggo and Glean Hub completed with 100% pass of executable targets (398 passed, 0 failed, 1 ignored live Mongo gate). However, in accordance with the project's non-negotiable honesty policy regarding native platforms, **Automated adversarial validation delivered; platform/cluster acceptance blocked**. Physical Android Doze timing (`setExactAndAllowWhileIdle`), live Linux D-Bus visual notification bubble display, Windows COM/WinRT toast bridge implementation, and multi-node MongoDB replica set live migration remain held on respective hardware testbeds and backend remediations. Production cutover remains blocked.
+All 399 automated targets across TabbyRush and Glean Hub completed with 100% pass of executable targets (398 passed, 0 failed, 1 ignored live Mongo gate). However, in accordance with the project's non-negotiable honesty policy regarding native platforms, **Automated adversarial validation delivered; platform/cluster acceptance blocked**. Physical Android Doze timing (`setExactAndAllowWhileIdle`), live Linux D-Bus visual notification bubble display, Windows COM/WinRT toast bridge implementation, and multi-node MongoDB replica set live migration remain held on respective hardware testbeds and backend remediations. Production cutover remains blocked.
 
 ---
 
 ### Critical Issues (Remediated During Phase 11)
 
 1. **[CRITICAL / SCHEDULER DESYNCHRONIZATION] Reminder-Only Modifications Failed to Update `scheduleToken` in Projection**
-   - **File**: `shared/src/commonMain/kotlin/dev/doggo/shared/contract/persisted-schedule-projector.kt:138-140`
+   - **File**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-schedule-projector.kt:138-140`
    - **Root Cause**: When folding outbox operations under `OutboxEntity.INTENT_REMINDER`, `PersistedScheduleProjector` reconstructed `reminderRule` but never assigned `scheduleToken = op.scheduleToken`.
    - **Impact**: While `RoomAccountStore.saveTodoLocally` rotated `scheduleToken` upon reminder rule modification, the projected schedule emitted the stale base token. `DesktopReminderScheduler` and `AndroidNotificationAdapter` rely on `scheduleToken` comparisons against stored occurrences to detect schedule changes; emitting a stale token caused native alarm reconciliation to skip rescheduling, leaving stale alarms active or dropping new reminder rules.
    - **Remediation Verified**: Lines 138–140 now assign `scheduleToken = op.scheduleToken` when `deadline != null && op.scheduleToken != null`. Tested and verified via `testScheduleTokenAssignmentAndPreservation` in `AdversarialSchedulerBoundaryTest.kt`, asserting that title-only changes preserve the token, reminder modifications advance the token, and deadline clearing resets the token to `null`.
@@ -111,13 +111,13 @@ All 399 automated targets across Doggo and Glean Hub completed with 100% pass of
 ```markdown
 - Total Checks / Targets: 399 targets (398 passed, 0 failed, 1 ignored)
   - Unit & Integration Test Cases: 384 passed
-    - Doggo Shared JVM & SQLite Tests (:shared:jvmTest --rerun-tasks): 202 passed (28 classes)
-    - Doggo Desktop App Tests (:desktopApp:test): 49 passed (10 classes)
-    - Doggo Android Debug Unit Tests (:androidApp:testDebugUnitTest): 12 passed (4 classes)
-    - Doggo Wire Vector Runner (scripts/strict-v2-vector-runner.mjs): 23 passed
-    - Doggo Hub Fixture Smoke (scripts/hub-live-smoke.mjs --fixture-test): 18 passed
-    - Doggo Hub Upgrade CLI Suite (scripts/hub-strict-upgrade.test.mjs): 9 passed
-    - Doggo Fault Proxy Suite (scripts/debug-fault-proxy.test.mjs): 6 passed
+    - TabbyRush Shared JVM & SQLite Tests (:shared:jvmTest --rerun-tasks): 202 passed (28 classes)
+    - TabbyRush Desktop App Tests (:desktopApp:test): 49 passed (10 classes)
+    - TabbyRush Android Debug Unit Tests (:androidApp:testDebugUnitTest): 12 passed (4 classes)
+    - TabbyRush Wire Vector Runner (scripts/strict-v2-vector-runner.mjs): 23 passed
+    - TabbyRush Hub Fixture Smoke (scripts/hub-live-smoke.mjs --fixture-test): 18 passed
+    - TabbyRush Hub Upgrade CLI Suite (scripts/hub-strict-upgrade.test.mjs): 9 passed
+    - TabbyRush Fault Proxy Suite (scripts/debug-fault-proxy.test.mjs): 6 passed
     - Glean Hub Backend Crate Tests (cargo test -p glean-hub-sync --locked): 54 passed (1 ignored live Mongo gate)
     - Glean Hub Admin App Unit Tests (pnpm test:unit): 13 passed (2 suites)
   - Packaging Build Targets: 2 passed

@@ -23,10 +23,10 @@ export const ALLOWLISTED_PATHS = new Set([
   '/api/v1/auth/me',
   '/api/v1/apps/access-requests',
   '/api/v1/apps/access-requests/me',
-  '/api/v1/sync/doggo/strong/bootstrap',
-  '/api/v1/sync/doggo/strong/pull',
-  '/api/v1/sync/doggo/strong/push',
-  '/api/v1/sync/doggo/strong/legacy-receipts'
+  '/api/v1/sync/tabby-rush/strong/bootstrap',
+  '/api/v1/sync/tabby-rush/strong/pull',
+  '/api/v1/sync/tabby-rush/strong/push',
+  '/api/v1/sync/tabby-rush/strong/legacy-receipts'
 ]);
 
 export function createFaultProxy({
@@ -73,9 +73,9 @@ export function createFaultProxy({
       timeout: upstreamTimeoutMs
     }, (upstreamRes) => {
       const is2xx = upstreamRes.statusCode >= 200 && upstreamRes.statusCode < 300;
-      const isPushRoute = pathname === '/api/v1/sync/doggo/strong/push';
+      const isPushRoute = pathname === '/api/v1/sync/tabby-rush/strong/push';
       const isRefreshRoute = pathname === '/api/v1/auth/refresh';
-      const isLegacyReceiptsRoute = pathname === '/api/v1/sync/doggo/strong/legacy-receipts';
+      const isLegacyReceiptsRoute = pathname === '/api/v1/sync/tabby-rush/strong/legacy-receipts';
 
       const shouldDropPush = is2xx && scenario === 'drop-push-response' && isPushRoute && !faultInjected;
       const shouldDropRefresh = is2xx && scenario === 'drop-refresh-response' && isRefreshRoute && !faultInjected;

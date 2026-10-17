@@ -3,7 +3,7 @@
 **Date**: 2026-10-15  
 **Context**: Linux Fedora 44 x86_64 | JDK 21 LTS (`/home/loidinh/.local/share/jvm/jdk-21`) | Android SDK (`/home/loidinh/Android/Sdk`) | Gradle 8.11.1 | Node.js v24.16.0  
 **Target Phase**: `Phase 09 — Process-scoped desktop scheduler and native adapters`  
-**Working Directory**: `/home/loidinh/WS/doggo`  
+**Working Directory**: `/home/loidinh/WS/tabbyrush`  
 **Artifact**: `plans/reports/qa-261015-2130-phase-09-desktop-scheduler.md`  
 
 ---
@@ -52,16 +52,16 @@
 
 | Test Class | Scope / Target | Passed | Failed | Skipped | Time |
 |---|---|:---:|:---:|:---:|:---:|
-| `dev.doggo.desktop.CompositeDesktopLeaveCancelGateTest` | Ordered quiescence coordination (drain delivery gate -> cancel observer -> cancel reminder scheduler -> cancel sync -> cancel notifications), fail-closed on timeout | 2 | 0 | 0 | 0.123s |
-| `dev.doggo.desktop.DesktopControllerEnvTest` | Environment resolution, loopback fallback rules, sync trigger flow | 4 | 0 | 0 | 0.062s |
-| `dev.doggo.desktop.DesktopLifecycleTest` | Single instance guard, periodic sync, release/debug host rules | 8 | 0 | 0 | 0.010s |
-| `dev.doggo.desktop.DesktopReminderControllerLifecycleTest` | Reminder coordinator init, delivery gate state, startup wipe notification cleanup, fail-closed marker retention on notification failure | 3 | 0 | 0 | 0.033s |
-| `dev.doggo.desktop.DesktopReminderSchedulerTest` | Wake loop wait/firing, clock backward jump protection, replace-based deadline wake, clean quiescence cancel | 5 | 0 | 0 | 0.018s |
-| `dev.doggo.desktop.DotEnvLoaderTest` | DotEnv parser robustness, quoting, fallback | 5 | 0 | 0 | 0.003s |
-| `dev.doggo.desktop.PlatformVaultDispatcherTest` | SPI vault provider resolution, fail-closed handling on unknown target | 5 | 0 | 0 | 0.003s |
-| `dev.doggo.desktop.linux.LinuxNotificationAdapterTest` | Low-level D-Bus freedesktop notifications, missing daemon/session error mapping | 4 | 0 | 0 | 0.009s |
-| `dev.doggo.desktop.linux.LinuxReminderAdapterTest` | LinuxNativeReminderAdapter capabilities, account-scoped notification tracking, replace ID mapping, account cleanup | 5 | 0 | 0 | 0.006s |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | Libsecret Secret Service storage, atomic replace, fail-closed corruption handling | 6 | 0 | 0 | 0.020s |
+| `dev.tabbyrush.desktop.CompositeDesktopLeaveCancelGateTest` | Ordered quiescence coordination (drain delivery gate -> cancel observer -> cancel reminder scheduler -> cancel sync -> cancel notifications), fail-closed on timeout | 2 | 0 | 0 | 0.123s |
+| `dev.tabbyrush.desktop.DesktopControllerEnvTest` | Environment resolution, loopback fallback rules, sync trigger flow | 4 | 0 | 0 | 0.062s |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | Single instance guard, periodic sync, release/debug host rules | 8 | 0 | 0 | 0.010s |
+| `dev.tabbyrush.desktop.DesktopReminderControllerLifecycleTest` | Reminder coordinator init, delivery gate state, startup wipe notification cleanup, fail-closed marker retention on notification failure | 3 | 0 | 0 | 0.033s |
+| `dev.tabbyrush.desktop.DesktopReminderSchedulerTest` | Wake loop wait/firing, clock backward jump protection, replace-based deadline wake, clean quiescence cancel | 5 | 0 | 0 | 0.018s |
+| `dev.tabbyrush.desktop.DotEnvLoaderTest` | DotEnv parser robustness, quoting, fallback | 5 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.desktop.PlatformVaultDispatcherTest` | SPI vault provider resolution, fail-closed handling on unknown target | 5 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.desktop.linux.LinuxNotificationAdapterTest` | Low-level D-Bus freedesktop notifications, missing daemon/session error mapping | 4 | 0 | 0 | 0.009s |
+| `dev.tabbyrush.desktop.linux.LinuxReminderAdapterTest` | LinuxNativeReminderAdapter capabilities, account-scoped notification tracking, replace ID mapping, account cleanup | 5 | 0 | 0 | 0.006s |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | Libsecret Secret Service storage, atomic replace, fail-closed corruption handling | 6 | 0 | 0 | 0.020s |
 
 ### Detailed Test Cases for Phase 09 Features:
 
@@ -99,32 +99,32 @@
 
 | Test Class | Scope / Target | Passed | Failed | Skipped | Time |
 |---|---|:---:|:---:|:---:|:---:|
-| `dev.doggo.shared.auth.HubAuthClientTest` | Registration, login, token refresh, access request | 9 | 0 | 0 | 0.251s |
-| `dev.doggo.shared.auth.HubAuthSessionTest` | Auth state machine, local logout, 401 guard | 8 | 0 | 0 | 0.100s |
-| `dev.doggo.shared.auth.SingleFlightRefreshTest` | Refresh deduplication, concurrency, safe error | 3 | 0 | 0 | 0.004s |
-| `dev.doggo.shared.contract.AccountKeyTest` | Account key framing, determinism, validation | 5 | 0 | 0 | 0.002s |
-| `dev.doggo.shared.contract.EndpointPolicyTest` | Origin sanitization, HTTPS enforcement, debug rules | 8 | 0 | 0 | 0.003s |
-| `dev.doggo.shared.contract.PersistedScheduleProjectionTest` | Draft-free projection, completion/delete barriers, intent overlay | 5 | 0 | 0 | 0.003s |
-| `dev.doggo.shared.contract.ReminderScheduleCalculatorTest` | Checked 64-bit arithmetic, 1..10 bounds, 5-min grace window | 9 | 0 | 0 | 0.008s |
-| `dev.doggo.shared.contract.StrictDigestTest` | SHA-256 vectors, deterministic canonical payload | 5 | 0 | 0 | 0.002s |
-| `dev.doggo.shared.contract.StrictTimeZoneResolverTest` | Standard time, DST overlap/gap, 23/25h boundary | 7 | 0 | 0 | 0.019s |
-| `dev.doggo.shared.contract.StrictV2DigestExtendedTest` | Negative epoch, unicode title/zone, max i64 rev | 6 | 0 | 0 | 0.004s |
-| `dev.doggo.shared.contract.StrictV2DigestVectorTest` | Date-only, repeating count, null defaults, DST | 5 | 0 | 0 | 0.002s |
-| `dev.doggo.shared.contract.TaskDeadlineReminderModelsTest` | Valid date-only/timed, last reminder bounds, tokens | 6 | 0 | 0 | 0.001s |
-| `dev.doggo.shared.contract.TitlePolicyTest` | Length bounds, surrogate validation, astral emoji | 6 | 0 | 0 | 0.002s |
-| `dev.doggo.shared.data.ReminderOccurrenceStoreTest` | Ledger persistence, claim-before-post, skipped marking, idempotent sync | 4 | 0 | 0 | 0.011s |
-| `dev.doggo.shared.data.ReminderSchedulingCoordinatorSqliteSmokeTest` | Real BundledSQLite integration, alarm scheduling, draft isolation | 2 | 0 | 0 | 0.090s |
-| `dev.doggo.shared.data.ReminderTeardownBarrierSqliteTest` | Teardown awaits in-flight delivery before closing Room database | 1 | 0 | 0 | 0.011s |
-| `dev.doggo.shared.data.RoomAccountStoreTest` | BundledSQLite persistence, non-destructive rebasing, schedule token rotation | 22 | 0 | 0 | 0.132s |
-| `dev.doggo.shared.data.RoomMigrationV1ToV2Test` | Explicit v1->v2 Room schema migration | 1 | 0 | 0 | 0.013s |
-| `dev.doggo.shared.sync.AccountLeaveProtocolTest` | Teardown sequence, scheduler cancel gate, fail-closed wipe | 7 | 0 | 0 | 0.010s |
-| `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | Upgrade detection, quiescence, receipt rebase, v2 push | 9 | 0 | 0 | 0.033s |
-| `dev.doggo.shared.sync.ContractTransitionTest` | Transition coordinator, phase resume, superseded blocks | 4 | 0 | 0 | 0.017s |
-| `dev.doggo.shared.sync.HubSyncClientTest` | Bootstrap v2, receipt fetch, push/pull envelopes | 12 | 0 | 0 | 0.028s |
-| `dev.doggo.shared.sync.OutboxReconciliationTest` | Optimistic lock, FIFO batch, receipt match, CAS ack | 12 | 0 | 0 | 0.007s |
-| `dev.doggo.shared.sync.ReminderDeliveryGateTest` | Mutation/delivery admission, drain signal, generation mismatch guard | 4 | 0 | 0 | 0.004s |
-| `dev.doggo.shared.sync.StagedFullScanTest` | Multi-page full scan, monotonic promotion, cursor loop | 14 | 0 | 0 | 0.044s |
-| `dev.doggo.shared.ui.TodoSemanticsTest` | Semantics, accessibility contrast, conflict warning copy | 8 | 0 | 0 | 0.025s |
+| `dev.tabbyrush.shared.auth.HubAuthClientTest` | Registration, login, token refresh, access request | 9 | 0 | 0 | 0.251s |
+| `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Auth state machine, local logout, 401 guard | 8 | 0 | 0 | 0.100s |
+| `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Refresh deduplication, concurrency, safe error | 3 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.shared.contract.AccountKeyTest` | Account key framing, determinism, validation | 5 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.shared.contract.EndpointPolicyTest` | Origin sanitization, HTTPS enforcement, debug rules | 8 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.shared.contract.PersistedScheduleProjectionTest` | Draft-free projection, completion/delete barriers, intent overlay | 5 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.shared.contract.ReminderScheduleCalculatorTest` | Checked 64-bit arithmetic, 1..10 bounds, 5-min grace window | 9 | 0 | 0 | 0.008s |
+| `dev.tabbyrush.shared.contract.StrictDigestTest` | SHA-256 vectors, deterministic canonical payload | 5 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.shared.contract.StrictTimeZoneResolverTest` | Standard time, DST overlap/gap, 23/25h boundary | 7 | 0 | 0 | 0.019s |
+| `dev.tabbyrush.shared.contract.StrictV2DigestExtendedTest` | Negative epoch, unicode title/zone, max i64 rev | 6 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.shared.contract.StrictV2DigestVectorTest` | Date-only, repeating count, null defaults, DST | 5 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.shared.contract.TaskDeadlineReminderModelsTest` | Valid date-only/timed, last reminder bounds, tokens | 6 | 0 | 0 | 0.001s |
+| `dev.tabbyrush.shared.contract.TitlePolicyTest` | Length bounds, surrogate validation, astral emoji | 6 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.shared.data.ReminderOccurrenceStoreTest` | Ledger persistence, claim-before-post, skipped marking, idempotent sync | 4 | 0 | 0 | 0.011s |
+| `dev.tabbyrush.shared.data.ReminderSchedulingCoordinatorSqliteSmokeTest` | Real BundledSQLite integration, alarm scheduling, draft isolation | 2 | 0 | 0 | 0.090s |
+| `dev.tabbyrush.shared.data.ReminderTeardownBarrierSqliteTest` | Teardown awaits in-flight delivery before closing Room database | 1 | 0 | 0 | 0.011s |
+| `dev.tabbyrush.shared.data.RoomAccountStoreTest` | BundledSQLite persistence, non-destructive rebasing, schedule token rotation | 22 | 0 | 0 | 0.132s |
+| `dev.tabbyrush.shared.data.RoomMigrationV1ToV2Test` | Explicit v1->v2 Room schema migration | 1 | 0 | 0 | 0.013s |
+| `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | Teardown sequence, scheduler cancel gate, fail-closed wipe | 7 | 0 | 0 | 0.010s |
+| `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | Upgrade detection, quiescence, receipt rebase, v2 push | 9 | 0 | 0 | 0.033s |
+| `dev.tabbyrush.shared.sync.ContractTransitionTest` | Transition coordinator, phase resume, superseded blocks | 4 | 0 | 0 | 0.017s |
+| `dev.tabbyrush.shared.sync.HubSyncClientTest` | Bootstrap v2, receipt fetch, push/pull envelopes | 12 | 0 | 0 | 0.028s |
+| `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | Optimistic lock, FIFO batch, receipt match, CAS ack | 12 | 0 | 0 | 0.007s |
+| `dev.tabbyrush.shared.sync.ReminderDeliveryGateTest` | Mutation/delivery admission, drain signal, generation mismatch guard | 4 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.shared.sync.StagedFullScanTest` | Multi-page full scan, monotonic promotion, cursor loop | 14 | 0 | 0 | 0.044s |
+| `dev.tabbyrush.shared.ui.TodoSemanticsTest` | Semantics, accessibility contrast, conflict warning copy | 8 | 0 | 0 | 0.025s |
 
 ---
 
@@ -137,10 +137,10 @@
 
 | Test Class | Scope / Target | Passed | Failed | Skipped | Time |
 |---|---|:---:|:---:|:---:|:---:|
-| `dev.doggo.android.AndroidNotificationAdapterTest` | Request code determinism/distribution, capabilities model, tag formatting, registry key serialization, restore actions | 6 | 0 | 0 | 0.041s |
-| `dev.doggo.android.BuildConfigTest` | DotEnv loading into BuildConfig | 1 | 0 | 0 | 0.000s |
-| `dev.doggo.android.CompositeLeaveSchedulerCancelGateTest` | Drain gate timeout fail-closed, sync cancel throw fail-closed, ordered drain/cancel | 3 | 0 | 0 | 0.081s |
-| `dev.doggo.android.ReminderPermissionControllerTest` | Permission string constant (`POST_NOTIFICATIONS`), state representation types | 2 | 0 | 0 | 0.001s |
+| `dev.tabbyrush.android.AndroidNotificationAdapterTest` | Request code determinism/distribution, capabilities model, tag formatting, registry key serialization, restore actions | 6 | 0 | 0 | 0.041s |
+| `dev.tabbyrush.android.BuildConfigTest` | DotEnv loading into BuildConfig | 1 | 0 | 0 | 0.000s |
+| `dev.tabbyrush.android.CompositeLeaveSchedulerCancelGateTest` | Drain gate timeout fail-closed, sync cancel throw fail-closed, ordered drain/cancel | 3 | 0 | 0 | 0.081s |
+| `dev.tabbyrush.android.ReminderPermissionControllerTest` | Permission string constant (`POST_NOTIFICATIONS`), state representation types | 2 | 0 | 0 | 0.001s |
 
 ---
 
@@ -184,7 +184,7 @@
 - **Status**: PASS (9/9 tests)
 
 ### 5.5 Desktop Distributable Assembly (`:desktopApp:createDistributable`)
-- Target location: `/home/loidinh/WS/doggo/desktopApp/build/compose/binaries/main/app`
+- Target location: `/home/loidinh/WS/tabbyrush/desktopApp/build/compose/binaries/main/app`
 - Status: BUILD SUCCESSFUL (19 actionable tasks, 1 executed, 18 up-to-date)
 - Execution Time: ~1.95s
 

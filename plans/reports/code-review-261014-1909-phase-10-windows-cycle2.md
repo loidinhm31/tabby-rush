@@ -18,9 +18,9 @@
 | **Test Summary** | `docs/evidence/windows-test-summary.md` | Updated | 81 |
 | **Runbook Guide** | `docs/windows-desktop-guide.md` | Updated | 138 |
 | **Acceptance Spec** | `docs/windows-acceptance.md` | Updated | 79 |
-| **Plan Tracking** | `plans/261013-1540-doggo-glean-hub-reuse/phase-10-windows-distribution.md` | Updated | 88 |
-| **Distributable** | `desktopApp/build/compose/binaries/main/app/Doggo/` | Verified | 67 JARs |
-| **MSI Package** | `desktopApp/build/compose/binaries/main/msi/Doggo-1.0.0.msi` | Verified | 100.68 MB |
+| **Plan Tracking** | `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-10-windows-distribution.md` | Updated | 88 |
+| **Distributable** | `desktopApp/build/compose/binaries/main/app/TabbyRush/` | Verified | 67 JARs |
+| **MSI Package** | `desktopApp/build/compose/binaries/main/msi/TabbyRush-1.0.0.msi` | Verified | 100.68 MB |
 
 ---
 
@@ -67,7 +67,7 @@ Score calibrated to **8.5/10**: Core implementation, target isolation, native DP
 
 ### Low Priority Suggestions
 1. **Dispatcher Test Java 20 Deprecation Warning:**
-   - In `desktopApp/src/test/kotlin/dev/doggo/desktop/platform-vault-dispatcher-test.kt:69`, `new URL(...)` is deprecated in Java 20+. Replace with `URI.create("mock://localhost/").toURL()`.
+   - In `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/platform-vault-dispatcher-test.kt:69`, `new URL(...)` is deprecated in Java 20+. Replace with `URI.create("mock://localhost/").toURL()`.
 
 ---
 
@@ -77,25 +77,25 @@ Score calibrated to **8.5/10**: Core implementation, target isolation, native DP
 # 1. Distributable & MSI Smoke Audit
 powershell -ExecutionPolicy Bypass -Command '
   $b = "desktopApp\build\compose\binaries\main";
-  & .\scripts\windows-package-smoke.ps1 -DistDir "$b\app\Doggo" -MsiPath "$b\msi\Doggo-1.0.0.msi"
+  & .\scripts\windows-package-smoke.ps1 -DistDir "$b\app\TabbyRush" -MsiPath "$b\msi\TabbyRush-1.0.0.msi"
 '
 # Result:
-# [PASS] Launcher executable found: Doggo.exe (547.5 KB)
+# [PASS] Launcher executable found: TabbyRush.exe (547.5 KB)
 # [PASS] Bundled Java runtime found: ...\jvm.dll
 # [INFO] Found 67 packaged JAR artifact(s) in ...\app
 # [PASS] WindowsDpapiVault class packaged in desktop bundle
 # [PASS] WindowsDpapiVaultProvider registered in META-INF/services
-# [PASS] Exactly one CredentialVaultProvider registered: dev.doggo.desktop.windows.WindowsDpapiVaultProvider
+# [PASS] Exactly one CredentialVaultProvider registered: dev.tabbyrush.desktop.windows.WindowsDpapiVaultProvider
 # [PASS] Target Isolation: Zero Linux D-Bus / SecretService classes leaked into Windows bundle
 # === Distributable Audit Passed ===
-# 1. File: Doggo-1.0.0.msi (100.68 MB)
+# 1. File: TabbyRush-1.0.0.msi (100.68 MB)
 # 2. SHA-256 Digest: 2AE585934644BBE356BB7A3CD2562BA25635A26595FE1C8E01CE7FB8C0086137
 # 3. Authenticode Status: NotSigned (Disclosed development build)
 # 4. MSI Metadata Properties:
 #    - UpgradeCode: {A6C507C8-88FE-4E49-8F43-A6125039281A}
-#    - Manufacturer: Doggo Team
+#    - Manufacturer: TabbyRush Team
 #    - ProductCode: {94C33C36-3F43-3D32-8E9B-6501B53FFCEE}
-#    - ProductName: Doggo
+#    - ProductName: TabbyRush
 #    - ProductVersion: 1.0.0
 # [PASS] All mandatory MSI metadata properties validated successfully
 # === MSI Audit Complete ===
@@ -128,7 +128,7 @@ powershell -ExecutionPolicy Bypass -Command '
 - **Shared Multiplatform Tests (`:shared:jvmTest`):** 96 / 96 PASSED (100%)
 - **Total Test Count:** 120 / 120 PASSED (100%)
 - **Packaged JAR Artifacts:** 67 (0 D-Bus, 0 SecretService)
-- **MSI Installer:** `Doggo-1.0.0.msi` (105,566,496 bytes, SHA-256 `2AE585934644BBE356BB7A3CD2562BA25635A26595FE1C8E01CE7FB8C0086137`)
+- **MSI Installer:** `TabbyRush-1.0.0.msi` (105,566,496 bytes, SHA-256 `2AE585934644BBE356BB7A3CD2562BA25635A26595FE1C8E01CE7FB8C0086137`)
 - **Review Score:** **8.5 / 10**
 
 ---

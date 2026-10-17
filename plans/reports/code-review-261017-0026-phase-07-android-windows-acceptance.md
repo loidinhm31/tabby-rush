@@ -3,7 +3,7 @@
 **Review Identifier:** `code-review-261017-0026-phase-07-android-windows-acceptance`  
 **Date:** 2026-10-17  
 **Reviewer:** EvcCodeReviewerPhase07  
-**Review Target:** Doggo Sticky Task Surfaces — Phase 07  
+**Review Target:** TabbyRush Sticky Task Surfaces — Phase 07  
 **Plan:** `plans/261016-1409-sticky-task-surfaces/plan.md`  
 **Overall Score:** **8.0 / 10 (Conditional Pass — Documentation & Testbed Verified; Native Hardware Acceptance Held)**  
 
@@ -78,13 +78,13 @@ However, **Phase 07 cannot be certified as 100% complete**. Under the Iron Law o
    - **Recommendation:** Maintain clear labelling as "design baselines" (as correctly noted in summary metadata); refresh with live framebuffer captures when physical testbeds attach in Phase 08.
 
 3. **Android Close Drain-Timeout Swallows Exception & Discards Runtime (Safety Finding)**
-   - **Location:** `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt:188-204`
+   - **Location:** `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt:188-204`
    - **Problem:** In `closeRuntimeInternal()`, when `runtime.deliveryGate.closeAndDrain()` times out (`!drained`), it throws `IllegalStateException`. However, the catch block catches `(e: Exception)`, logs `Error closing database...`, and suppresses rethrow. Execution returns to `closeActiveRuntime()`, which proceeds to `activeRuntime = null`.
    - **Impact:** Store freezing (`isFrozen = true`), observer cancellations (`cancelAndJoin()`), and database closure (`database.close()`) are skipped, while the runtime reference is cleared. Background coroutines and open SQLite handles remain active against an orphaned database.
    - **Action Required:** Route to Phase 05 owner for structural fix: abort or fail-closed without discarding the unquiesced runtime, and add regression test coverage.
 
 4. **Glance Widget Cleanup Catches Generic `Throwable` Non-Fatally**
-   - **Location:** `androidApp/src/main/kotlin/dev/doggo/android/task-widget-updater.kt:222-226, 240-244`
+   - **Location:** `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-updater.kt:222-226, 240-244`
    - **Problem:** `pushBlankRemoteViews` and `closeGlanceSessions` catch `Throwable` and log warnings during leave protocol. If `AppWidgetManager` fails, widgets may retain stale UI.
    - **Impact:** Potential ghost widget state on launcher. Tracked open risk routed to Phase 02/05 maintenance.
 
@@ -113,7 +113,7 @@ However, **Phase 07 cannot be certified as 100% complete**. Under the Iron Law o
 - **Exclusive File Ownership:** Phase 07 authored strictly docs and evidence files; exactly 0 lines of production, test, or build code were edited.
 - **Honest Gate Preservation:** Every single historical release hold (Gates G2, G3, G6, G7), the 149-checksum dependency baseline, and the Phase 08 Linux gate were transparently maintained across all 17 documents.
 - **PDR Alignment:** Accurately refined the 100%-shared-UI claim in `docs/project-overview-pdr.md` to reflect ~95% shared Compose UI with native Glance/platform shells.
-- **Security Auditor Test Coverage:** 12/12 Node security tests pass cleanly, strictly enforcing that only `MainActivity` and canonical `DoggoTaskWidgetReceiver` (with `APPWIDGET_UPDATE` and provider metadata) are exported.
+- **Security Auditor Test Coverage:** 12/12 Node security tests pass cleanly, strictly enforcing that only `MainActivity` and canonical `TabbyRushTaskWidgetReceiver` (with `APPWIDGET_UPDATE` and provider metadata) are exported.
 - **Tooling Verification:** Hub live-fixture smoke (18/18) and strict-v2 cutover rehearsal (8/8) pass cleanly.
 
 ---
@@ -141,7 +141,7 @@ However, **Phase 07 cannot be certified as 100% complete**. Under the Iron Law o
 ---
 
 ### Recommended Actions
-1. **[PHASE 05 HARDENING]** In `DoggoApplication.closeRuntimeInternal()`, escalate delivery gate drain timeout to fail-closed behavior before nulling `activeRuntime` or closing SQLite.
+1. **[PHASE 05 HARDENING]** In `TabbyRushApplication.closeRuntimeInternal()`, escalate delivery gate drain timeout to fail-closed behavior before nulling `activeRuntime` or closing SQLite.
 2. **[PHASE 08 GATE]** Conduct Linux-only session verification on actual Linux machine with X11/Wayland and active notification daemon.
 3. **[GATE G2 HARDWARE]** Execute interactive launcher and multi-monitor verification on physical Android 14/15 hardware and multi-monitor Windows workstation when attached.
 4. **[CLEANUP]** Remove or relocate untracked `android_screen.png` from repository root.

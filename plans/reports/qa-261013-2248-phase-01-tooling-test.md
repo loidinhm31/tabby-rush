@@ -61,7 +61,7 @@
 ---
 
 ## 7. Recommendations
-1. Stricter error contract testing: `test-phase-01-tooling.sh` assertion `! ./scripts/start-android-emulator.sh doggo_android` succeeds on any non-zero exit. Assert specific error message (`Error: 'emulator' command not found`).
+1. Stricter error contract testing: `test-phase-01-tooling.sh` assertion `! ./scripts/start-android-emulator.sh tabbyrush_android` succeeds on any non-zero exit. Assert specific error message (`Error: 'emulator' command not found`).
 2. Add assertion verifying PATH expansion after sourcing `scripts/android-sdk-env.sh`.
 3. Add isolated unit check for `start-xpra.sh stop` command path.
 
@@ -72,7 +72,7 @@
 2. Download Android Studio and run initial setup wizard interactively.
 3. Install Android SDK commandline-tools, platform-tools, emulator, and system-images.
 4. Accept SDK licenses interactively via `sdkmanager --licenses`.
-5. Create and boot `doggo_android` AVD, verifying `sys.boot_completed=1` and saving visual screenshot evidence.
+5. Create and boot `tabbyrush_android` AVD, verifying `sys.boot_completed=1` and saving visual screenshot evidence.
 
 ---
 

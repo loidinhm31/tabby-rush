@@ -2,14 +2,14 @@
 
 **Report Path:** `plans/reports/qa-261015-0326-dynamic-epoch-removal-validation.md`  
 **Date:** 2026-10-15  
-**Subject:** Validation of dynamic epoch collection removal across `glean-hub` and `doggo` repositories  
+**Subject:** Validation of dynamic epoch collection removal across `glean-hub` and `tabbyrush` repositories  
 **Status:** Requested validation commands completed successfully; one Rust acceptance test ignored
 
 ---
 
 ## Executive Summary
 
-Executed all 7 target validation commands across `glean-hub` and `doggo` repositories following transition from dynamic epoch collection naming (`_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>`) to direct target collection naming (`app_<appId>`).
+Executed all 7 target validation commands across `glean-hub` and `tabbyrush` repositories following transition from dynamic epoch collection naming (`_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>`) to direct target collection naming (`app_<appId>`).
 
 100% of executed unit and integration test assertions passed. Zero test failures, zero compilation errors, zero Clippy linter warnings, and zero security check failures. One Rust live MongoDB integration test was intentionally ignored per test gate design requiring live `MONGO_TEST_URI`.
 
@@ -24,10 +24,10 @@ Executed all 7 target validation commands across `glean-hub` and `doggo` reposit
 | **glean-hub** | `cargo test -p glean-hub-sync` | Doc-tests `glean_hub_sync` | 0 | 0 | 0 | 0 | N/A |
 | **glean-hub** | `cargo clippy -p glean-hub-sync -p glean-hub-server --all-targets -- -D warnings` | Linter / static analysis | N/A | Clean (0 err/warn) | 0 | 0 | 100% |
 | **glean-hub** | `cargo check --workspace` | Workspace compiler check | N/A | Clean (0 errors) | 0 | 0 | 100% |
-| **doggo** | `node scripts/hub-live-smoke.mjs --fixture-test` | Strict-v1 live smoke fixture checks | 18 checks | 18 | 0 | 0 | 100% |
-| **doggo** | `CONFIRM_MAINTENANCE_QUIESCENCE=true DRY_RUN=true node scripts/hub-strict-recovery.js` | Recovery script syntax & config | 1 check | 1 | 0 | 0 | 100% |
-| **doggo** | `node scripts/release-security-check.mjs --diagnose-source` | Static security audit checks | 6 checks | 6 | 0 | 0 | 100% |
-| **doggo** | `JAVA_HOME=... ./gradlew :shared:jvmTest --rerun-tasks` | Shared KMP JVM unit/integration tests | 98 | 98 | 0 | 0 | 100% |
+| **tabbyrush** | `node scripts/hub-live-smoke.mjs --fixture-test` | Strict-v1 live smoke fixture checks | 18 checks | 18 | 0 | 0 | 100% |
+| **tabbyrush** | `CONFIRM_MAINTENANCE_QUIESCENCE=true DRY_RUN=true node scripts/hub-strict-recovery.js` | Recovery script syntax & config | 1 check | 1 | 0 | 0 | 100% |
+| **tabbyrush** | `node scripts/release-security-check.mjs --diagnose-source` | Static security audit checks | 6 checks | 6 | 0 | 0 | 100% |
+| **tabbyrush** | `JAVA_HOME=... ./gradlew :shared:jvmTest --rerun-tasks` | Shared KMP JVM unit/integration tests | 98 | 98 | 0 | 0 | 100% |
 
 ### Total Aggregated Metrics
 - **Compiled Unit/Integration Tests (Rust + JVM):** 135 discovered, 134 passed, 0 failed, 1 ignored.
@@ -106,21 +106,21 @@ test result: ok. 36 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; fin
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.16s
 ```
 
-### 2.4 Doggo: `node scripts/hub-live-smoke.mjs --fixture-test`
-- **Working Directory:** `/home/loidinh/WS/doggo`
+### 2.4 TabbyRush: `node scripts/hub-live-smoke.mjs --fixture-test`
+- **Working Directory:** `/home/loidinh/WS/tabbyrush`
 - **Execution Time:** ~1s
 - **Outcome:** 18/18 checks passed across 5 test suites.
 - **Output:**
 ```
 ================================================================
-Doggo Hub Strict-v1 Live Smoke Test Runner
+TabbyRush Hub Strict-v1 Live Smoke Test Runner
 Target Origin: http://127.0.0.1:45711
-Application:   doggo
+Application:   tabbyrush
 ================================================================
 
 --- Suite 1: Health & App Admission ---
   [Admission] GET /api/v1/health returns healthy without redirect... PASS (HTTP 200, status=healthy)
-  [Admission] GET /api/v1/apps/doggo echoes strict-v1 mode and schema... PASS (syncMode=strict-v1, epoch=550e8400-e29b-41d4-a716-446655440000)
+  [Admission] GET /api/v1/apps/tabbyrush echoes strict-v1 mode and schema... PASS (syncMode=strict-v1, epoch=550e8400-e29b-41d4-a716-446655440000)
 
 --- Suite 2: Security & Negative Route Isolation ---
   [Security] Strict sync bootstrap rejects missing API key (HTTP 401/403)... PASS (status 403)
@@ -129,7 +129,7 @@ Application:   doggo
 
 --- Suite 3: Authentication & Access Session ---
   [Auth] Register new user account (POST /auth/register)... PASS (registered (status 200))
-  [Auth] Login with user credentials (POST /auth/login)... PASS (accessToken obtained, apps=["doggo"])
+  [Auth] Login with user credentials (POST /auth/login)... PASS (accessToken obtained, apps=["tabby-rush"])
   [Auth] Token refresh exchange (POST /auth/refresh)... PASS (token refreshed successfully)
   [Auth] Verify identity and grants (GET /auth/me)... PASS (verified user=test@example.com)
 
@@ -151,16 +151,16 @@ Live Smoke Summary: 18/18 checks passed
 ================================================================
 ```
 
-### 2.5 Doggo: `CONFIRM_MAINTENANCE_QUIESCENCE=true DRY_RUN=true node scripts/hub-strict-recovery.js`
-- **Working Directory:** `/home/loidinh/WS/doggo`
+### 2.5 TabbyRush: `CONFIRM_MAINTENANCE_QUIESCENCE=true DRY_RUN=true node scripts/hub-strict-recovery.js`
+- **Working Directory:** `/home/loidinh/WS/tabbyrush`
 - **Execution Time:** ~0.2s
 - **Outcome:** Syntax and pre-execution configuration verified cleanly in dry-run mode.
 - **Output:**
 ```
 ================================================================
-Doggo Hub Strict-v1 Maintenance Recovery Script
+TabbyRush Hub Strict-v1 Maintenance Recovery Script
 Database:       glean_hub
-App ID:         doggo
+App ID:         tabbyrush
 Source Backup:  (None - required for live recovery)
 Expected Epoch: (Not provided)
 Mode:           DRY-RUN (No mutations)
@@ -169,14 +169,14 @@ Mode:           DRY-RUN (No mutations)
 [PASS] Prerequisites and configuration syntax verified cleanly.
 ```
 
-### 2.6 Doggo: `node scripts/release-security-check.mjs --diagnose-source`
-- **Working Directory:** `/home/loidinh/WS/doggo`
+### 2.6 TabbyRush: `node scripts/release-security-check.mjs --diagnose-source`
+- **Working Directory:** `/home/loidinh/WS/tabbyrush`
 - **Execution Time:** ~0.3s
 - **Outcome:** 6/6 checks passed. Diagnostic audit result: CLEAN.
 - **Output:**
 ```
 ================================================================
-Doggo Android Release Security & Integrity Checker
+TabbyRush Android Release Security & Integrity Checker
 Target APK: androidApp/build/outputs/apk/release/androidApp-release.apk
 Approved Origin: https://api-glean-hub.qm-hub-v001.cloud
 Mode: Diagnostic Source Check
@@ -193,8 +193,8 @@ Mode: Diagnostic Source Check
 Diagnostic Audit Result: CLEAN (Source meets static security rules)
 ```
 
-### 2.7 Doggo: `JAVA_HOME="${JAVA_HOME:-$HOME/.local/share/jvm/jdk-21}" ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`
-- **Working Directory:** `/home/loidinh/WS/doggo`
+### 2.7 TabbyRush: `JAVA_HOME="${JAVA_HOME:-$HOME/.local/share/jvm/jdk-21}" ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`
+- **Working Directory:** `/home/loidinh/WS/tabbyrush`
 - **Execution Time:** 7.35s wall time
 - **Outcome:** BUILD SUCCESSFUL in 7s. 15 actionable tasks executed.
 - **Test Counts:** 98 tests executed, 98 passed, 0 failed, 0 skipped.
@@ -226,10 +226,10 @@ Diagnostic Audit Result: CLEAN (Source meets static security rules)
   - Rust sync tests: 30.00s (dominated by crypto digest / property rounds)
   - Clippy check: 0.16s
   - Cargo check workspace: 0.16s
-  - Doggo fixture smoke: ~1.0s
-  - Doggo recovery dry run: ~0.2s
-  - Doggo security check: ~0.3s
-  - Doggo JVM unit/integration test suite: 7.35s
+  - TabbyRush fixture smoke: ~1.0s
+  - TabbyRush recovery dry run: ~0.2s
+  - TabbyRush security check: ~0.3s
+  - TabbyRush JVM unit/integration test suite: 7.35s
 - **Slow Test Analysis:** Rust test suite takes 30.00s due to iterative schema generation tests and strict digest vectors; all finished well within acceptable bounds.
 
 ---
@@ -260,4 +260,4 @@ Diagnostic Audit Result: CLEAN (Source meets static security rules)
 ## 6. Unresolved Questions
 
 1. Will CI pipelines provision an ephemeral MongoDB instance to un-ignore and execute `test_strong_sync_live_mongo_acceptance_gate` regularly?
-2. When will production Glean Hub deployments be updated and verified against live physical Android devices running Doggo release builds?
+2. When will production Glean Hub deployments be updated and verified against live physical Android devices running TabbyRush release builds?

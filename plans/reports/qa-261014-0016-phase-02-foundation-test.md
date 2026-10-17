@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-14
 **Target Suite:** `./tests/test-phase-02-foundation.sh`
-**Execution Context:** Linux x86_64 (`/home/loidinh/WS/doggo`)
+**Execution Context:** Linux x86_64 (`/home/loidinh/WS/tabbyrush`)
 
 ---
 
@@ -20,7 +20,7 @@
 | 3. Wrapper properties & distribution SHA-256 (Gradle 8.11.1) | 2 | 2 | 0 |
 | 4. Settings staged assembly guards (`:shared`, `:androidApp`, `:desktopApp`) | 3 | 3 | 0 |
 | 5. Dependency version catalog (`kotlin 2.1.10`, `compose 1.7.3`, `agp 8.7.3`, `room 2.7.0-alpha12`) | 4 | 4 | 0 |
-| 6. Shared module configuration (`dev.doggo.shared`, minSdk 26, JVM 17, room schemaDirectory) | 4 | 4 | 0 |
+| 6. Shared module configuration (`dev.tabbyrush.shared`, minSdk 26, JVM 17, room schemaDirectory) | 4 | 4 | 0 |
 | 7. Kotlin contract sources existence (`commonMain/kotlin/.../*.kt`) | 16 | 16 | 0 |
 | 8. CommonTest test suites existence (`commonTest/kotlin/.../*.kt`) | 4 | 4 | 0 |
 | 9. Documentation deliverables existence (`docs/*.md`) | 5 | 5 | 0 |
@@ -36,7 +36,7 @@
 - **Contract Isolation Validation:**
   - `shared/src/commonMain/kotlin` contains 0 Android framework imports (`android.*`, `androidx.*`).
   - Zero Java framework imports (`java.*`) in contract interfaces.
-  - Package declaration uniformity: 16/16 contract files declare `package dev.doggo.shared.contract`.
+  - Package declaration uniformity: 16/16 contract files declare `package dev.tabbyrush.shared.contract`.
 - **Security Redaction Validation (Static Inspection):**
   - `CredentialBundle.toString()` explicitly outputs `CredentialBundle([REDACTED])`.
   - `HubConfig.toString()` explicitly outputs `appApiKey=[REDACTED]`.

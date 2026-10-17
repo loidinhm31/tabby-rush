@@ -1,4 +1,4 @@
-# Doggo Design Guidelines & UI Standards
+# TabbyRush Design Guidelines & UI Standards
 
 **Date:** 2026-10-17
 **Applies to:** Shared Compose UI (Android, Linux, Windows) and Android/desktop task-surface presentation
@@ -8,7 +8,7 @@
 
 ## 1. Visual Language & Inspiration
 
-Doggo's shared visual language is derived from the measured ForumFlash light theme (`https://forumflash.vercel.app/`), adapted for native task management.
+TabbyRush's shared visual language is derived from the measured ForumFlash light theme (`https://forumflash.vercel.app/`), adapted for native task management.
 - **Tone:** Focused, calm, clean geometric aesthetic with deep teal structure, soft mint containers, warm cream headers, and disciplined coral alert accents.
 - **Mode:** Accessible light theme only. Dark theme is out of scope for initial multiplatform release.
 - **Dynamic Color:** Disabled to avoid OS-level palette overrides that would alter calculated contrast ratios. Calculations are automated; rendered UI contrast across OEM devices remains pending platform acceptance.
@@ -21,45 +21,45 @@ Doggo's shared visual language is derived from the measured ForumFlash light the
 
 | Token Name | Hex Code | Material 3 Mapping | Primary Usage |
 |---|---|---|---|
-| `DoggoPrimary` | `#004646` | `primary` | App bar headers, primary buttons, active selected states |
-| `DoggoPrimaryDeep` | `#003838` | `secondary`, `onPrimaryContainer` | Sidebar header, emphasized titles, deep action accents |
-| `DoggoMint` | `#27C4B5` | `tertiary` | Decorative accent chips, tab indicator underlines |
-| `DoggoMintSurface` | `#E6F0F2` | `primaryContainer`, `surfaceVariant` | Soft container backgrounds, todo item borders, hover fills |
-| `DoggoCream` | `#F7F4ED` | `secondaryContainer` | Top header background in compact mode, warm card surfaces |
-| `DoggoCoral` | `#C62828` | `error` | Functional dark coral for destructive buttons, error text, alerts |
-| `DoggoCoralSurface` | `#FFEBEB` | `errorContainer` | Conflict callouts, error card backgrounds |
-| `DoggoLine` | `#D9E3E4` | `outlineVariant` | Decorative thin divider lines (1dp) |
-| `DoggoOutline` | `#687677` | `outline` | Functional component borders (meets 3:1 non-text contrast) |
-| `DoggoInk` | `#0F172A` | `onSurface`, `onBackground` | Primary typography, body text, dialog titles |
-| `DoggoMuted` | `#546269` | `customColors.muted` | Secondary timestamps, hint text, metadata |
-| `DoggoWhite` | `#FFFFFF` | `surface` | Card surfaces, dialog backgrounds, input background |
-| `DoggoPage` | `#F8FBFA` | `background` | Window root background, page canvas |
+| `TabbyRushPrimary` | `#004646` | `primary` | App bar headers, primary buttons, active selected states |
+| `TabbyRushPrimaryDeep` | `#003838` | `secondary`, `onPrimaryContainer` | Sidebar header, emphasized titles, deep action accents |
+| `TabbyRushMint` | `#27C4B5` | `tertiary` | Decorative accent chips, tab indicator underlines |
+| `TabbyRushMintSurface` | `#E6F0F2` | `primaryContainer`, `surfaceVariant` | Soft container backgrounds, todo item borders, hover fills |
+| `TabbyRushCream` | `#F7F4ED` | `secondaryContainer` | Top header background in compact mode, warm card surfaces |
+| `TabbyRushCoral` | `#C62828` | `error` | Functional dark coral for destructive buttons, error text, alerts |
+| `TabbyRushCoralSurface` | `#FFEBEB` | `errorContainer` | Conflict callouts, error card backgrounds |
+| `TabbyRushLine` | `#D9E3E4` | `outlineVariant` | Decorative thin divider lines (1dp) |
+| `TabbyRushOutline` | `#687677` | `outline` | Functional component borders (meets 3:1 non-text contrast) |
+| `TabbyRushInk` | `#0F172A` | `onSurface`, `onBackground` | Primary typography, body text, dialog titles |
+| `TabbyRushMuted` | `#546269` | `customColors.muted` | Secondary timestamps, hint text, metadata |
+| `TabbyRushWhite` | `#FFFFFF` | `surface` | Card surfaces, dialog backgrounds, input background |
+| `TabbyRushPage` | `#F8FBFA` | `background` | Window root background, page canvas |
 
 ### 2.2 Relative Luminance & Contrast Verification (WCAG 2.1 AA)
 
 Calculated ratios below evaluate 16 opaque token pairs using the standard W3C relative luminance formula:
 $L = 0.2126 \times R_{lin} + 0.7152 \times G_{lin} + 0.0722 \times B_{lin}$ and $Ratio = (L_1 + 0.05) / (L_2 + 0.05)$.
-These mathematical token calculations are verified by automated unit assertions in `dev.doggo.shared.ui.TodoSemanticsTest`. They establish baseline palette contrast thresholds, not exhaustive proof of contrast for every rendered control state or overall WCAG compliance across devices:
+These mathematical token calculations are verified by automated unit assertions in `dev.tabbyrush.shared.ui.TodoSemanticsTest`. They establish baseline palette contrast thresholds, not exhaustive proof of contrast for every rendered control state or overall WCAG compliance across devices:
 | Foreground | Background | Measured Ratio | WCAG Requirement | Status |
 |---|---|---|---|---|
-| `DoggoInk` (`#0F172A`) | `DoggoPage` (`#F8FBFA`) | **17.15:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
-| `DoggoInk` (`#0F172A`) | `DoggoWhite` (`#FFFFFF`) | **17.85:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
-| `DoggoInk` (`#0F172A`) | `DoggoCream` (`#F7F4ED`) | **16.25:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
-| `DoggoInk` (`#0F172A`) | `DoggoMintSurface` (`#E6F0F2`) | **15.40:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
-| `DoggoInk` (`#0F172A`) | `DoggoCoralSurface` (`#FFEBEB`) | **15.59:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
-| `DoggoWhite` (`#FFFFFF`) | `DoggoPrimary` (`#004646`) | **10.69:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
-| `DoggoWhite` (`#FFFFFF`) | `DoggoPrimaryDeep` (`#003838`) | **12.94:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
-| `DoggoWhite` (`#FFFFFF`) | `DoggoCoral` (`#C62828`) | **5.62:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
-| `DoggoCoral` (`#C62828`) | `DoggoWhite` (`#FFFFFF`) | **5.62:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
-| `DoggoCoral` (`#C62828`) | `DoggoCoralSurface` (`#FFEBEB`) | **4.91:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
-| `DoggoMuted` (`#546269`) | `DoggoWhite` (`#FFFFFF`) | **6.31:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
-| `DoggoMuted` (`#546269`) | `DoggoMintSurface` (`#E6F0F2`) | **5.44:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
-| `DoggoMuted` (`#546269`) | `DoggoCoralSurface` (`#FFEBEB`) | **5.51:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
-| `DoggoMuted` (`#546269`) | `DoggoCream` (`#F7F4ED`) | **5.74:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
-| `DoggoPrimaryDeep` (`#003838`) | `DoggoMintSurface` (`#E6F0F2`) | **11.16:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
-| `DoggoOutline` (`#687677`) | `DoggoWhite` (`#FFFFFF`) | **4.72:1** | >= 3.0:1 (Non-Text Controls) | Pass (AA) |
+| `TabbyRushInk` (`#0F172A`) | `TabbyRushPage` (`#F8FBFA`) | **17.15:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
+| `TabbyRushInk` (`#0F172A`) | `TabbyRushWhite` (`#FFFFFF`) | **17.85:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
+| `TabbyRushInk` (`#0F172A`) | `TabbyRushCream` (`#F7F4ED`) | **16.25:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
+| `TabbyRushInk` (`#0F172A`) | `TabbyRushMintSurface` (`#E6F0F2`) | **15.40:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
+| `TabbyRushInk` (`#0F172A`) | `TabbyRushCoralSurface` (`#FFEBEB`) | **15.59:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
+| `TabbyRushWhite` (`#FFFFFF`) | `TabbyRushPrimary` (`#004646`) | **10.69:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
+| `TabbyRushWhite` (`#FFFFFF`) | `TabbyRushPrimaryDeep` (`#003838`) | **12.94:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
+| `TabbyRushWhite` (`#FFFFFF`) | `TabbyRushCoral` (`#C62828`) | **5.62:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
+| `TabbyRushCoral` (`#C62828`) | `TabbyRushWhite` (`#FFFFFF`) | **5.62:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
+| `TabbyRushCoral` (`#C62828`) | `TabbyRushCoralSurface` (`#FFEBEB`) | **4.91:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
+| `TabbyRushMuted` (`#546269`) | `TabbyRushWhite` (`#FFFFFF`) | **6.31:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
+| `TabbyRushMuted` (`#546269`) | `TabbyRushMintSurface` (`#E6F0F2`) | **5.44:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
+| `TabbyRushMuted` (`#546269`) | `TabbyRushCoralSurface` (`#FFEBEB`) | **5.51:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
+| `TabbyRushMuted` (`#546269`) | `TabbyRushCream` (`#F7F4ED`) | **5.74:1** | >= 4.5:1 (Normal Text) | Pass (AA) |
+| `TabbyRushPrimaryDeep` (`#003838`) | `TabbyRushMintSurface` (`#E6F0F2`) | **11.16:1** | >= 4.5:1 (Normal Text) | Pass (AAA) |
+| `TabbyRushOutline` (`#687677`) | `TabbyRushWhite` (`#FFFFFF`) | **4.72:1** | >= 3.0:1 (Non-Text Controls) | Pass (AA) |
 
-*Critical Accessibility Invariant:* `DoggoMint` (`#27C4B5`) has a contrast ratio of only 2.18:1 on white and is strictly restricted to graphical accents or paired with dark teal (`#003838`).
+*Critical Accessibility Invariant:* `TabbyRushMint` (`#27C4B5`) has a contrast ratio of only 2.18:1 on white and is strictly restricted to graphical accents or paired with dark teal (`#003838`).
 
 ---
 
@@ -89,7 +89,7 @@ These mathematical token calculations are verified by automated unit assertions 
 
 ## 4. Responsive Layout Architecture
 
-Doggo implements a single unified Compose tree with responsive breakpoint adaptation:
+TabbyRush implements a single unified Compose tree with responsive breakpoint adaptation:
 1. **Compact Layout (< 840dp):**
    - Vertical layout with scrolling list container.
    - Warm cream top header showing account info, action buttons ("Add", "Notices", "Leave"), and sync feedback. The top bar is in non-scrolling `Scaffold.topBar`; viewport constraints at 200% font scale or landscape remain unverified.
@@ -128,7 +128,7 @@ Doggo implements a single unified Compose tree with responsive breakpoint adapta
 
 ## 6. Phase 02 Frozen Contract Gaps & Downstream Deferrals
 
-Per project dependency architecture, Phase 02 contracts (`shared/src/commonMain/kotlin/dev/doggo/shared/contract/`) and root dependency configurations are frozen. Phase 06 UI consumes these contracts as specified, noting the following integration gaps:
+Per project dependency architecture, Phase 02 contracts (`shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/`) and root dependency configurations are frozen. Phase 06 UI consumes these contracts as specified, noting the following integration gaps:
 
 1. **Cursor Pagination & Load More:** `TodoUiState` currently exposes a flat `items: List<Todo>` without pagination cursors or a `LoadMore` action in `TodoAction`. Infinite scroll / pagination triggers await contract amendment.
 2. **UnknownSuperseded & Reset Counts:** `SyncProgress` does not expose separate counter fields for `unknownSupersededCount` or `resetReviewCount`. The UI renders `SyncStatus.RESET_REQUIRED` and `SyncStatus.UNCERTAIN` chips in `SyncFeedback`, and displays dedicated guidance banners when `SafeError.ResetRequired` or `SafeError.ProtocolIncompatible` are present.
@@ -152,8 +152,8 @@ Per project dependency architecture, Phase 02 contracts (`shared/src/commonMain/
 - **Privacy-Preserving Non-Ready States**: When unauthenticated, locked, or during initial cold load (`WidgetDisplayState.Loading`, `SignedOut`, `Locked`, `Unavailable`), the widget displays clean generic guidance with **zero private task titles** rendered.
 
 ### 7.2 Quiet Deadline Notification
-- **Quiet System Alerts**: Low-importance channel (`doggo_task_surfaces`), sound and vibration disabled.
-- **WCAG AA Status Badging**: Overdue deadlines use high-contrast `DoggoCoral` (`#C62828`) text on `DoggoCoralSurface` (`#FFEBEB`), exceeding 4.5:1 text contrast.
+- **Quiet System Alerts**: Low-importance channel (`tabbyrush_task_surfaces`), sound and vibration disabled.
+- **WCAG AA Status Badging**: Overdue deadlines use high-contrast `TabbyRushCoral` (`#C62828`) text on `TabbyRushCoralSurface` (`#FFEBEB`), exceeding 4.5:1 text contrast.
 - **Lockscreen Masking**: Private view displays full task title; lockscreen public version (`setPublicVersion`) renders generic text ("Task deadline reminder", "Unlock device to view task title and details") protecting sensitive task titles.
 
 ### 7.3 Desktop Sticky Companion Window
@@ -169,7 +169,32 @@ The sticky-surface PNGs in `docs/evidence/` are visual design baselines only, no
 ## 8. Date & Time Picker Controls (Date & Time Picker Migration)
 
 The date and time selection surfaces replace manual text entry with Material 3 calendar and clock dialogs:
-- **Trigger Component (`DateTimePickerButton`):** Stacked label and formatted value; full-width clickable container enforcing `>= 48.dp` minimum touch target (`DoggoThemeTokens.MinTouchTargetSize`). Semantics declare `Role.Button` and `stateDescription`.
-- **Calendar Modal (`DoggoDatePickerDialog`):** Compose Material 3 DatePicker with input-mode toggle disabled (`showModeToggle = false`), enforcing calendar-only selection. Normalized to UTC midnight and configured for years `0..9999`.
-- **Clock Modal (`DoggoTimePickerDialog`):** Compose Material 3 TimePicker dial in 24-hour format (`is24Hour = true`), wrapped in a scrollable dialog container to accommodate compact displays without obstructing action buttons.
+- **Trigger Component (`DateTimePickerButton`):** Stacked label and formatted value; full-width clickable container enforcing `>= 48.dp` minimum touch target (`TabbyRushThemeTokens.MinTouchTargetSize`). Semantics declare `Role.Button` and `stateDescription`.
+- **Calendar Modal (`TabbyRushDatePickerDialog`):** Compose Material 3 DatePicker with input-mode toggle disabled (`showModeToggle = false`), enforcing calendar-only selection. Normalized to UTC midnight and configured for years `0..9999`.
+- **Clock Modal (`TabbyRushTimePickerDialog`):** Compose Material 3 TimePicker dial in 24-hour format (`is24Hour = true`), wrapped in a scrollable dialog container to accommodate compact displays without obstructing action buttons.
 - **Verification Boundary:** Palette contrast and UTC date/time helper conversions are verified by automated unit tests. Rendered Compose interaction tests and on-device TalkBack/Narrator screen-reader verification remain platform acceptance tasks.
+
+---
+
+## 9. TabbyRush App Icon & Visual Identity
+
+### 9.1 Concept: "TabbyRush: The Sprinting Mascot & Milestone Trail"
+The official visual identity of TabbyRush embodies focus, speed, and playful task completion:
+- **Mascot Character & Stance:** A chubby brown domestic tabby cat poised in a low runner's preparation crouch—strong planted front paws, muscular hind legs, soft primordial belly pouch, alert ears, and focused, earnest green eyes fixed forward.
+- **Milestone Trail & Finish Flag:** Curving behind the mascot is a dynamic dotted progress trail featuring mint-cyan circular task checkpoint badges and paw prints, culminating in a triumphant orange finish flag at top-right, grounded by energetic speed streaks.
+- **Desktop & Master Art:** Master composite features the mascot illustration centered on a crisp, rounded squircle canvas (`#FFFFFF` with `#D9E3E4` border and soft ambient drop shadow) to ensure maximum contrast and legibility across dark and light OS desktop taskbars and wallpapers.
+
+### 9.2 Android Adaptive Icon Geometry (minSdk 26)
+- **Canvas Viewport:** 108×108 dp canvas (rendered at 432×432 px at xxxhdpi).
+- **Background Layer (`ic_launcher_background.xml`):** Solid `#FFFFFF` vector path covering the full 108×108 dp.
+- **Foreground Layer (`ic_launcher_foreground.png`):** Transparent 32-bit RGBA bitmap featuring the TabbyRush mascot and milestone trail centered strictly within the inner **66 dp-diameter guaranteed safe circle** (radius 33.0 dp / 132 px from center `(216, 216)`). The artwork's maximum measured pixel radius from center across all non-transparent pixels is **31.02 dp (124.08 px)**, providing an explicit **1.98 dp (7.92 px) margin of safety**. Exactly zero pixels sit outside the 66 dp boundary, preventing clipping under circular, squircle, pebble, or rounded-rectangle OEM launcher masks.
+- **Adaptive Mipmaps:** Referenced via `@mipmap/ic_launcher` and `@mipmap/ic_launcher_round` in `androidApp/src/main/AndroidManifest.xml`.
+
+### 9.3 Desktop Runtime & Packaging Icons
+- **Desktop Window & Taskbar Icon:** `desktopApp/src/main/resources/tabbyrush-icon.png` (256×256 RGBA PNG). Configured on both `MainWindow` and `StickyWindow` via `painterResource("tabbyrush-icon.png")`.
+- **Desktop System Tray:** `desktopApp/src/linuxMain/resources/task-surface-tray.png` and `desktopApp/src/windowsMain/resources/task-surface-tray.png` (32×32 RGBA PNG). Features high-contrast optical artwork utilizing rows 4–26 and columns 3–28 for crisp legibility on dark and light system taskbars.
+- **Windows Packaging ICO:** `desktopApp/src/windowsMain/resources/tabbyrush.ico` (multi-resolution ICO embedding 16×16, 24×24, 32×32, 48×48, 64×64, 128×128, and 256×256 32-bit RGBA frames). Configured in `desktopApp/build.gradle.kts` under `compose.desktop.application.nativeDistributions.windows.iconFile`.
+- **Linux Packaging PNG:** `desktopApp/src/main/resources/tabbyrush-icon.png` configured under `nativeDistributions.linux.iconFile`.
+
+### 9.4 Canonical Master Vector
+- **Master SVG Source:** `docs/assets/tabbyrush-app-icon.svg` (512×512 SVG with semantic group layers for desktop background squircle and TabbyRush mascot).

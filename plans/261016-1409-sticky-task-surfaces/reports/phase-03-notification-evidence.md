@@ -9,7 +9,7 @@
 ## 1. Authored Production Components & Specifications
 
 ### 1.1 Preferences & Versioned Codec (`task-surface-preferences.kt`)
-- **Account Isolation**: SharedPreferences partitioned per account (`doggo_task_surface_<accountKey>`), completely decoupled from Room and remote sync.
+- **Account Isolation**: SharedPreferences partitioned per account (`tabbyrush_task_surface_<accountKey>`), completely decoupled from Room and remote sync.
 - **Durable State Contract**: `TaskSurfacePreferenceState(enabled, suppressed, postedKey, postedReceipt, hasCorruptSuppression)`. Default opt-in is `false`.
 - **Versioned Non-Leaking Codec**: `DeadlineSelectionKeyCodec` uses a versioned (`v1:`) URL-encoded parameter serialization that captures every `TaskDeadline` field (`date`, `time`, `zone`, `offsetSeconds`, `reminderAnchorTime`, `anchorEpochMs`, `overdueEpochMs`) along with account token and task ID, while strictly omitting user task titles to prevent credential/data leakage. Rejects malformed or corrupted payloads and flags conservative suppression rather than silently reviving dismissed tasks.
 - **Fail-Closed Synchronous Persistence**: All mutations execute off the main thread under a shared synchronization lock and enforce synchronous `commit()` writes. If a commit fails, an exception is thrown and the coordinator aborts without posting.
@@ -21,14 +21,14 @@
   - `clear(accountKey)` removes all preferences and deletes the file on Android N+.
 
 ### 1.2 Quiet Notification Coordinator (`task-surface-notification.kt`)
-- **Dedicated Quiet Channel**: `doggo_task_surface_v1` initialized with `NotificationManager.IMPORTANCE_LOW`, lights disabled, vibration disabled, null sound, badge disabled, and `VISIBILITY_PRIVATE`.
+- **Dedicated Quiet Channel**: `tabbyrush_task_surface_v1` initialized with `NotificationManager.IMPORTANCE_LOW`, lights disabled, vibration disabled, null sound, badge disabled, and `VISIBILITY_PRIVATE`.
 - **Shared Coordinator Serialization**: Entire notification lifecycle (`refresh`, `dismiss`, and `cancelForAccount`) is guarded by a companion-level `Mutex`, preventing race conditions between concurrent refreshes, user dismissals, and account cancellations. Dismissal calls route directly through `coordinator.dismiss(key, receipt)`.
 - **Stale Token Fencing**: Validates current host readiness (`host.access.readiness.value is SurfaceReadiness.Ready(token)`) before any destructive side effects or preference mutations. If publication admission fails (`!published`), invalidates only local post receipt without cancelling global notification ID (which another token may have published).
 - **Stable Post Receipt**: Reuses active post receipt across identical-selection refreshes, preventing race conditions where a routine refresh replaces the receipt of a visible notification before the user swipes it away.
 - **Deadline Selection**: Evaluates `selectNextDeadline(snapshot.schedules, nowEpochMs)` (includes incomplete deadlines and unresolved-conflict projections with `" (Sync conflict)"` indication; independent of reminder rule enablement; excludes drafts).
 - **Two-Tier Privacy**:
   - Private notification: displays actual task title, conflict indicator, formatted due/overdue status, direct Activity launch intent, Complete broadcast intent, and DeleteIntent.
-  - Generic public notification (`setPublicVersion`): displays generic `"Next task deadline"` title and `"Open Doggo to view"` text on secure lock screens, disclosing zero task text.
+  - Generic public notification (`setPublicVersion`): displays generic `"Next task deadline"` title and `"Open TabbyRush to view"` text on secure lock screens, disclosing zero task text.
 - **Pre-Persisted Receipt & Token Gate**: Generates a random UUID receipt and persists it via `recordPost` **before** calling `NotificationManager.notify()`. Post operation is admitted through `host.access.publishIfCurrent(token)`.
 - **Boundary Wake Scheduling**: If the selected deadline has a future overdue boundary, schedules inexact WorkManager wake via `TaskSurfaceRefreshWorker`; cancels wake if already overdue or selection is absent.
 - **Account Cancellation**: `cancelForAccount(accountKey)` cancels scheduled boundary work, invalidates receipts, removes OS notifications if posted by this account, and wipes account preferences.
@@ -48,7 +48,7 @@
 - *Note on Receiver Export*: Receivers are designed as private and unexported. Phase 05 holds explicit ownership of `AndroidManifest.xml` to declare them with `android:exported="false"`.
 
 ### 1.5 Boundary Wake Worker (`task-surface-refresh-worker.kt`)
-- **`TaskSurfaceRefreshWorker`**: Inexact `CoroutineWorker` scheduled with `ExistingWorkPolicy.REPLACE` and account tag `doggo_task_surface_<accountKey>`.
+- **`TaskSurfaceRefreshWorker`**: Inexact `CoroutineWorker` scheduled with `ExistingWorkPolicy.REPLACE` and account tag `tabbyrush_task_surface_<accountKey>`.
 - **Catch-up Guard**: Enforces minimum delay of 15 minutes (`MIN_DELAY_MS = 900_000L`).
 - **Readiness Check**: Awaits host readiness up to 4s, verifies account key and generation match input data, and triggers `host.refresh(SurfaceRefreshReason.Clock)`. Propagates cancellation cleanly.
 
@@ -95,19 +95,19 @@
 ## 3. Strict File Ownership Compliance
 
 Every file created/modified strictly matches the exclusive ownership list of Phase 03:
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-preferences.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-notification.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-intents.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-action-receiver.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-dismiss-receiver.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-time-receiver.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-refresh-worker.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-permission-controller.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-settings.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-preferences.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-notification.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-intents.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-action-receiver.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-dismiss-receiver.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-time-receiver.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-refresh-worker.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-permission-controller.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-settings.kt`
 - `androidApp/src/main/res/drawable/task-surface-notification-icon.xml`
 - `androidApp/src/main/res/values/task-surface-strings.xml`
-- `androidApp/src/test/kotlin/dev/doggo/android/task-surface-notification-test.kt`
-- `androidApp/src/androidTest/kotlin/dev/doggo/android/task-surface-preferences-device-test.kt`
+- `androidApp/src/test/kotlin/dev/tabbyrush/android/task-surface-notification-test.kt`
+- `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-surface-preferences-device-test.kt`
 - `plans/261016-1409-sticky-task-surfaces/reports/phase-03-notification-evidence.md`
 
 Zero shared root files, manifests, application classes, or Gradle files were touched.
@@ -118,7 +118,7 @@ Zero shared root files, manifests, application classes, or Gradle files were tou
 
 The following contracts and components are ready for Phase 05 wiring:
 1. **Manifest Registration**: Phase 05 registers `TaskSurfaceActionReceiver`, `TaskSurfaceDismissReceiver`, and `TaskSurfaceTimeReceiver` as unexported (`android:exported="false"`) broadcast receivers in `AndroidManifest.xml`.
-2. **Application Host**: Phase 05 implements `TaskSurfaceHostOwner` on `DoggoApplication` and instantiates `TaskSurfaceNotificationCoordinator`.
+2. **Application Host**: Phase 05 implements `TaskSurfaceHostOwner` on `TabbyRushApplication` and instantiates `TaskSurfaceNotificationCoordinator`.
 3. **Settings Navigation & Permission Flow**: Phase 05 embeds `TaskSurfaceSettings` into the settings navigation hierarchy and registers an `ActivityResultLauncher` with `ActivityResultContracts.RequestPermission()` for `POST_NOTIFICATIONS` (API 33+).
 4. **Account Lifecycle & Wipe**: Phase 05 calls `coordinator.cancelForAccount(accountKey)` during account logout, account replacement, or wipe marker recovery.
 5. **Runtime Device Acceptance**: Phase 05 / 07 verify actual API 34+ swipe dismissal delivery behavior and lock-screen privacy rendering on physical/emulated devices.

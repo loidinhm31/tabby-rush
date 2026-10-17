@@ -1,11 +1,11 @@
-# Phase 03 Review — Cycle 4 (Doggo-only strict server + legacy isolation)
+# Phase 03 Review — Cycle 4 (TabbyRush-only strict server + legacy isolation)
 
 **Score: 7/10.** Code fixes from cycle 3 verified in source (topology-aware concern, admission fail-closed/exact, key custody, lastOp invariant, docs honest). Phase NOT acceptable: plan §9–§12 live-Mongo/mounted/old-binary gates still unexecuted ("source inspection cannot pass 03"). No new tests added since cycle 3 (still 36 + 1 ignored).
 
 ## Scope
-- Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md` (status lines updated).
-- glean-hub-sync: `services/strong_sync_service.rs`, `services/app_service.rs`, `middleware/sync_mode_guard.rs`, `routes/strong_sync.rs`, `routes/apps.rs`/`lib.rs` diffs, `bin/strong_sync_admission.rs`, `docs/doggo-strict-sync.md`.
-- Doggo: `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, `integration/glean-hub/doggo-schema.json`, `docs/evidence/hub-compatibility-summary.md`, `docs/hub-*.md` (grep only).
+- Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-03-hub-schema-compatibility.md` (status lines updated).
+- glean-hub-sync: `services/strong_sync_service.rs`, `services/app_service.rs`, `middleware/sync_mode_guard.rs`, `routes/strong_sync.rs`, `routes/apps.rs`/`lib.rs` diffs, `bin/strong_sync_admission.rs`, `docs/tabbyrush-strict-sync.md`.
+- TabbyRush: `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, `integration/glean-hub/tabbyrush-schema.json`, `docs/evidence/hub-compatibility-summary.md`, `docs/hub-*.md` (grep only).
 - glean-hub worktree has large unrelated dirty diff (embed-app, UI, docs); not reviewed.
 
 ## Validation (run by me)
@@ -55,7 +55,7 @@ No new security/data-loss defects found in code.
 - Axum `Json` rejections (415/422) not strict-coded on strong routes.
 - Guard/dual_auth path extractors differ (`filter(!empty)` vs raw index `parts[2]`); both operate on raw encoded path so encoded-id bypass is closed, but pin with a mounted test.
 - Move cursor hex-encode/decode into `models/strong_sync.rs` (DTO/cursor concern) to slim service.
-- Evidence doc line 34 (`doggo-strict-sync.md` bullet) sits under "Runtime Environment" list; move to Documentation list.
+- Evidence doc line 34 (`tabbyrush-strict-sync.md` bullet) sits under "Runtime Environment" list; move to Documentation list.
 
 ## Positives
 - Clean isolation: separate model/service/route/error/guard modules; legacy `register_app` signature and `AppListItem` untouched; `update_schema` filter `syncMode $exists:false` + disambiguating reread; registry published last; epoch checked before collection handle; user id only from auth; cursor scope-bound; dual_auth is outermost layer over legacy+strong.

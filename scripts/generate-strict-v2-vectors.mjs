@@ -99,7 +99,7 @@ function encodePreimage(op) {
 
 const baseOp = {
   domain: 'strict-v2',
-  appId: 'doggo',
+  appId: 'tabby-rush',
   userId: '65a123456789abcdef012345',
   epoch: '550e8400-e29b-41d4-a716-446655440000',
   tableName: 'todos',
@@ -501,7 +501,7 @@ const processedValid = validCases.map((vc) => {
 const outputFixture = {
   version: 'strict-v2-vector-v1',
   domain: 'strict-v2',
-  description: 'Canonical reference test vectors for Doggo strict-v2 sync protocol (Gate G1)',
+  description: 'Canonical reference test vectors for TabbyRush strict-v2 sync protocol (Gate G1)',
   validVectors: processedValid,
   rejectionVectors: rejectionCases,
 };

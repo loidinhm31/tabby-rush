@@ -1,7 +1,7 @@
 # Phase 01 Documentation Alignment Report
 
 **Date:** 2026-10-16  
-**Scope:** Doggo Sticky Task Surfaces, Phase 01 shared foundation  
+**Scope:** TabbyRush Sticky Task Surfaces, Phase 01 shared foundation  
 **Outcome:** Documentation updated to describe delivered shared contracts and preserve explicit platform/provenance boundaries.
 
 ## Current State Assessment

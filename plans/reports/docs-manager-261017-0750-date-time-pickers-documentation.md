@@ -7,7 +7,7 @@
 ## Current State Assessment
 
 - Before this update, the architecture and changelog described manual deadline date/time inputs; the shared UI inventory omitted the new picker and helper-test files; the development roadmap had no date/time picker migration item.
-- Source review confirms shared Material 3 `DoggoDatePickerDialog` and `DoggoTimePickerDialog`, button triggers, disabled date input-mode toggle, clock dial without `TimeInput`, UTC-midnight date conversion, canonical `YYYY-MM-DD` / `HH:mm` output, and date-picker year range `0..9999`. Existing DST gap/overlap handling remains in the deadline calculation path.
+- Source review confirms shared Material 3 `TabbyRushDatePickerDialog` and `TabbyRushTimePickerDialog`, button triggers, disabled date input-mode toggle, clock dial without `TimeInput`, UTC-midnight date conversion, canonical `YYYY-MM-DD` / `HH:mm` output, and date-picker year range `0..9999`. Existing DST gap/overlap handling remains in the deadline calculation path.
 - The latest picker code-review report records 372/372 Gradle unit tests, Android `assembleDebug`, desktop compilation, and 32/32 Node checks passing. The plan records these unit/build results predate the current `yearRange = 0..9999` configuration, and no post-change rerun is evidenced. Rendered Compose interaction tests are absent and native device/accessibility acceptance remains open. No tests were rerun during this documentation pass.
 - The earlier QA report records two failures in its first run; the later code-review report says full reruns passed but does not explain the transition. Preserve the latest reported pass status while keeping this evidence discrepancy visible.
 

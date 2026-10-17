@@ -3,13 +3,13 @@
 Date: 2026-10-14  
 Status: Active  
 Phase: Phase 04 Auth & Protected Session  
-Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md`  
+Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-04-auth-session.md`  
 
 ---
 
 ## 1. Overview & Architecture
 
-Doggo reuses the existing Glean Hub authentication service for user identity and opt-in strict per-record sync. Authentication operates under strict least-privilege, origin-bound, and protected-storage invariants.
+TabbyRush reuses the existing Glean Hub authentication service for user identity and opt-in strict per-record sync. Authentication operates under strict least-privilege, origin-bound, and protected-storage invariants.
 
 ```mermaid
 flowchart TD
@@ -42,7 +42,7 @@ All outbound traffic is bounded to the configured `canonicalOrigin` validated by
 | `POST /api/v1/auth/login` | `AUTH_PUBLIC` | Content-Type | Password authentication |
 | `POST /api/v1/auth/refresh` | `AUTH_PUBLIC` | Content-Type | Single-flight token rotation |
 | `GET /api/v1/auth/me` | `BEARER_ONLY` | Authorization: Bearer | Authoritative user & app grant info |
-| `POST /api/v1/apps/access-requests` | `BEARER_ONLY` | Authorization: Bearer | Submit request for `doggo` app |
+| `POST /api/v1/apps/access-requests` | `BEARER_ONLY` | Authorization: Bearer | Submit request for `tabbyrush` app |
 | `GET /api/v1/apps/access-requests/me` | `BEARER_ONLY` | Authorization: Bearer | List existing access requests |
 | `POST /api/v1/sync/{appId}/strong/bootstrap` | `DUAL_AUTH_STRICT` | Bearer + X-API-Key + X-App-Id | Strict strong sync bootstrap |
 | `POST /api/v1/sync/{appId}/strong/push` | `DUAL_AUTH_STRICT` | Bearer + X-API-Key + X-App-Id | Strict mutation push batch |
@@ -64,10 +64,10 @@ Any request to non-allowlisted paths or legacy endpoints (`/api/v1/sync/:app_id`
 ## 4. Protected Credential Vault
 
 ### 4.1 Android Keystore Vault
-- **Master Key**: Android KeyStore hardware-backed AES-256-GCM key per account (`doggo_vault_key_{accountKey}`).
+- **Master Key**: Android KeyStore hardware-backed AES-256-GCM key per account (`tabbyrush_vault_key_{accountKey}`).
 - **Nonce**: Fresh 12-byte cryptographically secure random IV generated per write.
 - **Authenticated Additional Data (AAD)**: Binds ciphertext to format version and account:
-  $$\text{AAD} = \text{"doggo\_vault\_v1:"} \parallel \text{accountKey}$$
+  $$\text{AAD} = \text{"tabbyrush\_vault\_v1:"} \parallel \text{accountKey}$$
 - **Atomic File Replacement**: Written to `account_{accountKey}.vault.tmp`, synced to disk via `FileDescriptor.sync()`, then atomically renamed using `StandardCopyOption.ATOMIC_MOVE`.
 - **States**:
   - `READY`: Vault accessible and operations succeed.
@@ -81,7 +81,7 @@ Any request to non-allowlisted paths or legacy endpoints (`/api/v1/sync/:app_id`
 
 - **Access Token**: Glean Hub JWT, signed with HS256, 6-hour lifespan.
 - **Refresh Token**: Glean Hub cryptographically random 32-byte string, SHA-256 hashed on server, 30-day lifespan.
-- **Server Grant Enforcement**: Server JWT claims contain `apps` list at time of issuance. When an admin grants or revokes `doggo` access, the change takes effect upon next token refresh or login. Doggo verifies `/me.apps` before every sync cycle.
+- **Server Grant Enforcement**: Server JWT claims contain `apps` list at time of issuance. When an admin grants or revokes `tabbyrush` access, the change takes effect upon next token refresh or login. TabbyRush verifies `/me.apps` before every sync cycle.
 
 
 ---
@@ -96,7 +96,7 @@ All sticky task surface operations—including Glance widget completion/add, qui
 
 ### 6.2 Bounded Cold-Start Readiness Wait
 On application startup or background worker invocation, surfaces must not execute against uninitialized stores:
-- `awaitReadiness(timeoutMs = 4000L)` suspends for up to 4 seconds awaiting the `Ready(token)` lifecycle transition from `DoggoApplication`.
+- `awaitReadiness(timeoutMs = 4000L)` suspends for up to 4 seconds awaiting the `Ready(token)` lifecycle transition from `TabbyRushApplication`.
 - If the credential vault remains locked or cold restoration does not complete within 4 seconds, the surface transitions to `SurfaceReadiness.Unavailable` and renders safe fallback states with zero private task titles exposed.
 
 ### 6.3 Serialized Publication Mutex

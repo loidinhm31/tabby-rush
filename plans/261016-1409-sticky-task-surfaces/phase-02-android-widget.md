@@ -22,7 +22,7 @@ Glance uses RemoteViews, not ordinary shared Compose UI. Launcher owns widget ID
 5. Complete production implementation against01 host interfaces; real registration and compact create route are05 responsibility.
 
 ## Architecture
-`DoggoTaskWidgetReceiver` resolves Application's `TaskSurfaceHostOwner` → bounded access readiness → read current token snapshot → Glance-native projection. Updater enumerates `GlanceAppWidgetManager` IDs, coalesces updates, performs final token publication fencing, and exposes awaitable clear/quiescence to05. Callback desired boolean → host.access.setCompleted; request existing refresh/sync outside mutation lease. Add/Open use explicit Activity intents, token rechecked by05 on consumption.
+`TabbyRushTaskWidgetReceiver` resolves Application's `TaskSurfaceHostOwner` → bounded access readiness → read current token snapshot → Glance-native projection. Updater enumerates `GlanceAppWidgetManager` IDs, coalesces updates, performs final token publication fencing, and exposes awaitable clear/quiescence to05. Callback desired boolean → host.access.setCompleted; request existing refresh/sync outside mutation lease. Add/Open use explicit Activity intents, token rechecked by05 on consumption.
 
 ## Related code files
 **Exclusive create paths:** phase02 manifest table lists task-widget.kt, receiver/actions/updater, provider-info/initial-layout/widget-string resources, model/device tests and phase02 evidence report. No existing source/build/manifest changes.
@@ -32,15 +32,15 @@ Glance uses RemoteViews, not ordinary shared Compose UI. Launcher owns widget ID
 Own exactly02 paths, including widget tests/resources. Do not change01 host contract,03 notification/preferences files or05 Application/manifest/auditor. New resource files have widget-specific names; no competing strings.xml edits. Proposed unlisted file requires manifest amendment before work.
 
 Explicit owned paths (repository-relative; all proposed creates):
-- `androidApp/src/main/kotlin/dev/doggo/android/task-widget.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-widget-receiver.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-widget-actions.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-widget-updater.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-receiver.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-actions.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-updater.kt`
 - `androidApp/src/main/res/xml/task-widget-info.xml`
 - `androidApp/src/main/res/layout/task-widget-initial.xml`
 - `androidApp/src/main/res/values/task-widget-strings.xml`
-- `androidApp/src/test/kotlin/dev/doggo/android/task-widget-model-test.kt`
-- `androidApp/src/androidTest/kotlin/dev/doggo/android/task-widget-device-test.kt`
+- `androidApp/src/test/kotlin/dev/tabbyrush/android/task-widget-model-test.kt`
+- `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-widget-device-test.kt`
 - `plans/261016-1409-sticky-task-surfaces/reports/phase-02-widget-evidence.md`
 
 ## Implementation Steps

@@ -9,9 +9,9 @@
 
 ## 1. Executive Summary
 
-Phase 08 delivers the operational tooling, security audit capabilities, disaster recovery runbooks, and live Hub verification harnesses required to support the production release of Doggo on Android.
+Phase 08 delivers the operational tooling, security audit capabilities, disaster recovery runbooks, and live Hub verification harnesses required to support the production release of TabbyRush on Android.
 
-All Phase 08 deliverables assigned in `plans/261013-1540-doggo-glean-hub-reuse/file-ownership.md` are implemented in accordance with architectural invariants, without altering any files from previous phases.
+All Phase 08 deliverables assigned in `plans/261013-1540-tabbyrush-glean-hub-reuse/file-ownership.md` are implemented in accordance with architectural invariants, without altering any files from previous phases.
 
 In accordance with strict verification rules and architectural advice:
 - The tooling, script syntax, CLI options, and offline test harnesses have been verified and confirmed operational.
@@ -27,7 +27,7 @@ In accordance with strict verification rules and architectural advice:
 | 01 | `scripts/hub-live-smoke.mjs` | Node.js Script | Live Hub verification harness with strict-v1 protocol checks and offline fixture self-test (18/18 checks PASS). |
 | 02 | `scripts/release-security-check.mjs` | Node.js Script | Release security auditor with fail-closed APK inspection and diagnostic source auditing (`--diagnose-source` PASS). |
 | 03 | `scripts/hub-strict-recovery.js` | mongosh Script | Maintenance-only disaster recovery runner with writer quiescence assertion and journaled registry CAS on `_schemas` (Syntax & dry-run PASS; live mongosh run pending cluster maintenance window). |
-| 04 | `docs/deployment-guide.md` | Documentation | End-to-end operational guide for provisioning, building, signing, and deploying Doggo. |
+| 04 | `docs/deployment-guide.md` | Documentation | End-to-end operational guide for provisioning, building, signing, and deploying TabbyRush. |
 | 05 | `docs/security-and-recovery.md` | Documentation | Security architecture model and step-by-step disaster recovery runbook. |
 | 06 | `docs/release-acceptance.md` | Documentation | Release acceptance verification matrix and operator remediation checklist. |
 | 07 | `docs/project-overview-pdr.md` | Documentation | PDR updated to version 1.5.0 reflecting Phase 08 tooling deliverables. |

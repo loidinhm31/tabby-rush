@@ -25,7 +25,7 @@ Phase 12 marks completion of all 12 planned implementation phases under `plans/2
 1. **Authoritative Operational Cutover Runbook (`docs/strict-v2-cutover-runbook.md`)**:
    - Comprehensive end-to-end operational procedure enforcing strict chronological deployment ordering:
      1. All-node Hub backend binary deployment (strict-v2 capable while maintaining app strict-v1).
-     2. Doggo client application distribution (Room v2 migration & protocol transition ready).
+     2. TabbyRush client application distribution (Room v2 migration & protocol transition ready).
      3. Non-mutating preflight dry-run (`--dry-run`) validating schema prerequisites and permits.
      4. Controlled in-place migration execution via `hub-strict-upgrade.mjs` or Web Admin UI with a durable migration UUID.
      5. Mandatory post-cutover read-back assertion verifying `syncMode === 'strict-v2'`, canonical SHA-256 fingerprint (`5f539551...`), and all 16 ordered columns.
@@ -61,7 +61,7 @@ Phase 12 marks completion of all 12 planned implementation phases under `plans/2
      - `docs/project-roadmap.md`: Fully synchronized executive summary, timeline milestones, and changelog.
      - `docs/project-changelog.md`: Phase 12 release changelog entry added.
      - `README.md`: Documented rehearsal script and cutover runbook.
-     - Glean Hub `docs/doggo-strict-sync.md`: Corrected `--status-only` flag syntax and documented cutover runbook.
+     - Glean Hub `docs/tabbyrush-strict-sync.md`: Corrected `--status-only` flag syntax and documented cutover runbook.
 
 ---
 

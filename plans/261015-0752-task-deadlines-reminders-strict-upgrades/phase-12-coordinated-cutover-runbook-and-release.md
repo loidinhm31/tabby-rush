@@ -4,7 +4,7 @@
 [Parent](plan.md) · [Backend migration](phase-03-hub-versioned-contract-and-migration.md) · [Operator surfaces](phase-04-hub-admin-ui-and-upgrade-script.md) · [Acceptance gate](phase-11-adversarial-integration-and-platform-acceptance.md) · [Deployment guide](../../docs/deployment-guide.md) · [Recovery constraints](../../docs/security-and-recovery.md)
 
 ## Overview
-Date 2026-10-16. P1. Implementation DELIVERED / DONE 100% (12h credited). Owners: Hub operator + Doggo release/integration lead. Gate G7: Authoritative cutover runbook and rehearsal tooling delivered; live production cutover formally blocked pending Gates G2, G3, G6, and formal operator authorization.
+Date 2026-10-16. P1. Implementation DELIVERED / DONE 100% (12h credited). Owners: Hub operator + TabbyRush release/integration lead. Gate G7: Authoritative cutover runbook and rehearsal tooling delivered; live production cutover formally blocked pending Gates G2, G3, G6, and formal operator authorization.
 
 ## Key Insights
 Deploying schema additions alone is unsafe. Existing fresh-epoch recovery is not a feature upgrade/rollback. Offline old clients cannot all be drained. Updated clients must preserve local intentions across the supported transition.
@@ -20,7 +20,7 @@ Deploying schema additions alone is unsafe. Existing fresh-epoch recovery is not
 1. Approve reviewed contract/vectors/gates and collect release/artifact digests. Inventory all Hub replicas, ingress/maintenance paths, Mongo topology, supported client versions and target app scope.
 2. Take restorable journaled backup of registry/app records+collection/indexes; verify restore on isolated storage. Record invariant fingerprints/expected v1 version/schema/epoch and authorization without secrets.
 3. Deploy fence-aware version-capable Hub binary to every instance; keep app strict-v1. Confirm old binary cannot serve/write target collection and legacy cleanup is isolated. Observe v1 compatibility/receipt behavior before target upgrade.
-4. Publish updated Doggo binaries containing Room/protocol transition and new metadata support. While app v1, ordinary representable v1 edits work; deadlines clearly blocked. Do not require every offline client to return before upgrade.
+4. Publish updated TabbyRush binaries containing Room/protocol transition and new metadata support. While app v1, ordinary representable v1 edits work; deadlines clearly blocked. Do not require every offline client to return before upgrade.
 5. Start controlled upgrade through script OR UI with one durable migration ID and expected source state. Server fences new traffic and drains admitted requests. Client timeouts query same ID; no independent schema PUT or fresh epoch.
 6. Follow operation through transform/validate/publish. `operatorRequired` retains fence; investigate safe persisted state and drain proof. After atomic target publication, GET verifies exact v2 schema/version and unchanged epoch/collection identity/protected fingerprints.
 7. Confirm updated client v2 bootstrap, safe legacy receipt reconciliation and offline intentions; old binary gets upgrade-required with no local deletion. Observe native notification on a benign locally known task per platform; verify local toggles/permissions.
@@ -35,8 +35,8 @@ Deploying schema additions alone is unsafe. Existing fresh-epoch recovery is not
 - Client binary/Room rollback unsupported; preserve account data and offer upgraded repair build. Protocol error never automatically wipes database/outbox.
 
 ## Related code files
-Modify Doggo `/home/loidinh/WS/doggo/README.md`, `docs/{project-overview-pdr,system-architecture,local-storage-and-sync,hub-schema-integration,sync-acceptance,android-acceptance,linux-acceptance,windows-acceptance,deployment-guide,security-and-recovery,project-roadmap,project-changelog}.md`, relevant desktop guides/release acceptance; update package description/version via existing release convention.
-Modify Hub `/home/loidinh/WS/glean-hub/docs/doggo-strict-sync.md`, relevant deployment/recovery/docs CHANGELOG entries. Prefer existing docs; create focused feature migration runbook only if existing deployment/recovery docs exceed readable scope. Never replace current recovery command with same-name feature upgrade semantics.
+Modify TabbyRush `/home/loidinh/WS/tabbyrush/README.md`, `docs/{project-overview-pdr,system-architecture,local-storage-and-sync,hub-schema-integration,sync-acceptance,android-acceptance,linux-acceptance,windows-acceptance,deployment-guide,security-and-recovery,project-roadmap,project-changelog}.md`, relevant desktop guides/release acceptance; update package description/version via existing release convention.
+Modify Hub `/home/loidinh/WS/glean-hub/docs/tabbyrush-strict-sync.md`, relevant deployment/recovery/docs CHANGELOG entries. Prefer existing docs; create focused feature migration runbook only if existing deployment/recovery docs exceed readable scope. Never replace current recovery command with same-name feature upgrade semantics.
 
 ## Implementation Steps
 1. Convert tested migration state recovery into executable operator runbook; document preconditions, commands/API body and evidence location. Read actual new CLI help before writing final examples.
@@ -50,7 +50,7 @@ Modify Hub `/home/loidinh/WS/glean-hub/docs/doggo-strict-sync.md`, relevant depl
 - [x] Authoritative backup/restore and every migration-state recovery procedure documented in runbook (`docs/strict-v2-cutover-runbook.md`; live replica-set restore drill pending Gate G3/G7).
 - [x] Fence-aware all-node deployment and client publication sequence documented.
 - [x] Same-operation rehearsed tooling cutover and target readback self-test verified (7/7 checks PASS in `scripts/strict-v2-cutover-rehearsal.mjs`).
-- [x] Actual feature/security/platform docs, changelog and release evidence reconciled across Doggo and Glean Hub.
+- [x] Actual feature/security/platform docs, changelog and release evidence reconciled across TabbyRush and Glean Hub.
 
 ## Success Criteria
 Rehearsal and approved cutover preserve collection/epoch/IDs/revisions/tombstones/replay receipts; G6 platform evidence and release security/dependency/signing prerequisites complete. Docs describe actual behavior and limitations. All affected callers/specs/fixtures updated; no deprecated aliases or registry-only migration path. If operator execution unavailable, release gate explicitly blocked rather than claimed done.
@@ -75,6 +75,6 @@ Backup access controlled; tokens via protected environment/credential custody, n
 - **Delivered Artifacts**:
   1. `docs/strict-v2-cutover-runbook.md`: Authoritative operator cutover and recovery runbook covering preflight conditions, deployment sequence, and state-specific incident recovery decision tree.
   2. `scripts/strict-v2-cutover-rehearsal.mjs`: Dedicated rehearsal and tooling self-test harness (7/7 passing automated checks).
-  3. Reconciled operational documentation: `docs/deployment-guide.md`, `docs/security-and-recovery.md` (quarantining `hub-strict-recovery.js`), `docs/release-acceptance.md` (Gate G7), `docs/hub-schema-integration.md`, `docs/sync-acceptance.md`, `docs/android-acceptance.md`, `docs/linux-acceptance.md`, `docs/windows-acceptance.md`, `docs/system-architecture.md`, `docs/project-roadmap.md`, `docs/project-changelog.md`, `README.md`, and Glean Hub `docs/doggo-strict-sync.md`.
+  3. Reconciled operational documentation: `docs/deployment-guide.md`, `docs/security-and-recovery.md` (quarantining `hub-strict-recovery.js`), `docs/release-acceptance.md` (Gate G7), `docs/hub-schema-integration.md`, `docs/sync-acceptance.md`, `docs/android-acceptance.md`, `docs/linux-acceptance.md`, `docs/windows-acceptance.md`, `docs/system-architecture.md`, `docs/project-roadmap.md`, `docs/project-changelog.md`, `README.md`, and Glean Hub `docs/tabbyrush-strict-sync.md`.
 - **Gate G7 Blocker Boundaries**: Live production cutover remains formally blocked pending Gate G3 multi-instance MongoDB replica set migration and Phase 03 code remediations, Gate G2 physical native platform delivery, Gate G6 three-device sync proof, and formal operator authorization.
 Operator window, deployed topology/replica inventory and release signing/runtime access are execution prerequisites. No date or reduced-platform scope assumed.

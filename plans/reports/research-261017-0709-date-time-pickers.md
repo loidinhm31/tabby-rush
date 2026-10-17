@@ -9,14 +9,14 @@
 ## 1. Scope Boundary & Inventory
 
 ### Target Surfaces
-1. **`DeadlineEditorSection`** (`shared/src/commonMain/kotlin/dev/doggo/shared/ui/deadline-editor-section.kt`):
+1. **`DeadlineEditorSection`** (`shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/deadline-editor-section.kt`):
    - `deadlineDate`: Replace text entry with interactive date display + calendar picker dialog (`DatePickerDialog`).
    - `deadlineTime`: Replace text entry with interactive time display + timer/clock picker dialog (`TimePicker`).
    - `reminderAnchorTime`: Replace text entry with interactive time display + timer/clock picker dialog (`TimePicker`).
-2. **`ReminderSettingsDialog`** (`shared/src/commonMain/kotlin/dev/doggo/shared/ui/reminder-settings.kt`):
+2. **`ReminderSettingsDialog`** (`shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/reminder-settings.kt`):
    - `defaultDateOnlyAnchorTime`: Replace text entry with interactive time display + timer/clock picker dialog (`TimePicker`).
-3. **Reusable Component Module** (`shared/src/commonMain/kotlin/dev/doggo/shared/ui/date-time-pickers.kt`):
-   - Standalone `DoggoDatePickerDialog` and `DoggoTimePickerDialog` wrapping Compose Material 3 pickers.
+3. **Reusable Component Module** (`shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/date-time-pickers.kt`):
+   - Standalone `TabbyRushDatePickerDialog` and `TabbyRushTimePickerDialog` wrapping Compose Material 3 pickers.
 
 ### Out-of-Scope (Title-Only Entry Points)
 - `TaskSurfaceCreateScreen` (Android widget quick-add): Title-only.
@@ -42,7 +42,7 @@
 - **DST & Offset Handling**:
   - Reset `chosenOffsetSeconds = null` upon date or time changes so `DeadlineCalculatorHelpers` re-evaluates DST fall-back ambiguity or spring-forward gaps cleanly.
 - **Accessibility & Contrast**:
-  - Minimum touch target 48dp (`DoggoThemeTokens.MinTouchTargetSize`).
+  - Minimum touch target 48dp (`TabbyRushThemeTokens.MinTouchTargetSize`).
   - Explicit semantics: `contentDescription` for calendar and clock launch buttons.
 
 ---
@@ -60,7 +60,7 @@
 
 ## 4. Testing Strategy
 
-1. **Unit & Semantics Tests** (`shared/src/commonTest/kotlin/dev/doggo/shared/ui/todo-semantics-test.kt` & new picker tests):
+1. **Unit & Semantics Tests** (`shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/todo-semantics-test.kt` & new picker tests):
    - Verify date formatting from epoch millis across UTC boundaries and leap days.
    - Verify time formatting for midnight (`00:00`), noon (`12:00`), late evening (`23:59`), and leading zeroes.
    - Verify cancel/dismiss does not alter state.

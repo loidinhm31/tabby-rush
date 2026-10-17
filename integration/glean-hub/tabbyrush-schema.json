@@ -1,0 +1,15 @@
+{
+  "appId": "tabby-rush",
+  "syncMode": "strict-v1",
+  "schema": {
+    "todos": {
+      "columns": [
+        { "name": "id", "type": "string", "nullable": false },
+        { "name": "title", "type": "string", "nullable": false },
+        { "name": "completed", "type": "boolean", "nullable": false },
+        { "name": "createdAt", "type": "integer", "nullable": false }
+      ],
+      "primaryKey": "id"
+    }
+  }
+}

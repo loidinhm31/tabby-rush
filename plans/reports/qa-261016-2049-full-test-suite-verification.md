@@ -34,10 +34,10 @@ The resource file exists at `desktopApp/src/main/resources/task-surface-tray.png
 
 ` :androidApp:testDebugUnitTest --dependency-verification=off` fails at `:androidApp:compileDebugKotlin`; no Android unit tests ran. Compiler diagnostics:
 
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-access.kt:86:51` — unresolved `loadPersistedSchedule`.
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-access.kt:229:38` — unresolved `loadTodo`.
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-access.kt:230:35` — unresolved `isDeleted` on the unresolved `todo` value.
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-time-receiver.kt:26:20` — unresolved `Intent.ACTION_TIME_SET`.
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-access.kt:86:51` — unresolved `loadPersistedSchedule`.
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-access.kt:229:38` — unresolved `loadTodo`.
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-access.kt:230:35` — unresolved `isDeleted` on the unresolved `todo` value.
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-time-receiver.kt:26:20` — unresolved `Intent.ACTION_TIME_SET`.
 
 The forced rerun and the requested non-forced command both failed with these diagnostics.
 

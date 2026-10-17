@@ -1,4 +1,4 @@
-# Doggo Code Standards & Implementation Guidelines
+# TabbyRush Code Standards & Implementation Guidelines
 
 Last Updated: 2026-10-17
 Phase: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
@@ -8,7 +8,7 @@ Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Sy
 
 ## 1. Overview & Purpose
 
-This document establishes engineering conventions, coding standards, error handling patterns, and testing requirements across Doggo. It reflects the delivered Kotlin Multiplatform, Android, and desktop implementation, including account-scoped sticky task surfaces, while distinguishing standards from unresolved review findings and platform acceptance.
+This document establishes engineering conventions, coding standards, error handling patterns, and testing requirements across TabbyRush. It reflects the delivered Kotlin Multiplatform, Android, and desktop implementation, including account-scoped sticky task surfaces, while distinguishing standards from unresolved review findings and platform acceptance.
 
 ---
 
@@ -68,17 +68,17 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
 ## 3. Kotlin Multiplatform & Compose Guidelines
 
 ### 3.1 Package Hierarchy
-- Root shared package: `dev.doggo.shared.*`
-  - Contracts & models: `dev.doggo.shared.contract.*`
-  - Authentication & session: `dev.doggo.shared.auth.*`
-  - Local database & persistence: `dev.doggo.shared.data.*`
-  - Strict sync protocol: `dev.doggo.shared.sync.*`
-  - Theme & tokens: `dev.doggo.shared.theme.*`
-  - Compose UI components: `dev.doggo.shared.ui.*`
-- Android application: `dev.doggo.android.*`
-- Desktop application: `dev.doggo.desktop.*`
-  - Linux adapter: `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/*`
-  - Windows adapter: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/*`
+- Root shared package: `dev.tabbyrush.shared.*`
+  - Contracts & models: `dev.tabbyrush.shared.contract.*`
+  - Authentication & session: `dev.tabbyrush.shared.auth.*`
+  - Local database & persistence: `dev.tabbyrush.shared.data.*`
+  - Strict sync protocol: `dev.tabbyrush.shared.sync.*`
+  - Theme & tokens: `dev.tabbyrush.shared.theme.*`
+  - Compose UI components: `dev.tabbyrush.shared.ui.*`
+- Android application: `dev.tabbyrush.android.*`
+- Desktop application: `dev.tabbyrush.desktop.*`
+  - Linux adapter: `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/*`
+  - Windows adapter: `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/*`
   - Each selected target must register exactly one matching `CredentialVaultProvider` in `META-INF/services`; platform dependencies and lockfiles remain isolated by target.
 
 ### 3.2 Immutability & State Management
@@ -148,8 +148,8 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - Provide consistent CLI flag parsing with documented defaults and environment variable fallbacks:
   - Origin: `--origin` flag, fallback `process.env.GLEAN_ORIGIN || 'http://127.0.0.1:3000'`.
   - Admin JWT: `--token` flag, fallback `process.env.GLEAN_ADMIN_TOKEN`.
-  - App ID: `--app-id` flag, fallback `process.env.DOGGO_APP_ID || 'doggo'`.
-  - API Key: `--api-key` flag, fallback `process.env.DOGGO_API_KEY`.
+  - App ID: `--app-id` flag, fallback `process.env.TABBYRUSH_APP_ID || 'tabbyrush'`.
+  - API Key: `--api-key` flag, fallback `process.env.TABBYRUSH_API_KEY`.
 - Implement a `--help` / `-h` flag printing usage instructions and exit with code 0.
 
 ### 4.3 Key Custody & Security
@@ -176,7 +176,7 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 ### 5.3 Storage & CAS Invariants
 - Strict mutation writes must execute atomic compare-and-swap (CAS) queries matching `expectedRevision` and live record filters.
 - Replay confirmation writes must conditionally match `(opId, digest)` and verify `matched_count == 1`.
-- Strict collection naming targets the canonical application collection: `app<AppId>` (e.g. `appDoggo` via `SyncService::collection_name(app_id)`).
+- Strict collection naming targets the canonical application collection: `app<AppId>` (e.g. `appTabbyRush` via `SyncService::collection_name(app_id)`).
 - Code must compile cleanly with `cargo clippy --locked --all-targets` with zero warnings.
 
 ---
@@ -190,7 +190,7 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - CommonMain entity classes must remain free of platform-specific imports or annotations.
 
 ### 6.2 DAO Transaction Patterns
-- Multi-table operations must use Room `@Transaction` methods in `DoggoDao` (e.g. `saveTodoAtomic`, `deleteTodoAtomic`, `cancelUnsentCreateAtomic`, `reconcileAcceptedAtomic`, `promoteStagingAtomic`, `freezeOutboxAtomic`).
+- Multi-table operations must use Room `@Transaction` methods in `TabbyRushDao` (e.g. `saveTodoAtomic`, `deleteTodoAtomic`, `cancelUnsentCreateAtomic`, `reconcileAcceptedAtomic`, `promoteStagingAtomic`, `freezeOutboxAtomic`).
 - Implement optimistic concurrency checks inside transactions where race conditions could occur (e.g. `freezeOutboxAtomic` verifies `localRevision` and `deliveryState == PENDING` before dispatch).
 
 ### 6.3 Concurrency & Mutex Serialization

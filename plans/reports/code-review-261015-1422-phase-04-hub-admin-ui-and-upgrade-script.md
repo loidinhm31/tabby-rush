@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-15  
 **Reviewer**: Senior Software Engineer (`Phase04Reviewer`)  
-**Scope**: Phase 04 changes across `glean-hub-app` and `doggo`  
+**Scope**: Phase 04 changes across `glean-hub-app` and `tabbyrush`  
 **Target Plan**: `plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-04-hub-admin-ui-and-upgrade-script.md`  
 
 ---
@@ -11,7 +11,7 @@
 
 **Quality Score: 8.5 / 10**
 
-Phase 04 delivers the administrative operator tooling required to discover strict contracts, evaluate migration preconditions, run non-mutating dry-run preflights, execute in-place atomic upgrades from `strict-v1` to `strict-v2`, and safely recover or resume operations across both the Glean Hub Web Admin UI and the Doggo CLI runner.
+Phase 04 delivers the administrative operator tooling required to discover strict contracts, evaluate migration preconditions, run non-mutating dry-run preflights, execute in-place atomic upgrades from `strict-v1` to `strict-v2`, and safely recover or resume operations across both the Glean Hub Web Admin UI and the TabbyRush CLI runner.
 
 ### Key Strengths
 - **Strict Guarding Against Schema PUT**: Explicit defense-in-depth in both UI and backend forbids legacy arbitrary schema updates (`PUT /api/v1/apps/:appId/schema`) on strict apps.
@@ -114,13 +114,13 @@ Phase 04 delivers the administrative operator tooling required to discover stric
 | `glean-hub` | `glean-hub-app/scripts/test-loader.mjs` | Reviewed | 33 |
 | `glean-hub` | `glean-hub-app/scripts/test-register.mjs` | Reviewed | 2 |
 | `glean-hub` | `glean-hub-app/package.json` | Reviewed | 114 |
-| `glean-hub` | `docs/doggo-strict-sync.md` | Reviewed | 140 |
-| `doggo` | `scripts/hub-strict-upgrade.mjs` | Reviewed | 445 |
-| `doggo` | `scripts/hub-strict-upgrade.test.mjs` | Reviewed | 295 |
-| `doggo` | `scripts/hub-schema-provision.mjs` | Reviewed | 201 |
-| `doggo` | `scripts/hub-compatibility-smoke.mjs` | Reviewed | 225 |
-| `doggo` | `scripts/hub-live-smoke.mjs` | Reviewed & Patched | 804 |
-| `doggo` | `docs/hub-schema-integration.md` | Reviewed | 175 |
+| `glean-hub` | `docs/tabbyrush-strict-sync.md` | Reviewed | 140 |
+| `tabbyrush` | `scripts/hub-strict-upgrade.mjs` | Reviewed | 445 |
+| `tabbyrush` | `scripts/hub-strict-upgrade.test.mjs` | Reviewed | 295 |
+| `tabbyrush` | `scripts/hub-schema-provision.mjs` | Reviewed | 201 |
+| `tabbyrush` | `scripts/hub-compatibility-smoke.mjs` | Reviewed | 225 |
+| `tabbyrush` | `scripts/hub-live-smoke.mjs` | Reviewed & Patched | 804 |
+| `tabbyrush` | `docs/hub-schema-integration.md` | Reviewed | 175 |
 
 ---
 
@@ -137,23 +137,23 @@ pnpm --prefix ../glean-hub/glean-hub-app test:unit
 pnpm --prefix ../glean-hub/glean-hub-app build
 # Output: tsc + vite build successful (10,411 modules, 22.02s)
 
-# 3. Doggo Strict Upgrade CLI Test Suite (Mock server)
+# 3. TabbyRush Strict Upgrade CLI Test Suite (Mock server)
 node scripts/hub-strict-upgrade.test.mjs
 # Output: 7 passed, 0 failed, 1 suite (10.75s)
 
-# 4. Doggo Hub Live Smoke Protocol Fixture
+# 4. TabbyRush Hub Live Smoke Protocol Fixture
 node scripts/hub-live-smoke.mjs --fixture-test
 # Output: 18/18 checks passed (strict-v1 protocol fixtures)
 
-# 5. Doggo Strict-v2 Vector Runner
+# 5. TabbyRush Strict-v2 Vector Runner
 node scripts/strict-v2-vector-runner.mjs
 # Output: 23/23 checks passed (2 canonical fingerprints, 10 valid vectors, 11 rejections)
 
-# 6. Doggo Diagnostic Release Security Check
+# 6. TabbyRush Diagnostic Release Security Check
 node scripts/release-security-check.mjs --diagnose-source
 # Output: 6/6 static checks passed (CLEAN)
 
-# 7. Doggo Shared Kotlin Multiplatform JVM Tests
+# 7. TabbyRush Shared Kotlin Multiplatform JVM Tests
 JAVA_HOME=/home/loidinh/.local/share/jvm/jdk-21 ./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks
 # Output: 15 actionable tasks executed, BUILD SUCCESSFUL (5s)
 

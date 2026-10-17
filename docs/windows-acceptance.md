@@ -27,7 +27,7 @@ Phase 10 implementation scope includes the desktop application module (`:desktop
    - Never falls back to plaintext token files.
    - On Windows, missing ACL support, owner resolution, or ACL assignment failure causes vault storage to fail closed.
 4. **Single Instance Safety**:
-   - `SingleInstanceGuard` acquires an OS file-channel lock on `doggo.lock` BEFORE initializing database or vault.
+   - `SingleInstanceGuard` acquires an OS file-channel lock on `tabbyrush.lock` BEFORE initializing database or vault.
    - Second launch detects lock and exits cleanly without racing sync or touching database.
    - Lock file is retained on exit to prevent race conditions.
 5. **Foreground Sync & Quiescence**:
@@ -52,10 +52,10 @@ Status cells are transcribed from `docs/evidence/windows-test-summary.md`; comma
 | **Dependency Locking** | `gradle-windows.lockfile` generated and verified | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:dependencies` | PASS (Verified) |
 | **Root-Level Strict Dependency Verification** | Windows target dependencies verified against Gradle verification metadata | Root Gradle strict dependency verification on Windows | FAILED / HELD (149 unmatched classpath checksums in `gradle/verification-metadata.xml`; external hold) |
 | **Target Isolation** | Unsupported target mismatch rejection | `-PdesktopTarget=linux` on Windows | PASS (Fails immediately) |
-| **App Distributable** | Self-contained bundled runtime image | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:createDistributable` | PASS (Doggo.exe launcher verified in `desktopApp/build/compose/binaries/main/app/Doggo/`) |
+| **App Distributable** | Self-contained bundled runtime image | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:createDistributable` | PASS (TabbyRush.exe launcher verified in `desktopApp/build/compose/binaries/main/app/TabbyRush/`) |
 | **Package Smoke** | Diagnostics, JAR inspection, absence of Linux D-Bus | `powershell -File scripts\windows-package-smoke.ps1 -DistDir ...` | PASS |
-| **MSI Packaging** | Native `.msi` package generation | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:packageMsi` | PASS (Doggo-1.0.0.msi, 100.68 MB, SHA-256 verified) |
-| **Installed MSI Test** | System installation via `msiexec.exe` | `msiexec /i Doggo-1.0.0.msi` | PENDING (Package structure verified; clean-host system installation remains a release hold) |
+| **MSI Packaging** | Native `.msi` package generation | `.\gradlew.bat -PdesktopTarget=windows :desktopApp:packageMsi` | PASS (TabbyRush-1.0.0.msi, 100.68 MB, SHA-256 verified) |
+| **Installed MSI Test** | System installation via `msiexec.exe` | `msiexec /i TabbyRush-1.0.0.msi` | PENDING (Package structure verified; clean-host system installation remains a release hold) |
 ### 2.1 Phase 02 — Native Toast & AUMID Proof Status
 
 | Gate | Requirement | Verification Method | Status |
@@ -91,7 +91,7 @@ Status cells are transcribed from `docs/evidence/windows-test-summary.md`; comma
 | **Close-to-Hide & Tray Integration** | Close hides windows without terminating the process; sync continues; tray provides Open/Hide/Quit | Lifecycle tests and source | Automated coverage recorded; native tray/window flow pending Gate G2 |
 | **No-Tray Fallback Protection** | Unsupported/unavailable tray must retain a visible recovery path | Lifecycle tests and source | Automated coverage recorded; native no-tray/init-failure exercise pending Gate G2 |
 | **Geometry Clamping & Multi-Monitor** | Restore geometry within work areas, including insets, DPI changes, and negative origins | `StickyWindowGeometryTest` (15 tests in reported suite) | Unit coverage recorded; real monitor/DPI exercise pending Gate G2 |
-| **Unified Suspend Teardown & Locking** | Quit drains work, closes Room, and releases `doggo.lock` | `DesktopLifecycleTest`, `CompositeDesktopLeaveCancelGateTest` | Automated coverage recorded; native Quit/relaunch not observed |
+| **Unified Suspend Teardown & Locking** | Quit drains work, closes Room, and releases `tabbyrush.lock` | `DesktopLifecycleTest`, `CompositeDesktopLeaveCancelGateTest` | Automated coverage recorded; native Quit/relaunch not observed |
 | **Visual Evidence Baselines** | Window and tray design references | `docs/evidence/sticky-surfaces-windows-window.png`, `docs/evidence/sticky-surfaces-windows-tray.png` | Design baselines only; not runtime captures |
 | **AC 12 Regression & Security** | Shared, desktop, Android and security regression suites | Phase 07 report | 364 Gradle and 12 Node checks recorded passing with dependency verification off; 149-checksum hold remains |
 
@@ -107,7 +107,7 @@ The Phase 10 visual baseline consists of seven high-fidelity 960x720 design rend
 | **Populated** | `docs/evidence/windows-populated.png` | Active task list with checkboxes, tags, and action buttons | 17.85:1 (AAA) |
 | **Completed** | `docs/evidence/windows-completed.png` | Filtered completed tasks with strikethrough and timestamps | 6.31:1 (AA) |
 | **Task Editor** | `docs/evidence/windows-editor.png` | Modal dialog for inline editing with character count and actions | 10.69:1 (AAA) |
-| **Error Alert** | `docs/evidence/windows-error.png` | Non-fatal network error banner with DoggoCoralSurface styling | 4.91:1 (AA) |
+| **Error Alert** | `docs/evidence/windows-error.png` | Non-fatal network error banner with TabbyRushCoralSurface styling | 4.91:1 (AA) |
 | **Conflict Review** | `docs/evidence/windows-conflict.png` | Strict-v1 UnknownSuperseded side-by-side comparison modal | 15.40:1 (AAA) |
 | **Expanded Layout** | `docs/evidence/windows-expanded.png` | Two-pane view with fixed navigation rail and details workspace | 12.94:1 (AAA) |
 
@@ -116,7 +116,7 @@ The Phase 10 visual baseline consists of seven high-fidelity 960x720 design rend
 ## 4. Known Limitations & Prerequisites
 
 1. **WiX 3.11 Toolset Prerequisite**:
-   - The native WiX packaging toolchain is required by JDK 21 `jpackage` to produce an MSI unless available through the Compose Desktop packaging setup. The Windows test summary reports successful `Doggo-1.0.0.msi` generation using the plugin-provided WiX 3.11 binaries.
+   - The native WiX packaging toolchain is required by JDK 21 `jpackage` to produce an MSI unless available through the Compose Desktop packaging setup. The Windows test summary reports successful `TabbyRush-1.0.0.msi` generation using the plugin-provided WiX 3.11 binaries.
    - MSI generation does not establish installed-runtime acceptance. Available evidence reports package-structure checks for the launcher, bundled JRE, Windows provider, and absence of Linux D-Bus jars; clean-user launch and application workflow testing remain pending.
 2. **Authenticode Signing**:
    - Development builds are unsigned. Production releases should use an organizational code-signing certificate to establish publisher identity and integrity; signing does not guarantee SmartScreen warnings are suppressed.

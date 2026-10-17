@@ -2,11 +2,11 @@
 
 ## Scope
 - Files reviewed:
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/date-time-pickers.kt` (New, 180 lines)
-  - `shared/src/commonTest/kotlin/dev/doggo/shared/ui/date-time-pickers-test.kt` (New, 111 lines)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/deadline-editor-section.kt` (Modified, lines 40–397)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/reminder-settings.kt` (Modified, lines 40–309)
-  - `shared/src/commonTest/kotlin/dev/doggo/shared/ui/todo-semantics-test.kt` (Modified, lines 605–673)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/date-time-pickers.kt` (New, 180 lines)
+  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/date-time-pickers-test.kt` (New, 111 lines)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/deadline-editor-section.kt` (Modified, lines 40–397)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/reminder-settings.kt` (Modified, lines 40–309)
+  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/todo-semantics-test.kt` (Modified, lines 605–673)
   - Working tree configuration check: `gradle.properties` (Modified outside plan ownership)
 - Lines of code analyzed: ~820 lines across target files + full test/build inspection
 - Review focus: Date & time picker migration, UTC roundtrip invariants, DST gap/overlap preservation, Compose Multiplatform best practices, accessibility (touch targets >=48dp, contrast), and test coverage completeness against Phase 01–04 plan requirements
@@ -21,7 +21,7 @@ Core implementation quality of the shared components and consumer integrations i
 - Replaced 4 text-typing inputs with calendar and clock pickers without breaking domain scheduling contracts.
 - Strictly preserved UTC roundtrip conversion via `TimeZone.UTC`.
 - Preserved DST gap rejection and fall-back overlap disambiguation (clearing `chosenOffsetSeconds` on value changes, preserving it on cancel/unchanged confirm).
-- Accessible touch targets (`>=48.dp` via `DoggoThemeTokens.MinTouchTargetSize`), role button semantics, and WCAG AA contrast (DoggoMuted 6.28:1, DoggoInk 17.85:1).
+- Accessible touch targets (`>=48.dp` via `TabbyRushThemeTokens.MinTouchTargetSize`), role button semantics, and WCAG AA contrast (TabbyRushMuted 6.28:1, TabbyRushInk 17.85:1).
 - Unfiltered test suites pass: `:shared:jvmTest`, `:desktopApp:test`, `:androidApp:testDebugUnitTest` (372 unit tests total), plus 32 Node test-runner checks and operator self-tests.
 - Android debug assembly (`:androidApp:assembleDebug`) and desktop compilation (`:desktopApp:classes`) build cleanly.
 
@@ -59,8 +59,8 @@ None. Zero OWASP vulnerabilities, secret leaks, breaking database migrations, or
 
 ## Medium Priority Improvements
 
-### 3. Hardcoded Fallback Year in `DoggoDatePickerDialog`
-- **Location**: `shared/src/commonMain/kotlin/dev/doggo/shared/ui/date-time-pickers.kt:86`
+### 3. Hardcoded Fallback Year in `TabbyRushDatePickerDialog`
+- **Location**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/date-time-pickers.kt:86`
 - **Code**:
   ```kotlin
   val yearRange = remember(parsedDate) {
@@ -98,7 +98,7 @@ None. Zero OWASP vulnerabilities, secret leaks, breaking database migrations, or
 ## Positive Observations
 1. **Strict UTC Invariance**: `DateTimePickerFormats.utcMillisToDate` and `dateToUtcMillisOrNull` explicitly convert via `TimeZone.UTC`. DatePicker epoch millis never drift across local timezones.
 2. **DST State Safety**: Opening, canceling, or confirming unchanged values does not clear `chosenOffsetSeconds`. Value changes explicitly reset `chosenOffsetSeconds = null`, cleanly forcing DST gap/overlap recalculation.
-3. **Accessibility**: All buttons and interactive controls satisfy `>=48.dp` touch targets via `DoggoThemeTokens.MinTouchTargetSize`. Color contrast exceeds WCAG AA (DoggoMuted 6.28:1, DoggoInk 17.85:1).
+3. **Accessibility**: All buttons and interactive controls satisfy `>=48.dp` touch targets via `TabbyRushThemeTokens.MinTouchTargetSize`. Color contrast exceeds WCAG AA (TabbyRushMuted 6.28:1, TabbyRushInk 17.85:1).
 4. **Input Mode Defense**: `showModeToggle = false` on `DatePicker` and `TimePicker` dial ensure users cannot toggle into manual typing mode, satisfying the core PDR requirement.
 5. **Lifecycle Isolation**: Modal state `activePicker` is keyed on `remember(editor.id, editor.hasDeadline, editor.hasTime)`, ensuring dialogs dispose immediately when tasks switch or features are toggled.
 6. **Local Settings Isolation**: Settings time picker updates local draft `defaultAnchorTime` only. `TodoAction.SaveSettings` is emitted solely on outer dialog "Save Settings" click. Outer "Cancel" cleanly drops drafts.
@@ -110,10 +110,10 @@ None. Zero OWASP vulnerabilities, secret leaks, breaking database migrations, or
    - Add `compose.uiTest` dependency in `shared/build.gradle.kts` aligned with Compose 1.7.3.
    - Author rendered Compose tests using `runComposeUiTest` verifying trigger nodes, button semantics, dialog display, confirmation, and offset clearing.
 2. **Track New Files & Clean Git Tree**:
-   - Stage `shared/src/commonMain/kotlin/dev/doggo/shared/ui/date-time-pickers.kt` and `shared/src/commonTest/kotlin/dev/doggo/shared/ui/date-time-pickers-test.kt`.
+   - Stage `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/date-time-pickers.kt` and `shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/date-time-pickers-test.kt`.
    - Revert or isolate `gradle.properties` tooling flag.
 3. **Dynamic Year Fallback**:
-   - Replace hardcoded `2026` in `DoggoDatePickerDialog` with dynamic year lookup.
+   - Replace hardcoded `2026` in `TabbyRushDatePickerDialog` with dynamic year lookup.
 4. **Documentation Updates**:
    - Complete required Phase 04 documentation updates in `docs/system-architecture.md`, `docs/codebase-summary.md`, `docs/design-guidelines.md`, and `docs/project-changelog.md`.
 5. **Complete Platform Acceptance Gates**:

@@ -1,4 +1,4 @@
-# Doggo Strict-v2 Coordinated Cutover & Recovery Runbook
+# TabbyRush Strict-v2 Coordinated Cutover & Recovery Runbook
 
 **Document Version**: 1.0.0  
 **Phase**: 12 — Coordinated Cutover, Recovery Runbook & Release Documentation  
@@ -9,10 +9,10 @@
 
 ## 1. Executive Summary & Operational Scope
 
-This runbook establishes the strict, versioned procedure for upgrading the Doggo personal task management application on Glean Hub from `strict-v1` to `strict-v2` (incorporating task deadlines, timezones, and offline reminders).
+This runbook establishes the strict, versioned procedure for upgrading the TabbyRush personal task management application on Glean Hub from `strict-v1` to `strict-v2` (incorporating task deadlines, timezones, and offline reminders).
 
 ### 1.1 In-Place Upgrade Invariants
-1. **Zero Data Loss**: In-place transformation of `appDoggo` records; no collection recreation or record ID modifications.
+1. **Zero Data Loss**: In-place transformation of `appTabbyRush` records; no collection recreation or record ID modifications.
 2. **Epoch Invariance**: Active `strictEpoch` UUID is strictly preserved across the upgrade. Epoch rotation is forbidden during feature upgrades.
 3. **Monotonic Revisions**: Monotonic record revisions, tombstones (`deleted: true`, `data: {}`), and confirmation receipts are preserved bit-for-bit.
 4. **Coordinated Fencing**: Request permits in `_coordination` drain in-flight reads/writes, acquire an exclusive fence, transform batches idempotently, and publish the canonical `strict-v2` schema atomically.
@@ -39,7 +39,7 @@ This runbook establishes the strict, versioned procedure for upgrading the Doggo
   ```json
   {
     "is_admin": true,
-    "apps": ["doggo"]
+    "apps": ["tabby-rush"]
   }
   ```
   *(Global admin tokens with wildcard access are also admitted; standard user tokens or admin tokens scoped to other applications are rejected with HTTP 403 Forbidden).*
@@ -68,7 +68,7 @@ Verify the currently active application contract via the read-only contract endp
 ```bash
 curl -fsS \
   -H "Authorization: Bearer $GLEAN_ADMIN_TOKEN" \
-  "$APPROVED_HUB_ORIGIN/api/v1/apps/doggo/strict-contract" | jq .
+  "$APPROVED_HUB_ORIGIN/api/v1/apps/tabby-rush/strict-contract" | jq .
 ```
 **Assert**:
 - `syncMode` is `"strict-v1"`
@@ -85,7 +85,7 @@ mongodump \
   --uri="$MONGO_URI" \
   --db=glean_hub \
   --oplog \
-  --out="/backup/doggo/pre_v2_cutover_${BACKUP_DATE}"
+  --out="/backup/tabbyrush/pre_v2_cutover_${BACKUP_DATE}"
 ```
 Verify the archive restoration on an isolated staging instance before proceeding with the production cutover window.
 
@@ -103,15 +103,15 @@ sequenceDiagram
   autonumber
   actor Op as Operator
   participant Hub as Glean Hub Nodes
-  participant Client as Doggo Clients
+  participant Client as TabbyRush Clients
   participant DB as MongoDB Cluster
 
   Op->>Hub: 1. Deploy fence-aware Glean Hub binary to all nodes
   Note over Hub: Backend runs strict-v1 with v2-fencing support
-  Op->>Client: 2. Publish Room v2 Doggo client binaries
+  Op->>Client: 2. Publish Room v2 TabbyRush client binaries
   Note over Client: Clients run Room v2; deadline UI blocked on v1 server
   Op->>Hub: 3. Execute non-mutating preflight dry-run
-  Hub->>DB: Scan & validate appDoggo records
+  Hub->>DB: Scan & validate appTabbyRush records
   Op->>Hub: 4. Initiate live upgrade with durable migration UUID
   Hub->>DB: Acquire exclusive fence in _coordination
   Note over Hub: New traffic rejected with HTTP 503 (migrationInProgress)
@@ -126,8 +126,8 @@ sequenceDiagram
 ### Step 1: Deploy Fence-Aware Hub Binary to All Nodes
 Deploy the coordination-aware Glean Hub binary across all cluster instances. Confirm that all instances are running the updated binary before proceeding. Confirm old binary instances are stopped and cannot rejoin.
 
-### Step 2: Publish Updated Doggo Client Binaries
-Publish the updated Doggo clients (Android APK, Linux package, Windows MSI) containing Room migration `1->2` and the `ContractTransitionCoordinator`.  
+### Step 2: Publish Updated TabbyRush Client Binaries
+Publish the updated TabbyRush clients (Android APK, Linux package, Windows MSI) containing Room migration `1->2` and the `ContractTransitionCoordinator`.  
 - **Client Behavior**: Clients will upgrade their local database to Room v2 with `contractVersion = "strict-v1"`.
 - **UI Guard**: Normal task creation, editing, and completion sync as usual. Deadline and reminder submission controls display a disabled state with notice: *"Backend upgrade required to enable task deadlines and reminders."*
 
@@ -136,7 +136,7 @@ Execute the preflight validation via CLI:
 ```bash
 node scripts/hub-strict-upgrade.mjs \
   --origin "$APPROVED_HUB_ORIGIN" \
-  --app-id doggo \
+  --app-id tabbyrush \
   --dry-run
 ```
 **Expected Output**:
@@ -156,21 +156,21 @@ echo "Starting migration with ID: $MIGRATION_ID"
 
 node scripts/hub-strict-upgrade.mjs \
   --origin "$APPROVED_HUB_ORIGIN" \
-  --app-id doggo \
+  --app-id tabbyrush \
   --migration-id "$MIGRATION_ID"
 ```
-*(Alternatively, navigate to `/admin/apps/doggo/edit` in `glean-hub-app` and click "Start Upgrade" in the Strict Contract panel).*
+*(Alternatively, navigate to `/admin/apps/tabby-rush/edit` in `glean-hub-app` and click "Start Upgrade" in the Strict Contract panel).*
 
 The runner will:
 1. Validate preconditions and active epoch.
 2. Acquire exclusive fence in `_coordination` (`fenced: true`, `fenceOwner: migration_id`).
 3. Drain admitted reader/writer permits.
-4. Transform `appDoggo` live documents in batches of 500, setting null/default values for the 12 new fields while leaving tombstones empty (`data: {}`).
+4. Transform `appTabbyRush` live documents in batches of 500, setting null/default values for the 12 new fields while leaving tombstones empty (`data: {}`).
 5. Incrementally update `checkpointRowId` in `_schemas.activeMigration`.
 6. Validate all documents adhere to the 16-column schema.
 7. Atomically CAS publish `syncMode: "strict-v2"` with the canonical v2 fingerprint in `_schemas`.
 8. Release the exclusive fence in `_coordination`.
-9. Execute a mandatory read-back verification against `/api/v1/apps/doggo/strict-contract`.
+9. Execute a mandatory read-back verification against `/api/v1/apps/tabby-rush/strict-contract`.
 
 ---
 
@@ -182,7 +182,7 @@ Immediately following completion:
 ```bash
 curl -fsS \
   -H "Authorization: Bearer $GLEAN_ADMIN_TOKEN" \
-  "$APPROVED_HUB_ORIGIN/api/v1/apps/doggo/strict-contract" | jq .
+  "$APPROVED_HUB_ORIGIN/api/v1/apps/tabby-rush/strict-contract" | jq .
 ```
 Verify:
 - `syncMode`: `"strict-v2"`
@@ -195,13 +195,13 @@ Verify that the legacy receipts reconciliation endpoint is responsive and reject
 ```bash
 curl -i -X POST \
   -H "Content-Type: application/json" \
-  "$APPROVED_HUB_ORIGIN/api/v1/sync/doggo/strong/legacy-receipts" \
+  "$APPROVED_HUB_ORIGIN/api/v1/sync/tabby-rush/strong/legacy-receipts" \
   -d '{"operations":[]}'
 ```
 Must return HTTP 401 or 403 (unauthorized).
 
 ### 5.3 Client Transition & Replay Smoke
-1. Launch an updated Doggo client previously synchronized under `strict-v1`.
+1. Launch an updated TabbyRush client previously synchronized under `strict-v1`.
 2. Observe `ContractTransitionCoordinator` logs transitioning through:
    `ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`.
 3. Create a task with a deadline and reminder rule. Verify push and pull operations succeed without error.
@@ -216,9 +216,9 @@ If an interruption, failure, or timeout occurs during the upgrade, follow this s
 | Migration State / Incident | Root Cause | Operator Procedure | Safety Invariant |
 | :--- | :--- | :--- | :--- |
 | **Pre-Fence Rejection** (HTTP 4xx on POST) | Stale source version, fingerprint mismatch, or token scope error | Application remains unchanged `strict-v1`. Review error details, correct credentials or configuration, and re-run. | Zero database mutation; no rollback required. |
-| **Fencing Stall / Orphan Permits** | In-flight permits failed to drain; previous crashed runner held fence | **STOP. Keep fenced.** Inspect `_coordination` document `permit:doggo`. Verify whether active Hub nodes are executing queries. If nodes are idle and runner crashed, escalate to database operator. **NEVER blindly clear permits by TTL or shell script.** | Maintaining fence prevents mixed-version read/write corruption. |
-| **Interrupted Batch Transform** (Network timeout, process kill) | Hub or CLI process terminated during batch transformation | **Idempotent Resume.** Re-run the CLI upgrade runner using the **EXACT SAME** `--migration-id`: `node scripts/hub-strict-upgrade.mjs --app-id doggo --migration-id <SAME_UUID>`. The engine resumes from `checkpointRowId`. *(Note: `--status-only` only queries status; do not use it to resume execution).* | Idempotent set operations avoid duplicate counting or record corruption. |
-| **Lost Publish Response** (CLI timed out during validation/publish) | Network dropped between operator and Hub during final phase | Query status with `--status-only`: `node scripts/hub-strict-upgrade.mjs --app-id doggo --migration-id <UUID> --status-only`. If status is `ready-v2`, verify contract read-back. If state is `operatorRequired` or `publishing`, re-run with matching `--migration-id` without `--status-only`. | Atomic CAS in MongoDB guarantees either clean publication or preserved preflight state. |
+| **Fencing Stall / Orphan Permits** | In-flight permits failed to drain; previous crashed runner held fence | **STOP. Keep fenced.** Inspect `_coordination` document `permit:tabbyrush`. Verify whether active Hub nodes are executing queries. If nodes are idle and runner crashed, escalate to database operator. **NEVER blindly clear permits by TTL or shell script.** | Maintaining fence prevents mixed-version read/write corruption. |
+| **Interrupted Batch Transform** (Network timeout, process kill) | Hub or CLI process terminated during batch transformation | **Idempotent Resume.** Re-run the CLI upgrade runner using the **EXACT SAME** `--migration-id`: `node scripts/hub-strict-upgrade.mjs --app-id tabbyrush --migration-id <SAME_UUID>`. The engine resumes from `checkpointRowId`. *(Note: `--status-only` only queries status; do not use it to resume execution).* | Idempotent set operations avoid duplicate counting or record corruption. |
+| **Lost Publish Response** (CLI timed out during validation/publish) | Network dropped between operator and Hub during final phase | Query status with `--status-only`: `node scripts/hub-strict-upgrade.mjs --app-id tabbyrush --migration-id <UUID> --status-only`. If status is `ready-v2`, verify contract read-back. If state is `operatorRequired` or `publishing`, re-run with matching `--migration-id` without `--status-only`. | Atomic CAS in MongoDB guarantees either clean publication or preserved preflight state. |
 | **Preactivation Rollback** (Failure detected before v2 publish) | Validation detected invalid records during transform | If the backend aborts before publishing v2, the migration engine initiates preactivation rollback under fence: removes the 12 migration fields, verifies 4-column v1 schema, and restores `ready-v1`. If stalled, keep fenced and inspect database logs. | Never release fence until original snapshot is verified. |
 | **Post-v2 Publish Failure** (Errors observed after v2 is active) | Client bug or unexpected data format under v2 | **FORWARD REPAIR ONLY.** **DO NOT RESTORE V1 BACKUP OR ROLL BACK TO V1.** Restoring v1 will erase all new deadlines and permanently corrupt offline client intentions. Keep backend on v2, fence ingress if necessary, and deploy a forward hotfix. | Non-destructive evolution principle: never regress schema versions once published. |
 
@@ -234,4 +234,4 @@ Upon successful cutover verification:
    - Pre-cutover and post-cutover schema fingerprints
    - Total transformed record count
    - Verification curl outputs
-3. Notify stakeholders and release leads that `appDoggo` is operating under `strict-v2`.
+3. Notify stakeholders and release leads that `appTabbyRush` is operating under `strict-v2`.

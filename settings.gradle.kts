@@ -26,7 +26,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "doggo"
+rootProject.name = "tabbyrush"
 
 // Staged module assembly: shared is included immediately.
 // Application modules are guarded by the existence of their owned build scripts.

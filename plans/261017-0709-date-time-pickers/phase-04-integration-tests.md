@@ -8,7 +8,7 @@
 
 ## Exclusive ownership
 Modify only:
-- `shared/src/commonTest/kotlin/dev/doggo/shared/ui/todo-semantics-test.kt`
+- `shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/todo-semantics-test.kt`
 - `shared/build.gradle.kts`
 - `shared/gradle.lockfile` and `gradle/verification-metadata.xml` only where test dependency changes require updates
 - `docs/system-architecture.md`, `docs/codebase-summary.md`, `docs/design-guidelines.md`
@@ -25,7 +25,7 @@ Store command/device evidence in the final integration report and existing plan 
 6. JVM rendered tests need supported graphics/native runtime and an active Windows desktop or Linux virtual display. Missing runtime/display is a blocker to rendered verification, not grounds to substitute mocks, skip tests, or assert only fake state transitions.
 
 ## Authored coverage matrix
-Use actual `DoggoTheme` and production composables; state-hoist `EditorState` from captured real `UpdateEditorState` callbacks, collecting emitted actions. Settings tests collect actual outer actions. Exercise built-in picker nodes using their pinned semantics; do not call callbacks directly to simulate a user choice.
+Use actual `TabbyRushTheme` and production composables; state-hoist `EditorState` from captured real `UpdateEditorState` callbacks, collecting emitted actions. Settings tests collect actual outer actions. Exercise built-in picker nodes using their pinned semantics; do not call callbacks directly to simulate a user choice.
 
 | Surface | Required assertions |
 |---|---|

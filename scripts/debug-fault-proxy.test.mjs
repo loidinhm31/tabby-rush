@@ -41,9 +41,9 @@ describe('debug-fault-proxy.mjs', () => {
   });
 
   it('verifies allowlist contains required v2 and legacy routes', () => {
-    assert.ok(ALLOWLISTED_PATHS.has('/api/v1/sync/doggo/strong/push'));
-    assert.ok(ALLOWLISTED_PATHS.has('/api/v1/sync/doggo/strong/pull'));
-    assert.ok(ALLOWLISTED_PATHS.has('/api/v1/sync/doggo/strong/legacy-receipts'));
+    assert.ok(ALLOWLISTED_PATHS.has('/api/v1/sync/tabby-rush/strong/push'));
+    assert.ok(ALLOWLISTED_PATHS.has('/api/v1/sync/tabby-rush/strong/pull'));
+    assert.ok(ALLOWLISTED_PATHS.has('/api/v1/sync/tabby-rush/strong/legacy-receipts'));
   });
 
   it('passes through allowlisted route to upstream', async () => {
@@ -57,12 +57,12 @@ describe('debug-fault-proxy.mjs', () => {
 
     try {
       upstreamRequests = [];
-      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/doggo/strong/pull`);
+      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/pull`);
       assert.equal(res.status, 200);
       const json = await res.json();
       assert.equal(json.status, 'ok');
       assert.equal(upstreamRequests.length, 1);
-      assert.equal(upstreamRequests[0].url, '/api/v1/sync/doggo/strong/pull');
+      assert.equal(upstreamRequests[0].url, '/api/v1/sync/tabby-rush/strong/pull');
     } finally {
       await new Promise((resolve) => proxy.server.close(resolve));
     }
@@ -113,7 +113,7 @@ describe('debug-fault-proxy.mjs', () => {
       assert.equal(proxy.isFaultInjected(), false);
 
       await assert.rejects(async () => {
-        await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/doggo/strong/push`, {
+        await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/push`, {
           method: 'POST',
           body: JSON.stringify({ operations: [] }),
           headers: { 'Content-Type': 'application/json' }
@@ -124,7 +124,7 @@ describe('debug-fault-proxy.mjs', () => {
       assert.equal(upstreamRequests.length, 1); // upstream write succeeded!
 
       // Second request passes through since fault was consumed
-      const res2 = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/doggo/strong/push`, {
+      const res2 = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/push`, {
         method: 'POST',
         body: JSON.stringify({ operations: [] }),
         headers: { 'Content-Type': 'application/json' }
@@ -150,7 +150,7 @@ describe('debug-fault-proxy.mjs', () => {
       assert.equal(proxy.isFaultInjected(), false);
 
       await assert.rejects(async () => {
-        await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/doggo/strong/legacy-receipts`, {
+        await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/legacy-receipts`, {
           method: 'POST',
           body: JSON.stringify({ operations: [] }),
           headers: { 'Content-Type': 'application/json' }
@@ -174,7 +174,7 @@ describe('debug-fault-proxy.mjs', () => {
     const proxyPort = proxy.server.address().port;
 
     try {
-      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/doggo/strong/pull`);
+      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/pull`);
       assert.equal(res.status, 502);
       const json = await res.json();
       assert.equal(json.error, 'BAD_GATEWAY');
@@ -201,7 +201,7 @@ describe('debug-fault-proxy.mjs', () => {
     const proxyPort = proxy.server.address().port;
 
     try {
-      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/doggo/strong/pull`);
+      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/pull`);
       assert.equal(res.status, 504);
       const json = await res.json();
       assert.equal(json.error, 'GATEWAY_TIMEOUT');
@@ -232,7 +232,7 @@ describe('debug-fault-proxy.mjs', () => {
 
     try {
       await assert.rejects(async () => {
-        const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/doggo/strong/pull`);
+        const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/pull`);
         // Reading body should fail as socket is destroyed by timeout
         await res.text();
       }, /fetch failed|socket hang up|premature close|ECONNRESET/);

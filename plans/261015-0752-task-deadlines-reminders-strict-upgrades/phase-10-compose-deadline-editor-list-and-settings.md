@@ -25,8 +25,8 @@ Unsaved editor state must remain pure local UI/draft state. Permission enablemen
 - List overdue rendering updates on wall-clock boundary/timezone display changes without altering stored tasks or issuing sync operations.
 
 ## Related code files
-Doggo root `/home/loidinh/WS/doggo`.
-Modify shared `contract/{todo-action,todo-ui-state,todo-models}.kt`, `ui/{todo-editor,todo-list,doggo-app,conflict-review}.kt`, common Compose string resources `shared/src/commonMain/composeResources/values/strings.xml` as used by current conventions; Android `session-view-model.kt`, desktop `main.kt` controller actions.
+TabbyRush root `/home/loidinh/WS/tabbyrush`.
+Modify shared `contract/{todo-action,todo-ui-state,todo-models}.kt`, `ui/{todo-editor,todo-list,tabbyrush-app,conflict-review}.kt`, common Compose string resources `shared/src/commonMain/composeResources/values/strings.xml` as used by current conventions; Android `session-view-model.kt`, desktop `main.kt` controller actions.
 Create focused `ui/reminder-settings.kt`, deadline picker/preview components only if existing editor would mix concerns. Extend shared `commonTest/ui/todo-semantics-test.kt` for consumer-visible semantic behavior, not literal wording. Update feature PDR/design/accessibility docs after runtime evidence.
 
 ## Implementation Steps

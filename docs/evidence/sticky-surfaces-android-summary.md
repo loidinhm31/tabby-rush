@@ -14,9 +14,9 @@
 Phase 07 synthesizes the native Android sticky task surfaces delivered in Phase 02 (Glance Task Widget), Phase 03 (Quiet Task Surface Deadline Notification), and Phase 05 (Android Lifecycle, Fencing, and Security Integration).
 
 ### Delivered Capabilities
-1. **Glance Task Widget (`DoggoTaskWidget`)**: Responsive 4x4, 3x3, 3x2, and 2x2 home screen widget rendering unfiltered Incomplete tasks and Completed tasks in stable `createdAt DESC, id DESC` order. Provides atomic local task completion toggle, quick add dialog launch, and deep-link app opening.
-2. **Quiet Task Surface Notification (`TaskSurfaceNotificationCoordinator`)**: Low-importance, no-sound, no-vibration notification channel (`doggo_task_surfaces`) displaying the single next overdue or upcoming deadline. Operates with identity-only `PendingIntent` URIs, generic public lock-screen version (`VISIBILITY_PUBLIC`), and durable API 34+ swipe dismissal suppression.
-3. **Application Lifecycle & Token Fencing (`DoggoApplication`, `AndroidTaskSurfaceAccess`)**: Bounded 4-second cold-start wait, non-cancellable admission gating, serialized publication mutex, and multi-account generation fencing rejecting stale actions across account switches.
+1. **Glance Task Widget (`TabbyRushTaskWidget`)**: Responsive 4x4, 3x3, 3x2, and 2x2 home screen widget rendering unfiltered Incomplete tasks and Completed tasks in stable `createdAt DESC, id DESC` order. Provides atomic local task completion toggle, quick add dialog launch, and deep-link app opening.
+2. **Quiet Task Surface Notification (`TaskSurfaceNotificationCoordinator`)**: Low-importance, no-sound, no-vibration notification channel (`tabbyrush_task_surfaces`) displaying the single next overdue or upcoming deadline. Operates with identity-only `PendingIntent` URIs, generic public lock-screen version (`VISIBILITY_PUBLIC`), and durable API 34+ swipe dismissal suppression.
+3. **Application Lifecycle & Token Fencing (`TabbyRushApplication`, `AndroidTaskSurfaceAccess`)**: Bounded 4-second cold-start wait, non-cancellable admission gating, serialized publication mutex, and multi-account generation fencing rejecting stale actions across account switches.
 4. **Account Leave/Wipe Cleanup Path (`CompositeLeaveSchedulerCancelGate`)**: Cascading cancellation of surface observer jobs, WorkManager wake, active notifications, and Glance widget instances across all installed widget IDs. The separate runtime-replacement drain-timeout failure is documented below.
 
 ---
@@ -36,7 +36,7 @@ Executed via `./gradlew.bat :androidApp:testDebugUnitTest --rerun-tasks --depend
 ### 2.2 Security Auditor Suite (`scripts/release-security-check.test.mjs`)
 Executed via `node --test scripts/release-security-check.test.mjs`:
 - **Result**: **12 / 12 PASSED (100% Green)**
-- Verifies exact canonical identity for `MainActivity` and `DoggoTaskWidgetReceiver`, while rejecting foreign lookalikes, exported services, content providers, unauthorized intent-filter categories/data, and unverified exported receivers.
+- Verifies exact canonical identity for `MainActivity` and `TabbyRushTaskWidgetReceiver`, while rejecting foreign lookalikes, exported services, content providers, unauthorized intent-filter categories/data, and unverified exported receivers.
 
 ### 2.3 Diagnostic Source Security Audit (`scripts/release-security-check.mjs --diagnose-source`)
 Executed via `node scripts/release-security-check.mjs --diagnose-source`:
@@ -70,7 +70,7 @@ The following files are visual design baselines/design mockups, not screenshots 
 |---|---|---|---|---|
 | **AC 1** | Real launcher widget scrolling, ordering, toggle | Unit tests (`TaskWidgetModelTest`) | Automated subset recorded; Gate G2 pending | Ordering/model behavior is covered by tests; no native launcher interaction acceptance is claimed. |
 | **AC 2** | Offline widget Add & sync reconnection | Contract/unit fixtures and `TaskSurfaceCreateScreen` | Automated subset recorded; Gate G2 pending | Fixture evidence does not establish live launcher or reconnect behavior. |
-| **AC 3** | Multi-surface convergence across background sync | Process Flow observers and `DoggoSyncWorker` | Automated subset recorded; G6 pending | No live multi-device convergence acceptance is claimed. |
+| **AC 3** | Multi-surface convergence across background sync | Process Flow observers and `TabbyRushSyncWorker` | Automated subset recorded; G6 pending | No live multi-device convergence acceptance is claimed. |
 | **AC 4** | Oldest-overdue notification selection & ties | Unit tests (`TaskSurfaceNotificationTest`) | Automated subset recorded; Gate G2 pending | Selection behavior is covered by 10 unit tests; native notification presentation remains unaccepted. |
 | **AC 5** | Duplicate action delivery & stale generation rejection | Token fencing in `AndroidTaskSurfaceAccess` | Automated/source checks recorded; Gate G2 pending | No physical pending-intent delivery acceptance is claimed. |
 | **AC 6** | Permission denial, channel off, API 34+ swipe | Unit tests and preference codecs | Automated subset recorded; Gate G2 pending | Native permission and notification-shade behavior remains unaccepted. |
@@ -85,11 +85,11 @@ The following files are visual design baselines/design mockups, not screenshots 
    - Running `./gradlew.bat :shared:jvmTest --dependency-verification=strict` fails with 149 unmatched classpath checksums in `gradle/verification-metadata.xml`.
    - Reported tests/builds used `--dependency-verification=off`; both the 149-checksum baseline and the separate Glance artifact provenance hold remain unresolved.
 2. **Android Runtime Closure Drain Timeout (Cycle 2 Finding 1)**:
-   - File: `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt:191-198`
+   - File: `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt:191-198`
    - **Description**: `closeRuntimeInternal()` catches and logs the drain-timeout exception, then returns before observer-job cancellation and Room database closure. `closeActiveRuntime()` nevertheless clears `activeRuntime`, so coroutine jobs remain and Room is not closed.
    - **Status**: Open safety finding; this is an incomplete teardown, not a successful fail-closed shutdown. Native hardware acceptance remains held at Gate G2.
 3. **Glance Widget Cleanup Error Swallowing (Cycle 2 Finding 2)**:
-   - File: `androidApp/src/main/kotlin/dev/doggo/android/task-widget-updater.kt:222-226, 240-244`
+   - File: `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-updater.kt:222-226, 240-244`
    - Description: RemoteViews blanking and session closure catch `Throwable` non-fatally during leave protocol.
    - Status: Tracked open safety risk; launcher cache behavior requires physical device testing.
 4. **Physical Device & Connected Tests (Gate G2 Hold)**:

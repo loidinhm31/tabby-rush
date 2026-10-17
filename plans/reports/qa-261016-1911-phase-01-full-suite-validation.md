@@ -107,7 +107,7 @@ Warnings observed:
 - Four Android test-source type checks are reported as always `true`.
 - Desktop test compilation uses a deprecated Java `URL` constructor.
 
-The Windows live-toast test is conditionally gated by `doggo.test.liveToasts=true` and bridge availability; this run is not treated as evidence of live Windows toast delivery. The requested Gradle tasks run JVM/unit suites only, not Android instrumentation on a device/emulator.
+The Windows live-toast test is conditionally gated by `tabbyrush.test.liveToasts=true` and bridge availability; this run is not treated as evidence of live Windows toast delivery. The requested Gradle tasks run JVM/unit suites only, not Android instrumentation on a device/emulator.
 
 ## Dependency Verification Gate
 

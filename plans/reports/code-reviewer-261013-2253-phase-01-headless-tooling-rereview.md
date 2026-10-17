@@ -1,6 +1,6 @@
 # Code Re-Review (Cycle 2): Phase 01 Headless tooling and Android environment
 
-Plan: plans/261013-1540-doggo-glean-hub-reuse/phase-01-headless-tooling.md (still pending 0%; not edited)
+Plan: plans/261013-1540-tabbyrush-glean-hub-reuse/phase-01-headless-tooling.md (still pending 0%; not edited)
 Score: **7.5/10** (prior 6.5). Scripts/docs fixes land; 2 new defects; runtime acceptance gate still unmet.
 
 ## Critical

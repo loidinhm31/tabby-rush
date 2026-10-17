@@ -23,7 +23,7 @@ Session restoration is asynchronous; stale `getOrCreateAccountRuntime(key)` can 
 6. Register complete leaves with immutable intents/private receivers and verified widget export behavior; update production source+merged-manifest security audit narrowly, no broad allowlist.
 
 ## Architecture
-`DoggoApplication : TaskSurfaceHostOwner` owns real Android task-surface access/coordinator; `AccountRuntime` owns observer jobs/leases. Runtime establishment alone opens current account after restore/wipe/unlock checks. Existing delivery gate counts surface read/mutation/publication operations; publication/lifecycle mutex final-checks and serializes actual OS handoff against transition without holding it during drain. Existing AccountLeaveProtocol sequence remains authoritative; composite scheduler hook clears external state and fails closed. Main Activity handles direct Add/Open intents/real permission launcher, not a second task database/runtime.
+`TabbyRushApplication : TaskSurfaceHostOwner` owns real Android task-surface access/coordinator; `AccountRuntime` owns observer jobs/leases. Runtime establishment alone opens current account after restore/wipe/unlock checks. Existing delivery gate counts surface read/mutation/publication operations; publication/lifecycle mutex final-checks and serializes actual OS handoff against transition without holding it during drain. Existing AccountLeaveProtocol sequence remains authoritative; composite scheduler hook clears external state and fails closed. Main Activity handles direct Add/Open intents/real permission launcher, not a second task database/runtime.
 
 ## Related code files
 **Exclusive modifications/creates:** all phase05 ownership rows are exhaustive: Application/runtime/factory/account-state/composite cancel/VM/Activity/sync worker+scheduler/restore receiver, proposed real surface-access/runtime-coordinator/create-screen, manifest, auditor+test, existing cancel test and new real account/navigation device tests, evidence.
@@ -33,25 +33,25 @@ Session restoration is asynchronous; stale `getOrCreateAccountRuntime(key)` can 
 Exactly05 paths, including all affected Android roots, security auditor and integration tests.01 owns dependencies/locks;02 owns widget;03 notification/preferences/settings logic. A leaf defect goes back to its owner;05 never edits leaf test/source to force integration.07 has no production/test writes.
 
 Explicit owned paths (repository-relative; actions/reasons in central manifest):
-- `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/account-runtime.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/account-runtime-factory.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/android-account-state-manager.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/composite-leave-scheduler-cancel-gate.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/main-activity.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/doggo-sync-worker.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/android-sync-scheduler.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/reminder-restore-receiver.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-access.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-runtime-coordinator.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-create-screen.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/account-runtime.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/account-runtime-factory.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/android-account-state-manager.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/composite-leave-scheduler-cancel-gate.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/main-activity.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-sync-worker.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/android-sync-scheduler.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/reminder-restore-receiver.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-access.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-runtime-coordinator.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-create-screen.kt`
 - `androidApp/src/main/AndroidManifest.xml`
 - `scripts/release-security-check.mjs`
 - `scripts/release-security-check.test.mjs`
-- `androidApp/src/test/kotlin/dev/doggo/android/composite-leave-scheduler-cancel-gate-test.kt`
-- `androidApp/src/androidTest/kotlin/dev/doggo/android/task-surface-account-device-test.kt`
-- `androidApp/src/androidTest/kotlin/dev/doggo/android/task-surface-navigation-device-test.kt`
+- `androidApp/src/test/kotlin/dev/tabbyrush/android/composite-leave-scheduler-cancel-gate-test.kt`
+- `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-surface-account-device-test.kt`
+- `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-surface-navigation-device-test.kt`
 - `plans/261016-1409-sticky-task-surfaces/reports/phase-05-android-evidence.md`
 
 ## Implementation Steps

@@ -2,7 +2,7 @@
 /**
  * scripts/hub-strict-upgrade.mjs
  *
- * Doggo / Glean Hub Strict Schema Upgrade CLI runner.
+ * TabbyRush / Glean Hub Strict Schema Upgrade CLI runner.
  * Performs authorized strict-v1 -> strict-v2 migration via Glean Hub Admin API.
  *
  * Enforces:
@@ -84,7 +84,7 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
     origin: process.env.APPROVED_HUB_ORIGIN || process.env.GLEAN_ORIGIN || 'http://127.0.0.1:3000',
-    appId: process.env.DOGGO_APP_ID || 'doggo',
+    appId: process.env.TABBYRUSH_APP_ID || 'tabby-rush',
     token: process.env.GLEAN_ADMIN_TOKEN || '',
     expectedVersion: 'strict-v1',
     expectedFingerprint: CANONICAL_STRICT_V1_FINGERPRINT,
@@ -137,7 +137,7 @@ function parseArgs() {
 
 Options:
   --origin <URL>              Glean Hub server origin (default: $APPROVED_HUB_ORIGIN or http://127.0.0.1:3000)
-  --app-id <ID>               Target strict app ID (default: doggo)
+  --app-id <ID>               Target strict app ID (default: tabby-rush)
   --token <JWT>               Admin JWT bearer token (preferred: $GLEAN_ADMIN_TOKEN)
   --expected-version <VER>    Expected current protocol version (default: strict-v1)
   --expected-fingerprint <HEX> Expected current canonical schema fingerprint

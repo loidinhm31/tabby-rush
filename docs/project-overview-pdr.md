@@ -1,4 +1,4 @@
-# Doggo Project Overview & Product Development Requirements (PDR)
+# TabbyRush Project Overview & Product Development Requirements (PDR)
 
 Last Updated: 2026-10-17
 Document Version: 1.10.0
@@ -9,11 +9,11 @@ Related Docs: [System Architecture](./system-architecture.md) · [Code Standards
 
 ## 1. Executive Summary & Product Vision
 
-Doggo is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization.
+TabbyRush is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization.
 
 The project prioritizes a clean multiplatform architecture, where the core domain logic, state management, and user interface are planned in Kotlin Multiplatform and Compose Multiplatform:
 1. **Android Application (`androidApp/`)**: Native mobile client and sticky task surfaces are implemented. The Phase 07 report records a successful debug APK build; instrumented device and interactive launcher/shade acceptance remain pending the Gate G2 hardware run.
-2. **Desktop Application (`desktopApp/`)**: Linux desktop source and a standalone distributable were delivered in Phase 09; RPM installation and a live Secret Service session remain operator acceptance gates. Phase 10 Windows implementation was delivered and recorded at 100% (2026-10-14), including the x64 DPAPI provider, isolated dependency lock, package audit harness, self-contained `Doggo.exe` bundle, and unsigned MSI. Technical acceptance remains blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification.
+2. **Desktop Application (`desktopApp/`)**: Linux desktop source and a standalone distributable were delivered in Phase 09; RPM installation and a live Secret Service session remain operator acceptance gates. Phase 10 Windows implementation was delivered and recorded at 100% (2026-10-14), including the x64 DPAPI provider, isolated dependency lock, package audit harness, self-contained `TabbyRush.exe` bundle, and unsigned MSI. Technical acceptance remains blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification.
 3. **Headless Development Infrastructure**: Immediate development, IDE execution, and emulator testing on headless Fedora Linux servers via secure Xpra virtual display sessions (delivered in Phase 01).
 
 The primary task-management UI is shared Compose Multiplatform. Task surfaces extend it with an Android Glance app widget, an opt-in low-importance deadline notification, and a compact desktop Compose window with a system-tray entry when the desktop session exposes a usable tray. Phase 07 records automated Android/Windows integration evidence and design baselines, not native hardware acceptance; Linux session acceptance remains pending Phase 08.
@@ -91,20 +91,20 @@ Phase 02 delivers the immutable build system foundation, staged multiplatform pr
 |---|---|---|
 | Root Gradle Configuration | `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `.gitignore`. | Implemented; staged assembly and JVM flags verified. |
 | Pinned Wrapper & Toolchains | `gradle/wrapper/*`, `gradle/libs.versions.toml`, `gradle/verification-metadata.xml`. | Implemented; official SHA-256 hashes verified. |
-| `:shared` Module Configuration | `shared/build.gradle.kts`, `shared/gradle.lockfile` (`dev.doggo.shared`, minSdk 26, JVM 17). | Implemented; dependency locking and Room schema dir configured. |
-| Common Domain Contract Sources (16 files) | `shared/src/commonMain/kotlin/dev/doggo/shared/contract/*.kt`. | Implemented; models, UI state, actions, errors, auth, sync, and policies complete. |
-| Contract Test Suites (4 files) | `shared/src/commonTest/kotlin/dev/doggo/shared/contract/*.kt`. | Implemented; NIST vectors, title policy, account key, and endpoint policy covered. |
+| `:shared` Module Configuration | `shared/build.gradle.kts`, `shared/gradle.lockfile` (`dev.tabbyrush.shared`, minSdk 26, JVM 17). | Implemented; dependency locking and Room schema dir configured. |
+| Common Domain Contract Sources (16 files) | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/*.kt`. | Implemented; models, UI state, actions, errors, auth, sync, and policies complete. |
+| Contract Test Suites (4 files) | `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/*.kt`. | Implemented; NIST vectors, title policy, account key, and endpoint policy covered. |
 | Automated Foundation Test Suite | `tests/test-phase-02-foundation.sh`. | Implemented; 57/57 shell assertions PASS (live Gradle test runner pending downstream phases). |
 
 ---
 
 ## 5. Phase 03 Requirements & Acceptance: Hub Reuse & Strict Server Compatibility
 
-Phase 03 establishes backend strict synchronization support on Glean Hub, enforcing absolute namespace and route isolation for Doggo while preserving existing Hub applications without behavioral regression.
+Phase 03 establishes backend strict synchronization support on Glean Hub, enforcing absolute namespace and route isolation for TabbyRush while preserving existing Hub applications without behavioral regression.
 
 ### 5.1 Strict Server Requirements
 - **FR-STRICT-01 (Strict Mode & Canonical Epoch)**: Opt-in `syncMode: "strict-v1"` registered via admin endpoint (`POST /api/v1/strict-apps`); server generates an immutable lowercase UUIDv4 epoch string before publishing the schema.
-- **FR-STRICT-02 (Storage Target Collection)**: Dedicated application collection using the direct pattern `app<AppId>` (e.g. `appDoggo` via `SyncService::collection_name(app_id)`) with exact composite document key `_id: "userId:rowId"` and compound scan index `{ userId: 1, tableName: 1, rowId: 1 }`.
+- **FR-STRICT-02 (Storage Target Collection)**: Dedicated application collection using the direct pattern `app<AppId>` (e.g. `appTabbyRush` via `SyncService::collection_name(app_id)`) with exact composite document key `_id: "userId:rowId"` and compound scan index `{ userId: 1, tableName: 1, rowId: 1 }`.
 - **FR-STRICT-03 (Fail-Closed Admission Preflight)**: Admission validation requires uncapped collection, no TTL index, no custom validator, simple or absent collation, and verified scan index before schema publication. A standalone CLI (`strong_sync_admission`) executes identical validation rules.
 - **FR-STRICT-04 (Atomic CAS Mutations)**: Single-document conditional writes enforce revision predicates (Create expected 0 -> rev 1 insert-only; Update expected current -> rev current+1 live filter; Delete -> rev current+1 compact tombstone with canonical empty data).
 - **FR-STRICT-05 (Durable Replay Confirmation)**: Replay of matching `(opId, digest)` mutations executes conditional write updating `confirmationNonce` under journaled write concern; confirmation requires `matched_count == 1`.
@@ -114,7 +114,7 @@ Phase 03 establishes backend strict synchronization support on Glean Hub, enforc
 
 | Deliverable | Implementation Scope | Verification Status |
 |---|---|---|
-| Doggo Strict Schema | `integration/glean-hub/doggo-schema.json` | Implemented; verified exact 4-column todos schema. |
+| TabbyRush Strict Schema | `integration/glean-hub/tabbyrush-schema.json` | Implemented; verified exact 4-column todos schema. |
 | Provisioning Script | `scripts/hub-schema-provision.mjs` | Implemented; syntax verified (`node --check`), 0600 key custody. |
 | Compatibility Smoke Script | `scripts/hub-compatibility-smoke.mjs` | Implemented; syntax verified (`node --check`), non-zero on connection failure. |
 | Integration Documentation | `docs/hub-schema-integration.md`, `docs/hub-compatibility-acceptance.md`, `docs/evidence/hub-compatibility-summary.md` | Published; documented invariants, error envelopes, and lifecycle. |
@@ -129,28 +129,28 @@ Phase 04 implements the multiplatform authentication client, session state machi
 
 ### 6.1 Authentication & Session Requirements
 - **FR-AUTH-01 (Route Policy & Dual-Auth Header Allowlist)**: All outbound requests are bounded to `canonicalOrigin`. Routes are strictly classified into `AUTH_PUBLIC`, `BEARER_ONLY`, and `DUAL_AUTH_STRICT`. Disallowed paths and legacy sync endpoints fail closed locally with `SafeError.ProtocolIncompatible`. Redirects are strictly disabled (`followRedirects = false`).
-- **FR-AUTH-02 (Keystore-Protected Credential Custody)**: Platform `CredentialVault` implemented on Android via `AndroidKeystoreVault` using AES-256-GCM with fresh 12-byte random nonces per write and AAD binding (`"doggo_vault_v1:" + accountKey`). Tokens exist only in memory and within the vault; never exposed in `StateFlow`, loggers, or serialized state.
+- **FR-AUTH-02 (Keystore-Protected Credential Custody)**: Platform `CredentialVault` implemented on Android via `AndroidKeystoreVault` using AES-256-GCM with fresh 12-byte random nonces per write and AAD binding (`"tabbyrush_vault_v1:" + accountKey`). Tokens exist only in memory and within the vault; never exposed in `StateFlow`, loggers, or serialized state.
 - **FR-AUTH-03 (Single-Flight Refresh & Generation Fencing)**: Concurrent foreground and background refresh calls are deduplicated into a single leader network request via `SingleFlightRefreshCoordinator`. Generation counter increments on quiesce/logout/switch to fence stale async completions and prevent resurrected credentials.
 - **FR-AUTH-04 (Prohibited Automatic POST Replays)**: In `authorizedRequest()`, the HTTP auth layer never automatically replays mutating POST requests across 401 token refresh cycles; returns `SafeError.Unauthorized("TOKEN_REFRESHED")`, leaving retry ownership strictly to `SyncCoordinator`.
-- **FR-AUTH-05 (Session Lifecycle & App Grant Enforcement)**: Explicit state machine (`UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`). Enforces `/me.userId` matching login response. Evaluates `/me.apps` for `"doggo"` grant; creates and reconciles access requests if grant is pending.
+- **FR-AUTH-05 (Session Lifecycle & App Grant Enforcement)**: Explicit state machine (`UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`). Enforces `/me.userId` matching login response. Evaluates `/me.apps` for `"tabbyrush"` grant; creates and reconciles access requests if grant is pending.
 - **FR-AUTH-06 (Multiplatform Engine Abstraction)**: Common expect/actual factory `createPlatformHttpEngine()` configured with bounded timeouts (10s connect, 20s read/write) and disabled redirects on Android (`OkHttp`) and Desktop JVM (`Java`).
 
 ### 6.2 Phase 04 Deliverables & Status Distinction
 
 | Deliverable | Implementation Scope | Verification Status |
 |---|---|---|
-| Auth Wire DTOs | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-auth-dtos.kt` | Implemented; redacted `toString()`, email normalization, byte length validation. |
-| Ktor HTTP Client | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-http-client.kt` | Implemented; route classification, dual-auth headers, HTML error sanitization, 10s/20s timeouts. |
-| Hub Auth API Client | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-auth-client.kt` | Implemented; register, login, refresh, `/me`, and access requests. |
-| Auth Session State Machine | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/hub-auth-session.kt` | Implemented; state machine, generation fencing, prohibited POST replay, offline restore, local logout. |
-| Single-Flight Coordinator | `shared/src/commonMain/kotlin/dev/doggo/shared/auth/single-flight-refresh.kt` | Implemented; leader-based concurrency lock using Mutex and CompletableDeferred. |
-| Android HTTP Engine | `shared/src/androidMain/kotlin/dev/doggo/shared/auth/android-http-engine.kt` | Implemented; OkHttp engine with redirects disabled and bounded timeouts. |
-| JVM HTTP Engine | `shared/src/jvmMain/kotlin/dev/doggo/shared/auth/jvm-http-engine.kt` | Implemented; Java HTTP engine with connect timeout. |
-| Android Keystore Vault | `shared/src/androidMain/kotlin/dev/doggo/shared/auth/android-keystore-vault.kt` | Implemented; Android Keystore–protected AES-256-GCM, fresh 12-byte nonces, AAD binding, atomic rename, status discrimination. |
-| Auth Client Unit Tests | `shared/src/commonTest/kotlin/dev/doggo/shared/auth/hub-auth-client-test.kt` | Implemented; 8 unit tests PASS (routes, headers, sanitization). |
-| Auth Session Unit Tests | `shared/src/commonTest/kotlin/dev/doggo/shared/auth/hub-auth-session-test.kt` | Implemented; 8 unit tests PASS (lifecycle, fencing, no POST replay, vault write failure). |
-| Single-Flight Unit Tests | `shared/src/commonTest/kotlin/dev/doggo/shared/auth/single-flight-refresh-test.kt` | Implemented; 3 unit tests PASS (deduplication, error propagation). |
-| Keystore Instrumented Tests | `shared/src/androidInstrumentedTest/kotlin/dev/doggo/shared/auth/android-keystore-vault-test.kt` | Implemented; covers AES-GCM, fresh nonces, AAD tamper rejection, atomic rename. (Deferred to Phase 07). |
+| Auth Wire DTOs | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/auth/hub-auth-dtos.kt` | Implemented; redacted `toString()`, email normalization, byte length validation. |
+| Ktor HTTP Client | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/auth/hub-http-client.kt` | Implemented; route classification, dual-auth headers, HTML error sanitization, 10s/20s timeouts. |
+| Hub Auth API Client | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/auth/hub-auth-client.kt` | Implemented; register, login, refresh, `/me`, and access requests. |
+| Auth Session State Machine | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/auth/hub-auth-session.kt` | Implemented; state machine, generation fencing, prohibited POST replay, offline restore, local logout. |
+| Single-Flight Coordinator | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/auth/single-flight-refresh.kt` | Implemented; leader-based concurrency lock using Mutex and CompletableDeferred. |
+| Android HTTP Engine | `shared/src/androidMain/kotlin/dev/tabbyrush/shared/auth/android-http-engine.kt` | Implemented; OkHttp engine with redirects disabled and bounded timeouts. |
+| JVM HTTP Engine | `shared/src/jvmMain/kotlin/dev/tabbyrush/shared/auth/jvm-http-engine.kt` | Implemented; Java HTTP engine with connect timeout. |
+| Android Keystore Vault | `shared/src/androidMain/kotlin/dev/tabbyrush/shared/auth/android-keystore-vault.kt` | Implemented; Android Keystore–protected AES-256-GCM, fresh 12-byte nonces, AAD binding, atomic rename, status discrimination. |
+| Auth Client Unit Tests | `shared/src/commonTest/kotlin/dev/tabbyrush/shared/auth/hub-auth-client-test.kt` | Implemented; 8 unit tests PASS (routes, headers, sanitization). |
+| Auth Session Unit Tests | `shared/src/commonTest/kotlin/dev/tabbyrush/shared/auth/hub-auth-session-test.kt` | Implemented; 8 unit tests PASS (lifecycle, fencing, no POST replay, vault write failure). |
+| Single-Flight Unit Tests | `shared/src/commonTest/kotlin/dev/tabbyrush/shared/auth/single-flight-refresh-test.kt` | Implemented; 3 unit tests PASS (deduplication, error propagation). |
+| Keystore Instrumented Tests | `shared/src/androidInstrumentedTest/kotlin/dev/tabbyrush/shared/auth/android-keystore-vault-test.kt` | Implemented; covers AES-GCM, fresh nonces, AAD tamper rejection, atomic rename. (Deferred to Phase 07). |
 | Auth Acceptance Spec | `docs/auth-acceptance.md` | Published; 21 verification criteria across 4 test suites. |
 | Auth & Credentials Architecture | `docs/authentication-and-credentials.md` | Published; security invariants, route policies, AAD derivation, vault lifecycle. |
 
@@ -161,7 +161,7 @@ Phase 04 implements the multiplatform authentication client, session state machi
 Phase 05 implements local persistence via Room KMP version 1 and SQLite `BundledSQLiteDriver`, strict per-record outbox reconciliation, staged full scans, and crash-safe fail-closed account teardown.
 
 ### 7.1 Local Persistence & Sync Requirements
-- **FR-STORE-01 (Room Schema & Partitioning)**: Room database version 1 (`DoggoDatabase`) defines 5 stores (`server_base`, `outbox`, `editor_drafts`, `scan_staging`, `account_sync_meta`). Exported schema validated at `shared/schemas/.../1.json`. Destructive fallback is strictly forbidden. Storage is partitioned by canonical `AccountKey` SHA-256 string with path traversal validation.
+- **FR-STORE-01 (Room Schema & Partitioning)**: Room database version 1 (`TabbyRushDatabase`) defines 5 stores (`server_base`, `outbox`, `editor_drafts`, `scan_staging`, `account_sync_meta`). Exported schema validated at `shared/schemas/.../1.json`. Destructive fallback is strictly forbidden. Storage is partitioned by canonical `AccountKey` SHA-256 string with path traversal validation.
 - **FR-STORE-02 (Atomic Local Save & Unsent Cancellation)**: Local edits write `account_sync_meta`, `editor_drafts`, and `outbox` atomically via Room `@Transaction` methods (`saveTodoAtomic`, `deleteTodoAtomic`). Deleting a record with only an unsent `CREATE` operation cancels locally via `cancelUnsentCreateAtomic` without wire traffic.
 - **FR-STORE-03 (Per-Row FIFO Dispatch & Head Blocking)**: At most one unresolved operation per `rowId` is dispatched in any round. If the head operation on a row is `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED`, all successor operations on that row are blocked. Dispatch batches enforce `<= 100` operations, zero duplicate `rowId`s, and `<= 256 KiB` total payload.
 - **FR-STORE-04 (Staged Full Scan & Monotonic Promotion)**: 3-stage sync loop (scan -> push -> scan). Pagination begins with `cursor = null`, verifies epoch consistency, detects cursor loops and non-progressing cursors, and stages rows in SQLite `scan_staging`. Pre-scan confirmed identities must all be present in scan staging or sync aborts with `SafeError.ResetRequired("CONSISTENCY_ERROR")`. Monotonic promotion atomically applies higher revisions and verifies logical equivalence on equal revisions.
@@ -174,10 +174,10 @@ Phase 05 implements local persistence via Room KMP version 1 and SQLite `Bundled
 
 | Deliverable | Implementation Scope | Verification Status |
 |---|---|---|
-| Room KMP Database & Entities | `shared/src/commonMain/kotlin/dev/doggo/shared/data/` (5 entities, DAO, Database, migrations, RoomAccountStore). | Implemented; schema v1 exported, BundledSQLite driver, atomic `@Transaction` methods. |
-| Platform Database Builders & Files | `shared/src/{androidMain,jvmMain}/kotlin/dev/doggo/shared/data/` (Android and JVM database builders and account files). | Implemented; directory partitioning, path traversal guards, atomic wipe markers. |
-| Strict Sync Clients & Reconcilers | `shared/src/commonMain/kotlin/dev/doggo/shared/sync/` (HubSyncDtos, HubSyncClient, StagedFullScan, OutboxReconciliation, AccountSyncCoordinator, AccountLeaveProtocol). | Implemented; 3-stage sync, FIFO dispatch, CAS acks, UnknownSuperseded, fail-closed leave. |
-| Room Schema Export | `shared/schemas/dev.doggo.shared.data.DoggoDatabase/1.json`. | Implemented; verified canonical schema version 1 export. |
+| Room KMP Database & Entities | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/` (5 entities, DAO, Database, migrations, RoomAccountStore). | Implemented; schema v1 exported, BundledSQLite driver, atomic `@Transaction` methods. |
+| Platform Database Builders & Files | `shared/src/{androidMain,jvmMain}/kotlin/dev/tabbyrush/shared/data/` (Android and JVM database builders and account files). | Implemented; directory partitioning, path traversal guards, atomic wipe markers. |
+| Strict Sync Clients & Reconcilers | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/` (HubSyncDtos, HubSyncClient, StagedFullScan, OutboxReconciliation, AccountSyncCoordinator, AccountLeaveProtocol). | Implemented; 3-stage sync, FIFO dispatch, CAS acks, UnknownSuperseded, fail-closed leave. |
+| Room Schema Export | `shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/1.json`. | Implemented; verified canonical schema version 1 export. |
 | Local Storage & Sync Specs | `docs/local-storage-and-sync.md`, `docs/sync-acceptance.md`. | Published; complete architecture, lifecycle diagrams, acceptance criteria. |
 | Common & JVM Sync Test Suites (6 suites) | `shared/src/commonTest/.../sync/*-test.kt`, `shared/src/jvmTest/.../room-account-store-test.kt`. | Implemented; 89 unit and SQLite tests pass via `./gradlew --dependency-verification=lenient :shared:jvmTest`. |
 | Android Room Instrumented Tests | `shared/src/androidInstrumentedTest/.../room-account-store-test.kt`. | Implemented; covers app-private storage and Room transactions. (Deferred to Phase 07). |
@@ -189,8 +189,8 @@ Phase 05 implements local persistence via Room KMP version 1 and SQLite `Bundled
 Phase 06 delivers the shared Compose Multiplatform user interface, accessible light theme palette, typography scale, responsive layouts, credential security protections, and UI semantics tests.
 
 ### 8.1 UI & Theme Requirements
-- **FR-UI-01 (Accessible Light Palette)**: Deliver an accessible light theme palette (`DoggoTheme`, `DoggoColors`) with 16 calculated opaque token pairs meeting WCAG 2.1 AA contrast thresholds (normal text >= 4.5:1, interactive controls >= 3.0:1). Dynamic color is disabled; rendered UI contrast across OEM devices is deferred to Phase 07.
-- **FR-UI-02 (Platform-Universal Typography)**: Deliver a typography scale (`DoggoTypography`) based on Compose `FontFamily.SansSerif`, omitting binary Latin-only font assets to delegate font resolution to platform system fonts; international glyph rendering, TalkBack/Orca compatibility, and OS-level 200% font scaling require platform device testing.
+- **FR-UI-01 (Accessible Light Palette)**: Deliver an accessible light theme palette (`TabbyRushTheme`, `TabbyRushColors`) with 16 calculated opaque token pairs meeting WCAG 2.1 AA contrast thresholds (normal text >= 4.5:1, interactive controls >= 3.0:1). Dynamic color is disabled; rendered UI contrast across OEM devices is deferred to Phase 07.
+- **FR-UI-02 (Platform-Universal Typography)**: Deliver a typography scale (`TabbyRushTypography`) based on Compose `FontFamily.SansSerif`, omitting binary Latin-only font assets to delegate font resolution to platform system fonts; international glyph rendering, TalkBack/Orca compatibility, and OS-level 200% font scaling require platform device testing.
 - **FR-UI-03 (Responsive Breakpoint Architecture)**: Deliver a unified Compose layout adapting between a compact vertical stack (<840dp) and an expanded desktop two-column fixed sidebar layout (>=840dp). Note: compact top bar is non-scrolling in `Scaffold.topBar`, tracked for Phase 07 200% font scale verification.
 - **FR-UI-04 (Transient Password Security)**: Protect passwords with `PasswordVisualTransformation` visual masking, `semantics { password() }` semantic tag, memory dereferencing upon submission or disposal, and `AuthSubmitAction.toString()` redaction with `[REDACTED]`.
 - **FR-UI-05 (Accessible Task Management)**: Display tasks in a lazy column (`TodoList`) with stable keys, non-color completion states, >=48dp touch targets, and modal editing (`TodoEditorDialog`) enforcing `TitlePolicy` scalar limits (1–200 scalars).
@@ -200,8 +200,8 @@ Phase 06 delivers the shared Compose Multiplatform user interface, accessible li
 
 | Deliverable | Implementation Scope | Verification Status |
 |---|---|---|
-| Theme & Typography (2 files) | `shared/.../theme/{doggo-theme,doggo-typography}.kt` | Implemented; 16 contrast pairs verified >= 4.5:1 (text) and >= 3.0:1 (controls). |
-| Shared UI Composables (9 files) | `shared/.../ui/{doggo-app,account-form,access-request-panel,todo-list,todo-editor,sync-feedback,conflict-review,leave-guard,license-notices}.kt` | Implemented; responsive layouts, transient password masking, dialogs, 48dp targets. |
+| Theme & Typography (2 files) | `shared/.../theme/{tabbyrush-theme,tabbyrush-typography}.kt` | Implemented; 16 contrast pairs verified >= 4.5:1 (text) and >= 3.0:1 (controls). |
+| Shared UI Composables (9 files) | `shared/.../ui/{tabbyrush-app,account-form,access-request-panel,todo-list,todo-editor,sync-feedback,conflict-review,leave-guard,license-notices}.kt` | Implemented; responsive layouts, transient password masking, dialogs, 48dp targets. |
 | Resources & Notices (1 file) | `shared/.../composeResources/values/strings.xml` | Implemented; string resource catalog. |
 | UI Semantics Test Suite (1 file) | `shared/.../ui/todo-semantics-test.kt` | Implemented; 7 unit tests PASS via `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest`. |
 | Design & Provenance Specs (2 files) | `docs/{design-guidelines,font-provenance}.md` | Published; WCAG 2.1 AA contrast calculations, font audit, and documented deferrals. |
@@ -214,10 +214,10 @@ Phase 06 delivers the shared Compose Multiplatform user interface, accessible li
 Phase 07 delivers the native Android application module (`:androidApp`), integrating the frozen domain contracts (Phase 02), backend strict protocol client (Phase 03), Keystore credential vault and auth session (Phase 04), Room database and outbox sync coordinator (Phase 05), and accessible Compose UI (Phase 06).
 
 ### 9.1 Android Integration Requirements
-- **FR-AND-01 (Process Container & Account Runtime Isolation)**: `DoggoApplication` manages application-level singletons (`vault`, `accountFiles`, `hubConfig`, `authSession`, `syncScheduler`). `AccountRuntime` encapsulates `DoggoDatabase`, `RoomAccountStore`, `AccountSyncCoordinator`, and `AccountLeaveProtocol` bound to an `AccountKey` and generation counter. Foreground UI (`SessionViewModel`) and background tasks (`DoggoSyncWorker`) share the identical runtime instance and coordinator mutex.
-- **FR-AND-02 (Cold-Start Active Identity Persistence)**: Active account key and identity persist in app-private `active_account.dat` via temporary file write and `StandardCopyOption.ATOMIC_MOVE` upon authenticated login/register. On cold start, `DoggoApplication` restores the session from the vault only after verifying no `wipe.marker` exists.
+- **FR-AND-01 (Process Container & Account Runtime Isolation)**: `TabbyRushApplication` manages application-level singletons (`vault`, `accountFiles`, `hubConfig`, `authSession`, `syncScheduler`). `AccountRuntime` encapsulates `TabbyRushDatabase`, `RoomAccountStore`, `AccountSyncCoordinator`, and `AccountLeaveProtocol` bound to an `AccountKey` and generation counter. Foreground UI (`SessionViewModel`) and background tasks (`TabbyRushSyncWorker`) share the identical runtime instance and coordinator mutex.
+- **FR-AND-02 (Cold-Start Active Identity Persistence)**: Active account key and identity persist in app-private `active_account.dat` via temporary file write and `StandardCopyOption.ATOMIC_MOVE` upon authenticated login/register. On cold start, `TabbyRushApplication` restores the session from the vault only after verifying no `wipe.marker` exists.
 - **FR-AND-03 (Retained ViewModel & Reactive State Flow)**: `SessionViewModel` binds `TodoUiState` to auth and sync progress flows, dispatches `TodoAction` variants, maps storage and validation errors to sanitized `SafeError.Internal` and `SafeError.Validation` envelopes, and ensures passwords and auth tokens are not retained in ViewModel fields or `SavedStateHandle` after submission.
-- **FR-AND-04 (Background Sync Scheduling & Generation Fencing)**: `AndroidSyncScheduler` schedules WorkManager unique one-shot (`KEEP` policy, network connected constraint) and periodic 15-minute (`UPDATE` policy) work tagged with `doggo_sync_account_<key>`. `DoggoSyncWorker` enforces wipe marker absence, session auth state, account key match, and persisted generation counter equality before accessing store resources.
+- **FR-AND-04 (Background Sync Scheduling & Generation Fencing)**: `AndroidSyncScheduler` schedules WorkManager unique one-shot (`KEEP` policy, network connected constraint) and periodic 15-minute (`UPDATE` policy) work tagged with `tabbyrush_sync_account_<key>`. `TabbyRushSyncWorker` enforces wipe marker absence, session auth state, account key match, and persisted generation counter equality before accessing store resources.
 - **FR-AND-05 (Fail-Closed Quiescence & Wipe Protocol)**: `cancelAndAwait()` cancels WorkManager tasks by tag, polls WorkInfo completion for up to 5s (throwing `IllegalStateException` on timeout), and polls `coordinatorMutex.tryLock()` for up to 5s (throwing `IllegalStateException` on timeout). `completePendingWipesOnStartup()` synchronously cancels tasks, deletes database files, clears vault credentials, and removes markers before opening accounts.
 - **FR-AND-06 (Manifest Hardening & Diagnostic Infrastructure)**: Base manifest enforces single exported `MainActivity`, `allowBackup="false"`, and `usesCleartextTraffic="false"`. Debug manifest links `network_security_config.xml` strictly allowlisting `127.0.0.1`, `localhost`, and `10.0.2.2`. Backup and data extraction XML rules exclude private databases and accounts. Release task graph listener fails builds closed when keystore or signing credentials are absent. Includes `android-smoke.sh` and `debug-fault-proxy.mjs` for loopback fault injection.
 
@@ -229,7 +229,7 @@ The 25 Phase 07 deliverables are fully enumerated in the artifact inventory at [
 |---|---|---|
 | Android Build & Config (2 files) | `androidApp/{build.gradle.kts,gradle.lockfile}` | Implemented; AGP 8.7.3, compileSdk 35, release signing gate. |
 | Manifests & Security (5 files) | `androidApp/src/{main,debug}/AndroidManifest.xml`, `backup_rules.xml`, `data_extraction_rules.xml`, `network_security_config.xml` | Implemented; source audited; cleartext disabled in release, loopback-only debug NSC. |
-| Android Kotlin Source (5 files) | `main-activity.kt`, `doggo-application.kt`, `session-view-model.kt`, `android-sync-scheduler.kt`, `doggo-sync-worker.kt` | Implemented; source audited; uncompiled by AGP (host SDK absent); shared JVM regression suite (`:shared` only) 100% PASS (96/96 tests under lenient dependency verification). |
+| Android Kotlin Source (5 files) | `main-activity.kt`, `tabbyrush-application.kt`, `session-view-model.kt`, `android-sync-scheduler.kt`, `tabbyrush-sync-worker.kt` | Implemented; source audited; uncompiled by AGP (host SDK absent); shared JVM regression suite (`:shared` only) 100% PASS (96/96 tests under lenient dependency verification). |
 | Instrumented Test Suites (2 files) | `todo-device-test.kt`, `background-isolation-test.kt` | Authored; covers ViewModel, Room store, WorkManager, and wipe isolation (unexecuted on device). |
 | Host Scripts (2 files) | `scripts/{android-smoke.sh,debug-fault-proxy.mjs}` | Implemented; syntax verified (`bash -n`, `node --check`). |
 | Acceptance & Evidence Docs (2 files) | `docs/{android-acceptance.md,evidence/android-test-summary.md}` | Published; complete invariants, test matrices, and inventory. |
@@ -247,7 +247,7 @@ Phase 09 delivers the desktop application module (`:desktopApp`) targeting Linux
 - **FR-DSK-01 (Target Isolation & Locked Tooling)**: `desktopTarget` defaults to detected host OS (`linux`); explicit target mismatches fail before dependency resolution. Locked dependencies defined in `desktopApp/gradle-linux.lockfile` (161 locked artifacts). Packaged binaries contain Linux provider only with zero Windows references.
 - **FR-DSK-02 (Hardware/OS Vault SPI & ServiceLoader Dispatcher)**: Extensible `CredentialVaultProvider` SPI discovered via Java `ServiceLoader`. `PlatformVaultDispatcher` requires exactly one provider matching the active desktop target; zero, multiple, or mismatched providers fail closed with explicit exception. Plaintext token file fallback is strictly prohibited.
 - **FR-DSK-03 (Freedesktop Secret Service Vault Custody)**: `LinuxSecretServiceVault` stores access and refresh tokens as an atomic JSON bundle via Freedesktop Secret Service (`secret-tool` / D-Bus). Unlocked keyring status represented faithfully; missing daemon fails closed (`UNAVAILABLE`).
-- **FR-DSK-04 (Single-Instance Profile Guard)**: `SingleInstanceGuard` acquires exclusive OS file-channel lock on `~/.local/share/doggo/accounts/doggo.lock` before initializing vault or database. Second launch exits immediately without touching database or racing refresh. Lock file is retained across exits to prevent inode recycling races.
+- **FR-DSK-04 (Single-Instance Profile Guard)**: `SingleInstanceGuard` acquires exclusive OS file-channel lock on `~/.local/share/tabbyrush/accounts/tabbyrush.lock` before initializing vault or database. Second launch exits immediately without touching database or racing refresh. Lock file is retained across exits to prevent inode recycling races.
 - **FR-DSK-05 (Foreground Sync Scheduling & Quiescence)**: `DesktopSyncScheduler` coordinates periodic (15-min) and immediate sync within the window coroutine scope; implements `LeaveSchedulerCancelGate` to cancel and await active sync jobs before account leave or wipe.
 - **FR-DSK-06 (Immutable Modes & Packaging Smoke Runner)**: Default entrypoint `MainKt` enforces `BuildMode.RELEASE` (HTTPS only). `DevelopmentLauncher` enables `BuildMode.DEBUG` (HTTP loopback permitted) via `:desktopApp:runDebug`. `scripts/linux-package-smoke.sh` audits distributable bundle, RPM metadata, and absence of foreign platform classes.
 
@@ -257,11 +257,11 @@ Phase 09 delivers the desktop application module (`:desktopApp`) targeting Linux
 |---|---|---|
 | Desktop Build & Tooling (3 files) | `desktopApp/build.gradle.kts`, `desktopApp/gradle-linux.lockfile`, `scripts/linux-package-smoke.sh` | Implemented; Kotlin JVM 2.1.10, Compose 1.7.3, 161 locked artifacts, smoke runner syntax verified. |
 | Common Desktop Source (5 files) | `main.kt`, `credential-vault-provider.kt`, `platform-vault-dispatcher.kt`, `desktop-sync-scheduler.kt`, `single-instance-guard.kt` | Implemented; ServiceLoader SPI, file lock guard, foreground scheduler, and RELEASE/DEBUG entrypoints. |
-| Linux Target Source & SPI (2 files) | `linux-secret-service-vault.kt`, `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` | Implemented; Freedesktop Secret Service client, atomic JSON payload, ServiceLoader descriptor. |
+| Linux Target Source & SPI (2 files) | `linux-secret-service-vault.kt`, `META-INF/services/dev.tabbyrush.desktop.CredentialVaultProvider` | Implemented; Freedesktop Secret Service client, atomic JSON payload, ServiceLoader descriptor. |
 | Desktop Unit Test Suites (3 files) | `platform-vault-dispatcher-test.kt`, `desktop-lifecycle-test.kt`, `linux-secret-service-vault-test.kt` | Implemented; 19/19 unit tests PASS via `./gradlew :desktopApp:test`. |
 | Desktop Acceptance & Runbooks (3 files) | `docs/linux-desktop-guide.md`, `docs/linux-acceptance.md`, `docs/evidence/linux-test-summary.md` | Published; architecture, runbooks, acceptance criteria, and test execution evidence. |
 | Visual Design Baselines (7 PNGs) | `docs/evidence/linux-*.png` | Visual design mockups for desktop screen states conforming to ForumFlash light theme. |
-| Standalone Distributable Bundle | `desktopApp/build/compose/binaries/main/app/Doggo/` | Assembled and statically inspected via smoke runner (`bin/Doggo` executable verified; live launch without JDK unrun). |
+| Standalone Distributable Bundle | `desktopApp/build/compose/binaries/main/app/TabbyRush/` | Assembled and statically inspected via smoke runner (`bin/TabbyRush` executable verified; live launch without JDK unrun). |
 | **Live RPM Packaging & System Install** | `:desktopApp:packageRpm`, `sudo dnf install` | **PENDING**: Blocked by absent `rpmbuild` (`rpm-build` package) on host and interactive sudo; deferred to operator setup. |
 | **Live D-Bus / Secret Service Session** | Running desktop under active D-Bus session and Xpra framebuffer capture. | **PENDING**: Requires interactive Xpra desktop attachment (`xpra attach`) with unlocked GNOME Keyring. |
 
@@ -269,14 +269,14 @@ Phase 09 delivers the desktop application module (`:desktopApp`) targeting Linux
 
 ## 11. Phase 10 Requirements & Acceptance: Native Windows DPAPI and MSI
 
-Phase 10 implementation was delivered and is recorded at **100% (2026-10-14)**. This is implementation status, not technical acceptance: interactive MSI installation, Narrator verification, and strict dependency verification remain blocked pending operator prerequisites. The latest Windows evidence summary reports 25/25 desktop tests and 96/96 shared JVM tests passing (121/121 combined), a successful `Doggo.exe` bundle audit, and MSI metadata/hash inspection. Separately, the source ACL helper does not guarantee restrictive ACL enforcement; clean-user runtime/sync and uninstall/reinstall evidence also remain open.
+Phase 10 implementation was delivered and is recorded at **100% (2026-10-14)**. This is implementation status, not technical acceptance: interactive MSI installation, Narrator verification, and strict dependency verification remain blocked pending operator prerequisites. The latest Windows evidence summary reports 25/25 desktop tests and 96/96 shared JVM tests passing (121/121 combined), a successful `TabbyRush.exe` bundle audit, and MSI metadata/hash inspection. Separately, the source ACL helper does not guarantee restrictive ACL enforcement; clean-user runtime/sync and uninstall/reinstall evidence also remain open.
 
 ### 11.1 Windows Desktop Requirements
 - **FR-WIN-01 (Target Isolation & Locked Tooling)**: `desktopTarget` selects `windows` only on a Windows host and rejects mismatches before resolution. `desktopApp/gradle-windows.lockfile` freezes the Windows target graph. Windows packaging includes JNA and the Windows provider, not Linux D-Bus/Secret Service runtime dependencies.
 - **FR-WIN-02 (User-Scoped DPAPI Custody)**: `WindowsDpapiVault` protects one JSON credential bundle containing account key and access/refresh tokens using JNA-backed `CryptProtectData` / `CryptUnprotectData` with UI prompts forbidden; machine-wide scope and plaintext token fallback are prohibited. The vault zeroes plaintext byte buffers after cryptographic use.
-- **FR-WIN-03 (Atomic Credential Replacement)**: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-dpapi-vault.kt` writes protected bytes to a temporary file and atomically moves them into place. `applyRestrictiveUserAcl()` attempts an owner ACL but returns when the ACL view/owner is absent and suppresses exceptions, so effective ACL enforcement is not guaranteed.
+- **FR-WIN-03 (Atomic Credential Replacement)**: `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-dpapi-vault.kt` writes protected bytes to a temporary file and atomically moves them into place. `applyRestrictiveUserAcl()` attempts an owner ACL but returns when the ACL view/owner is absent and suppresses exceptions, so effective ACL enforcement is not guaranteed.
 - **FR-WIN-04 (Service Provider Isolation)**: Java `ServiceLoader` discovers `WindowsDpapiVaultProvider`; the shared dispatcher requires exactly one provider matching the active target and fails closed when resolution is empty or ambiguous. The Windows package smoke script audits the provider descriptor and absence of Linux D-Bus/Secret Service classes.
-- **FR-WIN-05 (Windows Distribution)**: `:desktopApp:createDistributable` creates the self-contained `Doggo.exe` application image; `:desktopApp:packageMsi` creates the per-user MSI with Start Menu integration. The developer MSI is unsigned; organizational Authenticode signing is a production distribution prerequisite.
+- **FR-WIN-05 (Windows Distribution)**: `:desktopApp:createDistributable` creates the self-contained `TabbyRush.exe` application image; `:desktopApp:packageMsi` creates the per-user MSI with Start Menu integration. The developer MSI is unsigned; organizational Authenticode signing is a production distribution prerequisite.
 - **FR-WIN-06 (Installed Runtime Acceptance)**: Installation without a developer JDK, launch, persistence/sync, DPAPI custody, accessibility, and uninstall/reinstall require a real interactive Windows session. Account-leave quiescence and credential/data clearing must be verified as acceptance criteria, not assumed from source or package inspection. Interactive MSI install, Narrator verification, and strict dependency verification remain pending operator prerequisites.
 
 ### 11.2 Phase 10 Deliverables & Status Distinction
@@ -286,7 +286,7 @@ Phase 10 implementation was delivered and is recorded at **100% (2026-10-14)**. 
 | Windows Vault & SPI | `windows-dpapi-vault.kt`, Windows `META-INF/services` descriptor | Implemented; live JNA DPAPI round-trip and provider discovery reported in the Windows evidence summary. |
 | Target Lock & Isolation | `gradle-windows.lockfile`, JNA-only Windows target dependencies | 160 configurations locked; package inspection reports Windows provider present and Linux D-Bus artifacts absent. |
 | Automated Tests | Windows `desktopApp` tests and `:shared:jvmTest` | 25/25 desktop and 96/96 shared tests reported passing (121/121 combined) in [Windows Test Summary](./evidence/windows-test-summary.md). |
-| Distribution Artifacts | `createDistributable`, `packageMsi` | `Doggo.exe` bundle and `Doggo-1.0.0.msi` generated and audited; MSI is 100.68 MB and unsigned. |
+| Distribution Artifacts | `createDistributable`, `packageMsi` | `TabbyRush.exe` bundle and `TabbyRush-1.0.0.msi` generated and audited; MSI is 100.68 MB and unsigned. |
 | Package Verification | `scripts/windows-package-smoke.ps1` | Audits distributable JAR contents/provider, target isolation, MSI SHA-256, Authenticode status, and COM metadata. |
 | UI Evidence | Seven `docs/evidence/windows-*.png` renders | Design mockups only; not live application captures or Narrator evidence. |
 | **Technical Acceptance Gates** | Interactive MSI install/runtime, Narrator verification, strict dependency verification | **BLOCKED** pending operator prerequisites; package metadata inspection is not proof of installed runtime behavior. |
@@ -309,11 +309,11 @@ Phase 01 delivers the frozen data contract, temporal model, and safe transition 
 
 | Deliverable | Implementation Scope | Verification Status |
 |---|---|---|
-| Canonical Schemas | `integration/glean-hub/doggo-schema-v1.json`, `doggo-schema-v2.json` | Schemas defined; SHA-256 fingerprints `3361a80f...` and `5f539551...` verified. |
+| Canonical Schemas | `integration/glean-hub/tabbyrush-schema-v1.json`, `tabbyrush-schema-v2.json` | Schemas defined; SHA-256 fingerprints `3361a80f...` and `5f539551...` verified. |
 | Cryptographic Vectors | `integration/glean-hub/strict-v2-vectors.json` | 20 reference test vectors (9 valid + 11 rejections) verified across Kotlin, Rust, and Node.js test runners. |
-| Kotlin Domain Contracts | `shared/src/commonMain/kotlin/dev/doggo/shared/contract/strict-sync-v2-contract.kt` | Implemented; `StrictV2TodoData`, checked 64-bit arithmetic, validation invariants. |
-| Binary Preimage Engine | `shared/src/commonMain/kotlin/dev/doggo/shared/contract/strict-sync-v2-digest.kt` | Implemented; `StrictSyncV2Digest` SHA-256 framing and encoding verified. |
-| Unit & Vector Tests | `shared/src/commonTest/kotlin/dev/doggo/shared/contract/strict-v2-digest-*.kt` | 10 tests across 2 test files (`StrictV2DigestVectorTest`, `StrictV2DigestExtendedTest`) passing in `:shared:jvmTest`. |
+| Kotlin Domain Contracts | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/strict-sync-v2-contract.kt` | Implemented; `StrictV2TodoData`, checked 64-bit arithmetic, validation invariants. |
+| Binary Preimage Engine | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/strict-sync-v2-digest.kt` | Implemented; `StrictSyncV2Digest` SHA-256 framing and encoding verified. |
+| Unit & Vector Tests | `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/strict-v2-digest-*.kt` | 10 tests across 2 test files (`StrictV2DigestVectorTest`, `StrictV2DigestExtendedTest`) passing in `:shared:jvmTest`. |
 | Node.js Vector Runner | `scripts/strict-v2-vector-runner.mjs` | Node.js test runner verifying vectors and schema fingerprint hashing (20/20 PASS). |
 | Vector Generator | `scripts/generate-strict-v2-vectors.mjs` | Reference fixture generator script implemented. |
 | Documentation & Review | `docs/system-architecture.md`, `local-storage-and-sync.md`, `hub-schema-integration.md` | Documented; QA report ([QA Report](../plans/reports/qa-261015-0938-phase-01-freeze-temporal-model.md)) and Code Review ([Review Report](../plans/reports/code-review-261015-0951-phase-01-freeze-temporal-model.md)) approved (Gate G1 passed; Phases 02–12 implementation delivered under Plan 261015-0752; live production cutover blocked at Gate G7). |
@@ -338,7 +338,7 @@ Phase 01 delivers the frozen data contract, temporal model, and safe transition 
 
 ## 14. Traceability & Phased Roadmap
 
-Progress across the Doggo project is tracked in the living [Project Roadmap](./project-roadmap.md):
+Progress across the TabbyRush project is tracked in the living [Project Roadmap](./project-roadmap.md):
 - **Phase 01 Tooling & Environment**: Scripts and documentation implemented (DONE); runtime GUI gate pending interactive attachment.
 - **Phase 02 Frozen Foundation & Contracts**: Staged Gradle build system, SHA-256 pinned wrapper, shared module configuration, common domain contract sources, and test suites implemented (DONE).
 - **Phase 03 Hub Reuse & Strict Server**: Backend strict synchronization server, legacy isolation fences, admission preflight, schema integration, and operator tooling implemented across 26 files (Implementation Complete; 36 Rust tests pass; live MongoDB gates deferred to Phase 07).
@@ -348,7 +348,7 @@ Progress across the Doggo project is tracked in the living [Project Roadmap](./p
 - **Phase 07 Android Composition & Runtime Integration**: Native Android client module, process container, WorkManager background sync, debug network security config, manifest hardening, fault-injection proxy, smoke runner, and authored instrumented test suites delivered across 25 artifacts (Android source delivered; JVM regression suite 96/96 PASS; AGP bytecode compilation, connected device tests, and live framebuffer capture pending host SDK provisioning in Phase 08).
 - **Phase 08 Authorized Hub Operations & Signed Android Release**: Operational tooling, release security auditor (`scripts/release-security-check.mjs`), live strict smoke runner (`scripts/hub-live-smoke.mjs`), mongosh recovery script (`scripts/hub-strict-recovery.js`), deployment guide, security & recovery architecture, release acceptance specification, and evidence reports implemented across 20 artifacts (Tooling & harnesses operational; live bytecode compilation, binary signing verification, and live device acceptance gated on host SDK provisioning and Phase 07 defect remediation).
 - **Phase 09 Linux Desktop & Installed RPM Distribution**: Native Linux desktop module (`:desktopApp`), Secret Service hardware/OS vault SPI (`CredentialVaultProvider`), ServiceLoader dispatcher (`PlatformVaultDispatcher`), `SingleInstanceGuard` file-channel lock, `DesktopSyncScheduler` foreground sync coordination, packaging smoke runner (`scripts/linux-package-smoke.sh`), and unit test suites implemented across 23 artifacts (19/19 desktop tests PASS; standalone distributable assembled and inspected; live RPM packaging, installed smoke test, and interactive D-Bus session pending operator prerequisites).
-- **Phase 10 Windows Desktop & MSI Distribution**: DPAPI vault, Windows SPI, target lock/isolation, smoke harness, `Doggo.exe` distributable and MSI artifacts delivered; test/package evidence recorded. Interactive MSI installation, runtime/accessibility checks, uninstall/reinstall, and upstream Phase 09 acceptance remain pending.
+- **Phase 10 Windows Desktop & MSI Distribution**: DPAPI vault, Windows SPI, target lock/isolation, smoke harness, `TabbyRush.exe` distributable and MSI artifacts delivered; test/package evidence recorded. Interactive MSI installation, runtime/accessibility checks, uninstall/reinstall, and upstream Phase 09 acceptance remain pending.
 - **Task Deadlines, Reminders & Strict Protocol Upgrades (Plan 261015-0752, Phases 01–12)**:
   - **Implementation Effort**: 100% planned effort delivered (236h / 236h credited across Phases 01–12).
   - **Gate G1 (Contract & Transition Design)**: **PASSED** (canonical v1/v2 schemas, tri-stack binary digests, and 23 wire vectors frozen).
@@ -366,8 +366,8 @@ The separate Sticky Task Surfaces initiative (`plans/261016-1409-sticky-task-sur
 - `SurfaceAccountToken` binds an `AccountKey` to its runtime generation. `TaskSurfaceAccess` admits reads, desired-state completion, publication and navigation only for the current token; non-ready states do not publish task content.
 - `AccountStore.observeTodos()` feeds current task snapshots to the surfaces. `setCompletedLocally(id, completed, nowEpochMs)` performs an atomic desired-state update from a fresh projection, preserving other current fields.
 - Shared projections partition non-deleted tasks without reordering and select overdue deadlines before upcoming ones, with deterministic deadline/task-ID ordering and conflict metadata. Reminder enablement does not gate deadline selection.
-- Android `DoggoTaskWidget` is a responsive Glance app widget with Incomplete and Completed sections and Open, Add and desired-completion actions. `TaskSurfaceNotificationCoordinator` publishes one opt-in, low-importance notification without sound, vibration or badge; task detail is private, with generic public lock-screen text.
-- Desktop `StickyTaskContent` is composed in a separate compact Compose `Window` requesting `alwaysOnTop`; the tray offers Open Doggo, Show/Hide Sticky Tasks and Quit when supported. Quick-add is isolated from the main editor. Closing a window hides it; explicit Quit performs runtime teardown. A missing/unusable tray must not strand the process with every window hidden.
+- Android `TabbyRushTaskWidget` is a responsive Glance app widget with Incomplete and Completed sections and Open, Add and desired-completion actions. `TaskSurfaceNotificationCoordinator` publishes one opt-in, low-importance notification without sound, vibration or badge; task detail is private, with generic public lock-screen text.
+- Desktop `StickyTaskContent` is composed in a separate compact Compose `Window` requesting `alwaysOnTop`; the tray offers Open TabbyRush, Show/Hide Sticky Tasks and Quit when supported. Quick-add is isolated from the main editor. Closing a window hides it; explicit Quit performs runtime teardown. A missing/unusable tray must not strand the process with every window hidden.
 - Android task-surface preferences and desktop sticky-window geometry/visibility are local presentation state, not synchronized task fields. Linux-specific session acceptance is not inferred from shared desktop behavior.
 
 ### 15.2 Review, Verification and Remaining Gates

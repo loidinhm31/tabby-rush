@@ -5,7 +5,7 @@
  * Automated test suite for release-security-check.mjs exported components validator.
  * Validates the narrow allowlist policy:
  * - MainActivity (exported=true) is allowed ONLY with exact canonical class name.
- * - DoggoTaskWidgetReceiver (exported=true) is allowed ONLY with exact canonical class name,
+ * - TabbyRushTaskWidgetReceiver (exported=true) is allowed ONLY with exact canonical class name,
  *   exact APPWIDGET_UPDATE action inside <intent-filter>, no extra actions/categories/data,
  *   and exact @xml/task_widget_info or @xml/task-widget-info provider meta-data.
  * - All other exported activities, receivers, services, and providers are rejected.
@@ -17,10 +17,10 @@ import { validateExportedComponents } from './release-security-check.mjs';
 
 describe('Release Security Check: Exported Components Auditor', () => {
 
-  it('passes on canonical release manifest with MainActivity and verified DoggoTaskWidgetReceiver', () => {
+  it('passes on canonical release manifest with MainActivity and verified TabbyRushTaskWidgetReceiver', () => {
     const validManifest = `
       <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-        <application android:name=".DoggoApplication">
+        <application android:name=".TabbyRushApplication">
           <activity
               android:name=".MainActivity"
               android:exported="true">
@@ -31,7 +31,7 @@ describe('Release Security Check: Exported Components Auditor', () => {
           </activity>
 
           <receiver
-              android:name=".DoggoTaskWidgetReceiver"
+              android:name=".TabbyRushTaskWidgetReceiver"
               android:exported="true">
               <intent-filter>
                   <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -43,7 +43,7 @@ describe('Release Security Check: Exported Components Auditor', () => {
 
           <receiver android:name=".TaskSurfaceActionReceiver" android:exported="false" />
           <receiver android:name=".TaskSurfaceDismissReceiver" android:exported="false" />
-          <receiver android:name=".DoggoAlarmReceiver" android:exported="false" />
+          <receiver android:name=".TabbyRushAlarmReceiver" android:exported="false" />
         </application>
       </manifest>
     `;
@@ -66,12 +66,12 @@ describe('Release Security Check: Exported Components Auditor', () => {
     assert.match(issues[0], /Exported activity is not MainActivity: com\.attacker\.MainActivity/);
   });
 
-  it('rejects foreign-package lookalike for DoggoTaskWidgetReceiver', () => {
+  it('rejects foreign-package lookalike for TabbyRushTaskWidgetReceiver', () => {
     const manifest = `
       <manifest>
         <application>
           <activity android:name=".MainActivity" android:exported="true" />
-          <receiver android:name="com.malicious.DoggoTaskWidgetReceiver" android:exported="true">
+          <receiver android:name="com.malicious.TabbyRushTaskWidgetReceiver" android:exported="true">
             <intent-filter>
               <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -85,7 +85,7 @@ describe('Release Security Check: Exported Components Auditor', () => {
 
     const issues = validateExportedComponents(manifest);
     assert.equal(issues.length, 1);
-    assert.match(issues[0], /Exported receiver is not DoggoTaskWidgetReceiver: com\.malicious\.DoggoTaskWidgetReceiver/);
+    assert.match(issues[0], /Exported receiver is not TabbyRushTaskWidgetReceiver: com\.malicious\.TabbyRushTaskWidgetReceiver/);
   });
 
   it('rejects any exported service', () => {
@@ -118,7 +118,7 @@ describe('Release Security Check: Exported Components Auditor', () => {
     assert.match(issues[0], /Non-main provider is exported: \.LeakContentProvider/);
   });
 
-  it('rejects exported receiver other than DoggoTaskWidgetReceiver', () => {
+  it('rejects exported receiver other than TabbyRushTaskWidgetReceiver', () => {
     const manifest = `
       <manifest>
         <application>
@@ -130,15 +130,15 @@ describe('Release Security Check: Exported Components Auditor', () => {
 
     const issues = validateExportedComponents(manifest);
     assert.equal(issues.length, 1);
-    assert.match(issues[0], /Exported receiver is not DoggoTaskWidgetReceiver: \.ArbitraryExportedReceiver/);
+    assert.match(issues[0], /Exported receiver is not TabbyRushTaskWidgetReceiver: \.ArbitraryExportedReceiver/);
   });
 
-  it('rejects DoggoTaskWidgetReceiver missing APPWIDGET_UPDATE action', () => {
+  it('rejects TabbyRushTaskWidgetReceiver missing APPWIDGET_UPDATE action', () => {
     const manifest = `
       <manifest>
         <application>
           <activity android:name=".MainActivity" android:exported="true" />
-          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+          <receiver android:name=".TabbyRushTaskWidgetReceiver" android:exported="true">
             <intent-filter>
               <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
@@ -155,12 +155,12 @@ describe('Release Security Check: Exported Components Auditor', () => {
     assert.ok(issues.some(i => i.includes('unauthorized exported action')));
   });
 
-  it('rejects DoggoTaskWidgetReceiver containing unauthorized category in intent filter', () => {
+  it('rejects TabbyRushTaskWidgetReceiver containing unauthorized category in intent filter', () => {
     const manifest = `
       <manifest>
         <application>
           <activity android:name=".MainActivity" android:exported="true" />
-          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+          <receiver android:name=".TabbyRushTaskWidgetReceiver" android:exported="true">
             <intent-filter>
               <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
               <category android:name="android.intent.category.DEFAULT" />
@@ -178,12 +178,12 @@ describe('Release Security Check: Exported Components Auditor', () => {
     assert.match(issues[0], /unauthorized <category>/);
   });
 
-  it('rejects DoggoTaskWidgetReceiver containing unauthorized data in intent filter', () => {
+  it('rejects TabbyRushTaskWidgetReceiver containing unauthorized data in intent filter', () => {
     const manifest = `
       <manifest>
         <application>
           <activity android:name=".MainActivity" android:exported="true" />
-          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+          <receiver android:name=".TabbyRushTaskWidgetReceiver" android:exported="true">
             <intent-filter>
               <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
               <data android:scheme="http" />
@@ -201,12 +201,12 @@ describe('Release Security Check: Exported Components Auditor', () => {
     assert.match(issues[0], /unauthorized <data>/);
   });
 
-  it('rejects DoggoTaskWidgetReceiver missing intent-filter', () => {
+  it('rejects TabbyRushTaskWidgetReceiver missing intent-filter', () => {
     const manifest = `
       <manifest>
         <application>
           <activity android:name=".MainActivity" android:exported="true" />
-          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+          <receiver android:name=".TabbyRushTaskWidgetReceiver" android:exported="true">
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/task_widget_info" />
@@ -220,12 +220,12 @@ describe('Release Security Check: Exported Components Auditor', () => {
     assert.match(issues[0], /missing <intent-filter>/);
   });
 
-  it('rejects DoggoTaskWidgetReceiver missing provider meta-data', () => {
+  it('rejects TabbyRushTaskWidgetReceiver missing provider meta-data', () => {
     const manifest = `
       <manifest>
         <application>
           <activity android:name=".MainActivity" android:exported="true" />
-          <receiver android:name=".DoggoTaskWidgetReceiver" android:exported="true">
+          <receiver android:name=".TabbyRushTaskWidgetReceiver" android:exported="true">
             <intent-filter>
               <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

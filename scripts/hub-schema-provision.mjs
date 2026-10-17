@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Doggo Hub Schema Provisioning Script
+ * TabbyRush Hub Schema Provisioning Script
  * Provisions strict-v1 app schema on Glean Hub, performs mandatory read-back verification,
  * and outputs the provisioned credentials with strict mode 0600 key custody.
  */
@@ -13,7 +13,7 @@ function parseArgs() {
   const options = {
     origin: process.env.GLEAN_ORIGIN || 'http://127.0.0.1:3000',
     token: process.env.GLEAN_ADMIN_TOKEN || '',
-    schemaPath: resolve(process.cwd(), 'integration/glean-hub/doggo-schema.json'),
+    schemaPath: resolve(process.cwd(), 'integration/glean-hub/tabbyrush-schema.json'),
     outPath: null,
   };
 

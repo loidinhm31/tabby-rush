@@ -3,7 +3,7 @@
 **Date:** 2026-10-14
 **Target:** Phase 04 Hub Authentication, Protected Session, and Contract Test Suites
 **Command:** `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`
-**Environment:** Linux x86_64 (`/home/loidinh/WS/doggo`), OpenJDK 21.0.8
+**Environment:** Linux x86_64 (`/home/loidinh/WS/tabbyrush`), OpenJDK 21.0.8
 
 ---
 
@@ -11,13 +11,13 @@
 
 | Test Suite | Class FQCN | Total | Passed | Failed | Skipped | Status |
 |---|---|---:|---:|---:|---:|:---:|
-| **Single-Flight Refresh** | `dev.doggo.shared.auth.SingleFlightRefreshTest` | 4 | 4 | 0 | 0 | **PASS** |
-| **Hub Auth Client** | `dev.doggo.shared.auth.HubAuthClientTest` | 8 | 8 | 0 | 0 | **PASS** |
-| **Hub Auth Session** | `dev.doggo.shared.auth.HubAuthSessionTest` | 6 | 6 | 0 | 0 | **PASS** |
-| **Account Key Contract** | `dev.doggo.shared.contract.AccountKeyTest` | 5 | 5 | 0 | 0 | **PASS** |
-| **Endpoint Policy Contract** | `dev.doggo.shared.contract.EndpointPolicyTest` | 8 | 8 | 0 | 0 | **PASS** |
-| **Strict Digest Contract** | `dev.doggo.shared.contract.StrictDigestTest` | 5 | 5 | 0 | 0 | **PASS** |
-| **Title Policy Contract** | `dev.doggo.shared.contract.TitlePolicyTest` | 6 | 6 | 0 | 0 | **PASS** |
+| **Single-Flight Refresh** | `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | 4 | 4 | 0 | 0 | **PASS** |
+| **Hub Auth Client** | `dev.tabbyrush.shared.auth.HubAuthClientTest` | 8 | 8 | 0 | 0 | **PASS** |
+| **Hub Auth Session** | `dev.tabbyrush.shared.auth.HubAuthSessionTest` | 6 | 6 | 0 | 0 | **PASS** |
+| **Account Key Contract** | `dev.tabbyrush.shared.contract.AccountKeyTest` | 5 | 5 | 0 | 0 | **PASS** |
+| **Endpoint Policy Contract** | `dev.tabbyrush.shared.contract.EndpointPolicyTest` | 8 | 8 | 0 | 0 | **PASS** |
+| **Strict Digest Contract** | `dev.tabbyrush.shared.contract.StrictDigestTest` | 5 | 5 | 0 | 0 | **PASS** |
+| **Title Policy Contract** | `dev.tabbyrush.shared.contract.TitlePolicyTest` | 6 | 6 | 0 | 0 | **PASS** |
 | **TOTAL (JVM Common)** | *All 7 Common JVM Suites* | **42** | **42** | **0** | **0** | **PASS (100%)** |
 
 ---
@@ -35,14 +35,14 @@
 - `testRegisterSuccessAndHeaders`: PASS. Verifies `/api/v1/auth/register` payload serialization; asserts public auth routes omit `Authorization` and `X-API-Key`.
 - `testLoginSuccessAndErrorHandling`: PASS. Verifies `/api/v1/auth/login` DTO parsing (`userId`, `accessToken`, `refreshToken`, `apps`, `isAdmin`) and maps HTTP 401 to `SafeError.Unauthorized`.
 - `testRefreshSuccess`: PASS. Verifies `/api/v1/auth/refresh` request and successor tokens deserialization.
-- `testGetMeWithBearerToken`: PASS. Injects `Bearer <token>` into `Authorization` header on `/api/v1/auth/me`; validates `hasDoggoAccess` evaluation.
-- `testAccessRequestCreationAndListing`: PASS. Tests creation (`POST /api/v1/apps/access-requests`) and listing (`GET /api/v1/apps/access-requests`) for cooperative doggo approval.
+- `testGetMeWithBearerToken`: PASS. Injects `Bearer <token>` into `Authorization` header on `/api/v1/auth/me`; validates `hasTabbyRushAccess` evaluation.
+- `testAccessRequestCreationAndListing`: PASS. Tests creation (`POST /api/v1/apps/access-requests`) and listing (`GET /api/v1/apps/access-requests`) for cooperative tabbyrush approval.
 - `testEndpointAllowlistAndDualAuthHeaders`: PASS. Injects `X-API-Key` and `X-App-Id` on strict sync endpoints (`/api/v1/sync/:app_id/strong/*`); rejects legacy non-allowlisted routes client-side with `SafeError.ProtocolIncompatible("DISALLOWED_ENDPOINT")`.
 - `testSanitizeErrorMessageStripsHtml`: PASS. Sanitizes raw HTML server error pages (502 Bad Gateway), stripping markup to prevent UI injection and log noise.
 
 ### 2.3 HubAuthSessionTest (6/6 PASS)
-- `testLoginSuccessWithDoggoAccess`: PASS. Full login flow where `/me` returns `apps: ["doggo"]`; transitions session state to `AuthState.AUTHENTICATED`, sets `currentIdentity` and `currentAccountKey`, and persists bundle to vault.
-- `testLoginSuccessWithoutDoggoAccessTransitionsToAccessPending`: PASS. Login where user lacks doggo approval; session transitions to `AuthState.ACCESS_PENDING`.
+- `testLoginSuccessWithTabbyRushAccess`: PASS. Full login flow where `/me` returns `apps: ["tabby-rush"]`; transitions session state to `AuthState.AUTHENTICATED`, sets `currentIdentity` and `currentAccountKey`, and persists bundle to vault.
+- `testLoginSuccessWithoutTabbyRushAccessTransitionsToAccessPending`: PASS. Login where user lacks tabbyrush approval; session transitions to `AuthState.ACCESS_PENDING`.
 - `testLoginMismatchedUserIdRejected`: PASS. Rejects login if `/me` user ID mismatches `/login` user ID; resets state to `AuthState.UNAUTHENTICATED`, leaving vault unwritten.
 - `testOfflineSessionRestore`: PASS. Restores session from cached `AccountIdentity` and `AccountKey` using local vault credentials while network is offline (HTTP engine throws exception).
 - `testAuthorizedRequest401DoesNotReplayPostAutomatically`: PASS. Proves critical invariant: when 401 occurs during `authorizedRequest`, refresh succeeds but the method returns `TOKEN_REFRESHED` error instead of auto-replaying POST payload, preserving idempotent caller control.
@@ -58,12 +58,12 @@
 
 ## 3. Keystore Vault Test Definitions & Android Status
 
-**Static Test Definitions File:** `shared/src/androidInstrumentedTest/kotlin/dev/doggo/shared/auth/android-keystore-vault-test.kt`
+**Static Test Definitions File:** `shared/src/androidInstrumentedTest/kotlin/dev/tabbyrush/shared/auth/android-keystore-vault-test.kt`
 **Runner:** `AndroidJUnit4`
 **7 Defined Test Cases:**
 1. `testStoreAndLoadCredentials`: Round-trip storage and retrieval under Android Keystore AES-256-GCM.
 2. `testFreshNoncePerWrite`: Verifies 12-byte random IV differs between consecutive writes.
-3. `testAadBindingPreventsCrossAccountDecryption`: Verifies ciphertext written under Account A cannot be decrypted under Account B due to AAD mismatch (`"doggo_vault_v1:" || accountKey`).
+3. `testAadBindingPreventsCrossAccountDecryption`: Verifies ciphertext written under Account A cannot be decrypted under Account B due to AAD mismatch (`"tabbyrush_vault_v1:" || accountKey`).
 4. `testCorruptMagicHeaderDetection`: Detects corrupted magic header (`DGV1`) and flags `VaultStatus.CORRUPT`.
 5. `testTruncatedVaultFileDetection`: Detects truncated vault file (< 20 bytes) and flags `VaultStatus.CORRUPT`.
 6. `testTamperedCiphertextDetection`: Detects flipped bits in ciphertext/tag via GCM auth tag check and flags `VaultStatus.CORRUPT`.
@@ -77,12 +77,12 @@
 
 ### Plan Authority for Deferral:
 The deferral of Android compilation and instrumented Keystore tests to Phase 07 is explicitly defined and governed by the project roadmap:
-- `plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md` (Line 11):
+- `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-04-auth-session.md` (Line 11):
   *"Group C after 02; independent coding 03/05/06... Test source ready here; common/instrumented execution coordinated 07; live Hub 03 needed for runtime."*
-- `plans/261013-1540-doggo-glean-hub-reuse/dependency-matrix.md` (Line 26 & 38):
+- `plans/261013-1540-tabbyrush-glean-hub-reuse/dependency-matrix.md` (Line 26 & 38):
   *"04 auth: Consumes frozen vault/route contracts; Android Keystore device run coordinated in 07 common/Keystore execution... 07 runs tuple-mapped :shared:allTests, shared Android instrumented Room/Keystore suites... in a single coordinated batch after lanes."*
 - `docs/auth-acceptance.md` (Line 59):
-  *"Android Keystore Test | dev.doggo.shared.auth.AndroidKeystoreVaultTest | Android Instrumented | Phase 07"*
+  *"Android Keystore Test | dev.tabbyrush.shared.auth.AndroidKeystoreVaultTest | Android Instrumented | Phase 07"*
 
 *Note on Hardware Assurance:* Execution on an Android emulator in Phase 07 will exercise the Android Keystore API implementation, but does not provide real TEE/hardware-backed security guarantees (which require physical hardware with StrongBox or TEE support).
 

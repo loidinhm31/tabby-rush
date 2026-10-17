@@ -2,15 +2,15 @@
 
 **Date:** 2026-10-14
 **Agent:** Phase02ProjectManager
-**Target Plan:** `plans/261013-1540-doggo-glean-hub-reuse/plan.md`
-**Phase File:** `plans/261013-1540-doggo-glean-hub-reuse/phase-02-frozen-foundation.md`
+**Target Plan:** `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md`
+**Phase File:** `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-02-frozen-foundation.md`
 **Roadmap:** `docs/project-roadmap.md`
 
 ---
 
 ## 1. Executive Summary & Achievements
 
-Phase 02 (Frozen Foundation & Contracts) establishes the core multiplatform build architecture, dependency version catalog, and complete contract surface for the Doggo Glean Hub reuse project.
+Phase 02 (Frozen Foundation & Contracts) establishes the core multiplatform build architecture, dependency version catalog, and complete contract surface for the TabbyRush Glean Hub reuse project.
 
 ### Key Achievements Delivered
 1. **Multiplatform Gradle Baseline**:
@@ -20,12 +20,12 @@ Phase 02 (Frozen Foundation & Contracts) establishes the core multiplatform buil
    - Configured strict dependency locking (`shared/gradle.lockfile`) and verification metadata (`gradle/verification-metadata.xml`).
 
 2. **Shared Contract Specifications (16 Files)**:
-   - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/` populated with: `strict-sync-contract.kt`, `endpoint-policy.kt`, `title-policy.kt`, `todo-action.kt`, `todo-ui-state.kt`, `todo-models.kt`, `app-factories.kt`, `sync-scheduler.kt`, `sync-coordinator.kt`, `account-store.kt`, `auth-session.kt`, `credential-vault.kt`, `account-key.kt`, `account-identity.kt`, `hub-config.kt`, `safe-errors.kt`.
-   - Verified package uniformity (`dev.doggo.shared.contract`), zero `android.*` imports in shared contracts, and strict string redaction for `CredentialBundle.toString()` and `HubConfig.toString()`.
+   - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/` populated with: `strict-sync-contract.kt`, `endpoint-policy.kt`, `title-policy.kt`, `todo-action.kt`, `todo-ui-state.kt`, `todo-models.kt`, `app-factories.kt`, `sync-scheduler.kt`, `sync-coordinator.kt`, `account-store.kt`, `auth-session.kt`, `credential-vault.kt`, `account-key.kt`, `account-identity.kt`, `hub-config.kt`, `safe-errors.kt`.
+   - Verified package uniformity (`dev.tabbyrush.shared.contract`), zero `android.*` imports in shared contracts, and strict string redaction for `CredentialBundle.toString()` and `HubConfig.toString()`.
    - Implemented NIST SHA-256 canonical digest vectors and scalar title validation policies.
 
 3. **CommonTest Test Suites (4 Files)**:
-   - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/`: `strict-digest-test.kt`, `title-policy-test.kt`, `endpoint-policy-test.kt`, `account-key-test.kt`.
+   - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/`: `strict-digest-test.kt`, `title-policy-test.kt`, `endpoint-policy-test.kt`, `account-key-test.kt`.
 
 4. **Technical Documentation**:
    - `docs/system-architecture.md`, `docs/api-contract.md`, `docs/code-standards.md`, `docs/toolchain-versions.md`, `docs/foundation-evidence.md`.
@@ -40,10 +40,10 @@ Phase 02 (Frozen Foundation & Contracts) establishes the core multiplatform buil
 
 | File | Previous Status | Updated Status | Details |
 |---|---|---|---|
-| `plans/261013-1540-doggo-glean-hub-reuse/plan.md` | `status: pending` / Phase 02 `pending0%` | `status: in-progress` / Phase 02 `completed / 100% (2026-10-14)` | Updated parent frontmatter and phase tracking table |
-| `plans/261013-1540-doggo-glean-hub-reuse/phase-02-frozen-foundation.md` | `Implementation status: pending (0%)` | `Implementation status: completed (100% - 2026-10-14)` | Checked all todo items; updated unresolved questions |
+| `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md` | `status: pending` / Phase 02 `pending0%` | `status: in-progress` / Phase 02 `completed / 100% (2026-10-14)` | Updated parent frontmatter and phase tracking table |
+| `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-02-frozen-foundation.md` | `Implementation status: pending (0%)` | `Implementation status: completed (100% - 2026-10-14)` | Checked all todo items; updated unresolved questions |
 | `docs/project-roadmap.md` | Phase 02 `Pending` (0%) | Phase 02 **`DONE`** (100% - 2026-10-14) | Updated overall completion to 12% (18h/148h); updated Milestone 2 and Milestone 3; added [0.2.0-alpha.1] changelog |
-| `plans/261013-0914-doggo-compose-todos/plan.md` | Phase 02 `pending / 0%` | Phase 02 `pending / 0% (superseded)` | Explicitly marked historical/superseded to avoid cross-plan confusion |
+| `plans/261013-0914-tabbyrush-compose-todos/plan.md` | Phase 02 `pending / 0%` | Phase 02 `pending / 0% (superseded)` | Explicitly marked historical/superseded to avoid cross-plan confusion |
 
 ---
 

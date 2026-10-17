@@ -1,8 +1,8 @@
-# Doggo Frozen Toolchain Versions & Compatibility Tuple
+# TabbyRush Frozen Toolchain Versions & Compatibility Tuple
 
 Date: 2026-10-17  
 Phase: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
-Plan: `plans/261016-1409-sticky-task-surfaces` (and `plans/261013-1540-doggo-glean-hub-reuse`)  
+Plan: `plans/261016-1409-sticky-task-surfaces` (and `plans/261013-1540-tabbyrush-glean-hub-reuse`)  
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [API Contract](./api-contract.md) · [Foundation Evidence](./foundation-evidence.md)
 
 ---
@@ -63,8 +63,8 @@ The following version tuple is frozen for Phase 02 and governs all downstream im
 
 To maintain strict file ownership and prevent broken builds during multi-phase implementation:
 1. `shared` is registered immediately in `settings.gradle.kts`.
-2. `androidApp` is included conditionally: only when `/home/loidinh/WS/doggo/androidApp/build.gradle.kts` exists on disk.
-3. `desktopApp` is included conditionally: only when `/home/loidinh/WS/doggo/desktopApp/build.gradle.kts` exists on disk.
+2. `androidApp` is included conditionally: only when `/home/loidinh/WS/tabbyrush/androidApp/build.gradle.kts` exists on disk.
+3. `desktopApp` is included conditionally: only when `/home/loidinh/WS/tabbyrush/desktopApp/build.gradle.kts` exists on disk.
 4. **Zero Stub Applications**: Neither `androidApp` nor `desktopApp` stubs are created in Phase 02. Phase 07 owns `androidApp`; Phase 09 owns `desktopApp`.
 
 ## 4. Phase 07 Reported Build and Test Environment

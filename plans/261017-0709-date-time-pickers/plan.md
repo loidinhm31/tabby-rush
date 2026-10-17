@@ -30,7 +30,7 @@ Phase 01 shared API + utility tests -> [Phase 02 deadline || Phase 03 settings] 
 | [04 Integration](phase-04-integration-tests.md) | Completed (administrative) | 5h | Unit suites, Android debug assembly, and desktop compilation passing; post-range-change :shared:jvmTest freshly rerun and passing (239/239). Rendered Compose and native platform acceptance remain conditionally open. |
 
 ## Exclusive file ownership matrix
-Paths below are repository-relative; `U = shared/src/commonMain/kotlin/dev/doggo/shared/ui`, `T = shared/src/commonTest/kotlin/dev/doggo/shared/ui`.
+Paths below are repository-relative; `U = shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui`, `T = shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui`.
 | Owner | Files allowed to change | Action |
 |---|---|---|
 | Phase 01 | `U/date-time-pickers.kt`; `T/date-time-pickers-test.kt` | Create shared UI/helpers and pure tests |

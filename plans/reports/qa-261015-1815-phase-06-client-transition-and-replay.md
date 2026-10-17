@@ -3,7 +3,7 @@
 **Date**: 2026-10-15  
 **Context**: Linux Fedora 44 x86_64 | JDK 21 LTS (`/home/loidinh/.local/share/jvm/jdk-21`) | Gradle 8.11.1 | Node.js v24.16.0  
 **Target Phase**: `phase-06-client-version-transition-and-replay`  
-**Working Directory**: `/home/loidinh/WS/doggo`  
+**Working Directory**: `/home/loidinh/WS/tabbyrush`  
 
 ---
 
@@ -31,26 +31,26 @@
 
 | Test Class | Scope / Target | Passed | Failed | Skipped |
 |---|---|:---:|:---:|:---:|
-| `dev.doggo.shared.auth.HubAuthClientTest` | Registration, login, token refresh, access request | 9 | 0 | 0 |
-| `dev.doggo.shared.auth.HubAuthSessionTest` | Auth state machine, local logout, 401 guard | 8 | 0 | 0 |
-| `dev.doggo.shared.auth.SingleFlightRefreshTest` | Refresh deduplication, concurrency, safe error | 3 | 0 | 0 |
-| `dev.doggo.shared.contract.AccountKeyTest` | Account key framing, determinism, validation | 5 | 0 | 0 |
-| `dev.doggo.shared.contract.EndpointPolicyTest` | Origin sanitization, HTTPS enforcement, debug rules | 8 | 0 | 0 |
-| `dev.doggo.shared.contract.StrictDigestTest` | SHA-256 vectors, deterministic canonical payload | 5 | 0 | 0 |
-| `dev.doggo.shared.contract.StrictTimeZoneResolverTest` | Standard time, DST overlap/gap, 23/25h boundary | 7 | 0 | 0 |
-| `dev.doggo.shared.contract.StrictV2DigestExtendedTest` | Negative epoch, unicode title/zone, max i64 rev | 6 | 0 | 0 |
-| `dev.doggo.shared.contract.StrictV2DigestVectorTest` | Date-only, repeating count, null defaults, DST | 5 | 0 | 0 |
-| `dev.doggo.shared.contract.TaskDeadlineReminderModelsTest` | Valid date-only/timed, last reminder bounds, tokens | 6 | 0 | 0 |
-| `dev.doggo.shared.contract.TitlePolicyTest` | Length bounds, surrogate validation, astral emoji | 6 | 0 | 0 |
-| `dev.doggo.shared.data.RoomAccountStoreTest` | BundledSQLite persistence, non-destructive rebasing, atomic cleanup, schedule token rotation | 21 | 0 | 0 |
-| `dev.doggo.shared.data.RoomMigrationV1ToV2Test` | Explicit v1->v2 Room schema migration | 1 | 0 | 0 |
-| `dev.doggo.shared.sync.AccountLeaveProtocolTest` | Teardown guard, fail-closed wipe, review check | 7 | 0 | 0 |
-| `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | Upgrade detection, quiescence, receipt rebase, v2 push | 9 | 0 | 0 |
-| `dev.doggo.shared.sync.ContractTransitionTest` | Transition coordinator, phase resume, superseded blocks, review gating | 4 | 0 | 0 |
-| `dev.doggo.shared.sync.HubSyncClientTest` | Bootstrap v2, receipt fetch, push/pull envelopes | 12 | 0 | 0 |
-| `dev.doggo.shared.sync.OutboxReconciliationTest` | Optimistic lock, FIFO batch, receipt match, CAS ack | 12 | 0 | 0 |
-| `dev.doggo.shared.sync.StagedFullScanTest` | Multi-page full scan, monotonic promotion, cursor loop | 13 | 0 | 0 |
-| `dev.doggo.shared.ui.TodoSemanticsTest` | Semantics, accessibility contrast, conflict warning copy | 8 | 0 | 0 |
+| `dev.tabbyrush.shared.auth.HubAuthClientTest` | Registration, login, token refresh, access request | 9 | 0 | 0 |
+| `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Auth state machine, local logout, 401 guard | 8 | 0 | 0 |
+| `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Refresh deduplication, concurrency, safe error | 3 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.AccountKeyTest` | Account key framing, determinism, validation | 5 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.EndpointPolicyTest` | Origin sanitization, HTTPS enforcement, debug rules | 8 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.StrictDigestTest` | SHA-256 vectors, deterministic canonical payload | 5 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.StrictTimeZoneResolverTest` | Standard time, DST overlap/gap, 23/25h boundary | 7 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.StrictV2DigestExtendedTest` | Negative epoch, unicode title/zone, max i64 rev | 6 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.StrictV2DigestVectorTest` | Date-only, repeating count, null defaults, DST | 5 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.TaskDeadlineReminderModelsTest` | Valid date-only/timed, last reminder bounds, tokens | 6 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.TitlePolicyTest` | Length bounds, surrogate validation, astral emoji | 6 | 0 | 0 |
+| `dev.tabbyrush.shared.data.RoomAccountStoreTest` | BundledSQLite persistence, non-destructive rebasing, atomic cleanup, schedule token rotation | 21 | 0 | 0 |
+| `dev.tabbyrush.shared.data.RoomMigrationV1ToV2Test` | Explicit v1->v2 Room schema migration | 1 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | Teardown guard, fail-closed wipe, review check | 7 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | Upgrade detection, quiescence, receipt rebase, v2 push | 9 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.ContractTransitionTest` | Transition coordinator, phase resume, superseded blocks, review gating | 4 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.HubSyncClientTest` | Bootstrap v2, receipt fetch, push/pull envelopes | 12 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | Optimistic lock, FIFO batch, receipt match, CAS ack | 12 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.StagedFullScanTest` | Multi-page full scan, monotonic promotion, cursor loop | 13 | 0 | 0 |
+| `dev.tabbyrush.shared.ui.TodoSemanticsTest` | Semantics, accessibility contrast, conflict warning copy | 8 | 0 | 0 |
 
 ---
 
@@ -63,12 +63,12 @@
 
 | Test Class | Scope / Target | Passed | Failed | Skipped |
 |---|---|:---:|:---:|:---:|
-| `dev.doggo.desktop.DesktopControllerEnvTest` | Environment bootstrap, hub config parsing | 4 | 0 | 0 |
-| `dev.doggo.desktop.DesktopLifecycleTest` | App startup, shutdown hooks, controller dispatch | 8 | 0 | 0 |
-| `dev.doggo.desktop.DotEnvLoaderTest` | Local env parsing, comments, precedence | 5 | 0 | 0 |
-| `dev.doggo.desktop.PlatformVaultDispatcherTest` | Vault resolution across Linux/macOS/Windows | 5 | 0 | 0 |
-| `dev.doggo.desktop.linux.LinuxNotificationAdapterTest` | DBus freedesktop notification interface | 4 | 0 | 0 |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | Linux libsecret / secret-service integration | 6 | 0 | 0 |
+| `dev.tabbyrush.desktop.DesktopControllerEnvTest` | Environment bootstrap, hub config parsing | 4 | 0 | 0 |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | App startup, shutdown hooks, controller dispatch | 8 | 0 | 0 |
+| `dev.tabbyrush.desktop.DotEnvLoaderTest` | Local env parsing, comments, precedence | 5 | 0 | 0 |
+| `dev.tabbyrush.desktop.PlatformVaultDispatcherTest` | Vault resolution across Linux/macOS/Windows | 5 | 0 | 0 |
+| `dev.tabbyrush.desktop.linux.LinuxNotificationAdapterTest` | DBus freedesktop notification interface | 4 | 0 | 0 |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | Linux libsecret / secret-service integration | 6 | 0 | 0 |
 
 ---
 
@@ -129,12 +129,12 @@
 ## 8. Failure-Path & Contract Invariants Verified
 
 1. **Non-Destructive Intent-Masked Rebasing**: `RoomAccountStore.reconcileAccepted` preserves remote v2 deadline fields when reconciling v1 outbox updates or title-only v2 edits against equal/higher revision base.
-2. **Atomic Regressive Reconciliation Cleanup**: `DoggoDao.discardRegressiveReconcileAtomic` wraps `deleteDraft` and `deleteOutbox` into single SQLite transaction preventing orphaned stale edits when server revision regresses.
+2. **Atomic Regressive Reconciliation Cleanup**: `TabbyRushDao.discardRegressiveReconcileAtomic` wraps `deleteDraft` and `deleteOutbox` into single SQLite transaction preventing orphaned stale edits when server revision regresses.
 3. **Dispatch Quiescence & Checkpoint Resumption**: `ContractTransitionTest.testCrashResumptionFromCheckpoints` proves coordinator resumes from intermediate `V2_BASE_SCANNING` phase without re-requesting legacy receipts.
 4. **Receipt Ambiguity Conflict Preservation**: `ContractTransitionTest.testLegacyReceiptUnknownSupersededBlocksWithExplicitConflict` proves receipts with `unknownSuperseded` transition to `STATE_UNKNOWN_SUPERSEDED` for explicit user resolution rather than silent dropping or automated re-ID.
 5. **Review-Gated Intention Safety**: `ContractTransitionTest.testRequiresReviewDoesNotAutoTranslate` verifies ambiguous intentions marked with `INTENT_REQUIRES_REVIEW` transition to `STATE_CONFLICT` rather than automated v2 translation.
 6. **Schedule Token Rotation**: `RoomAccountStoreTest.testScheduleTokenPersistedAndRotatedOnSemanticChange` explicitly asserts scheduleToken rotates to new UUID upon semantic change and persists across reloads.
-7. **Delivery Files Tracking**: Implementation introduces `shared/src/commonMain/kotlin/dev/doggo/shared/sync/contract-transition-coordinator.kt` and `shared/src/commonTest/kotlin/dev/doggo/shared/sync/contract-transition-test.kt` which must be included in deliverable commit.
+7. **Delivery Files Tracking**: Implementation introduces `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/contract-transition-coordinator.kt` and `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/contract-transition-test.kt` which must be included in deliverable commit.
 
 ---
 

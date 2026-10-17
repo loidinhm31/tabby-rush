@@ -16,15 +16,15 @@ D-Bus/JNA presence is not delivery proof. Windows host-matched target guard prev
 ## Architecture
 - Android candidate: AlarmManager explicit immutable PendingIntent + BroadcastReceiver + NotificationManager channel. SCHEDULE_EXACT_ALARM, not restricted USE_EXACT_ALARM entitlement. Distinguish notification permission/channel from timing access.
 - Linux candidate: existing D-Bus Java session transport; `/org/freedesktop/Notifications`, `org.freedesktop.Notifications`, Notify/GetCapabilities/CloseNotification.
-- Windows first candidate: narrow JNA-backed WinRT/COM toast bridge using documented desktop AUMID route; stable AUMID `dev.doggo.desktop`, installer-set Start-menu shortcut property and process identity. Prove HRESULT/interface ownership, COM initialization/threading, XML escaping, tag/group history removal. If JNA bridge cannot be supported, choose a small bundled native helper/library on Windows only; same native contract, no tray substitution or raised OS minimum. Record selected dependency/license/checksum and packaging changes.
+- Windows first candidate: narrow JNA-backed WinRT/COM toast bridge using documented desktop AUMID route; stable AUMID `dev.tabbyrush.desktop`, installer-set Start-menu shortcut property and process identity. Prove HRESULT/interface ownership, COM initialization/threading, XML escaping, tag/group history removal. If JNA bridge cannot be supported, choose a small bundled native helper/library on Windows only; same native contract, no tray substitution or raised OS minimum. Record selected dependency/license/checksum and packaging changes.
 - Proof harness uses generic content and local input, no network; retain only reusable proven adapter parts, remove spike entrypoints afterward.
 - Strict resolver returns zero/one/two valid zone offsets for local anchor. Existing library preferred; narrow expect/actual JVM/Android ZoneRules permissible if common API cannot enumerate. Test runtime tzdb coverage on API26 and desktop.
 
 ## Related code files
 Modify during execution:
-- `/home/loidinh/WS/doggo/desktopApp/build.gradle.kts`, `gradle/libs.versions.toml`, `gradle/verification-metadata.xml`, target lockfiles if selected binding changes.
-- `/home/loidinh/WS/doggo/androidApp/src/main/AndroidManifest.xml`; preserve hardened manifest/export/backup policy.
-Create candidates under existing roots: Android `androidApp/src/main/kotlin/dev/doggo/android/` alarm/posting components; Linux `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-notification-adapter.kt`; Windows matching `windows-notification-adapter.kt`; shared strict timezone resolver contract/actuals. Final placement confirmed by phase 08/09 ownership.
+- `/home/loidinh/WS/tabbyrush/desktopApp/build.gradle.kts`, `gradle/libs.versions.toml`, `gradle/verification-metadata.xml`, target lockfiles if selected binding changes.
+- `/home/loidinh/WS/tabbyrush/androidApp/src/main/AndroidManifest.xml`; preserve hardened manifest/export/backup policy.
+Create candidates under existing roots: Android `androidApp/src/main/kotlin/dev/tabbyrush/android/` alarm/posting components; Linux `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-notification-adapter.kt`; Windows matching `windows-notification-adapter.kt`; shared strict timezone resolver contract/actuals. Final placement confirmed by phase 08/09 ownership.
 Evidence: existing `docs/android-acceptance.md`, `docs/linux-acceptance.md`, `docs/windows-acceptance.md` (mark proof vs final acceptance separately).
 
 ## Implementation Steps

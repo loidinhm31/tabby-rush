@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Doggo Linux Desktop & RPM Package Verification Smoke Runner
+# TabbyRush Linux Desktop & RPM Package Verification Smoke Runner
 # Phase 09 Validation & Diagnostics Harness
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,8 +23,8 @@ Options:
 
 Examples:
   $0 --diagnose
-  $0 --rpm desktopApp/build/compose/binaries/main/rpm/doggo-1.0.0.rpm
-  $0 --dist desktopApp/build/compose/binaries/main/app/doggo
+  $0 --rpm desktopApp/build/compose/binaries/main/rpm/tabbyrush-1.0.0.rpm
+  $0 --dist desktopApp/build/compose/binaries/main/app/tabbyrush
 EOF
     exit 1
 }
@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$MODE" == "diagnose" ]]; then
-    echo "=== Doggo Linux Desktop Environment Diagnostics ==="
+    echo "=== TabbyRush Linux Desktop Environment Diagnostics ==="
     echo "1. Host OS: $(uname -s) $(uname -r) ($(uname -m))"
 
     echo -n "2. Java Runtime: "
@@ -119,12 +119,12 @@ if [[ -n "$DIST_DIR" ]]; then
         exit 1
     fi
 
-    LAUNCHER="$DIST_DIR/bin/doggo"
+    LAUNCHER="$DIST_DIR/bin/tabbyrush"
     if [[ ! -x "$LAUNCHER" ]]; then
-        LAUNCHER="$DIST_DIR/bin/Doggo"
+        LAUNCHER="$DIST_DIR/bin/TabbyRush"
     fi
     if [[ ! -x "$LAUNCHER" ]]; then
-        echo "ERROR: Doggo executable launcher not found in $DIST_DIR/bin" >&2
+        echo "ERROR: TabbyRush executable launcher not found in $DIST_DIR/bin" >&2
         exit 1
     fi
     echo "✓ Found executable launcher: $LAUNCHER"
@@ -144,7 +144,7 @@ if [[ -n "$DIST_DIR" ]]; then
     FOUND_WINDOWS_PROVIDER=false
 
     for jar in $APP_JARS; do
-        if unzip -l "$jar" 2>/dev/null | grep -q "dev/doggo/desktop/linux/LinuxSecretServiceVaultProvider.class"; then
+        if unzip -l "$jar" 2>/dev/null | grep -q "dev/tabbyrush/desktop/linux/LinuxSecretServiceVaultProvider.class"; then
             FOUND_LINUX_PROVIDER=true
         fi
         if unzip -l "$jar" 2>/dev/null | grep -q "WindowsDpapiVaultProvider"; then
@@ -192,10 +192,10 @@ if [[ -n "$RPM_FILE" ]]; then
     echo "Total files packaged: $FILE_COUNT"
 
     # Verify key paths
-    if rpm -qlp "$RPM_FILE" | grep -q "/bin/doggo"; then
-        echo "✓ RPM packages executable launcher: /bin/doggo"
+    if rpm -qlp "$RPM_FILE" | grep -q "/bin/tabbyrush"; then
+        echo "✓ RPM packages executable launcher: /bin/tabbyrush"
     else
-        echo "WARNING: /bin/doggo not found in RPM file list"
+        echo "WARNING: /bin/tabbyrush not found in RPM file list"
     fi
 
     if rpm -qlp "$RPM_FILE" | grep -q "/share/applications/.*\.desktop"; then

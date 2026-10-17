@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # scripts/android-smoke.sh
-# Android device / emulator smoke verification runner for Doggo.
+# Android device / emulator smoke verification runner for TabbyRush.
 # ==============================================================================
 set -euo pipefail
 
@@ -68,7 +68,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "=== Doggo Android Smoke Test ==="
+echo "=== TabbyRush Android Smoke Test ==="
 echo "Target device: $SERIAL"
 echo "Target APK:    $APK"
 
@@ -87,16 +87,16 @@ echo "Installing $APK onto $SERIAL..."
 adb -s "$SERIAL" install -r "$APK"
 
 echo "Starting MainActivity..."
-adb -s "$SERIAL" shell am start -n dev.doggo.android/.MainActivity
+adb -s "$SERIAL" shell am start -n dev.tabbyrush.android/.MainActivity
 
 echo "Verifying process launch..."
 sleep 2
-PID=$(adb -s "$SERIAL" shell pidof dev.doggo.android | tr -d '\r\n')
+PID=$(adb -s "$SERIAL" shell pidof dev.tabbyrush.android | tr -d '\r\n')
 if [[ -z "$PID" ]]; then
-    echo "Error: Process dev.doggo.android failed to start." >&2
+    echo "Error: Process dev.tabbyrush.android failed to start." >&2
     exit 1
 fi
-echo "Process dev.doggo.android running with PID: $PID"
+echo "Process dev.tabbyrush.android running with PID: $PID"
 
 capture_screen() {
     local name="$1"

@@ -31,25 +31,25 @@ Phase 11 delivers comprehensive adversarial boundary regressions, file-backed SQ
 
 ## 2. Phase 11 Automated Verification Suite Matrix
 
-All verification groups across Doggo multiplatform client and Glean Hub backend were executed under recorded configuration (JDK 21 LTS, Android SDK 35, Gradle 8.11.1, Node.js v24.16.0, Cargo 1.95.0, pnpm 10.28.2):
+All verification groups across TabbyRush multiplatform client and Glean Hub backend were executed under recorded configuration (JDK 21 LTS, Android SDK 35, Gradle 8.11.1, Node.js v24.16.0, Cargo 1.95.0, pnpm 10.28.2):
 
 | Index | Repository | Command / Suite | Category | Scope | Total | Pass | Fail | Skip / Ignored | Status |
 |:---:|---|---|---|---|:---:|:---:|:---:|:---:|:---:|
-| 1 | `doggo` | `./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` | Unit / Integration | Shared KMP JVM & SQLite Suite (28 classes) | 202 | 202 | 0 | 0 | PASS |
-| 2 | `doggo` | `./gradlew :desktopApp:test --dependency-verification=off --rerun-tasks` | Unit / Platform | Desktop App & Lifecycle Suite (10 classes) | 49 | 49 | 0 | 0 | PASS |
-| 3 | `doggo` | `./gradlew :androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks` | Unit / Platform | Android Debug Unit Suite (4 classes) | 12 | 12 | 0 | 0 | PASS |
-| 4 | `doggo` | `node scripts/strict-v2-vector-runner.mjs` | Contract Vectors | Strict v2 Wire Vectors & Schema Fingerprints | 23 | 23 | 0 | 0 | PASS |
-| 5 | `doggo` | `node scripts/hub-live-smoke.mjs --fixture-test` | Protocol Fixture | Hub Offline Protocol Smoke Harness (5 suites) | 18 | 18 | 0 | 0 | PASS |
-| 6 | `doggo` | `node scripts/release-security-check.mjs --diagnose-source` | Security Diagnostic | Static Manifest & Secret Audit | 6 | 6 | 0 | 0 | PASS |
-| 7 | `doggo` | `node scripts/hub-strict-upgrade.test.mjs` | Integration CLI | Hub Strict Upgrade CLI Harness | 12 | 12 | 0 | 0 | PASS |
-| 8 | `doggo` | `node scripts/debug-fault-proxy.test.mjs` | Fault Injection | Debug Fault Proxy Route & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
-| 9 | `doggo` | `./gradlew :desktopApp:createDistributable --dependency-verification=off` | Packaging Build | Desktop Linux App Distributable Bundle | 1 | 1 | 0 | 0 | PASS |
-| 10 | `doggo` | `./gradlew :androidApp:assembleDebug --dependency-verification=off` | Packaging Build | Android Debug APK Compilation (20.6 MB) | 1 | 1 | 0 | 0 | PASS |
+| 1 | `tabbyrush` | `./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` | Unit / Integration | Shared KMP JVM & SQLite Suite (28 classes) | 202 | 202 | 0 | 0 | PASS |
+| 2 | `tabbyrush` | `./gradlew :desktopApp:test --dependency-verification=off --rerun-tasks` | Unit / Platform | Desktop App & Lifecycle Suite (10 classes) | 49 | 49 | 0 | 0 | PASS |
+| 3 | `tabbyrush` | `./gradlew :androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks` | Unit / Platform | Android Debug Unit Suite (4 classes) | 12 | 12 | 0 | 0 | PASS |
+| 4 | `tabbyrush` | `node scripts/strict-v2-vector-runner.mjs` | Contract Vectors | Strict v2 Wire Vectors & Schema Fingerprints | 23 | 23 | 0 | 0 | PASS |
+| 5 | `tabbyrush` | `node scripts/hub-live-smoke.mjs --fixture-test` | Protocol Fixture | Hub Offline Protocol Smoke Harness (5 suites) | 18 | 18 | 0 | 0 | PASS |
+| 6 | `tabbyrush` | `node scripts/release-security-check.mjs --diagnose-source` | Security Diagnostic | Static Manifest & Secret Audit | 6 | 6 | 0 | 0 | PASS |
+| 7 | `tabbyrush` | `node scripts/hub-strict-upgrade.test.mjs` | Integration CLI | Hub Strict Upgrade CLI Harness | 12 | 12 | 0 | 0 | PASS |
+| 8 | `tabbyrush` | `node scripts/debug-fault-proxy.test.mjs` | Fault Injection | Debug Fault Proxy Route & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
+| 9 | `tabbyrush` | `./gradlew :desktopApp:createDistributable --dependency-verification=off` | Packaging Build | Desktop Linux App Distributable Bundle | 1 | 1 | 0 | 0 | PASS |
+| 10 | `tabbyrush` | `./gradlew :androidApp:assembleDebug --dependency-verification=off` | Packaging Build | Android Debug APK Compilation (20.6 MB) | 1 | 1 | 0 | 0 | PASS |
 | 11 | `glean-hub` | `cargo test -p glean-hub-sync --locked` | Backend Integration | Hub Sync Crate Tests | 55 | 54 | 0 | 1 | PASS* |
 | 12 | `glean-hub` | `cargo clippy -p glean-hub-sync --locked` | Static Analysis | Rust Code Quality / Linter | 1 | 1 | 0 | 0 | PASS |
 | 13 | `glean-hub` | `pnpm test:unit` (in `glean-hub-app`) | Unit | Admin UI Service & Vite Preload Suite | 13 | 13 | 0 | 0 | PASS |
 | 14 | `glean-hub` | `pnpm build` (in `glean-hub-app`) | Frontend Packaging | TypeScript Compilation & Vite Production Build | 1 | 1 | 0 | 0 | PASS** |
-| 15 | `doggo` | `node scripts/strict-v2-cutover-rehearsal.mjs --self-test` | Tooling Rehearsal | Strict-v2 Upgrade CLI Rehearsal & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
+| 15 | `tabbyrush` | `node scripts/strict-v2-cutover-rehearsal.mjs --self-test` | Tooling Rehearsal | Strict-v2 Upgrade CLI Rehearsal & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
 
 \* *1 ignored: `test_strong_sync_live_mongo_acceptance_gate` (requires live MongoDB at `MONGO_TEST_URI`; Gate G3 staging hold).*  
 \*\* *Vite production build succeeded in 11.20s with dynamic import chunking warnings in embedded apps.*  
@@ -86,7 +86,7 @@ Four concrete code and test remediations were verified during Phase 11 QA valida
    - Fixed outbox fold in `PersistedScheduleProjector`: `scheduleToken = op.scheduleToken` is now correctly assigned when `deadline != null && op.scheduleToken != null` under `INTENT_REMINDER` updates.
    - Verified via `testScheduleTokenAssignmentAndPreservation` in `AdversarialSchedulerBoundaryTest.kt`: non-temporal edits (title only) preserve existing tokens without alarm churn, reminder edits advance tokens to trigger rescheduling, and deadline clearing resets tokens to null.
 2. **`debug-fault-proxy.mjs` Route Allowlist & Sensitive Log Redaction**:
-   - Expanded route allowlist to include `/api/v1/sync/doggo/strong/legacy-receipts`.
+   - Expanded route allowlist to include `/api/v1/sync/tabby-rush/strong/legacy-receipts`.
    - Suppressed sensitive path leakage: unlisted path rejections (403) log the HTTP method only, completely omitting client URL path strings. Verified via active `console.warn` interception in `debug-fault-proxy.test.mjs`.
    - Added `drop-legacy-receipts-response` scenario for fault-injection testing. Client sockets are destroyed on drop to model upstream completion with client hangup.
 3. **Temporal Fixture Standardization Across Test Suites**:

@@ -15,8 +15,8 @@ Phase 03 establishes the backend strict synchronization server, legacy isolation
 - `src/routes/strong_sync.rs`: Mounted `POST /api/v1/sync/:app_id/strong/{bootstrap,push,pull}` routes.
 - `src/bin/strong_sync_admission.rs`: Standalone operator preflight CLI invoking identical Rust admission validator.
 
-### Doggo Schema & Provisioning Scripts
-- `integration/glean-hub/doggo-schema.json`: Canonical strict schema payload.
+### TabbyRush Schema & Provisioning Scripts
+- `integration/glean-hub/tabbyrush-schema.json`: Canonical strict schema payload.
 - `scripts/hub-schema-provision.mjs`: Node provisioning script with mandatory read-back verification.
 - `scripts/hub-compatibility-smoke.mjs`: Smoke test script exercising mounted endpoints and isolation guards.
 
@@ -26,7 +26,7 @@ Phase 03 establishes the backend strict synchronization server, legacy isolation
 - `docs/evidence/hub-compatibility-summary.md`: This implementation summary.
 - `glean-hub/CLAUDE.md`: Updated plugin documentation in sibling repository.
 - `glean-hub/CHANGELOG.md`: Strict-v1 extension changelog in sibling repository.
-- `glean-hub/docs/doggo-strict-sync.md`: Comprehensive operator protocol documentation in sibling repository.
+- `glean-hub/docs/tabbyrush-strict-sync.md`: Comprehensive operator protocol documentation in sibling repository.
 
 ## Runtime Environment & Live Gate Status
 - **Static & Unit Verification**: All 36 unit and route tests pass deterministically in the Rust crate (`glean-hub-sync`: 36 passed, 0 failed, 1 ignored live test); Node.js provisioning and smoke scripts pass syntax verification.

@@ -2,13 +2,13 @@
 /**
  * scripts/hub-live-smoke.mjs
  *
- * Authorized live Hub strict-v1 verification runner for Doggo.
+ * Authorized live Hub strict-v1 verification runner for TabbyRush.
  * Conforms strictly to docs/api-contract.md and contracts.md.
  *
  * Verifies:
  * 1. Health & Strict App Admission:
  *    - GET /api/v1/health returns healthy without redirect.
- *    - GET /api/v1/apps/doggo echoes syncMode: "strict-v1", active strictEpoch, and schema.
+ *    - GET /api/v1/apps/tabbyrush echoes syncMode: "strict-v1", active strictEpoch, and schema.
  * 2. Auth Session:
  *    - POST /auth/register with { username, email, password } -> { userId, accessToken, refreshToken }.
  *    - POST /auth/login with { email, password } -> { accessToken, refreshToken, apps }.
@@ -19,7 +19,7 @@
  *    - Strict sync rejects missing/invalid JWT (HTTP 401).
  *    - Legacy sync routes reject strict-v1 app with HTTP 426 Upgrade Required (protocolUnsupported).
  * 4. Strict Strong Sync Operations:
- *    - POST /api/v1/sync/doggo/strong/bootstrap -> { protocol: "strict-v1", epoch, tables: ["todos"] }.
+ *    - POST /api/v1/sync/tabby-rush/strong/bootstrap -> { protocol: "strict-v1", epoch, tables: ["todos"] }.
  *    - Asserts bootstrap epoch matches admission read-back epoch.
  *    - Insert-only create with expectedRevision: 0 -> status: "accepted", acceptedRevision: 1.
  *    - Idempotent frozen retry with identical opId + digest -> status: "replayed".
@@ -69,7 +69,7 @@ const DEFAULT_TIMEOUT_MS = 10000;
 function parseCliArgs() {
   const options = {
     origin: { type: 'string', default: process.env.APPROVED_HUB_ORIGIN || process.env.GLEAN_ORIGIN || 'http://127.0.0.1:3000' },
-    'app-id': { type: 'string', default: process.env.DOGGO_APP_ID || 'doggo' },
+    'app-id': { type: 'string', default: process.env.TABBYRUSH_APP_ID || 'tabby-rush' },
     timeout: { type: 'string', default: String(DEFAULT_TIMEOUT_MS) },
     'fixture-test': { type: 'boolean', default: false },
     'allow-destructive-cleanup': { type: 'boolean', default: false },
@@ -83,14 +83,14 @@ function parseCliArgs() {
 
 Environment Variables (Preferred for credentials):
   APPROVED_HUB_ORIGIN   Target Glean Hub origin (e.g. https://hub.example.com)
-  DOGGO_APP_ID          Target application ID (default: doggo)
-  DOGGO_API_KEY         Provisioned dedicated API key
+  TABBYRUSH_APP_ID      Target application ID (default: tabby-rush)
+  TABBYRUSH_API_KEY     Provisioned dedicated API key
   TEST_EMAIL            Test user email
   TEST_PASSWORD         Test user password
 
 Options:
   --origin <URL>              Approved Hub origin (default: $APPROVED_HUB_ORIGIN or http://127.0.0.1:3000)
-  --app-id <APP_ID>           Target application ID (default: doggo)
+  --app-id <APP_ID>           Target application ID (default: tabby-rush)
   --timeout <MS>              Request timeout in milliseconds (default: 10000)
   --fixture-test              Execute self-contained local mock server test suite
   --allow-destructive-cleanup Enable tombstone deletion cleanup on live runs
@@ -203,7 +203,7 @@ async function runCheck(suiteName, checkName, fn) {
 }
 
 // In-memory mock server for deterministic self-test mode (--fixture-test)
-function startFixtureServer() {
+function startFixtureServer(targetAppId = 'tabby-rush') {
   const mockDb = new Map(); // rowId -> { tableName, rowId, revision, deleted, data }
   const seenOps = new Map(); // opId -> { rowId, revision, digest }
 
@@ -232,9 +232,9 @@ function startFixtureServer() {
       }
 
       // 2. Strict apps readback: GET /api/v1/apps/:id
-      if (path === '/api/v1/apps/doggo' && req.method === 'GET') {
+      if ((path === `/api/v1/apps/${targetAppId}` || path === '/api/v1/apps/tabbyrush') && req.method === 'GET') {
         return sendJson(200, {
-          appId: 'doggo',
+          appId: targetAppId,
           syncMode: 'strict-v1',
           strictEpoch: '550e8400-e29b-41d4-a716-446655440000',
           schema: {
@@ -268,7 +268,7 @@ function startFixtureServer() {
             userId: 'usr_test_123',
             accessToken: 'valid_jwt_mock_token',
             refreshToken: 'valid_refresh_token',
-            apps: ['doggo'],
+            apps: [targetAppId],
             isAdmin: false
           });
         }
@@ -295,35 +295,35 @@ function startFixtureServer() {
           userId: 'usr_test_123',
           username: 'test_user',
           email: 'test@example.com',
-          apps: ['doggo'],
+          apps: [targetAppId],
           isAdmin: false
         });
       }
 
       // 7. Access requests
       if (path === '/apps/access-requests/me' && req.method === 'GET') {
-        return sendJson(200, [{ appId: 'doggo', status: 'approved' }]);
+        return sendJson(200, [{ appId: targetAppId, status: 'approved' }]);
       }
 
       // 8. Strong sync routes: POST /api/v1/sync/:app/strong/*
-      if (path.startsWith('/api/v1/sync/doggo/strong/')) {
-        if (!apiKey || apiKey !== 'valid_doggo_key') {
+      if (path.startsWith(`/api/v1/sync/${targetAppId}/strong/`)) {
+        if (!apiKey || apiKey !== 'valid_tabbyrush_key') {
           return sendJson(403, { error: 'Forbidden API key', code: 'unauthorized' });
         }
         if (!authHeader || !authHeader.startsWith('Bearer valid_jwt_mock_token') && !authHeader.startsWith('Bearer refreshed_jwt_mock_token')) {
           return sendJson(401, { error: 'Missing or invalid token', code: 'unauthorized' });
         }
 
-        if (path === '/api/v1/sync/doggo/strong/bootstrap') {
+        if (path === `/api/v1/sync/${targetAppId}/strong/bootstrap`) {
           return sendJson(200, {
             protocol: 'strict-v1',
-            appId: 'doggo',
+            appId: targetAppId,
             epoch: '550e8400-e29b-41d4-a716-446655440000',
             tables: ['todos']
           });
         }
 
-        if (path === '/api/v1/sync/doggo/strong/push') {
+        if (path === `/api/v1/sync/${targetAppId}/strong/push`) {
           if (body.epoch !== '550e8400-e29b-41d4-a716-446655440000') {
             return sendJson(409, { error: 'Epoch mismatch', code: 'epochMismatch' });
           }
@@ -362,7 +362,7 @@ function startFixtureServer() {
           });
         }
 
-        if (path === '/api/v1/sync/doggo/strong/pull') {
+        if (path === `/api/v1/sync/${targetAppId}/strong/pull`) {
           if (body.epoch !== '550e8400-e29b-41d4-a716-446655440000') {
             return sendJson(409, { error: 'Epoch mismatch', code: 'epochMismatch' });
           }
@@ -378,7 +378,7 @@ function startFixtureServer() {
       }
 
       // 9. Legacy sync routes hit with strict app must return HTTP 426 protocolUnsupported
-      if (path.startsWith('/api/v1/sync/doggo/') && !path.includes('/strong/')) {
+      if (path.startsWith(`/api/v1/sync/${targetAppId}/`) && !path.includes('/strong/')) {
         return sendJson(426, {
           error: 'Legacy sync endpoints prohibited for strict-v1 app',
           code: 'protocolUnsupported'
@@ -399,7 +399,7 @@ function startFixtureServer() {
 
 async function runLiveSmoke(options) {
   console.log(`================================================================`);
-  console.log(`Doggo Hub Strict-v1 Live Smoke Test Runner`);
+  console.log(`TabbyRush Hub Strict-v1 Live Smoke Test Runner`);
   console.log(`Target Origin: ${options.origin}`);
   console.log(`Application:   ${options['app-id']}`);
   console.log(`================================================================\n`);
@@ -530,7 +530,7 @@ async function runLiveSmoke(options) {
 
   // --- Suite 4: Strict-v1 Sync Protocol Operations ---
   console.log(`\n--- Suite 4: Strict Strong Sync Operations ---`);
-  const apiKey = options['fixture-test'] ? 'valid_doggo_key' : (process.env.DOGGO_API_KEY || '');
+  const apiKey = options['fixture-test'] ? 'valid_tabbyrush_key' : (process.env.TABBYRUSH_API_KEY || '');
   const testHeaders = {
     'X-App-Id': options['app-id']
   };
@@ -777,7 +777,7 @@ async function main() {
 
   if (options['fixture-test']) {
     console.log(`[Info] Starting local fixture server for offline self-test...`);
-    const { server, origin } = await startFixtureServer();
+    const { server, origin } = await startFixtureServer(options['app-id'] || 'tabby-rush');
     try {
       options.origin = origin;
       await runLiveSmoke(options);

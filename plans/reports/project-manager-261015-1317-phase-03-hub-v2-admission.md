@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary & Progress Status
 
-Phase 03 implementation across Glean Hub Sync backend (`glean-hub`) and Doggo integration suites delivered. Contracts, backend logic, and automated unit/vector/smoke test suites verified.
+Phase 03 implementation across Glean Hub Sync backend (`glean-hub`) and TabbyRush integration suites delivered. Contracts, backend logic, and automated unit/vector/smoke test suites verified.
 - **Planned Effort Credited**: 32h / 32h allocated (evolution plan cumulative credited: 64h / 236h = 27.1% delivery roll-up).
 - **Delivery Classification**: DELIVERED (Contracts/Logic/Tests).
 - **Production Status**: ADMISSION ON HOLD (NOT APPROVED FOR PRODUCTION per Cycle 3 Code Review score 8.0/10).
@@ -47,9 +47,9 @@ Phase 03 implementation across Glean Hub Sync backend (`glean-hub`) and Doggo in
 QA test execution report (`plans/reports/qa-261015-1215-phase-03-hub-v2-admission.md`) attributes 211 executed passing tests across 4 suites (0 failures, 1 ignored test), plus 6 static Android security checks:
 - **Rust Backend (`cargo test --locked`)**: 54/54 executed tests PASS, 1 test ignored (`test_strong_sync_live_mongo_acceptance_gate` requiring live MongoDB).
 - **Rust Clippy (`cargo clippy --locked --all-targets`)**: 0 warnings, 0 errors (clean).
-- **Doggo Strict-v2 Vector Runner (`strict-v2-vector-runner.mjs`)**: 23/23 checks PASS (schema fingerprints, cross-repo fixture parity, 10 valid vectors, 11 rejection vectors).
-- **Doggo Hub Live Smoke (`hub-live-smoke.mjs --fixture-test`)**: 18/18 checks PASS across 5 suites (health, route isolation, auth session, strict sync, tombstone preservation).
-- **Doggo Shared JVM Suite (`./gradlew :shared:jvmTest --rerun-tasks --dependency-verification=off`)**: 116/116 tests PASS across 17 suites (including 7 strict DST vectors and 11 strict-v2 digest vectors). Note: executed with `--dependency-verification=off` per assignment command.
+- **TabbyRush Strict-v2 Vector Runner (`strict-v2-vector-runner.mjs`)**: 23/23 checks PASS (schema fingerprints, cross-repo fixture parity, 10 valid vectors, 11 rejection vectors).
+- **TabbyRush Hub Live Smoke (`hub-live-smoke.mjs --fixture-test`)**: 18/18 checks PASS across 5 suites (health, route isolation, auth session, strict sync, tombstone preservation).
+- **TabbyRush Shared JVM Suite (`./gradlew :shared:jvmTest --rerun-tasks --dependency-verification=off`)**: 116/116 tests PASS across 17 suites (including 7 strict DST vectors and 11 strict-v2 digest vectors). Note: executed with `--dependency-verification=off` per assignment command.
 - **Android Release Security Audit (`release-security-check.mjs --diagnose-source`)**: 6/6 static source checks PASS (additional audit outside the 211 executed unit/vector test count).
 
 ---

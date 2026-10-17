@@ -1,11 +1,11 @@
-# Phase 03 Review — Cycle 2 (Doggo-only strict server + legacy isolation)
+# Phase 03 Review — Cycle 2 (TabbyRush-only strict server + legacy isolation)
 
 **Score: 6/10.** Cycle-1 defects (concern config, UUID hex, epoch validation, admission tightening, DTO strictness, cursor panic, per-op errors, provision key output, CLAUDE.md fence) verified fixed in source. Phase still NOT acceptable: plan §9–§12 acceptance gates unmet, replay-durability path still has a hole, docs overclaim topology support.
 
 ## Scope
-- Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md` (status lines updated).
-- Reviewed: glean-hub-sync `strong_sync_service.rs`(905), `app_service.rs`(strict parts), `strong_sync_error.rs`, `models/strong_sync.rs`, `middleware/sync_mode_guard.rs`, `routes/strong_sync.rs`, `routes/apps.rs` diff, `lib.rs` diff, `bin/strong_sync_admission.rs`, tests (`strong_sync_tests.rs`, `strong_sync_route_tests.rs`); doggo `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, `docs/evidence/hub-compatibility-summary.md`, doc claims grep; QA report `qa-261014-0159-...`.
-- Not reviewed in depth: `integration/glean-hub/doggo-schema.json`, glean-hub docs prose, models/app.rs/api.rs (diff only skimmed).
+- Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-03-hub-schema-compatibility.md` (status lines updated).
+- Reviewed: glean-hub-sync `strong_sync_service.rs`(905), `app_service.rs`(strict parts), `strong_sync_error.rs`, `models/strong_sync.rs`, `middleware/sync_mode_guard.rs`, `routes/strong_sync.rs`, `routes/apps.rs` diff, `lib.rs` diff, `bin/strong_sync_admission.rs`, tests (`strong_sync_tests.rs`, `strong_sync_route_tests.rs`); tabbyrush `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, `docs/evidence/hub-compatibility-summary.md`, doc claims grep; QA report `qa-261014-0159-...`.
+- Not reviewed in depth: `integration/glean-hub/tabbyrush-schema.json`, glean-hub docs prose, models/app.rs/api.rs (diff only skimmed).
 
 ## Validation (run by me)
 | Command | Result |

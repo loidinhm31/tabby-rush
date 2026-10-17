@@ -73,7 +73,7 @@ Explicit owned paths (repository-relative; actions/reasons in central manifest):
 - [x] Collect complete owner handoffs and run scheduled coherent aggregate verification. (Verified: 12 Node security tests, clean source diagnostics, 18 Hub smoke checks, 8 rehearsal self-tests; prior review records 363/364 Gradle unit tests)
 - [ ] Exercise actual Android launcher/shade/account/permission/dismissal race scenarios. (Unit/security verified; interactive physical device launcher execution held for Gate G2)
 - [ ] Exercise actual Windows singleton/lifetime/input/geometry/no-tray scenarios. (Unit/distributable verified; live interactive multi-monitor testing held for physical desktop testbed)
-- [ ] Return defects to original owners and obtain corrected terminal handoffs. (Tracked Cycle 2 findings routed: DoggoApplication close drain-timeout exception-swallowing and Glance cleanup error-swallowing routed to Phase 05)
+- [ ] Return defects to original owners and obtain corrected terminal handoffs. (Tracked Cycle 2 findings routed: TabbyRushApplication close drain-timeout exception-swallowing and Glance cleanup error-swallowing routed to Phase 05)
 - [x] Update exact affected docs/evidence; preserve pending Linux and historical release holds. (17 shared docs updated; G2, G3, G6, G7, 149-checksum baseline, Phase 08 Linux holds preserved)
 
 ## Success Criteria

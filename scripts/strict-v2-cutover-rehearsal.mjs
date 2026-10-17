@@ -105,7 +105,7 @@ function createMockHubServer() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
-            appId: 'doggo',
+            appId: 'tabby-rush',
             syncMode,
             epoch,
             schemaFingerprint,
@@ -134,7 +134,7 @@ function createMockHubServer() {
           res.end(
             JSON.stringify({
               migrationId: body.migrationId,
-              appId: 'doggo',
+              appId: 'tabby-rush',
               state: 'preflight-passed',
               sourceVersion: 'strict-v1',
               targetVersion: 'strict-v2',
@@ -149,7 +149,7 @@ function createMockHubServer() {
         res.end(
           JSON.stringify({
             migrationId: body.migrationId,
-            appId: 'doggo',
+            appId: 'tabby-rush',
             state: simulatedState,
             sourceVersion: 'strict-v1',
             targetVersion: 'strict-v2',
@@ -177,7 +177,7 @@ function createMockHubServer() {
         res.end(
           JSON.stringify({
             migrationId: migId,
-            appId: 'doggo',
+            appId: 'tabby-rush',
             state: simulatedState,
             sourceVersion: 'strict-v1',
             targetVersion: 'strict-v2',
@@ -232,7 +232,7 @@ function createMockHubServer() {
 
 async function runSelfTests() {
   console.log('================================================================');
-  console.log('Doggo Strict-v2 Operator Tooling Rehearsal & Self-Test Suite');
+  console.log('TabbyRush Strict-v2 Operator Tooling Rehearsal & Self-Test Suite');
   console.log('Mode: In-Process Tooling Mock Self-Test');
   console.log('================================================================\n');
 
@@ -298,7 +298,7 @@ async function runSelfTests() {
         '--origin',
         origin,
         '--app-id',
-        'doggo',
+        'tabbyrush',
         '--token',
         'valid-admin-token',
         '--dry-run',
@@ -322,7 +322,7 @@ async function runSelfTests() {
         '--origin',
         origin,
         '--app-id',
-        'doggo',
+        'tabbyrush',
         '--token',
         'valid-admin-token',
         '--migration-id',
@@ -357,7 +357,7 @@ async function runSelfTests() {
         '--origin',
         origin,
         '--app-id',
-        'doggo',
+        'tabbyrush',
         '--token',
         'valid-admin-token',
         '--migration-id',
@@ -387,7 +387,7 @@ async function runSelfTests() {
         '--origin',
         origin,
         '--app-id',
-        'doggo',
+        'tabbyrush',
         '--token',
         'valid-admin-token',
         '--migration-id',
@@ -406,7 +406,7 @@ async function runSelfTests() {
       mock.resetState();
       const sensitiveEnvToken = 'ENV_ONLY_TOKEN_KEEP_OFF_ARGV_XYZ';
       const { code, stdout } = await runUpgradeCli(
-        ['--origin', origin, '--app-id', 'doggo', '--dry-run'],
+        ['--origin', origin, '--app-id', 'tabbyrush', '--dry-run'],
         { GLEAN_ADMIN_TOKEN: 'valid-admin-token' }
       );
       if (code !== 0) throw new Error(`Dry-run with env token exited with code ${code}`);
@@ -434,7 +434,7 @@ Options:
   --self-test                     Run the in-process operator tooling mock self-test (default)
   --staging-origin <URL>          Target disposable staging Hub origin (requires --confirm-disposable-staging)
   --staging-token <JWT>           Operator admin JWT token for staging origin
-  --app-id <ID>                   Target application ID on staging (default: doggo)
+  --app-id <ID>                   Target application ID on staging (default: tabbyrush)
   --confirm-disposable-staging    Explicit safety confirmation that target is a disposable staging environment
   -h, --help                      Show this help text
 `);
@@ -444,7 +444,7 @@ async function main() {
   const args = process.argv.slice(2);
   let stagingOrigin = '';
   let stagingToken = process.env.GLEAN_ADMIN_TOKEN || '';
-  let appId = 'doggo';
+  let appId = 'tabby-rush';
   let confirmedStaging = false;
 
   for (let i = 0; i < args.length; i++) {

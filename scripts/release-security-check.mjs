@@ -2,7 +2,7 @@
 /**
  * scripts/release-security-check.mjs
  *
- * Android Release Security & Integrity Audit Tool for Doggo.
+ * Android Release Security & Integrity Audit Tool for TabbyRush.
  *
  * Enforces release security invariants:
  * 1. APK Verification (Fail-Closed):
@@ -12,7 +12,7 @@
  *      * android:debuggable="false" (must explicitly be false; fails if true or absent).
  *      * android:usesCleartextTraffic="false" (fails if true or absent).
  *      * android:allowBackup="false" (must explicitly be false; fails if missing or true).
- *      * Exported components: ONLY MainActivity and narrowly verified DoggoTaskWidgetReceiver are exported.
+ *      * Exported components: ONLY MainActivity and narrowly verified TabbyRushTaskWidgetReceiver are exported.
  *      * Network security config: Debug loopback config must be absent in release APK.
  * 2. Origin & Network Invariants:
  *    - Asserts release endpoint targets approved HTTPS origin.
@@ -139,9 +139,9 @@ function scanForSecrets(repoRoot) {
 
 /**
  * Validates exported components against strict release security policy:
- * - Only MainActivity (.MainActivity, MainActivity, dev.doggo.android.MainActivity) is permitted as an exported activity.
+ * - Only MainActivity (.MainActivity, MainActivity, dev.tabbyrush.android.MainActivity) is permitted as an exported activity.
  * - Services and content providers must NEVER be exported.
- * - Only DoggoTaskWidgetReceiver (.DoggoTaskWidgetReceiver, DoggoTaskWidgetReceiver, dev.doggo.android.DoggoTaskWidgetReceiver)
+ * - Only TabbyRushTaskWidgetReceiver (.TabbyRushTaskWidgetReceiver, TabbyRushTaskWidgetReceiver, dev.tabbyrush.android.TabbyRushTaskWidgetReceiver)
  *   is permitted as an exported receiver, and ONLY with:
  *     * An explicit <intent-filter> containing exact action: android.appwidget.action.APPWIDGET_UPDATE
  *     * No unauthorized extra actions, categories, or data tags inside the widget receiver.
@@ -168,28 +168,28 @@ export function validateExportedComponents(manifestXml) {
       if (tag === 'activity') {
         const isMain = componentName === '.MainActivity' ||
                        componentName === 'MainActivity' ||
-                       componentName === 'dev.doggo.android.MainActivity';
+                       componentName === 'dev.tabbyrush.android.MainActivity';
         if (!isMain) {
           issues.push(`Exported activity is not MainActivity: ${componentName}`);
         }
       } else if (tag === 'receiver') {
-        const isWidget = componentName === '.DoggoTaskWidgetReceiver' ||
-                         componentName === 'DoggoTaskWidgetReceiver' ||
-                         componentName === 'dev.doggo.android.DoggoTaskWidgetReceiver';
+        const isWidget = componentName === '.TabbyRushTaskWidgetReceiver' ||
+                         componentName === 'TabbyRushTaskWidgetReceiver' ||
+                         componentName === 'dev.tabbyrush.android.TabbyRushTaskWidgetReceiver';
         if (!isWidget) {
-          issues.push(`Exported receiver is not DoggoTaskWidgetReceiver: ${componentName}`);
+          issues.push(`Exported receiver is not TabbyRushTaskWidgetReceiver: ${componentName}`);
         } else {
-          // Narrow verification for DoggoTaskWidgetReceiver:
+          // Narrow verification for TabbyRushTaskWidgetReceiver:
           // 1. Must contain an explicit intent-filter
           const intentFilterMatch = innerContent.match(/<intent-filter\b[^>]*>([\s\S]*?)<\/intent-filter>/i);
           if (!intentFilterMatch) {
-            issues.push(`DoggoTaskWidgetReceiver is exported but missing <intent-filter>`);
+            issues.push(`TabbyRushTaskWidgetReceiver is exported but missing <intent-filter>`);
           } else {
             const filterContent = intentFilterMatch[1];
             // Must contain exact APPWIDGET_UPDATE action
             const hasAppWidgetUpdate = /<action\s+[^>]*android:name\s*=\s*"android\.appwidget\.action\.APPWIDGET_UPDATE"[^>]*\/?>/i.test(filterContent);
             if (!hasAppWidgetUpdate) {
-              issues.push(`DoggoTaskWidgetReceiver is exported but missing android.appwidget.action.APPWIDGET_UPDATE intent filter`);
+              issues.push(`TabbyRushTaskWidgetReceiver is exported but missing android.appwidget.action.APPWIDGET_UPDATE intent filter`);
             }
 
             // Must not contain any other action
@@ -197,16 +197,16 @@ export function validateExportedComponents(manifestXml) {
             for (const actionMatch of actionMatches) {
               const actionName = actionMatch[1];
               if (actionName !== 'android.appwidget.action.APPWIDGET_UPDATE') {
-                issues.push(`DoggoTaskWidgetReceiver contains unauthorized exported action: ${actionName}`);
+                issues.push(`TabbyRushTaskWidgetReceiver contains unauthorized exported action: ${actionName}`);
               }
             }
 
             // Must not contain categories or data in widget update filter
             if (/<category\b/i.test(filterContent)) {
-              issues.push(`DoggoTaskWidgetReceiver contains unauthorized <category> in intent filter`);
+              issues.push(`TabbyRushTaskWidgetReceiver contains unauthorized <category> in intent filter`);
             }
             if (/<data\b/i.test(filterContent)) {
-              issues.push(`DoggoTaskWidgetReceiver contains unauthorized <data> in intent filter`);
+              issues.push(`TabbyRushTaskWidgetReceiver contains unauthorized <data> in intent filter`);
             }
           }
 
@@ -214,7 +214,7 @@ export function validateExportedComponents(manifestXml) {
           const hasProviderMetadata = /<meta-data\s+[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*android:resource\s*=\s*"@xml\/task[_-]widget[_-]info"[^>]*\/?>/i.test(innerContent) ||
             /<meta-data\s+[^>]*android:resource\s*=\s*"@xml\/task[_-]widget[_-]info"[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*\/?>/i.test(innerContent);
           if (!hasProviderMetadata) {
-            issues.push(`DoggoTaskWidgetReceiver is missing required @xml/task-widget-info provider meta-data`);
+            issues.push(`TabbyRushTaskWidgetReceiver is missing required @xml/task-widget-info provider meta-data`);
           }
         }
       } else {
@@ -256,7 +256,7 @@ function runSourceDiagnostic(repoRoot, approvedOrigin) {
       }
       issues += exportedIssues.length;
     } else {
-      console.log(`[PASS] Exported components audit: Only MainActivity and verified DoggoTaskWidgetReceiver are exported.`);
+      console.log(`[PASS] Exported components audit: Only MainActivity and verified TabbyRushTaskWidgetReceiver are exported.`);
     }
   } else {
     console.log(`[WARN] AndroidManifest.xml not found at ${manifestPath}`);
@@ -385,7 +385,7 @@ function runApkAudit(apkPath, approvedOrigin) {
       }
       issues += apkExportedIssues.length;
     } else {
-      console.log(`[PASS] Exported components audit: Only MainActivity and verified DoggoTaskWidgetReceiver are exported.`);
+      console.log(`[PASS] Exported components audit: Only MainActivity and verified TabbyRushTaskWidgetReceiver are exported.`);
     }
 
     if (/networkSecurityConfig/i.test(manifestXml)) {
@@ -416,7 +416,7 @@ function main() {
   const repoRoot = process.cwd();
 
   console.log(`================================================================`);
-  console.log(`Doggo Android Release Security & Integrity Checker`);
+  console.log(`TabbyRush Android Release Security & Integrity Checker`);
   console.log(`Target APK: ${options.apk}`);
   console.log(`Approved Origin: ${options.origin || '(Not specified)'}`);
   console.log(`Mode: ${options['diagnose-source'] ? 'Diagnostic Source Check' : 'Release APK Audit (Fail-Closed)'}`);

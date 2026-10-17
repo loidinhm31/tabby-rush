@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-14
 **Author:** DocsManagerFinalize
-**Plan:** `plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md`
+**Plan:** `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-07-android-integration.md`
 **Status:** Documentation Synchronized (Android source authored/delivered; AGP compilation, instrumented tests, and runtime device gates pending host SDK setup in Phase 08)
 
 ---
@@ -26,7 +26,7 @@ Synchronized technical documentation across `docs/` and generated repository com
 |---|---|
 | `docs/codebase-summary.md` | Compaction snapshot dated 2026-10-14 (238 files packed, 424,517 tokens, 1,829,015 chars; 1 test file excluded by heuristic). Added `androidApp/` and Phase 07 scripts/docs to high-level directory tree. Added Section 2.7 Android Application Module table (16 components/scripts/tests). Added Phase 07 delivery summary to Section 4.1. Added Invariants 14–20 (process container, cold-start persistence, WorkManager account-tag cancellation, cancelAndAwait quiescence mechanism, fail-closed startup wipe recovery, manifest cleartext hardening, and visual design baseline mockups). |
 | `docs/project-overview-pdr.md` | Bumped version to 1.4.0. Updated Executive Summary for Phase 07. Added Section 9 (Phase 07 Requirements & Acceptance: FR-AND-01 through FR-AND-06, 25-item deliverable summary matrix referencing `android-test-summary.md`, explicit pending status for AGP bytecode compilation and device suites, and tracking previously deferred platform gates carried to Phase 08). Updated Section 10 constraints (Android SDK 35 provisioning) and Section 11 roadmap traceability. |
-| `docs/system-architecture.md` | Updated status header to reflect Phase 07 source delivered with host SDK and runtime acceptance pending. Updated Section 4 Mermaid diagram to include `:androidApp` components (`MainActivity`, `SessionViewModel`, `DoggoApplication`, `AndroidSyncScheduler`, `DoggoSyncWorker`). Added Section 4.8 detailing Android architecture, singletons, cold-start persistence, reactive ViewModel flows, WorkManager worker fencing, cancelAndAwait quiescence mechanism, manifest security, and fault-injection scripts. Added Security Invariants 20–25. |
+| `docs/system-architecture.md` | Updated status header to reflect Phase 07 source delivered with host SDK and runtime acceptance pending. Updated Section 4 Mermaid diagram to include `:androidApp` components (`MainActivity`, `SessionViewModel`, `TabbyRushApplication`, `AndroidSyncScheduler`, `TabbyRushSyncWorker`). Added Section 4.8 detailing Android architecture, singletons, cold-start persistence, reactive ViewModel flows, WorkManager worker fencing, cancelAndAwait quiescence mechanism, manifest security, and fault-injection scripts. Added Security Invariants 20–25. |
 | `repomix-output.xml` | Generated fresh full codebase compaction via Repomix v1.18.0 (238 files, 424,517 tokens). |
 
 ---

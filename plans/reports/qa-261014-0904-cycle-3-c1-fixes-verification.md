@@ -19,13 +19,13 @@ Command: `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verific
 
 | Suite | Tests | Passed | Failed | Skipped | Duration |
 |-------|-------|--------|--------|---------|----------|
-| `dev.doggo.shared.auth.HubAuthClientTest` | 8 | 8 | 0 | 0 | 0.445s |
-| `dev.doggo.shared.auth.HubAuthSessionTest` | 8 | 8 | 0 | 0 | 0.172s |
-| `dev.doggo.shared.auth.SingleFlightRefreshTest` | 3 | 3 | 0 | 0 | 0.023s |
-| `dev.doggo.shared.contract.AccountKeyTest` | 5 | 5 | 0 | 0 | 0.003s |
-| `dev.doggo.shared.contract.EndpointPolicyTest` | 8 | 8 | 0 | 0 | 0.006s |
-| `dev.doggo.shared.contract.StrictDigestTest` | 5 | 5 | 0 | 0 | 0.004s |
-| `dev.doggo.shared.contract.TitlePolicyTest` | 6 | 6 | 0 | 0 | 0.008s |
+| `dev.tabbyrush.shared.auth.HubAuthClientTest` | 8 | 8 | 0 | 0 | 0.445s |
+| `dev.tabbyrush.shared.auth.HubAuthSessionTest` | 8 | 8 | 0 | 0 | 0.172s |
+| `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | 3 | 3 | 0 | 0 | 0.023s |
+| `dev.tabbyrush.shared.contract.AccountKeyTest` | 5 | 5 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.shared.contract.EndpointPolicyTest` | 8 | 8 | 0 | 0 | 0.006s |
+| `dev.tabbyrush.shared.contract.StrictDigestTest` | 5 | 5 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.shared.contract.TitlePolicyTest` | 6 | 6 | 0 | 0 | 0.008s |
 | **Total** | **43** | **43** | **0** | **0** | **0.661s** |
 
 ---
@@ -45,8 +45,8 @@ Command: `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verific
 ### 2. `HubAuthSessionTest` (8 tests)
 - `testLoginMismatchedUserIdRejected[jvm]`: PASS (0.020s)
 - `testOfflineSessionRestore[jvm]`: PASS (0.005s)
-- `testLoginSuccessWithoutDoggoAccessTransitionsToAccessPending[jvm]`: PASS (0.008s)
-- `testLoginSuccessWithDoggoAccess[jvm]`: PASS (0.007s)
+- `testLoginSuccessWithoutTabbyRushAccessTransitionsToAccessPending[jvm]`: PASS (0.008s)
+- `testLoginSuccessWithTabbyRushAccess[jvm]`: PASS (0.007s)
 - `testLogoutDuringRefreshPreventsStaleVaultResurrection[jvm]`: PASS (0.073s)
 - `testLocalLogoutClearsSessionAndVault[jvm]`: PASS (0.016s)
 - `testVaultWriteFailureRetainsSuccessorInMemory[jvm]`: PASS (0.017s)
@@ -96,7 +96,7 @@ Command: `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verific
 - **Line Coverage**: N/A (Kover / JaCoCo not configured in `shared/build.gradle.kts`)
 - **Branch Coverage**: N/A
 - **Function Coverage**: N/A
-- **Functional Scope Coverage**: Covers current defined common test suites across `dev.doggo.shared.auth.*` and `dev.doggo.shared.contract.*`. Android instrumented tests (`androidInstrumentedTest`) not included.
+- **Functional Scope Coverage**: Covers current defined common test suites across `dev.tabbyrush.shared.auth.*` and `dev.tabbyrush.shared.contract.*`. Android instrumented tests (`androidInstrumentedTest`) not included.
 
 ---
 

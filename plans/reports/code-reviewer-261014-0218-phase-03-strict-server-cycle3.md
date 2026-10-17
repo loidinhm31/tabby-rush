@@ -1,11 +1,11 @@
-# Phase 03 Review — Cycle 3 (Doggo-only strict server + legacy isolation)
+# Phase 03 Review — Cycle 3 (TabbyRush-only strict server + legacy isolation)
 
 **Score: 6/10.** Cycle-2 Critical 1 (replay confirm) fixed in code. Critical 2 (acceptance suite) and Critical 3 (durability policy/doc claims) still open. Two cycle-3 claims in the brief are not true in the files (provision key custody; "36 tests across Rust and Node"). Phase NOT acceptable per plan ("source inspection cannot pass 03").
 
 ## Scope
-- Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md` (status lines updated).
-- glean-hub-sync (`/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync`): `services/strong_sync_service.rs`(922), `services/app_service.rs` strict parts, `strong_sync_error.rs`, `models/strong_sync.rs`(skim), `middleware/sync_mode_guard.rs`, `routes/strong_sync.rs`, `routes/apps.rs`/`lib.rs` diffs, `bin/strong_sync_admission.rs`, tests, `CHANGELOG.md`, `docs/doggo-strict-sync.md`.
-- Doggo: `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, `integration/glean-hub/doggo-schema.json`, `docs/hub-schema-integration.md`, `docs/hub-compatibility-acceptance.md`, `docs/evidence/hub-compatibility-summary.md`.
+- Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-03-hub-schema-compatibility.md` (status lines updated).
+- glean-hub-sync (`/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync`): `services/strong_sync_service.rs`(922), `services/app_service.rs` strict parts, `strong_sync_error.rs`, `models/strong_sync.rs`(skim), `middleware/sync_mode_guard.rs`, `routes/strong_sync.rs`, `routes/apps.rs`/`lib.rs` diffs, `bin/strong_sync_admission.rs`, tests, `CHANGELOG.md`, `docs/tabbyrush-strict-sync.md`.
+- TabbyRush: `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, `integration/glean-hub/tabbyrush-schema.json`, `docs/hub-schema-integration.md`, `docs/hub-compatibility-acceptance.md`, `docs/evidence/hub-compatibility-summary.md`.
 - Note: glean-hub worktree has large unrelated dirty diff (embed-app, app UI, docs rewrites); not reviewed.
 
 ## Validation (run by me)
@@ -39,7 +39,7 @@
 
 ## Warnings
 - Evidence doc: "All 36 unit and route tests pass … across Rust (`glean-hub-sync`) and Node.js suites" — no Node tests exist in repo (only `tests/*.sh` for phases 01/02). Misleading; also docs say strict data is "Never accessible by legacy … cleanup jobs/notification writers" — asserted, unmeasured (plan §10).
-- `docs/doggo-strict-sync.md` runbook: `cargo run --bin strong_sync_admission -- --mongo-uri $MONGO_URI` — URI on argv (plan: never) and cargo on production (plan: release prerequisite = packaged executable, no Cargo on prod). Bin also silently falls back to `MONGO_TEST_URI` and default db `glean_hub`; no test that helper == server validator.
+- `docs/tabbyrush-strict-sync.md` runbook: `cargo run --bin strong_sync_admission -- --mongo-uri $MONGO_URI` — URI on argv (plan: never) and cargo on production (plan: release prerequisite = packaged executable, no Cargo on prod). Bin also silently falls back to `MONGO_TEST_URI` and default db `glean_hub`; no test that helper == server validator.
 - Admission still not "exact": extra unique/partial/hidden indexes unchecked, `filter_map(as_i32)` lets `{userId:1,tableName:1,rowId:1,x:"text"}` pass (`app_service.rs:302-308`), collection `type`/timeseries/clustered unchecked, hidden flag unchecked; `list_collection_names()` full scan redundant with `list_collections().filter`; cache never evicts.
 - Corrupt-row handling inconsistent: apply path coerces missing `revision/deleted` to 0/false; update `createdAt` immutability silently skipped if `data` missing/invalid (:423-437); pull coerces bad `data` to `{}`. Also nonnull `lastOp.acceptedRevision == revision` invariant (plan §6) not enforced; replay returns stored value with `unwrap_or(current_rev)`. Should fail closed (Internal/RetryableFailure).
 - Smoke: with neither key nor JWT every gate passes on 401 → misleading green; `--debug-local` parsed, unused (plan command references it). No strict happy path (create/pull/replay) nor legacy-app-unchanged check. Fail/SKIPPED when creds absent.

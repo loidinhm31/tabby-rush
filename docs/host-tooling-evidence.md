@@ -37,7 +37,7 @@ Related Docs: [Headless Android Setup](./headless-android-setup.md) · [Project 
 
 ### Verified Smoke Test Evidence
 - **Live Session Smoke (Display `:199`)**: Executed during review cycle 3 (`plans/reports/code-reviewer-261013-2314-phase-01-headless-tooling-cycle3.md`) using `scripts/start-xpra.sh`. Verified process startup (xpra, Xorg, xterm), confirmed session active in `xpra list`, verified zero listening TCP sockets associated with Xpra via `ss -ltn` (system port 5353 belongs to host Avahi daemon; Xpra was started with `--mdns=no`), and verified clean shutdown via `start-xpra.sh stop`.
-- **Environment Installation & Graphical Acceptance**: Android Studio download, SDK command-line tools, platform tools (`adb`), emulator binary, AVD (`doggo_android`), and visual inspection of the emulator framebuffer remain **PENDING** interactive workstation operator execution.
+- **Environment Installation & Graphical Acceptance**: Android Studio download, SDK command-line tools, platform tools (`adb`), emulator binary, AVD (`tabbyrush_android`), and visual inspection of the emulator framebuffer remain **PENDING** interactive workstation operator execution.
 ---
 
 ## 3. Runtimes & Development Tools
@@ -50,7 +50,7 @@ Related Docs: [Headless Android Setup](./headless-android-setup.md) · [Project 
 | **adb** | Unset | Not yet installed | Pending interactive SDK platform-tools install |
 | **emulator** | Unset | Not yet installed | Pending interactive SDK emulator package install |
 | **Android Studio**| Unset | Not yet installed | Pending interactive download & extraction to `~/.local/share/android-studio` |
-| **AVD** | Unset | Not yet created | Planned device: `doggo_android` (`pixel_6`, API 35 image) |
+| **AVD** | Unset | Not yet created | Planned device: `tabbyrush_android` (`pixel_6`, API 35 image) |
 | **Screenshot** | `docs/evidence/android-tooling-launcher.png` | Not yet captured | Pending visual emulator session |
 
 ---

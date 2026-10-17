@@ -1,28 +1,28 @@
-# Doggo Local Storage and Strict Synchronization Specification
+# TabbyRush Local Storage and Strict Synchronization Specification
 
 Date: 2026-10-17  
 Phase: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
-Plan: `plans/261016-1409-sticky-task-surfaces` (and `plans/261015-0752-task-deadlines-reminders-strict-upgrades`, `plans/261013-1540-doggo-glean-hub-reuse`)
+Plan: `plans/261016-1409-sticky-task-surfaces` (and `plans/261015-0752-task-deadlines-reminders-strict-upgrades`, `plans/261013-1540-tabbyrush-glean-hub-reuse`)
 Related Docs: [System Architecture](./system-architecture.md) · [API Contract](./api-contract.md) · [Code Standards](./code-standards.md) · [Sync Acceptance](./sync-acceptance.md)
 
 ---
 
 ## 1. Storage Architecture & Partitioning
 
-Doggo persists all local application state using **AndroidX Room KMP** (version 2.7.0-alpha12) backed by SQLite via `BundledSQLiteDriver`. Destructive migration fallback is strictly prohibited. Schema evolution uses explicit step-by-step migrations: schema version 1 (`shared/schemas/dev.doggo.shared.data.DoggoDatabase/1.json`) upgrades to schema version 2 (`shared/schemas/dev.doggo.shared.data.DoggoDatabase/2.json`, identity hash `06a93ffbac4a0570d56446f47e0e3e4c`) via `DatabaseMigrations.MIGRATION_1_2`. Both JVM (`createJvmDatabaseBuilder`) and Android (`createAndroidDatabaseBuilder`) database builders register this migration via `DatabaseMigrations.ALL`.
+TabbyRush persists all local application state using **AndroidX Room KMP** (version 2.7.0-alpha12) backed by SQLite via `BundledSQLiteDriver`. Destructive migration fallback is strictly prohibited. Schema evolution uses explicit step-by-step migrations: schema version 1 (`shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/1.json`) upgrades to schema version 2 (`shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/2.json`, identity hash `06a93ffbac4a0570d56446f47e0e3e4c`) via `DatabaseMigrations.MIGRATION_1_2`. Both JVM (`createJvmDatabaseBuilder`) and Android (`createAndroidDatabaseBuilder`) database builders register this migration via `DatabaseMigrations.ALL`.
 
 ### 1.1 Account-Level Isolation
 - **Storage Partitioning**: Each account directory is keyed exclusively by the 64-character lowercase hexadecimal string of the canonical `AccountKey`:
   `SHA-256(u32_be(origin.len) + origin_bytes + u32_be(userId.len) + userId_bytes)`
 - **Directory Layout**:
   - Android: `Context.filesDir/accounts/<accountKey>/`
-  - Linux Desktop: `$XDG_DATA_HOME/doggo/accounts/<accountKey>/` (default: `~/.local/share/doggo/accounts/<accountKey>/`)
-  - Windows Desktop: `%LOCALAPPDATA%/doggo/accounts/<accountKey>/`
+  - Linux Desktop: `$XDG_DATA_HOME/tabbyrush/accounts/<accountKey>/` (default: `~/.local/share/tabbyrush/accounts/<accountKey>/`)
+  - Windows Desktop: `%LOCALAPPDATA%/tabbyrush/accounts/<accountKey>/`
 - **Path Traversal Protection & Filesystem Model**: Both `AndroidAccountFiles` and `JvmAccountFiles` verify `canonicalFile.toPath().startsWith(canonicalBase.toPath())` to ensure the resolved directory stays contained within the canonical base root (mitigating path traversal via `..` or symlink escapes outside the accounts root; intra-tree symlinks and TOCTOU races are outside this model). Critical metadata files (`wipe.marker`, `generation.dat`) write to temporary files, flush to disk via `FileOutputStream.fd.sync()`, and replace atomically via `StandardCopyOption.ATOMIC_MOVE` (note: directory metadata fsync is filesystem-dependent).
 
 ### 1.2 The Seven Room Entities (Database Version 2)
 
-`DoggoDatabase` defines seven entities under `dev.doggo.shared.data`:
+`TabbyRushDatabase` defines seven entities under `dev.tabbyrush.shared.data`:
 
 | Entity | Table Name | Primary Key | Description & Invariants |
 |---|---|---|---|
@@ -252,7 +252,7 @@ sequenceDiagram
 3. **Persist Marker Outside Database**: Atomically writes `generation + 1` to `wipe.marker.tmp` with file sync (`fsync`), then atomically moves to `wipe.marker`. If generation read or marker persistence fails, teardown aborts immediately fail-closed with store frozen.
 4. **Cancel & Await Schedulers**: Cancels background WorkManager tasks on Android and coordinates platform teardown cancellation via `LeaveSchedulerCancelGate` (binding `adapter.cancelAllForAccount(accountKey)`; physical native alarm/notification cancellation verified in Phases 08/09). If cancellation throws or fails, teardown aborts fail-closed: **retains `wipe.marker` and remains frozen** (no rollback to unfrozen state).
 5. **Close Room Database**: `store.close()` closes all database connections cleanly after in-flight work has drained.
-6. **Delete Database Artifacts**: Deletes `doggo.db`, `doggo.db-wal`, `doggo.db-shm`. If deletion fails, the process stays fail-closed with `wipe.marker` intact.
+6. **Delete Database Artifacts**: Deletes `tabbyrush.db`, `tabbyrush.db-wal`, `tabbyrush.db-shm`. If deletion fails, the process stays fail-closed with `wipe.marker` intact.
 7. **Clear Credentials**: Removes tokens and identity from `CredentialVault` and resets `HubAuthSession`.
 8. **Clear Wipe Marker**: Removes `wipe.marker` once database artifacts and credentials are provably eliminated.
 
@@ -261,7 +261,7 @@ sequenceDiagram
 ### 6.2 Startup Crash Recovery
 On application startup, before opening any database or initializing an account, `AccountLeaveProtocol.completePendingWipe()` inspects `hasPendingWipe(accountKey)`. If `wipe.marker` exists:
 1. Cancels all background work and alarms via `schedulerCancelGate?.cancelAndAwait(accountKey)`. If cancellation throws, it aborts returning `false` (retaining `wipe.marker`).
-2. Deletes remaining database files (`doggo.db`, `doggo.db-wal`, `doggo.db-shm`).
+2. Deletes remaining database files (`tabbyrush.db`, `tabbyrush.db-wal`, `tabbyrush.db-shm`).
 3. If files are deleted successfully, clears vault credentials via `onClearVault(accountKey)`.
 4. Clears `wipe.marker` via `onClearWipeMarker(accountKey)`.
 If file deletion fails, it returns `false`, preventing the account from being reopened in a corrupted state.
@@ -269,9 +269,9 @@ If file deletion fails, it returns `false`, preventing the account from being re
 
 ## 7. Strict-v2 Client Transition, Safe Replay & Outbox Reconciliation (Phase 06 Delivered)
 
-*Note: Section 7.1 documents the Room database version 2 schema, explicit `MIGRATION_1_2`, and shared models delivered in Phase 05. Section 7.2 defines the cross-version outbox reconciliation, durable transition pipeline, and safe replay mechanisms delivered in Phase 06. Section 7.3 defines the mathematical invariants and checked 64-bit arithmetic implemented in `dev.doggo.shared.contract`.*
+*Note: Section 7.1 documents the Room database version 2 schema, explicit `MIGRATION_1_2`, and shared models delivered in Phase 05. Section 7.2 defines the cross-version outbox reconciliation, durable transition pipeline, and safe replay mechanisms delivered in Phase 06. Section 7.3 defines the mathematical invariants and checked 64-bit arithmetic implemented in `dev.tabbyrush.shared.contract`.*
 ### 7.1 Room Database Migration (1 -> 2) [Phase 05 Delivered]
-In Room database version 2, `DoggoDatabase` executes explicit step-by-step migration `DatabaseMigrations.MIGRATION_1_2`. Both `createAndroidDatabaseBuilder` and `createJvmDatabaseBuilder` consume `DatabaseMigrations.ALL`, which registers `MIGRATION_1_2`. Destructive migration fallback is strictly forbidden.
+In Room database version 2, `TabbyRushDatabase` executes explicit step-by-step migration `DatabaseMigrations.MIGRATION_1_2`. Both `createAndroidDatabaseBuilder` and `createJvmDatabaseBuilder` consume `DatabaseMigrations.ALL`, which registers `MIGRATION_1_2`. Destructive migration fallback is strictly forbidden.
 
 - **Expanded Tables (12 Temporal Columns)**:
   `server_base`, `editor_drafts`, `scan_staging`, and `outbox` are altered using SQLite `ALTER TABLE ADD COLUMN`:
@@ -324,7 +324,7 @@ In Room database version 2, `DoggoDatabase` executes explicit step-by-step migra
   2. `reminder_delivery_ledger`: Durable occurrence state and claim outcomes for native reminders. Composite primary key: `[accountKey, generation, taskId, scheduleToken, occurrenceIndex]`. Indices: `[accountKey, generation, taskId]` and `[dueEpochMs]`. Status values: `PENDING`, `CLAIMED`, `POSTED`, `MISSED`, `CANCELLED`, `SKIPPED`. Cancellation states: `ACTIVE`, `CANCELLED`. Account-partitioned, wiped on logout, never transmitted to Hub.
 
 - **Transactional Database Wipe**:
-  `DoggoDao.wipeAllTablesAtomic()` incorporates both new tables:
+  `TabbyRushDao.wipeAllTablesAtomic()` incorporates both new tables:
   ```kotlin
   @Transaction
   suspend fun wipeAllTablesAtomic() {
@@ -379,7 +379,7 @@ Provably unsent legacy v1 operations (`transitionCheckpoint == "PROVEN_NOT_ACCEP
 
 #### 5. Intent-Masked Rebase Safety & Atomic Cleanup
 - **Non-Destructive Rebase**: In `RoomAccountStore.reconcileAccepted()`, acknowledging a legacy strict-v1 outbox operation (`op.contractVersion == CONTRACT_VERSION_V1`) or a masked edit without deadline/reminder intents preserves remote temporal fields (`deadlineDate`, `deadlineTime`, `reminderEnabled`, `scheduleToken`, etc.) from `currentBase`.
-- **Atomic Regressive Cleanup**: In `DoggoDao.discardRegressiveReconcileAtomic()`, receiving a server revision lower than confirmed base deletes the stale outbox entry and conditionally clears the draft in a single SQLite transaction without regressing `server_base`.
+- **Atomic Regressive Cleanup**: In `TabbyRushDao.discardRegressiveReconcileAtomic()`, receiving a server revision lower than confirmed base deletes the stale outbox entry and conditionally clears the draft in a single SQLite transaction without regressing `server_base`.
 
 #### 6. Cross-Version Invariant & Server Compatibility Guard
 - In `AccountSyncCoordinator.executeSyncRound()`:
@@ -442,8 +442,8 @@ The ledger lifecycle is managed over `reminder_delivery_ledger` in SQLite:
   1. Filters active ledger entries matching `taskId` and `scheduleToken`.
   2. Gathers consumed indices (`OUTCOME_CLAIMED`, `OUTCOME_POSTED`).
   3. Evaluates 5-minute grace window via `ReminderScheduleCalculator.evaluateGrace()`.
-  4. Marks skipped indices in SQLite via `DoggoDao.markOccurrencesSkippedAtomic()`.
-  5. Atomically claims the single eligible occurrence in SQLite via `DoggoDao.claimOccurrenceAtomic()` inside a Room `@Transaction`.
+  4. Marks skipped indices in SQLite via `TabbyRushDao.markOccurrencesSkippedAtomic()`.
+  5. Atomically claims the single eligible occurrence in SQLite via `TabbyRushDao.claimOccurrenceAtomic()` inside a Room `@Transaction`.
 - **Notification Removal Acknowledgment**: When an obsolete notification is removed via `adapter.removeOwnedNotification()`, `clearPostedNotificationId()` transactionally clears `postedPlatformId` in the ledger.
 
 ### 8.4 Lock Hierarchy & Delivery Gate Concurrency (`ReminderDeliveryGate`)
@@ -523,7 +523,7 @@ In `RoomAccountStore.getAccountLocalSettings()` and `updateAccountLocalSettings(
 
 
 ### 10.4 Surface Preference Storage
-- Android `TaskSurfacePreferences` uses private, account-keyed `SharedPreferences` named `doggo_task_surface_<accountKey>`, outside Room and task synchronization. It stores the notification opt-in (disabled by default), deadline suppression key, and active posted-notification key/receipt. The versioned `DeadlineSelectionKeyCodec` persists deadline identity/temporal fields without a task title. Account leave/wipe clears this preference file.
+- Android `TaskSurfacePreferences` uses private, account-keyed `SharedPreferences` named `tabbyrush_task_surface_<accountKey>`, outside Room and task synchronization. It stores the notification opt-in (disabled by default), deadline suppression key, and active posted-notification key/receipt. The versioned `DeadlineSelectionKeyCodec` persists deadline identity/temporal fields without a task title. Account leave/wipe clears this preference file.
 - Desktop `StickyWindowPreferences` stores only presentation metadata—visibility, window geometry, and saved display scale—in `sticky-window.properties`, outside Room and synchronization. Its default is hidden; writes use a temporary file, fsync, and atomic move. It contains no account or task content.
 - These surface preferences are distinct from `AccountLocalSettingsEntity`, which stores device/account-local reminder defaults and existing reminder notification settings.
 

@@ -1,8 +1,8 @@
-# Doggo Sync & Local State Acceptance Criteria
+# TabbyRush Sync & Local State Acceptance Criteria
 
 Date: 2026-10-14  
 Phase: Phase 05 Durable Local State and Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)  
-Plan: `plans/261013-1540-doggo-glean-hub-reuse`  
+Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse`  
 Related Docs: [Local Storage & Sync](./local-storage-and-sync.md) · [API Contract](./api-contract.md) · [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md)
 
 ---
@@ -11,7 +11,7 @@ Related Docs: [Local Storage & Sync](./local-storage-and-sync.md) · [API Contra
 
 | Gate ID | Area | Acceptance Rule & Specification | Status |
 |---|---|---|---|
-| **GATE-05-01** | **Room Schema & Export** | Room database compiles with KSP to schema version 1. Schema JSON exported and verified at `shared/schemas/dev.doggo.shared.data.DoggoDatabase/1.json`. Destructive fallback is strictly prohibited. | **VERIFIED** |
+| **GATE-05-01** | **Room Schema & Export** | Room database compiles with KSP to schema version 1. Schema JSON exported and verified at `shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/1.json`. Destructive fallback is strictly prohibited. | **VERIFIED** |
 | **GATE-05-02** | **Account Partitioning** | Storage directory is isolated strictly by canonical `AccountKey` SHA-256 string. Path traversal attempts (`..` or symlinks) outside canonical base directory trigger `SecurityException`. | **VERIFIED** |
 | **GATE-05-03** | **Atomic Local Save** | `saveTodoLocally` and `deleteTodoLocally` write `account_sync_meta`, `editor_drafts`, and `outbox` atomically via Room `@Transaction` methods before returning success to caller. | **VERIFIED** |
 | **GATE-05-04** | **Unsent Create-Delete** | Deleting a record with only an unsent `CREATE` operation cancels locally via `cancelUnsentCreateAtomic` without generating network wire traffic. | **VERIFIED** |

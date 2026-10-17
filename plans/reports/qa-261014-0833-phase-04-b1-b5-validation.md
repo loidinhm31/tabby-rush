@@ -3,7 +3,7 @@
 **Date:** 2026-10-14
 **Target:** Phase 04 Hub Authentication, Protected Session, and Contract Test Suites (B1-B5 Resolution Verification)
 **Command:** `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`
-**Environment:** Linux x86_64 (`/home/loidinh/WS/doggo`), OpenJDK 21.0.8 (build 21.0.8+7)
+**Environment:** Linux x86_64 (`/home/loidinh/WS/tabbyrush`), OpenJDK 21.0.8 (build 21.0.8+7)
 
 ---
 
@@ -11,13 +11,13 @@
 
 | Test Suite | Class FQCN | Total | Passed | Failed | Skipped | Status | Execution Time |
 |---|---|---:|---:|---:|---:|:---:|---:|
-| **Hub Auth Client** | `dev.doggo.shared.auth.HubAuthClientTest` | 8 | 8 | 0 | 0 | **PASS** | 0.298s |
-| **Hub Auth Session** | `dev.doggo.shared.auth.HubAuthSessionTest` | 8 | 8 | 0 | 0 | **PASS** | 0.114s |
-| **Single-Flight Refresh** | `dev.doggo.shared.auth.SingleFlightRefreshTest` | 3 | 3 | 0 | 0 | **PASS** | 0.008s |
-| **Account Key Contract** | `dev.doggo.shared.contract.AccountKeyTest` | 5 | 5 | 0 | 0 | **PASS** | 0.002s |
-| **Endpoint Policy Contract** | `dev.doggo.shared.contract.EndpointPolicyTest` | 8 | 8 | 0 | 0 | **PASS** | 0.004s |
-| **Strict Digest Contract** | `dev.doggo.shared.contract.StrictDigestTest` | 5 | 5 | 0 | 0 | **PASS** | 0.003s |
-| **Title Policy Contract** | `dev.doggo.shared.contract.TitlePolicyTest` | 6 | 6 | 0 | 0 | **PASS** | 0.005s |
+| **Hub Auth Client** | `dev.tabbyrush.shared.auth.HubAuthClientTest` | 8 | 8 | 0 | 0 | **PASS** | 0.298s |
+| **Hub Auth Session** | `dev.tabbyrush.shared.auth.HubAuthSessionTest` | 8 | 8 | 0 | 0 | **PASS** | 0.114s |
+| **Single-Flight Refresh** | `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | 3 | 3 | 0 | 0 | **PASS** | 0.008s |
+| **Account Key Contract** | `dev.tabbyrush.shared.contract.AccountKeyTest` | 5 | 5 | 0 | 0 | **PASS** | 0.002s |
+| **Endpoint Policy Contract** | `dev.tabbyrush.shared.contract.EndpointPolicyTest` | 8 | 8 | 0 | 0 | **PASS** | 0.004s |
+| **Strict Digest Contract** | `dev.tabbyrush.shared.contract.StrictDigestTest` | 5 | 5 | 0 | 0 | **PASS** | 0.003s |
+| **Title Policy Contract** | `dev.tabbyrush.shared.contract.TitlePolicyTest` | 6 | 6 | 0 | 0 | **PASS** | 0.005s |
 | **GRAND TOTAL** | *All 7 Shared JVM Test Suites* | **43** | **43** | **0** | **0** | **PASS (100%)** | **0.434s** |
 
 *Note on suite count evolution:* Total test count increased from 42 to 43 tests. `SingleFlightRefreshTest` was refactored (4 -> 3 tests) to remove session-level vault concerns from coordinator unit tests, while `HubAuthSessionTest` expanded (6 -> 8 tests) by adding specific integration tests for B2 (stale resurrection prevention) and B3 (successor in-memory retention on vault failure).
@@ -44,7 +44,7 @@
 
 ### B4: Android Instrumented Test Compilation
 - **Status:** **DEFERRED (Source-level fixed, execution deferred to Phase 07)**
-- **Verification:** Missing imports (`org.junit.Assert.assertFalse`, `assertEquals`, `assertNull`, etc.) added to `shared/src/androidInstrumentedTest/kotlin/dev/doggo/shared/auth/android-keystore-vault-test.kt`.
+- **Verification:** Missing imports (`org.junit.Assert.assertFalse`, `assertEquals`, `assertNull`, etc.) added to `shared/src/androidInstrumentedTest/kotlin/dev/tabbyrush/shared/auth/android-keystore-vault-test.kt`.
 - **Host Limitation:** Local workstation has no Android SDK (`ANDROID_HOME`). Neither Android production sources nor instrumented tests compile on this machine.
 - **Plan Authority:** `phase-04-auth-session.md` and roadmap explicitly defer Android compilation and instrumented test execution to Phase 07.
 
@@ -56,7 +56,7 @@
 
 ## 3. Detailed Test Execution Breakdown
 
-### 3.1 `dev.doggo.shared.auth.HubAuthClientTest` (8/8 PASS)
+### 3.1 `dev.tabbyrush.shared.auth.HubAuthClientTest` (8/8 PASS)
 1. `testGetMeWithBearerToken[jvm]`: PASS (0.247s) - Validates `Bearer <token>` in `Authorization` header on `/api/v1/auth/me` and app access evaluation.
 2. `testEndpointAllowlistAndDualAuthHeaders[jvm]`: PASS (0.009s) - Validates `X-API-Key` and `X-App-Id` on allowlisted sync routes; rejects legacy non-allowlisted routes client-side with `DISALLOWED_ENDPOINT`.
 3. `testRefreshSuccess[jvm]`: PASS (0.011s) - Validates `/api/v1/auth/refresh` serialization and response parsing.
@@ -66,17 +66,17 @@
 7. `testLoginSuccessAndErrorHandling[jvm]`: PASS (0.009s) - Tests login response parsing and 401 error mapping.
 8. `testSanitizeErrorMessageStripsHtml[jvm]`: PASS (0.004s) - Confirms raw HTML stripping from 502 server error pages.
 
-### 3.2 `dev.doggo.shared.auth.HubAuthSessionTest` (8/8 PASS)
+### 3.2 `dev.tabbyrush.shared.auth.HubAuthSessionTest` (8/8 PASS)
 1. `testLoginMismatchedUserIdRejected[jvm]`: PASS (0.014s) - Rejects login when `/me` user ID mismatches `/login` response user ID.
 2. `testOfflineSessionRestore[jvm]`: PASS (0.004s) - Restores authenticated state from cached identity and vault while offline.
-3. `testLoginSuccessWithoutDoggoAccessTransitionsToAccessPending[jvm]`: PASS (0.005s) - Verifies transition to `ACCESS_PENDING` when user lacks doggo approval.
-4. `testLoginSuccessWithDoggoAccess[jvm]`: PASS (0.005s) - Full login transition to `AUTHENTICATED` with vault persistence.
+3. `testLoginSuccessWithoutTabbyRushAccessTransitionsToAccessPending[jvm]`: PASS (0.005s) - Verifies transition to `ACCESS_PENDING` when user lacks tabbyrush approval.
+4. `testLoginSuccessWithTabbyRushAccess[jvm]`: PASS (0.005s) - Full login transition to `AUTHENTICATED` with vault persistence.
 5. `testLogoutDuringRefreshPreventsStaleVaultResurrection[jvm]`: PASS (0.062s) - [B2 fix verification] Logout during refresh aborts vault persistence and returns `GENERATION_STALE`.
 6. `testLocalLogoutClearsSessionAndVault[jvm]`: PASS (0.005s) - Local logout clears in-memory credentials and deletes vault entry.
 7. `testVaultWriteFailureRetainsSuccessorInMemory[jvm]`: PASS (0.007s) - [B3 fix verification] Retains successor in memory on vault write error and notifies callback.
 8. `testAuthorizedRequest401DoesNotReplayPostAutomatically[jvm]`: PASS (0.010s) - Refresh succeeds on 401, but non-idempotent POST is not automatically replayed.
 
-### 3.3 `dev.doggo.shared.auth.SingleFlightRefreshTest` (3/3 PASS)
+### 3.3 `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` (3/3 PASS)
 1. `testNetworkFailurePropagatedWithoutLoop[jvm]`: PASS (0.002s) - Network 401 propagates without entering retry loop.
 2. `testUnexpectedExceptionReturnsSafeError[jvm]`: PASS (0.002s) - Runtime exceptions map to `SafeError.Network("REFRESH_EXCEPTION")`.
 3. `testConcurrentRefreshDeduplication[jvm]`: PASS (0.004s) - 5 concurrent callers deduplicated into 1 single network refresh request.
@@ -92,8 +92,8 @@
 ## 4. Coverage Metrics & Static Quality Assessment
 
 - **JVM Automated Test Coverage:**
-  - `dev.doggo.shared.auth.*`: 19 tests covering client, session, and coordinator lifecycle paths.
-  - `dev.doggo.shared.contract.*`: 24 tests covering frozen contracts (account keys, endpoint policies, digests, title policies).
+  - `dev.tabbyrush.shared.auth.*`: 19 tests covering client, session, and coordinator lifecycle paths.
+  - `dev.tabbyrush.shared.contract.*`: 24 tests covering frozen contracts (account keys, endpoint policies, digests, title policies).
   - Common JVM unit/contract coverage estimated >85% across happy paths, error transformations, and generation boundaries.
 - **Coverage Deficits / Gaps (Identified by QA & Code Review):**
   1. Concurrency keying: `SingleFlightRefreshCoordinator` is shared across accounts/generations rather than keyed by `(accountKey, generation)` (High Review item H1).

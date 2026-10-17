@@ -27,12 +27,12 @@ val desktopTarget = requestedTarget
 
 sourceSets {
     main {
-        kotlin.srcDirs("src/main/kotlin", "src/${desktopTarget}Main/kotlin")
-        resources.srcDirs("src/main/resources", "src/${desktopTarget}Main/resources")
+        kotlin.srcDirs("src/${desktopTarget}Main/kotlin")
+        resources.srcDirs("src/${desktopTarget}Main/resources")
     }
     test {
-        kotlin.srcDirs("src/test/kotlin", "src/${desktopTarget}Test/kotlin")
-        resources.srcDirs("src/test/resources", "src/${desktopTarget}Test/resources")
+        kotlin.srcDirs("src/${desktopTarget}Test/kotlin")
+        resources.srcDirs("src/${desktopTarget}Test/resources")
     }
 }
 dependencies {
@@ -60,29 +60,31 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "dev.doggo.desktop.MainKt"
+        mainClass = "dev.tabbyrush.desktop.MainKt"
         nativeDistributions {
             targetFormats(TargetFormat.Rpm, TargetFormat.Msi)
-            packageName = if (desktopTarget == "linux") "doggo" else "Doggo"
+            packageName = if (desktopTarget == "linux") "tabbyrush" else "TabbyRush"
             packageVersion = "1.0.0"
-            description = "Doggo personal task management with strict-v1 Glean Hub synchronization"
-            vendor = "Doggo Team"
-            copyright = "Copyright 2026 Doggo"
+            description = "TabbyRush personal task management with strict-v1 Glean Hub synchronization"
+            vendor = "TabbyRush Team"
+            copyright = "Copyright 2026 TabbyRush"
 
             linux {
-                packageName = "doggo"
+                packageName = "tabbyrush"
                 rpmPackageVersion = "1.0.0"
                 menuGroup = "Office"
                 shortcut = true
+                iconFile.set(project.file("src/main/resources/tabbyrush-icon.png"))
             }
 
             windows {
-                packageName = "Doggo"
+                packageName = "TabbyRush"
                 upgradeUuid = "a6c507c8-88fe-4e49-8f43-a6125039281a"
                 menu = true
                 shortcut = true
                 dirChooser = true
                 perUserInstall = true
+                iconFile.set(project.file("src/windowsMain/resources/tabbyrush.ico"))
             }
 
             modules("java.base", "java.desktop", "java.net.http", "java.sql", "java.naming", "jdk.unsupported")
@@ -98,8 +100,8 @@ dependencyLocking {
 
 tasks.register<JavaExec>("runDebug") {
     group = "application"
-    description = "Runs Doggo Desktop in debug mode with local HTTP allowed"
-    mainClass.set("dev.doggo.desktop.DevelopmentLauncher")
+    description = "Runs TabbyRush Desktop in debug mode with local HTTP allowed"
+    mainClass.set("dev.tabbyrush.desktop.DevelopmentLauncher")
     classpath = sourceSets["main"].runtimeClasspath
 }
 

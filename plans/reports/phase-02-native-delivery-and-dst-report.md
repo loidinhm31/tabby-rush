@@ -17,7 +17,7 @@ In strict adherence to the Phase 02 specification and architecture guidance, Gat
 
 ## 2. Strict Timezone & DST Resolution Proof
 
-The strict resolver contract (`StrictTimeZoneResolver`, `StrictZoneOffsetResult`) was implemented in `shared/src/commonMain/kotlin/dev/doggo/shared/contract/` with platform actuals in `jvmMain` and `androidMain` utilizing standard `java.time.zone.ZoneRules` (built into Java 8+ and Android API 26+).
+The strict resolver contract (`StrictTimeZoneResolver`, `StrictZoneOffsetResult`) was implemented in `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/` with platform actuals in `jvmMain` and `androidMain` utilizing standard `java.time.zone.ZoneRules` (built into Java 8+ and Android API 26+).
 
 All 6 test vectors executed and passed 100% in `:shared:jvmTest`:
 
@@ -38,20 +38,20 @@ All 6 test vectors executed and passed 100% in `:shared:jvmTest`:
 
 ### 3.1 Linux Desktop & D-Bus Candidate
 - **Dependency Locking Repair**: `desktopApp/gradle-linux.lockfile` was reconciled to remove stale `net.java.dev.jna` entries while preserving target isolation. Builds and test suites reproduce without `--write-locks`.
-- **Adapter Implementation**: `DbusLinuxNotificationAdapter` in `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-notification-adapter.kt` communicates with `/org/freedesktop/Notifications`.
+- **Adapter Implementation**: `DbusLinuxNotificationAdapter` in `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-notification-adapter.kt` communicates with `/org/freedesktop/Notifications`.
 - **Workstation Probe**: Probing user bus at `/run/user/1000/bus` confirmed no notification service is running or activatable (`GDBus.Error.org.freedesktop.DBus.Error.ServiceUnknown`).
 - **Resilience**: Adapter catches `DBusExecutionException` / `ServiceUnknown` and returns `LinuxNotificationStatus.Unavailable` without application crash.
 - **Suite Verification**: 4/4 notification tests and 23/23 total desktop tests pass in `:desktopApp:test`.
 - **Gate Status**: Native bubble display and Action Center history removal remain BLOCKED until a desktop notification daemon (e.g., dunst or xfce4-notifyd) is active in the session.
 
 ### 3.2 Android Mobile Candidate
-- **Manifest Protection**: Added `SCHEDULE_EXACT_ALARM`, `POST_NOTIFICATIONS`, and non-exported receiver `DoggoAlarmReceiver` (`android:exported="false"`) to `androidApp/src/main/AndroidManifest.xml`.
+- **Manifest Protection**: Added `SCHEDULE_EXACT_ALARM`, `POST_NOTIFICATIONS`, and non-exported receiver `TabbyRushAlarmReceiver` (`android:exported="false"`) to `androidApp/src/main/AndroidManifest.xml`.
 - **Adapter & Capabilities**: `AndroidNotificationAdapter` and `AndroidReminderCapabilitiesChecker` implemented, decoupling notification permission from exact-alarm timing access.
 - **Workstation Probe**: Workstation lacks Android SDK in `/home/loidinh/Android/Sdk` and connected device/emulator (`adb` not found).
 - **Gate Status**: Offline receiver delivery after process death remains BLOCKED pending host SDK provisioning in Phase 08.
 
 ### 3.3 Windows Desktop Candidate
-- **Adapter Candidate & Scaffold**: `WindowsNotificationAdapter` and `WindowsToastBridge` implemented in `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-notification-adapter.kt` with stable AUMID `dev.doggo.desktop`, XML escaping, and tag/group history clearance.
+- **Adapter Candidate & Scaffold**: `WindowsNotificationAdapter` and `WindowsToastBridge` implemented in `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-notification-adapter.kt` with stable AUMID `dev.tabbyrush.desktop`, XML escaping, and tag/group history clearance.
 - **Fail-Closed Bridge**: `JnaWindowsToastBridge` explicitly returns `isAvailable() = false` and `WindowsNotificationStatus.Unavailable("Native COM/WinRT toast bridge unproven; pending Phase 09 Windows testbed")` to prevent false-positive delivery claims without real WinRT implementation.
 - **Workstation Probe**: Workstation is Linux Fedora 44; Windows DPAPI, WinRT, and MSI tools are absent.
 - **Gate Status**: Candidate remains implementation-incomplete and unproven pending WinRT/COM integration and execution on an installed Windows host with MSI AUMID registration in Phase 09.

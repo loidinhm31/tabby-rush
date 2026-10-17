@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Doggo</string>
+    <string name="app_name">TabbyRush</string>
     <string name="todo_title_label">Todo Title</string>
     <string name="todo_title_placeholder">What needs to be done?</string>
     <string name="action_create">Add Todo</string>
@@ -33,7 +33,7 @@
     <string name="sync_status_reset">Sync paused: epoch reset required</string>
     <string name="sync_status_uncertain">Sync uncertain: delivery unconfirmed</string>
     <string name="access_pending_title">Access Request Pending</string>
-    <string name="access_pending_desc">Your request to access the Doggo app is awaiting administrator approval.</string>
+    <string name="access_pending_desc">Your request to access the TabbyRush app is awaiting administrator approval.</string>
     <string name="access_rejected_title">Access Request Rejected</string>
     <string name="access_rejected_desc">Your access request was rejected by an administrator.</string>
     <string name="leave_guard_title">Leave Account?</string>

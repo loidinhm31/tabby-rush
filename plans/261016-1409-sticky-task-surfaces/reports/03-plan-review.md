@@ -18,7 +18,7 @@ Parent ran a throwaway in-memory Python validator over actual generated Markdown
 - All local Markdown links and referenced heading anchors resolve.
 - Mandatory acceptance rows are exactly1–12, with native evidence/prerequisites and behavioral race/edge coverage.
 - Research reports40 lines each, under150; both terminal results received. Desktop researcher six total calls exceeded max5 by one; Android used5. Exception retained openly, no rerun or fabricated compliance.
-- Research release fact checked against official Glance release notes:1.2.0 stable2026-08-26; compileSdk35 change in1.2 alpha notes, minSdk23 in beta notes. Exact Doggo compiler/dependency compatibility remains unverified.
+- Research release fact checked against official Glance release notes:1.2.0 stable2026-08-26; compileSdk35 change in1.2 alpha notes, minSdk23 in beta notes. Exact TabbyRush compiler/dependency compatibility remains unverified.
 - Source check confirmed notifyScheduleChanged only declared/called inside RoomAccountStore; clean private helper replacement in foundation does not require outside caller migration based on current text search. Kotlin LSP absent.
 
 ## Execution review

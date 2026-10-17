@@ -3,7 +3,7 @@
 Date: 2026-10-14  
 Status: Active  
 Phase: Phase 04 Auth & Protected Session  
-Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md`  
+Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-04-auth-session.md`  
 
 ---
 
@@ -29,8 +29,8 @@ This document establishes the acceptance criteria for Phase 04 Hub Authenticatio
 ### 2.2 HubAuthClient & Session Transitions
 - `AUTH_ACCEPT_07`: Registration normalizes email (trim + lowercase), validates byte lengths, and preserves raw transient password.
 - `AUTH_ACCEPT_08`: Login verifies `/me.userId` matches login response `userId`; returns `SafeError.Unauthorized("USER_ID_MISMATCH")` on disparity.
-- `AUTH_ACCEPT_09`: Established account with `doggo` in `/me.apps` transitions to `AuthState.AUTHENTICATED`.
-- `AUTH_ACCEPT_10`: Account without `doggo` in `/me.apps` transitions to `AuthState.ACCESS_PENDING` and submits or reconciles access request.
+- `AUTH_ACCEPT_09`: Established account with `tabbyrush` in `/me.apps` transitions to `AuthState.AUTHENTICATED`.
+- `AUTH_ACCEPT_10`: Account without `tabbyrush` in `/me.apps` transitions to `AuthState.ACCESS_PENDING` and submits or reconciles access request.
 - `AUTH_ACCEPT_11`: Access request submission failure (e.g. 400 duplicate) initiates bounded own-list reconciliation without recursive looping.
 
 ### 2.3 Single-Flight Refresh & Generation Fencing
@@ -53,8 +53,8 @@ This document establishes the acceptance criteria for Phase 04 Hub Authenticatio
 
 | Test Suite | Location | Target | Gate |
 |---|---|---|---|
-| Hub Auth Client Test | `dev.doggo.shared.auth.HubAuthClientTest` | Common JVM / Mock | Phase 04 |
-| Single-Flight Refresh Test | `dev.doggo.shared.auth.SingleFlightRefreshTest` | Common JVM / Mock | Phase 04 |
-| Hub Auth Session Test | `dev.doggo.shared.auth.HubAuthSessionTest` | Common JVM / Mock | Phase 04 |
-| Android Keystore Test | `dev.doggo.shared.auth.AndroidKeystoreVaultTest` | Android Instrumented | Phase 07 |
+| Hub Auth Client Test | `dev.tabbyrush.shared.auth.HubAuthClientTest` | Common JVM / Mock | Phase 04 |
+| Single-Flight Refresh Test | `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Common JVM / Mock | Phase 04 |
+| Hub Auth Session Test | `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Common JVM / Mock | Phase 04 |
+| Android Keystore Test | `dev.tabbyrush.shared.auth.AndroidKeystoreVaultTest` | Android Instrumented | Phase 07 |
 | Live Hub Sync Integration | `scripts/hub-compatibility-smoke.mjs` | Node / Glean Hub | Phase 07/08 |

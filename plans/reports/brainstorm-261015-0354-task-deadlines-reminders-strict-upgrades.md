@@ -2,11 +2,11 @@
 
 Date: 2026-10-15
 Status: scope agreed; implementation not started
-Projects: Doggo + adjacent Glean Hub
+Projects: TabbyRush + adjacent Glean Hub
 
 ## Problem and final artifacts
 
-Add optional task deadline date/time and configurable reminders. Android alerts without opening UI; Linux/Windows alert while Doggo runs, visible or minimized. Deadline and per-task reminder rules sync through Hub.
+Add optional task deadline date/time and configurable reminders. Android alerts without opening UI; Linux/Windows alert while TabbyRush runs, visible or minimized. Deadline and per-task reminder rules sync through Hub.
 
 Deliverable of this session: this decision report. No code implementation or detailed implementation plan.
 
@@ -44,7 +44,7 @@ Eventual feature artifacts:
 
 ## Scope and constraints
 
-In scope: Doggo shared model/UI/storage/sync/lifecycle, Android notifications/alarms, Linux/Windows scheduling/native delivery, Hub strict-version handling, UI and script migration entry points, existing-data preservation and verification.
+In scope: TabbyRush shared model/UI/storage/sync/lifecycle, Android notifications/alarms, Linux/Windows scheduling/native delivery, Hub strict-version handling, UI and script migration entry points, existing-data preservation and verification.
 
 Out of scope: recurring tasks, snooze, repeated overdue campaigns, cloud push/FCM, continuously running Android service, tray lifecycle, desktop daemon/autostart, macOS/iOS, arbitrary strict-schema editing, general-purpose schema migration platform.
 
@@ -58,16 +58,16 @@ Timeline: no deadline supplied; do not trade migration/data safety for an assume
 
 ## Repository evidence
 
-Doggo:
+TabbyRush:
 - `shared/.../contract/todo-models.kt:9-17`: task has no deadline/reminder fields.
 - `shared/.../sync/hub-sync-dtos.kt:5-11`: four-field wire payload.
 - `shared/.../contract/strict-sync-contract.kt:35-39,89-101`: matching four-field data/digest encoding.
-- `integration/glean-hub/doggo-schema.json:5-12`: four-column todos registry schema.
-- `shared/.../data/doggo-database.kt:13-23`: Room schema version 1; explicit migration required.
+- `integration/glean-hub/tabbyrush-schema.json:5-12`: four-column todos registry schema.
+- `shared/.../data/tabbyrush-database.kt:13-23`: Room schema version 1; explicit migration required.
 - `shared/.../data/room-account-store.kt:35-75`: visible UI projection overlays drafts; not a safe reminder eligibility query.
 - Lifecycle scout: DAO suspend queries have no observable reminder projection; controllers reload UI on local actions/coordinator progress.
 - `androidApp/src/main/AndroidManifest.xml:4-29`: no notification/exact-alarm/boot declarations currently.
-- Lifecycle scout: `doggo-application.kt` completes pending wipes before local session restore; worker checks account, generation, wipe marker.
+- Lifecycle scout: `tabbyrush-application.kt` completes pending wipes before local session restore; worker checks account, generation, wipe marker.
 - `desktopApp/.../main.kt:434-439`: close disposes runtime and exits.
 - `desktopApp/build.gradle.kts:49-54`: existing Linux D-Bus / Windows JNA dependencies; bindings available, notification adapters not implemented.
 
@@ -135,12 +135,12 @@ Detailed transition algorithm/version-aware replay handling is required planning
 
 ## Touchpoints
 
-- Shared: `contract/` task/actions/UI state/account-store/strict-sync; `data/` entities, DAO, Room version/migrations/exported schema; `sync/` DTOs, coordinator, staging, reconciliation and account-leave protocol; `ui/todo-editor.kt`, `ui/todo-list.kt`, `ui/doggo-app.kt` and settings surface.
+- Shared: `contract/` task/actions/UI state/account-store/strict-sync; `data/` entities, DAO, Room version/migrations/exported schema; `sync/` DTOs, coordinator, staging, reconciliation and account-leave protocol; `ui/todo-editor.kt`, `ui/todo-list.kt`, `ui/tabbyrush-app.kt` and settings surface.
 - Android: manifest, application startup/runtime, session view-model, activity permission flow, alarm/restore receivers, notification channel/adapter, account cancellation gate. Existing WorkManager remains sync-only.
 - Desktop: controller/window lifecycle in `main.kt`, account scheduler, target-specific Linux/Windows notification adapters and packaging/dependencies where required.
 - Hub server: sync plugin `models/strong_sync.rs`, `models/app.rs`, `models/api.rs`, `services/app_service.rs`, `services/strong_sync_service.rs`, storage admission and routes; version-aware migration operation/state.
 - Hub UI: schema service/types, admin edit-app and schema-editor version-aware display/migration action; shared operator feedback.
-- Scripts/specs/docs: canonical Doggo schema, provisioning/compatibility scripts, controlled migration client, operator runbook and Android/Linux/Windows acceptance docs.
+- Scripts/specs/docs: canonical TabbyRush schema, provisioning/compatibility scripts, controlled migration client, operator runbook and Android/Linux/Windows acceptance docs.
 - Existing tests: shared storage/sync/digest/migration suites, server contract/storage/replay suites, Hub admin UI tests where applicable. Add permanent regressions for uncertain behavior, not wiring assertions.
 - External systems: deployed Hub service, MongoDB registry/app records, Android OS permissions/alarms, Linux session bus/notification daemon, Windows shell/installer identity. No new cloud notification service.
 
@@ -161,7 +161,7 @@ Detailed transition algorithm/version-aware replay handling is required planning
 
 ## Risks and dependencies
 
-Primary risk: sync-contract evolution and offline uncertain operations; notification UI is not the hard part. Needs coordinated Hub deployment, MongoDB operator procedure and Doggo release across platforms.
+Primary risk: sync-contract evolution and offline uncertain operations; notification UI is not the hard part. Needs coordinated Hub deployment, MongoDB operator procedure and TabbyRush release across platforms.
 
 Other risks: app-wide Doze quotas/OEM restrictions, blocked notifications/DND, Windows packaged notification identity/binding, Linux service absence, scheduler/posting crash boundary, timezone/DST ambiguity, stale remote completion offline.
 

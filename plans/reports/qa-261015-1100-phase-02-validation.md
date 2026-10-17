@@ -21,7 +21,7 @@
 
 ## 2. Key Phase 02 Suite Breakdown
 
-### 2.1 `dev.doggo.shared.contract.StrictTimeZoneResolverTest` (6/6 PASS)
+### 2.1 `dev.tabbyrush.shared.contract.StrictTimeZoneResolverTest` (6/6 PASS)
 - `testDstOverlapEnumerationNewYorkFallBack[jvm]`: PASS (0.018s) - Verifies 2 valid offsets for 2026-11-01 01:30 (EDT -14400s vs EST -18000s), distinct instants separated by 3600000ms, ambiguous call without offset rejected.
 - `testDstGapRejectionNewYorkSpringForward[jvm]`: PASS (0.001s) - Verifies Gap returned for 2026-03-08 02:30 (zero valid offsets, instant resolution throws `IllegalArgumentException`).
 - `testStandardUnambiguousTimeResolution[jvm]`: PASS (0.002s) - Verifies Single offset -14400s for 2026-06-15 10:00.
@@ -29,7 +29,7 @@
 - `testTwentyFiveHourDayBoundaryAcrossFallBack[jvm]`: PASS (0.0s) - Verifies 90000000ms (25h) day length on 2026-11-01.
 - `testZoneSupportAndValidation[jvm]`: PASS (0.001s) - Validates valid zones, leap-year rejection, invalid hour/minute bounds.
 
-### 2.2 `dev.doggo.desktop.linux.LinuxNotificationAdapterTest` (4/4 PASS)
+### 2.2 `dev.tabbyrush.desktop.linux.LinuxNotificationAdapterTest` (4/4 PASS)
 - `testMissingDaemonServiceUnknownHandling`: PASS (0.006s) - Verifies `DBusExecutionException` / `ServiceUnknown` gracefully mapped to `LinuxNotificationStatus.Unavailable` without process crash.
 - `testMissingDbusSessionConnectionHandling`: PASS (0.0s) - Verifies missing D-Bus session handled gracefully.
 - `testHostEnvironmentProbeSafeExecution`: PASS (0.005s) - Verifies safe environment probing on workstation session.
@@ -120,7 +120,7 @@
 
 ## 9. Recommendations
 1. Configure JaCoCo/Kover for multiplatform unit test code coverage measurement.
-2. Address Java `URL` constructor deprecation in `desktopApp/src/test/kotlin/dev/doggo/desktop/platform-vault-dispatcher-test.kt`.
+2. Address Java `URL` constructor deprecation in `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/platform-vault-dispatcher-test.kt`.
 3. Re-enable Gradle dependency verification once lockfile/checksum metadata updated for all targets.
 4. Provision Android SDK 35 command-line tools in CI/workstation for Phase 08 mobile alarm/notification verification.
 

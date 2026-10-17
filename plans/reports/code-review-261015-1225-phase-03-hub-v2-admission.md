@@ -4,7 +4,7 @@
 **Review Target**: Phase 03 Hub versioned contract, admission guard, and data-preserving migration (`phase-03-hub-versioned-contract-and-migration.md`)  
 **Repositories Involved**:
 - Backend: `/home/loidinh/WS/glean-hub` (`glean-hub-plugin/glean-hub-sync`)
-- Client & Test Vectors: `/home/loidinh/WS/doggo`
+- Client & Test Vectors: `/home/loidinh/WS/tabbyrush`
 **Reviewer Role**: evcCodeReviewerCycle3 (Cycle 3 Final Review after atomic permitCount CAS and resumption accounting fixes)
 
 ---
@@ -19,7 +19,7 @@
   6. `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync/src/routes/strong_sync.rs` (66 lines)
   7. `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync/src/middleware/dual_auth.rs` (234 lines)
   8. `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/strict_upgrade_tests.rs` (263 lines)
-  9. `/home/loidinh/WS/glean-hub/docs/doggo-strict-sync.md` (115 lines)
+  9. `/home/loidinh/WS/glean-hub/docs/tabbyrush-strict-sync.md` (115 lines)
   10. `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/app_service.rs` (660 lines)
   11. `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync/src/models/strong_sync.rs` (319 lines)
   12. `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync/src/models/strong_sync_v2.rs` (187 lines)
@@ -172,10 +172,10 @@ Code remediations for atomic permit count CAS and cumulative resumption accounti
 |---|---|---|---|---|---|---|
 | `cargo test --locked` | `glean-hub-plugin/glean-hub-sync` | Unit, integration & route tests | 55 | 54 | 0 (1 ign) | **PASS** |
 | `cargo clippy --locked --all-targets` | `glean-hub-plugin/glean-hub-sync` | Static compiler analysis | N/A | 0 warnings | 0 | **PASS** |
-| `node scripts/strict-v2-vector-runner.mjs` | `doggo` | 10 valid + 11 reject + 2 fingerprint checks | 23 | 23 | 0 | **PASS** |
-| `node scripts/hub-live-smoke.mjs --fixture-test` | `doggo` | Offline fixture protocol isolation smoke | 18 | 18 | 0 | **PASS** |
-| `./gradlew :shared:jvmTest --rerun-tasks` | `doggo` | Shared KMP JVM test suites | 116 | 116 | 0 | **PASS** |
-| `node scripts/release-security-check.mjs --diagnose-source` | `doggo` | Android static manifest & security audit | 6 | 6 | 0 | **PASS** |
+| `node scripts/strict-v2-vector-runner.mjs` | `tabbyrush` | 10 valid + 11 reject + 2 fingerprint checks | 23 | 23 | 0 | **PASS** |
+| `node scripts/hub-live-smoke.mjs --fixture-test` | `tabbyrush` | Offline fixture protocol isolation smoke | 18 | 18 | 0 | **PASS** |
+| `./gradlew :shared:jvmTest --rerun-tasks` | `tabbyrush` | Shared KMP JVM test suites | 116 | 116 | 0 | **PASS** |
+| `node scripts/release-security-check.mjs --diagnose-source` | `tabbyrush` | Android static manifest & security audit | 6 | 6 | 0 | **PASS** |
 | **Gate G3 Multi-Instance Live Mongo Gate** | Distributed Topology | Two-node admission fence race & crash recovery | 0 | 0 | 0 | **UNVERIFIED** |
 
 *Note: 1 ignored test in `glean-hub-sync` (`test_strong_sync_live_mongo_acceptance_gate`) explicitly requires live MongoDB via `MONGO_TEST_URI`.*
@@ -243,10 +243,10 @@ Code remediations for atomic permit count CAS and cumulative resumption accounti
 |---|---|---|---|
 | `cargo test --locked` | `glean-hub-sync` | **PASS** | 54 passed, 0 failed, 1 ignored (`test_strong_sync_live_mongo_acceptance_gate`) |
 | `cargo clippy --locked --all-targets` | `glean-hub-sync` | **PASS** | 0 warnings, clean compilation |
-| `node scripts/strict-v2-vector-runner.mjs` | `doggo` | **PASS** | 23/23 vectors & fingerprints verified |
-| `node scripts/hub-live-smoke.mjs --fixture-test` | `doggo` | **PASS (FIXTURE ONLY)** | 18/18 mock fixture checks passed (does not exercise Rust backend or MongoDB) |
-| `node scripts/release-security-check.mjs --diagnose-source` | `doggo` | **PASS** | 6/6 static manifest and security checks passed |
-| `./gradlew :shared:jvmTest --rerun-tasks` | `doggo` | **BLOCKED** | Failed at Gradle startup: JDK 25 (`25.0.4.1`) incompatible with Kotlin CLI `JavaVersion.parse`; requires JDK 21 LTS |
+| `node scripts/strict-v2-vector-runner.mjs` | `tabbyrush` | **PASS** | 23/23 vectors & fingerprints verified |
+| `node scripts/hub-live-smoke.mjs --fixture-test` | `tabbyrush` | **PASS (FIXTURE ONLY)** | 18/18 mock fixture checks passed (does not exercise Rust backend or MongoDB) |
+| `node scripts/release-security-check.mjs --diagnose-source` | `tabbyrush` | **PASS** | 6/6 static manifest and security checks passed |
+| `./gradlew :shared:jvmTest --rerun-tasks` | `tabbyrush` | **BLOCKED** | Failed at Gradle startup: JDK 25 (`25.0.4.1`) incompatible with Kotlin CLI `JavaVersion.parse`; requires JDK 21 LTS |
 | **Gate G3 Multi-Instance Live Mongo Gate** | Cluster Topology | **MANDATORY / UNVERIFIED** | Live two-node replica set race, failover, and crash tests unexecuted |
 
 ---
@@ -322,10 +322,10 @@ Production admission cannot be signed off until permit atomicity, resumption acc
 |---|---|---|---|
 | `cargo test --locked` | `glean-hub-sync` unit & integration | **PASS** | 54 passed, 0 failed, 1 ignored (`test_strong_sync_live_mongo_acceptance_gate`) |
 | `cargo clippy --locked --all-targets` | `glean-hub-sync` static analysis | **PASS** | Clean compilation, 0 warnings |
-| `node scripts/strict-v2-vector-runner.mjs` | `doggo` strict-v2 protocol vectors | **PASS** | 23/23 vectors (10 valid, 11 reject, 2 fingerprints) |
-| `node scripts/hub-live-smoke.mjs --fixture-test` | `doggo` offline mock fixture | **PASS (FIXTURE ONLY)** | 18/18 checks passed; does not exercise live Rust backend or MongoDB |
-| `node scripts/release-security-check.mjs --diagnose-source` | `doggo` release source security audit | **PASS** | 6/6 static manifest and security checks passed |
-| `./gradlew :shared:jvmTest --rerun-tasks` | `doggo` shared KMP JVM test suite | **BLOCKED ON WORKSTATION** | Workstation default JDK 25 (`25.0.4.1`) incompatible with Kotlin CLI; requires JDK 21 LTS |
+| `node scripts/strict-v2-vector-runner.mjs` | `tabbyrush` strict-v2 protocol vectors | **PASS** | 23/23 vectors (10 valid, 11 reject, 2 fingerprints) |
+| `node scripts/hub-live-smoke.mjs --fixture-test` | `tabbyrush` offline mock fixture | **PASS (FIXTURE ONLY)** | 18/18 checks passed; does not exercise live Rust backend or MongoDB |
+| `node scripts/release-security-check.mjs --diagnose-source` | `tabbyrush` release source security audit | **PASS** | 6/6 static manifest and security checks passed |
+| `./gradlew :shared:jvmTest --rerun-tasks` | `tabbyrush` shared KMP JVM test suite | **BLOCKED ON WORKSTATION** | Workstation default JDK 25 (`25.0.4.1`) incompatible with Kotlin CLI; requires JDK 21 LTS |
 | **Gate G3 Multi-Instance Live Mongo Gate** | Distributed 2-node cluster + replica set | **MANDATORY / UNVERIFIED** | Live multi-instance race, failover CAS, and crash injection unexecuted |
 
 ---

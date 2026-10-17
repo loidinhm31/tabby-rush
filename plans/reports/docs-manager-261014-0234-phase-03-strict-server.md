@@ -2,18 +2,18 @@
 
 **Date:** 2026-10-14
 **Agent:** Phase03Docs
-**Scope:** Phase 03 Doggo-Only Strict Server & Legacy Isolation Documentation
-**Target Plan:** `plans/261013-1540-doggo-glean-hub-reuse/plan.md`
-**Phase File:** `plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md`
+**Scope:** Phase 03 TabbyRush-Only Strict Server & Legacy Isolation Documentation
+**Target Plan:** `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md`
+**Phase File:** `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-03-hub-schema-compatibility.md`
 
 ---
 
 ## 1. Current State Assessment
 
-Phase 03 delivers the backend foundation for isolated strict synchronization in Glean Hub Sync and the associated integration tooling, schemas, and verification scripts in Doggo.
+Phase 03 delivers the backend foundation for isolated strict synchronization in Glean Hub Sync and the associated integration tooling, schemas, and verification scripts in TabbyRush.
 
 Documentation across `docs/` has been systematically synchronized with the actual codebase implementation across both repositories:
-- **`docs/codebase-summary.md`**: Updated to catalog all 26 Phase 03 files (6 Doggo integration artifacts and 20 Glean Hub Sync plugin source/doc artifacts), restored host tooling section, updated Repomix compaction metrics (133 packed files, 211,737 tokens, 893,878 chars), sanitized mock credentials in prose to resolve secretlint exclusions, and added Phase 03 status invariants.
+- **`docs/codebase-summary.md`**: Updated to catalog all 26 Phase 03 files (6 TabbyRush integration artifacts and 20 Glean Hub Sync plugin source/doc artifacts), restored host tooling section, updated Repomix compaction metrics (133 packed files, 211,737 tokens, 893,878 chars), sanitized mock credentials in prose to resolve secretlint exclusions, and added Phase 03 status invariants.
 - **`docs/project-overview-pdr.md`**: Added Section 5 detailing Phase 03 Functional Requirements (FR-STRICT-01 through FR-STRICT-06), deliverable matrix, and updated Section 7 Traceability marking Phase 03 implementation complete with live Mongo gates deferred to Phase 07.
 - **`docs/system-architecture.md`**: Expanded Section 4 with Glean Hub backend strict-v1 architecture, MongoDB dedicated namespace (`_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>`), admission preflight CLI, route mode fences (`legacy_sync_mode_guard` returning HTTP 426), CAS mutation lifecycle, and durability policy with `hello` fallback observations.
 - **`docs/code-standards.md`**: Added Section 4 for Node.js scripts (ESM `.mjs`, 0600 key custody, CLI arguments, exit codes) and Section 5 for Rust backend integration (`StrictSyncError`, fail-closed admission, clean clippy, CAS invariants); renumbered subsequent sections.
@@ -21,16 +21,16 @@ Documentation across `docs/` has been systematically synchronized with the actua
 - **`docs/project-roadmap.md`**: Updated Phase 03 status to "Implementation Complete*" with qualification footnote; updated planned effort progress to 39% (58h / 148h planned); aligned Phase 07 (device sync / live Mongo) and Phase 08 (release operations / old-binary rollback) deferrals; added `[0.3.0-alpha.1]` changelog entry.
 - **`docs/hub-schema-integration.md`**: Added metadata header, navigation links, and cross-references.
 - **`docs/hub-compatibility-acceptance.md`**: Added acceptance gate status matrix distinguishing verified static/unit tests from deferred live Mongo gates, and documented open cycle-4 review findings and production blockers.
-- **`docs/evidence/hub-compatibility-summary.md`**: Relocated `doggo-strict-sync.md` to Documentation section, separated Doggo vs sibling Glean Hub artifacts, and clarified deferred gates.
+- **`docs/evidence/hub-compatibility-summary.md`**: Relocated `tabbyrush-strict-sync.md` to Documentation section, separated TabbyRush vs sibling Glean Hub artifacts, and clarified deferred gates.
 
 ---
 
 ## 2. Changes Made
 
 1. **`docs/codebase-summary.md`**:
-   - Added `integration/glean-hub/doggo-schema.json`, `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, and Phase 03 documentation files to the directory tree.
+   - Added `integration/glean-hub/tabbyrush-schema.json`, `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, and Phase 03 documentation files to the directory tree.
    - Restored Subsection 2.3 (`scripts/start-xpra.sh`, `scripts/android-sdk-env.sh`, `scripts/start-android-emulator.sh`).
-   - Added Subsection 2.4 detailing Doggo integration artifacts and sibling `glean-hub-sync` backend modules (Models, Services, Routes, Middleware, Binaries, Documentation).
+   - Added Subsection 2.4 detailing TabbyRush integration artifacts and sibling `glean-hub-sync` backend modules (Models, Services, Routes, Middleware, Binaries, Documentation).
    - Documented script limitations (provision script stdout key logging, smoke script unauthenticated 401 false-acceptance).
    - Updated Repomix compaction metrics based on fresh scan (133 packed files, 211,737 tokens, 893,878 chars; 1 test file excluded due to mock URL vector; sanitized prose to resolve `docs/codebase-summary.md` exclusion).
    - Removed temporary `repomix-output.xml`.
@@ -70,8 +70,8 @@ Documentation across `docs/` has been systematically synchronized with the actua
    - Documented Open Review Findings & Production Blockers (Cycle 4): topology fallback on `hello` error, corrupt-row default unwraps, script key custody and 401 acceptance behavior.
 
 8. **`docs/evidence/hub-compatibility-summary.md`**:
-   - Relocated `doggo-strict-sync.md` from Runtime Environment list to Documentation list.
-   - Explicitly separated Doggo artifacts (6 files) from sibling Glean Hub artifacts (20 files).
+   - Relocated `tabbyrush-strict-sync.md` from Runtime Environment list to Documentation list.
+   - Explicitly separated TabbyRush artifacts (6 files) from sibling Glean Hub artifacts (20 files).
    - Qualified live Mongo gate deferral to Phase 07.
 
 ---

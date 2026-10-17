@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Doggo Hub Compatibility Smoke Test Script
+ * TabbyRush Hub Compatibility Smoke Test Script
  * Verifies mounted strict-v1 and legacy route isolation gates against a running Hub origin.
  */
 
@@ -8,8 +8,8 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
     origin: process.env.GLEAN_ORIGIN || 'http://127.0.0.1:3000',
-    appId: process.env.DOGGO_APP_ID || 'doggo',
-    apiKey: process.env.DOGGO_API_KEY || '',
+    appId: process.env.TABBYRUSH_APP_ID || 'tabby-rush',
+    apiKey: process.env.TABBYRUSH_API_KEY || '',
     token: process.env.TEST_JWT || '',
     debugLocal: false,
   };

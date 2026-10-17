@@ -3,7 +3,7 @@
 **Date**: 2026-10-15  
 **Context**: Linux Fedora 44 x86_64 | JDK 21 LTS (`/home/loidinh/.local/share/jvm/jdk-21`) | Android SDK (`/home/loidinh/Android/Sdk`) | Gradle 8.11.1 | Node.js v24.16.0  
 **Target Phase**: `Phase 10 — Shared deadline editor, task list and local settings`  
-**Working Directory**: `/home/loidinh/WS/doggo`  
+**Working Directory**: `/home/loidinh/WS/tabbyrush`  
 **Artifact Path**: `plans/reports/qa-261015-2245-phase-10-validation.md`  
 
 ---
@@ -47,32 +47,32 @@
 
 | Test Class | Passed | Failed | Skipped | Time |
 |---|:---:|:---:|:---:|:---:|
-| `dev.doggo.shared.auth.HubAuthClientTest` | 9 | 0 | 0 | 0.336s |
-| `dev.doggo.shared.auth.HubAuthSessionTest` | 8 | 0 | 0 | 0.126s |
-| `dev.doggo.shared.auth.SingleFlightRefreshTest` | 3 | 0 | 0 | 0.007s |
-| `dev.doggo.shared.contract.AccountKeyTest` | 5 | 0 | 0 | 0.003s |
-| `dev.doggo.shared.contract.EndpointPolicyTest` | 8 | 0 | 0 | 0.003s |
-| `dev.doggo.shared.contract.PersistedScheduleProjectionTest` | 5 | 0 | 0 | 0.003s |
-| `dev.doggo.shared.contract.ReminderScheduleCalculatorTest` | 9 | 0 | 0 | 0.009s |
-| `dev.doggo.shared.contract.StrictDigestTest` | 5 | 0 | 0 | 0.002s |
-| `dev.doggo.shared.contract.StrictTimeZoneResolverTest` | 7 | 0 | 0 | 0.023s |
-| `dev.doggo.shared.contract.StrictV2DigestExtendedTest` | 6 | 0 | 0 | 0.004s |
-| `dev.doggo.shared.contract.StrictV2DigestVectorTest` | 5 | 0 | 0 | 0.003s |
-| `dev.doggo.shared.contract.TaskDeadlineReminderModelsTest` | 6 | 0 | 0 | 0.001s |
-| `dev.doggo.shared.contract.TitlePolicyTest` | 6 | 0 | 0 | 0.002s |
-| `dev.doggo.shared.data.ReminderOccurrenceStoreTest` | 4 | 0 | 0 | 0.013s |
-| `dev.doggo.shared.data.ReminderSchedulingCoordinatorSqliteSmokeTest` | 2 | 0 | 0 | 0.114s |
-| `dev.doggo.shared.data.ReminderTeardownBarrierSqliteTest` | 1 | 0 | 0 | 0.012s |
-| `dev.doggo.shared.data.RoomAccountStoreTest` | 23 | 0 | 0 | 0.168s |
-| `dev.doggo.shared.data.RoomMigrationV1ToV2Test` | 1 | 0 | 0 | 0.017s |
-| `dev.doggo.shared.sync.AccountLeaveProtocolTest` | 7 | 0 | 0 | 0.014s |
-| `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | 9 | 0 | 0 | 0.042s |
-| `dev.doggo.shared.sync.ContractTransitionTest` | 4 | 0 | 0 | 0.022s |
-| `dev.doggo.shared.sync.HubSyncClientTest` | 12 | 0 | 0 | 0.037s |
-| `dev.doggo.shared.sync.OutboxReconciliationTest` | 12 | 0 | 0 | 0.012s |
-| `dev.doggo.shared.sync.ReminderDeliveryGateTest` | 4 | 0 | 0 | 0.006s |
-| `dev.doggo.shared.sync.StagedFullScanTest` | 14 | 0 | 0 | 0.063s |
-| `dev.doggo.shared.ui.TodoSemanticsTest` | 14 | 0 | 0 | 0.036s |
+| `dev.tabbyrush.shared.auth.HubAuthClientTest` | 9 | 0 | 0 | 0.336s |
+| `dev.tabbyrush.shared.auth.HubAuthSessionTest` | 8 | 0 | 0 | 0.126s |
+| `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | 3 | 0 | 0 | 0.007s |
+| `dev.tabbyrush.shared.contract.AccountKeyTest` | 5 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.shared.contract.EndpointPolicyTest` | 8 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.shared.contract.PersistedScheduleProjectionTest` | 5 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.shared.contract.ReminderScheduleCalculatorTest` | 9 | 0 | 0 | 0.009s |
+| `dev.tabbyrush.shared.contract.StrictDigestTest` | 5 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.shared.contract.StrictTimeZoneResolverTest` | 7 | 0 | 0 | 0.023s |
+| `dev.tabbyrush.shared.contract.StrictV2DigestExtendedTest` | 6 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.shared.contract.StrictV2DigestVectorTest` | 5 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.shared.contract.TaskDeadlineReminderModelsTest` | 6 | 0 | 0 | 0.001s |
+| `dev.tabbyrush.shared.contract.TitlePolicyTest` | 6 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.shared.data.ReminderOccurrenceStoreTest` | 4 | 0 | 0 | 0.013s |
+| `dev.tabbyrush.shared.data.ReminderSchedulingCoordinatorSqliteSmokeTest` | 2 | 0 | 0 | 0.114s |
+| `dev.tabbyrush.shared.data.ReminderTeardownBarrierSqliteTest` | 1 | 0 | 0 | 0.012s |
+| `dev.tabbyrush.shared.data.RoomAccountStoreTest` | 23 | 0 | 0 | 0.168s |
+| `dev.tabbyrush.shared.data.RoomMigrationV1ToV2Test` | 1 | 0 | 0 | 0.017s |
+| `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | 7 | 0 | 0 | 0.014s |
+| `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | 9 | 0 | 0 | 0.042s |
+| `dev.tabbyrush.shared.sync.ContractTransitionTest` | 4 | 0 | 0 | 0.022s |
+| `dev.tabbyrush.shared.sync.HubSyncClientTest` | 12 | 0 | 0 | 0.037s |
+| `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | 12 | 0 | 0 | 0.012s |
+| `dev.tabbyrush.shared.sync.ReminderDeliveryGateTest` | 4 | 0 | 0 | 0.006s |
+| `dev.tabbyrush.shared.sync.StagedFullScanTest` | 14 | 0 | 0 | 0.063s |
+| `dev.tabbyrush.shared.ui.TodoSemanticsTest` | 14 | 0 | 0 | 0.036s |
 
 ### Phase 10 Specific Shared Test Additions:
 1. **`RoomAccountStoreTest.testClearingDeadlineToServerBaseDoesNotResurrect`**:
@@ -96,16 +96,16 @@
 
 | Test Class | Passed | Failed | Skipped | Time |
 |---|:---:|:---:|:---:|:---:|
-| `dev.doggo.desktop.CompositeDesktopLeaveCancelGateTest` | 2 | 0 | 0 | 0.138s |
-| `dev.doggo.desktop.DesktopControllerEnvTest` | 4 | 0 | 0 | 0.067s |
-| `dev.doggo.desktop.DesktopLifecycleTest` | 8 | 0 | 0 | 0.010s |
-| `dev.doggo.desktop.DesktopReminderControllerLifecycleTest` | 3 | 0 | 0 | 0.028s |
-| `dev.doggo.desktop.DesktopReminderSchedulerTest` | 6 | 0 | 0 | 0.020s |
-| `dev.doggo.desktop.DotEnvLoaderTest` | 5 | 0 | 0 | 0.002s |
-| `dev.doggo.desktop.linux.LinuxNotificationAdapterTest` | 4 | 0 | 0 | 0.009s |
-| `dev.doggo.desktop.linux.LinuxReminderAdapterTest` | 6 | 0 | 0 | 0.010s |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | 6 | 0 | 0 | 0.016s |
-| `dev.doggo.desktop.PlatformVaultDispatcherTest` | 5 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.desktop.CompositeDesktopLeaveCancelGateTest` | 2 | 0 | 0 | 0.138s |
+| `dev.tabbyrush.desktop.DesktopControllerEnvTest` | 4 | 0 | 0 | 0.067s |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | 8 | 0 | 0 | 0.010s |
+| `dev.tabbyrush.desktop.DesktopReminderControllerLifecycleTest` | 3 | 0 | 0 | 0.028s |
+| `dev.tabbyrush.desktop.DesktopReminderSchedulerTest` | 6 | 0 | 0 | 0.020s |
+| `dev.tabbyrush.desktop.DotEnvLoaderTest` | 5 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.desktop.linux.LinuxNotificationAdapterTest` | 4 | 0 | 0 | 0.009s |
+| `dev.tabbyrush.desktop.linux.LinuxReminderAdapterTest` | 6 | 0 | 0 | 0.010s |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | 6 | 0 | 0 | 0.016s |
+| `dev.tabbyrush.desktop.PlatformVaultDispatcherTest` | 5 | 0 | 0 | 0.002s |
 
 ---
 
@@ -145,10 +145,10 @@
 ## 5. Android Test Suite & Build Verification
 
 ### 5.1 Android Debug Unit Tests (`:androidApp:testDebugUnitTest`)
-- `dev.doggo.android.AndroidNotificationAdapterTest`: 6 passed (0.041s)
-- `dev.doggo.android.BuildConfigTest`: 1 passed (0.001s)
-- `dev.doggo.android.CompositeLeaveSchedulerCancelGateTest`: 3 passed (0.080s)
-- `dev.doggo.android.ReminderPermissionControllerTest`: 2 passed (0.001s)
+- `dev.tabbyrush.android.AndroidNotificationAdapterTest`: 6 passed (0.041s)
+- `dev.tabbyrush.android.BuildConfigTest`: 1 passed (0.001s)
+- `dev.tabbyrush.android.CompositeLeaveSchedulerCancelGateTest`: 3 passed (0.080s)
+- `dev.tabbyrush.android.ReminderPermissionControllerTest`: 2 passed (0.001s)
 - **Result**: 12/12 passed (duration: 0.123s).
 
 ### 5.2 Build Packaging Verifications
@@ -161,7 +161,7 @@
 
 During initial test execution, compilation in `:androidApp:compileDebugKotlin` failed:
 1. **Compilation Error**:
-   - `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt:232`: Unresolved reference `AndroidNotificationIntentFactory.DEFAULT_CHANNEL_ID`.
+   - `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt:232`: Unresolved reference `AndroidNotificationIntentFactory.DEFAULT_CHANNEL_ID`.
    - **Remediation**: Corrected reference to `AndroidNotificationIntentFactory.CHANNEL_ID`.
 2. **Capability State Fidelity Fix**:
    - In `session-view-model.kt:245`: `areNotificationsEnabled` was mapped to `caps.canPostNotifications` instead of `caps.isChannelEnabled`. This collapsed channel-disabled vs app-level permission states.

@@ -5,7 +5,7 @@
 **Phase Target**: Phase 03 — Hub versioned contract, admission guard, and data-preserving migration  
 **Working Directories**:
 - `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync`
-- `/home/loidinh/WS/doggo`
+- `/home/loidinh/WS/tabbyrush`
 
 ---
 
@@ -15,10 +15,10 @@
 |---|---|---|---|---|---|---|---|---|---|
 | `cargo test --locked` | `.../glean-hub-sync` | Hub Sync Rust unit, integration & doc tests | 55 | 54 | 0 | 1 | 100% (executed) | 32.34s wall (30.00s test runner) | 0 |
 | `cargo clippy --locked --all-targets` | `.../glean-hub-sync` | Rust compiler linter & static analysis | N/A | N/A (0 warnings) | 0 | 0 | N/A (clean) | 0.19s | 0 |
-| `node scripts/hub-live-smoke.mjs --fixture-test` | `/home/loidinh/WS/doggo` | Offline strict-v1 protocol & route isolation smoke | 18 | 18 | 0 | 0 | 100% | Recorded exit 0 | 0 |
-| `node scripts/strict-v2-vector-runner.mjs` | `/home/loidinh/WS/doggo` | Preimage, SHA-256 digest & schema fingerprint checks | 23 | 23 | 0 | 0 | 100% | Recorded exit 0 | 0 |
-| `JAVA_HOME=... ./gradlew :shared:jvmTest --rerun-tasks --dependency-verification=off` | `/home/loidinh/WS/doggo` | Shared Kotlin Multiplatform JVM unit test suites | 116 | 116 | 0 | 0 | 100% | 7.76s wall (initial run: 905ms up-to-date) | 0 |
-| `node scripts/release-security-check.mjs --diagnose-source` | `/home/loidinh/WS/doggo` | Android static manifest, backup & secret audit checks | 6 | 6 | 0 | 0 | 100% | Recorded exit 0 | 0 |
+| `node scripts/hub-live-smoke.mjs --fixture-test` | `/home/loidinh/WS/tabbyrush` | Offline strict-v1 protocol & route isolation smoke | 18 | 18 | 0 | 0 | 100% | Recorded exit 0 | 0 |
+| `node scripts/strict-v2-vector-runner.mjs` | `/home/loidinh/WS/tabbyrush` | Preimage, SHA-256 digest & schema fingerprint checks | 23 | 23 | 0 | 0 | 100% | Recorded exit 0 | 0 |
+| `JAVA_HOME=... ./gradlew :shared:jvmTest --rerun-tasks --dependency-verification=off` | `/home/loidinh/WS/tabbyrush` | Shared Kotlin Multiplatform JVM unit test suites | 116 | 116 | 0 | 0 | 100% | 7.76s wall (initial run: 905ms up-to-date) | 0 |
+| `node scripts/release-security-check.mjs --diagnose-source` | `/home/loidinh/WS/tabbyrush` | Android static manifest, backup & secret audit checks | 6 | 6 | 0 | 0 | 100% | Recorded exit 0 | 0 |
 | **Combined Automated Tests / Checks** | **Both Repos** | **All executed unit, vector, smoke, and audit checks** | **212** | **211** | **0** | **1** | **100%** | **All suites completed** | **All 0** |
 
 *Note: 1 ignored test in `glean-hub-sync` (`services::strong_sync_tests::test_strong_sync_live_mongo_acceptance_gate`) explicitly requires live MongoDB instance via `MONGO_TEST_URI`.*
@@ -96,11 +96,11 @@
 - Bin tests (`src/bin/strong_sync_admission.rs`): 0 tests defined
 - Doc tests (`glean_hub_sync`): 0 tests defined
 
-### 2.2 Doggo Strict-v2 Vector Runner (`strict-v2-vector-runner.mjs`) (23/23 PASS)
+### 2.2 TabbyRush Strict-v2 Vector Runner (`strict-v2-vector-runner.mjs`) (23/23 PASS)
 - Canonical Schema Fingerprint Checks: 2/2 PASS
   - v1 SHA-256 fingerprint verified: `3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec`
   - v2 SHA-256 fingerprint verified: `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`
-- Cross-repository Fixture Parity: PASS (Both Doggo `integration/glean-hub/strict-v2-vectors.json` and Hub `.../glean-hub-sync/tests/fixtures/strict-v2-vectors.json` present on disk with matching SHA-256 digests)
+- Cross-repository Fixture Parity: PASS (Both TabbyRush `integration/glean-hub/strict-v2-vectors.json` and Hub `.../glean-hub-sync/tests/fixtures/strict-v2-vectors.json` present on disk with matching SHA-256 digests)
 - Valid Vectors: 10/10 PASS
   - Exact byte length, preimage hex, and SHA-256 digest verified for 10 operations:
     1. `v2-create-date-only-minimal`
@@ -116,17 +116,17 @@
 - Rejection Vectors: 11/11 PASS
   - Validates rejection for out-of-range expected revision, delete containing data payload, negative createdAt, negative lead minutes, count out of range, interval not null when count=1, interval < 15 for repeating reminders, deadline parameters present without deadlineDate, missing required fields with deadlineDate, invalid reminder anchor on timed deadlines, last reminder after anchor
 
-### 2.3 Doggo Hub Live Smoke Fixture Test (`hub-live-smoke.mjs --fixture-test`) (18/18 PASS)
+### 2.3 TabbyRush Hub Live Smoke Fixture Test (`hub-live-smoke.mjs --fixture-test`) (18/18 PASS)
 - Suite 1 (Health & App Admission): 2/2 PASS
   - GET `/api/v1/health` healthy (HTTP 200)
-  - GET `/api/v1/apps/doggo` echoes `syncMode=strict-v1` and authoritative epoch
+  - GET `/api/v1/apps/tabbyrush` echoes `syncMode=strict-v1` and authoritative epoch
 - Suite 2 (Security & Negative Route Isolation): 3/3 PASS
   - Strict sync bootstrap rejects missing API key (HTTP 403)
   - Strict sync bootstrap rejects invalid API key (HTTP 403)
   - Legacy sync route rejects strict-v1 app with HTTP 426 (`protocolUnsupported`)
 - Suite 3 (Authentication & Access Session): 4/4 PASS
   - Register new user account (POST `/auth/register` HTTP 200)
-  - Login user credentials (POST `/auth/login` token obtained, apps=["doggo"])
+  - Login user credentials (POST `/auth/login` token obtained, apps=["tabby-rush"])
   - Token refresh exchange (POST `/auth/refresh` successful)
   - Verify identity & grants (GET `/auth/me` verified user)
 - Suite 4 (Strict Strong Sync Operations): 7/7 PASS
@@ -141,7 +141,7 @@
   - Revision-CAS delete produces permanent empty tombstone at revision 2
   - Pull confirms tombstone preservation (`deleted: true`, `data: {}`)
 
-### 2.4 Doggo Shared JVM Multiplatform Suite (`:shared:jvmTest`) (116/116 PASS)
+### 2.4 TabbyRush Shared JVM Multiplatform Suite (`:shared:jvmTest`) (116/116 PASS)
 *Run with `--rerun-tasks` to ensure active execution. Total 116 tests executed across 17 suites.*
 - `HubAuthClientTest`: 9/9 PASS
 - `HubAuthSessionTest`: 8/8 PASS
@@ -172,7 +172,7 @@
 - Verified without modifying command flags (did not inject `-D warnings` or suppress lints).
 
 ### 3.2 Android Release Security Source Diagnostic (`release-security-check.mjs --diagnose-source`)
-- Execution directory: `/home/loidinh/WS/doggo`
+- Execution directory: `/home/loidinh/WS/tabbyrush`
 - Target: Source repository manifest, security configs, and origin rules
 - Result: **CLEAN (6/6 checks passed)**
   1. Base manifest prohibits cleartext traffic (`usesCleartextTraffic="false"`): PASS
@@ -187,7 +187,7 @@
 - Strict v1 Canonical Fingerprint: `3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec` (verified in Rust unit tests and Node vector runner)
 - Strict v2 Canonical Fingerprint: `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4` (verified in Rust unit tests and Node vector runner)
 - Strict v2 16-column schema ordering & types: Verified in `test_v2_schema_requires_all_16_columns_in_order`.
-- Cross-repository vector consistency: Doggo fixture matches Hub test fixture bit-for-bit (verified on disk via SHA-256 fixture digest check).
+- Cross-repository vector consistency: TabbyRush fixture matches Hub test fixture bit-for-bit (verified on disk via SHA-256 fixture digest check).
 
 ---
 

@@ -3,7 +3,7 @@
 **Date:** 2026-10-14
 **Target:** Phase 06 UI State Models, Token Contrast, Action Invariants & Shared JVM Test Suite
 **Command:** `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`
-**Environment:** Linux x86_64 Fedora (`/home/loidinh/WS/doggo`), OpenJDK 21.0.8 (`$HOME/.local/share/jvm/jdk-21`), Gradle 8.11.1
+**Environment:** Linux x86_64 Fedora (`/home/loidinh/WS/tabbyrush`), OpenJDK 21.0.8 (`$HOME/.local/share/jvm/jdk-21`), Gradle 8.11.1
 **Scope:** Working tree post-Cycle 1 remediation containing Phase 06 UI state classes, theme tokens with adjusted contrast values, notices, and test suites.
 
 ---
@@ -12,20 +12,20 @@
 
 | Test Suite | Class FQCN | Engine / Double | Total | Passed | Failed | Skipped | Status |
 |---|---|---|---:|---:|---:|---:|:---:|
-| **Todo Semantics (Phase 06)** | `dev.doggo.shared.ui.TodoSemanticsTest` | Pure Common Kotlin | 7 | 7 | 0 | 0 | **PASS** |
-| **Hub Auth Client** | `dev.doggo.shared.auth.HubAuthClientTest` | Mock Ktor Engine | 8 | 8 | 0 | 0 | **PASS** |
-| **Hub Auth Session** | `dev.doggo.shared.auth.HubAuthSessionTest` | Fake Vault + Mock Ktor | 8 | 8 | 0 | 0 | **PASS** |
-| **Single-Flight Refresh** | `dev.doggo.shared.auth.SingleFlightRefreshTest` | Coroutine Coordinator | 3 | 3 | 0 | 0 | **PASS** |
-| **Account Key Contract** | `dev.doggo.shared.contract.AccountKeyTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
-| **Endpoint Policy Contract** | `dev.doggo.shared.contract.EndpointPolicyTest` | Pure Common Kotlin | 8 | 8 | 0 | 0 | **PASS** |
-| **Strict Digest Contract** | `dev.doggo.shared.contract.StrictDigestTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
-| **Title Policy Contract** | `dev.doggo.shared.contract.TitlePolicyTest` | Pure Common Kotlin | 6 | 6 | 0 | 0 | **PASS** |
-| **Room Account Store (JVM)** | `dev.doggo.shared.data.RoomAccountStoreTest` | Real Bundled SQLite (JVM) | 9 | 9 | 0 | 0 | **PASS** |
-| **Account Leave Protocol** | `dev.doggo.shared.sync.AccountLeaveProtocolTest` | Fake Store/Session + Callbacks | 7 | 7 | 0 | 0 | **PASS** |
-| **Account Sync Coordinator** | `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | Fake DAO + Mock Ktor | 5 | 5 | 0 | 0 | **PASS** |
-| **Hub Sync Client** | `dev.doggo.shared.sync.HubSyncClientTest` | Mock Ktor Engine | 6 | 6 | 0 | 0 | **PASS** |
-| **Outbox Reconciliation** | `dev.doggo.shared.sync.OutboxReconciliationTest` | Fake Store/DAO | 10 | 10 | 0 | 0 | **PASS** |
-| **Staged Full Scan** | `dev.doggo.shared.sync.StagedFullScanTest` | Fake DAO + Mock Ktor | 9 | 9 | 0 | 0 | **PASS** |
+| **Todo Semantics (Phase 06)** | `dev.tabbyrush.shared.ui.TodoSemanticsTest` | Pure Common Kotlin | 7 | 7 | 0 | 0 | **PASS** |
+| **Hub Auth Client** | `dev.tabbyrush.shared.auth.HubAuthClientTest` | Mock Ktor Engine | 8 | 8 | 0 | 0 | **PASS** |
+| **Hub Auth Session** | `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Fake Vault + Mock Ktor | 8 | 8 | 0 | 0 | **PASS** |
+| **Single-Flight Refresh** | `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Coroutine Coordinator | 3 | 3 | 0 | 0 | **PASS** |
+| **Account Key Contract** | `dev.tabbyrush.shared.contract.AccountKeyTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
+| **Endpoint Policy Contract** | `dev.tabbyrush.shared.contract.EndpointPolicyTest` | Pure Common Kotlin | 8 | 8 | 0 | 0 | **PASS** |
+| **Strict Digest Contract** | `dev.tabbyrush.shared.contract.StrictDigestTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
+| **Title Policy Contract** | `dev.tabbyrush.shared.contract.TitlePolicyTest` | Pure Common Kotlin | 6 | 6 | 0 | 0 | **PASS** |
+| **Room Account Store (JVM)** | `dev.tabbyrush.shared.data.RoomAccountStoreTest` | Real Bundled SQLite (JVM) | 9 | 9 | 0 | 0 | **PASS** |
+| **Account Leave Protocol** | `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | Fake Store/Session + Callbacks | 7 | 7 | 0 | 0 | **PASS** |
+| **Account Sync Coordinator** | `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | Fake DAO + Mock Ktor | 5 | 5 | 0 | 0 | **PASS** |
+| **Hub Sync Client** | `dev.tabbyrush.shared.sync.HubSyncClientTest` | Mock Ktor Engine | 6 | 6 | 0 | 0 | **PASS** |
+| **Outbox Reconciliation** | `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | Fake Store/DAO | 10 | 10 | 0 | 0 | **PASS** |
+| **Staged Full Scan** | `dev.tabbyrush.shared.sync.StagedFullScanTest` | Fake DAO + Mock Ktor | 9 | 9 | 0 | 0 | **PASS** |
 | **TOTAL (JVM Execution)** | *All 14 Suites* | — | **96** | **96** | **0** | **0** | **PASS (100%)** |
 
 ---
@@ -124,5 +124,5 @@
 ## 8. Unresolved Questions
 
 1. Will shared composable tests using `runComposeUiTest` be added under `shared/src/jvmTest` in Phase 06, or is Compose rendering testing deferred to platform phases (Phase 07 Android, Phase 09 Desktop)?
-2. Should `testWcagContrastRatiosMeetAccessibilityStandards` also test `DoggoMuted` on `DoggoCoralSurface` and secondary container pairings?
+2. Should `testWcagContrastRatiosMeetAccessibilityStandards` also test `TabbyRushMuted` on `TabbyRushCoralSurface` and secondary container pairings?
 3. When will the 251 transitive dependencies in `shared:jvmTestRuntimeClasspath` be reconciled in `gradle/verification-metadata.xml` for strict verification?

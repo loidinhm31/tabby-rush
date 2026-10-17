@@ -8,15 +8,16 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
-        android:name=".DoggoApplication"
+        android:name=".TabbyRushApplication"
         android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules"
         android:fullBackupOnly="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false"
         android:supportsRtl="true"
-        android:label="Doggo"
-        android:icon="@android:drawable/sym_def_app_icon">
+        android:label="TabbyRush"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round">
 
         <activity
             android:name=".MainActivity"
@@ -30,7 +31,7 @@
         </activity>
 
         <receiver
-            android:name=".DoggoAlarmReceiver"
+            android:name=".TabbyRushAlarmReceiver"
             android:exported="false" />
 
         <receiver
@@ -46,9 +47,9 @@
             </intent-filter>
         </receiver>
 
-        <!-- Doggo Glance Task Widget Receiver -->
+        <!-- TabbyRush Glance Task Widget Receiver -->
         <receiver
-            android:name=".DoggoTaskWidgetReceiver"
+            android:name=".TabbyRushTaskWidgetReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

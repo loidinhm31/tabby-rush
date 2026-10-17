@@ -54,20 +54,20 @@ Executed via: `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-ve
 
 | Test Class FQCN | Domain / Layer | Tests | Passed | Failed | Skipped |
 |---|---|---:|---:|---:|---:|
-| `dev.doggo.shared.auth.HubAuthClientTest` | Authentication HTTP | 8 | 8 | 0 | 0 |
-| `dev.doggo.shared.auth.HubAuthSessionTest` | Auth Session State | 8 | 8 | 0 | 0 |
-| `dev.doggo.shared.auth.SingleFlightRefreshTest` | Token Concurrency | 3 | 3 | 0 | 0 |
-| `dev.doggo.shared.contract.AccountKeyTest` | Core Contract Invariants | 5 | 5 | 0 | 0 |
-| `dev.doggo.shared.contract.EndpointPolicyTest` | Contract Routing & Origin | 8 | 8 | 0 | 0 |
-| `dev.doggo.shared.contract.StrictDigestTest` | Hashing & Nonce Invariants | 5 | 5 | 0 | 0 |
-| `dev.doggo.shared.contract.TitlePolicyTest` | Sanitization & Normalization | 6 | 6 | 0 | 0 |
-| `dev.doggo.shared.data.RoomAccountStoreTest` | Local Persistence (SQLite JVM) | 9 | 9 | 0 | 0 |
-| `dev.doggo.shared.sync.AccountLeaveProtocolTest` | Teardown & Wipe Protocol | 7 | 7 | 0 | 0 |
-| `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | Strict Sync Coordination | 5 | 5 | 0 | 0 |
-| `dev.doggo.shared.sync.HubSyncClientTest` | Backend Sync Client | 6 | 6 | 0 | 0 |
-| `dev.doggo.shared.sync.OutboxReconciliationTest` | Outbox Replay & CAS Logic | 10 | 10 | 0 | 0 |
-| `dev.doggo.shared.sync.StagedFullScanTest` | Full Sync Scan & Ingestion | 9 | 9 | 0 | 0 |
-| `dev.doggo.shared.ui.TodoSemanticsTest` | Compose Semantics & Accessibility | 7 | 7 | 0 | 0 |
+| `dev.tabbyrush.shared.auth.HubAuthClientTest` | Authentication HTTP | 8 | 8 | 0 | 0 |
+| `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Auth Session State | 8 | 8 | 0 | 0 |
+| `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Token Concurrency | 3 | 3 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.AccountKeyTest` | Core Contract Invariants | 5 | 5 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.EndpointPolicyTest` | Contract Routing & Origin | 8 | 8 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.StrictDigestTest` | Hashing & Nonce Invariants | 5 | 5 | 0 | 0 |
+| `dev.tabbyrush.shared.contract.TitlePolicyTest` | Sanitization & Normalization | 6 | 6 | 0 | 0 |
+| `dev.tabbyrush.shared.data.RoomAccountStoreTest` | Local Persistence (SQLite JVM) | 9 | 9 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | Teardown & Wipe Protocol | 7 | 7 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | Strict Sync Coordination | 5 | 5 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.HubSyncClientTest` | Backend Sync Client | 6 | 6 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | Outbox Replay & CAS Logic | 10 | 10 | 0 | 0 |
+| `dev.tabbyrush.shared.sync.StagedFullScanTest` | Full Sync Scan & Ingestion | 9 | 9 | 0 | 0 |
+| `dev.tabbyrush.shared.ui.TodoSemanticsTest` | Compose Semantics & Accessibility | 7 | 7 | 0 | 0 |
 | **TOTAL** | — | **96** | **96** | **0** | **0** |
 
 ---
@@ -75,7 +75,7 @@ Executed via: `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-ve
 ## 3. Coverage Metrics
 
 - **Shared Core JVM**: ~90%+ estimated logic coverage across auth, data, contract, and sync domains.
-- **Android App Layer (`:androidApp`)**: 0% executed test coverage. Source files (`MainActivity`, `DoggoApplication`, `SessionViewModel`, `AndroidSyncScheduler`, `DoggoSyncWorker`) remain uncompiled by AGP and unexecuted due to absent Android SDK.
+- **Android App Layer (`:androidApp`)**: 0% executed test coverage. Source files (`MainActivity`, `TabbyRushApplication`, `SessionViewModel`, `AndroidSyncScheduler`, `TabbyRushSyncWorker`) remain uncompiled by AGP and unexecuted due to absent Android SDK.
 
 ---
 
@@ -89,8 +89,8 @@ Executed via: `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-ve
 | **CredentialBundle Constructor** | `background-isolation-test.kt:71-72` | **VERIFIED** | Instantiates 2-arg `CredentialBundle("acc_token", "ref_token")` and calls `app.vault.store(matchingKey, dummyBundle)`. |
 | **ACCESS_PENDING Logout** | `session-view-model.kt:171,188` | **VERIFIED** | When `getActiveRuntime() == null`, calls `app.authSession.logout()`, `app.clearActiveAccount()`, and resets `_uiState`. |
 | **Clock Skew Protection** | `session-view-model.kt:139,145` | **VERIFIED** | Uses `maxOf(now, createdAt)` during edit and toggle operations to prevent timestamp regression exceptions. |
-| **Atomic Active Account Write** | `doggo-application.kt:97-103` | **VERIFIED** | Writes to `active_account.tmp` and executes `Files.move(..., ATOMIC_MOVE, REPLACE_EXISTING)`. |
-| **Direct LeaveProtocol Binding** | `doggo-application.kt:35,154`, `session-view-model.kt:116,172` | **VERIFIED** | `AccountRuntime` binds `leaveProtocol`; `SessionViewModel` invokes `leaveProtocol.executeLeave()` / `discardAndLeave()` directly. |
+| **Atomic Active Account Write** | `tabbyrush-application.kt:97-103` | **VERIFIED** | Writes to `active_account.tmp` and executes `Files.move(..., ATOMIC_MOVE, REPLACE_EXISTING)`. |
+| **Direct LeaveProtocol Binding** | `tabbyrush-application.kt:35,154`, `session-view-model.kt:116,172` | **VERIFIED** | `AccountRuntime` binds `leaveProtocol`; `SessionViewModel` invokes `leaveProtocol.executeLeave()` / `discardAndLeave()` directly. |
 | **CancelAndAwait Mutex Handling** | `android-sync-scheduler.kt:108-118` | **PARTIAL** | Loops with `mutex.tryLock()`, but silently continues on timeout instead of failing closed with an exception. |
 
 ---
@@ -104,7 +104,7 @@ Executed via: `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-ve
 3. **Android Build & Execution Environment Blocked**:
    Host environment lacks `ANDROID_HOME` and Android SDK (API 35). `:androidApp:assembleDebug`, `compileDebugKotlin`, and `connectedDebugAndroidTest` remain unrunnable on Fedora host until toolchain is provisioned.
 4. **Active Account Persistence Durability**:
-   `DoggoApplication.saveActiveAccount` swallows exceptions silently and does not call fsync on descriptor before atomic move.
+   `TabbyRushApplication.saveActiveAccount` swallows exceptions silently and does not call fsync on descriptor before atomic move.
 
 ---
 

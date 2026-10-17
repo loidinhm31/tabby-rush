@@ -50,19 +50,19 @@ assert_test "scripts/android-sdk-env.sh emits Java 25 compatibility notice" '
   echo "$output" | grep -q "Host Java is version 25. AGP requires JDK 21 LTS"
 '
 assert_test "scripts/start-android-emulator.sh fails with code 1 and error message when emulator absent" '
-  output=$(PATH="/usr/bin:/bin" ANDROID_HOME="/nonexistent" ./scripts/start-android-emulator.sh doggo_android 2>&1 || true)
+  output=$(PATH="/usr/bin:/bin" ANDROID_HOME="/nonexistent" ./scripts/start-android-emulator.sh tabbyrush_android 2>&1 || true)
   echo "$output" | grep -q "Error: .emulator. command not found."
 '
 assert_test "scripts/start-android-emulator.sh rejects odd port" '
-  output=$(EMULATOR_PORT=5555 ./scripts/start-android-emulator.sh doggo_android 2>&1 || true)
+  output=$(EMULATOR_PORT=5555 ./scripts/start-android-emulator.sh tabbyrush_android 2>&1 || true)
   echo "$output" | grep -q "Error: Invalid EMULATOR_PORT"
 '
 assert_test "scripts/start-android-emulator.sh rejects leading-zero octal ports" '
-  output=$(EMULATOR_PORT=08 ./scripts/start-android-emulator.sh doggo_android 2>&1 || true)
+  output=$(EMULATOR_PORT=08 ./scripts/start-android-emulator.sh tabbyrush_android 2>&1 || true)
   echo "$output" | grep -q "Error: Invalid EMULATOR_PORT"
 '
 assert_test "scripts/start-android-emulator.sh rejects non-canonical leading-zero ports" '
-  output=$(EMULATOR_PORT=05554 ./scripts/start-android-emulator.sh doggo_android 2>&1 || true)
+  output=$(EMULATOR_PORT=05554 ./scripts/start-android-emulator.sh tabbyrush_android 2>&1 || true)
   echo "$output" | grep -q "Error: Invalid EMULATOR_PORT"
 '
 

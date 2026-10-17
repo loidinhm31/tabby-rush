@@ -1,15 +1,15 @@
-# Doggo API & Strict Sync Protocol Contract
+# TabbyRush API & Strict Sync Protocol Contract
 
 Date: 2026-10-14  
 Phase: Phase 03 Strict Server & Legacy Isolation (Implementation Complete; Runtime Acceptance Pending)  
-Plan: `plans/261013-1540-doggo-glean-hub-reuse`  
+Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse`  
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Toolchain Versions](./toolchain-versions.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md)
 
 ---
 
 ## 1. Scope, Origin & Authentication Overview
 
-Doggo reuses the existing Glean Hub authentication service, app schema registry, and dual-layer authorization (JWT Bearer token + App API Key). Doggo exclusively uses the opt-in strict synchronization protocol (`syncMode: "strict-v1"`).
+TabbyRush reuses the existing Glean Hub authentication service, app schema registry, and dual-layer authorization (JWT Bearer token + App API Key). TabbyRush exclusively uses the opt-in strict synchronization protocol (`syncMode: "strict-v1"`).
 
 ### 1.1 Endpoint & Origin Policy
 - **Base Origin**: Canonical origin only (scheme, host, optional port). Zero path, query, fragment, or user credentials.
@@ -42,7 +42,7 @@ All request/response payloads use JSON camelCase.
 | `POST` | `/auth/login` | `{email, password}` | `{userId, accessToken, refreshToken, apps, isAdmin}` | App access verified via `apps` array |
 | `POST` | `/auth/refresh` | `{refreshToken}` | `{accessToken, refreshToken}` | Single-flight execution; atomic bundle replacement |
 | `GET` | `/auth/me` | Bearer auth header | `{userId, username, email, apps, isAdmin, ...}` | Server identity check |
-| `POST` | `/apps/access-requests` | `{appId: "doggo", message?}` | `AccessRequestInfo` | Explicit access request if `doggo` not granted |
+| `POST` | `/apps/access-requests` | `{appId: "tabby-rush", message?}` | `AccessRequestInfo` | Explicit access request if `tabbyrush` not granted |
 | `GET` | `/apps/access-requests/me` | Bearer auth header | `AccessRequestInfo[]` | Query status: pending, approved, rejected |
 
 ### 2.1 Admin Strict App Registration & Schema Management
@@ -62,7 +62,7 @@ Strict apps require administrative registration and immutable schema binding:
 Sync routes require dual authentication headers:
 - `Authorization: Bearer <accessToken>`
 - `X-API-Key: <appApiKey>`
-- `X-App-Id: doggo`
+- `X-App-Id: tabbyrush`
 
 ### 3.1 Bootstrap: `POST /api/v1/sync/:app_id/strong/bootstrap`
 - **Request**: `{}`
@@ -70,7 +70,7 @@ Sync routes require dual authentication headers:
   ```json
   {
     "protocol": "strict-v1",
-    "appId": "doggo",
+    "appId": "tabby-rush",
     "epoch": "550e8400-e29b-41d4-a716-446655440000",
     "tables": ["todos"]
   }

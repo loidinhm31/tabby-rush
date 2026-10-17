@@ -6,7 +6,7 @@
 
     <!-- Notification content -->
     <string name="task_surface_public_title">Next task deadline</string>
-    <string name="task_surface_public_content">Open Doggo to view</string>
+    <string name="task_surface_public_content">Open TabbyRush to view</string>
     <string name="task_surface_action_complete">Complete</string>
     <string name="task_surface_conflict_suffix"> (Sync conflict)</string>
     <string name="task_surface_overdue">Overdue</string>
@@ -22,7 +22,7 @@
     <string name="task_surface_rationale_permission">Notification permission is required on Android 13+ to display the next deadline surface.</string>
     <string name="task_surface_btn_grant_permission">Allow notifications</string>
     <string name="task_surface_status_app_disabled">App notifications blocked</string>
-    <string name="task_surface_desc_app_disabled">Notifications for Doggo are disabled in system settings. Re-enable them to show your deadline.</string>
+    <string name="task_surface_desc_app_disabled">Notifications for TabbyRush are disabled in system settings. Re-enable them to show your deadline.</string>
     <string name="task_surface_status_channel_disabled">Notification channel muted</string>
     <string name="task_surface_desc_channel_disabled">The Next task deadline notification channel is disabled. Turn it back on in channel settings.</string>
     <string name="task_surface_btn_open_settings">System Settings</string>

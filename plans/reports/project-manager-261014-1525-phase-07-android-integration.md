@@ -2,8 +2,8 @@
 
 **Date:** 2026-10-14T15:25:00Z
 **Agent:** ProjectManagerFinalize
-**Target Plan:** `plans/261013-1540-doggo-glean-hub-reuse/plan.md`
-**Phase File:** `plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md`
+**Target Plan:** `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md`
+**Phase File:** `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-07-android-integration.md`
 **Roadmap:** `docs/project-roadmap.md`
 
 ---
@@ -16,20 +16,20 @@ Phase 07 marked **DONE** (administratively closed per user directive with techni
 1. **Module & Build Configuration (`androidApp/build.gradle.kts`, `androidApp/gradle.lockfile`)**:
    - AGP 8.7.3, compileSdk 35, minSdk 26, `kotlin("android")` plugin alias.
    - Pinned dependencies from version catalog (`libs.versions.toml`).
-   - Release signing task gate failing closed if `DOGGO_KEYSTORE` / credentials missing; debug builds require no secrets.
+   - Release signing task gate failing closed if `TABBYRUSH_KEYSTORE` / credentials missing; debug builds require no secrets.
    - Tracked lockfile placeholder stub (`empty=`; `--write-locks` pending SDK resolution).
 2. **Security Manifests & Network Configurations (`AndroidManifest.xml`, `backup_rules.xml`, `data_extraction_rules.xml`, debug `AndroidManifest.xml`, `network_security_config.xml`)**:
    - Single exported component (`MainActivity`), `android:usesCleartextTraffic="false"` globally.
    - Strict cloud backup and device transfer exclusion covering databases, shared preferences, and account files.
    - Debug network security config restricting cleartext HTTP strictly to `127.0.0.1`, `localhost`, and `10.0.2.2`.
-3. **Application Lifecycle & Process Singletons (`doggo-application.kt`, `main-activity.kt`, `session-view-model.kt`)**:
+3. **Application Lifecycle & Process Singletons (`tabbyrush-application.kt`, `main-activity.kt`, `session-view-model.kt`)**:
    - Process container managing singleton `HubAuthSession`, `AndroidKeystoreVault`, `AndroidAccountFiles`, `HubConfig`, and `AndroidSyncScheduler`.
    - Cold-start identity persistence in `active_account.dat` via atomic file swap (`.tmp` + `ATOMIC_MOVE`).
    - Synchronous fail-closed startup wipe recovery (`completePendingWipesOnStartup`) executing prior to any account or database operations.
    - Retained `SessionViewModel` binding `AccountRuntime` to Compose UI without leaking credentials into state, intents, or SavedStateHandle.
-4. **WorkManager Background Sync & Fencing (`android-sync-scheduler.kt`, `doggo-sync-worker.kt`)**:
+4. **WorkManager Background Sync & Fencing (`android-sync-scheduler.kt`, `tabbyrush-sync-worker.kt`)**:
    - One-shot and 15-minute periodic sync with `NetworkType.CONNECTED` constraints.
-   - Account-tag cancellation (`doggo_sync_account_<key>`) cancelling all work across generation bumps.
+   - Account-tag cancellation (`tabbyrush_sync_account_<key>`) cancelling all work across generation bumps.
    - Fail-closed cancellation gate `cancelAndAwait` waiting on WorkInfo completion and coordinator mutex.
    - Background worker verifying AccountKey, active auth session, wipe markers, and generation counters.
 5. **Testing, Diagnostics & Tooling (`todo-device-test.kt`, `background-isolation-test.kt`, `android-smoke.sh`, `debug-fault-proxy.mjs`)**:
@@ -82,7 +82,7 @@ To be addressed during Phase 08 release operations or by respective module owner
 7. **W7 (Kotlin jvmTarget)**: Missing explicit `compilerOptions { jvmTarget.set(JVM_17) }` in `androidApp/build.gradle.kts`.
 8. **W8 (Identity Fallback in Runtime Creation)**: `getOrCreateAccountRuntime` falls back to `userId = "default"` when identity is null; should throw instead.
 9. **W9 (Test Isolation & Scope)**: `BackgroundIsolationTest` leaves singleton `authSession` authenticated; missing tests for race scenarios, foreground+worker overlap, and switch A→B.
-10. **W10 (Startup Main-Thread I/O)**: `runBlocking(Dispatchers.IO)` in `DoggoApplication.onCreate` can trigger StrictMode / ANR warnings.
+10. **W10 (Startup Main-Thread I/O)**: `runBlocking(Dispatchers.IO)` in `TabbyRushApplication.onCreate` can trigger StrictMode / ANR warnings.
 11. **W11 (Residual Worker TOCTOU)**: Worker checks generation then requests runtime; potential race if leave completes concurrently.
 
 ---
@@ -91,7 +91,7 @@ To be addressed during Phase 08 release operations or by respective module owner
 
 **CRITICAL NOTICE FOR MAIN AGENT:**
 It is **PARAMOUNT AND MANDATORY** to complete the implementation plan through all remaining phases (`Phase 08`, `Phase 09`, `Phase 10`)!
-Doggo's architecture is a multi-platform system where each phase builds upon strict contracts. Stopping short will leave the platform deliverables unfinished and untested.
+TabbyRush's architecture is a multi-platform system where each phase builds upon strict contracts. Stopping short will leave the platform deliverables unfinished and untested.
 
 1. **Phase 08: Android Release Operations (10h planned effort — Next Active Phase)**:
    - Provision Android SDK 35 and emulator runtime on Fedora host via Xpra display :100.

@@ -33,24 +33,24 @@ Coordinator receives token-tagged snapshot through real Android host, computes s
 Exactly03 new paths; own notification and preferences tests.01 owns dependencies;05 owns every existing Android integration file/manifest/auditor and ActivityResult flow. Keep strings/icons feature-specific. Later acceptance does not edit these tests/preferences logic.
 
 Explicit owned paths (repository-relative; all proposed creates):
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-preferences.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-notification.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-intents.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-action-receiver.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-dismiss-receiver.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-time-receiver.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-refresh-worker.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-permission-controller.kt`
-- `androidApp/src/main/kotlin/dev/doggo/android/task-surface-settings.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-preferences.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-notification.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-intents.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-action-receiver.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-dismiss-receiver.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-time-receiver.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-refresh-worker.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-permission-controller.kt`
+- `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-settings.kt`
 - `androidApp/src/main/res/drawable/task-surface-notification-icon.xml`
 - `androidApp/src/main/res/values/task-surface-strings.xml`
-- `androidApp/src/test/kotlin/dev/doggo/android/task-surface-notification-test.kt`
-- `androidApp/src/androidTest/kotlin/dev/doggo/android/task-surface-preferences-device-test.kt`
+- `androidApp/src/test/kotlin/dev/tabbyrush/android/task-surface-notification-test.kt`
+- `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-surface-preferences-device-test.kt`
 - `plans/261016-1409-sticky-task-surfaces/reports/phase-03-notification-evidence.md`
 
 ## Implementation Steps
 1. Consume01 frozen selector/access/deadline key. Implement preferences atomic write/read/delete, default-off and capability state values per contracts; no task text persisted in suppression metadata.
-2. Implement dedicated quiet channel `doggo_task_surface_v1`, tag `doggo.task.surface`, ID4101, small icon, private/public versions and conflict label. Do not alter reminder channel/settings or evade OS block by new channel.
+2. Implement dedicated quiet channel `tabbyrush_task_surface_v1`, tag `tabbyrush.task.surface`, ID4101, small icon, private/public versions and conflict label. Do not alter reminder channel/settings or evade OS block by new channel.
 3. Implement deterministic selection refresh using shared selector and current time, never reminder predicate or display strings. No eligible selection cancels and clears suppression; same suppressed key cancels/stays absent.
 4. Implement explicit immutable Complete/Open/delete identity with token+task+operation and durable opaque post receipt. Complete uses access setter(true); Open direct Activity. Validate missing/deleted/current token again before operations; stale callback harmless.
 5. Implement deletion semantics: persist exact selection suppression before scheduling anything; title/reminder-only edits do not reset; full deadline/selection changes/disappearance or deliberate off→on reset. Programmatic replacement/cancel invalidates active receipt first so delayed deletes cannot suppress new task or be misclassified.

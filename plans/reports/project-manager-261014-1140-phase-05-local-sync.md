@@ -2,8 +2,8 @@
 
 **Date:** 2026-10-14T11:30:00Z
 **Agent:** EvcProjectManagerPhase05
-**Target Plan:** `plans/261013-1540-doggo-glean-hub-reuse/plan.md`
-**Phase File:** `plans/261013-1540-doggo-glean-hub-reuse/phase-05-local-sync-state.md`
+**Target Plan:** `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md`
+**Phase File:** `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-05-local-sync-state.md`
 **Roadmap:** `docs/project-roadmap.md`
 
 ---
@@ -13,11 +13,11 @@
 Phase 05 marked **DONE** as of 2026-10-14T11:30:00Z. Delivered durable local persistence, Room v1 schema, and strict per-record sync protocol client on top of Phase 02 contracts and Phase 04 auth. Total progress reaches **66%** (98h / 148h planned effort).
 
 ### Delivered Artifacts (29 Files)
-1. **Room Entities & DAO (`server-base-entity.kt`, `outbox-entity.kt`, `editor-draft-entity.kt`, `scan-staging-entity.kt`, `account-sync-meta-entity.kt`, `doggo-dao.kt`)**:
+1. **Room Entities & DAO (`server-base-entity.kt`, `outbox-entity.kt`, `editor-draft-entity.kt`, `scan-staging-entity.kt`, `account-sync-meta-entity.kt`, `tabbyrush-dao.kt`)**:
    - 5 isolated Room tables per account database.
    - Atomic freeze CAS transaction (`freezeOutboxAtomic`) verifying state=PENDING and localRevision before freezing batch.
    - Permanent tombstones with canonical empty body; separate editor drafts and scan staging.
-2. **Database & Platform Builders (`doggo-database.kt`, `database-migrations.kt`, `room-account-store.kt`, `jvm-database-builder.kt`, `android-database-builder.kt`, `jvm-account-files.kt`, `android-account-files.kt`, `DoggoDatabase/1.json`)**:
+2. **Database & Platform Builders (`tabbyrush-database.kt`, `database-migrations.kt`, `room-account-store.kt`, `jvm-database-builder.kt`, `android-database-builder.kt`, `jvm-account-files.kt`, `android-account-files.kt`, `TabbyRushDatabase/1.json`)**:
    - BundledSQLiteDriver integration, strict schema validation, fail-closed migrations (no destructive fallback).
    - Account files adapters on JVM and Android for session metadata and wipe marker lifecycle.
 3. **Strict Sync Protocol & Reconciliation (`hub-sync-dtos.kt`, `hub-sync-client.kt`, `staged-full-scan.kt`, `outbox-reconciliation.kt`, `account-sync-coordinator.kt`, `account-leave-protocol.kt`)**:

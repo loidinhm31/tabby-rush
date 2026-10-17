@@ -16,10 +16,10 @@ Phase 07 validates the desktop sticky task surface integration delivered in Phas
 ### Delivered Capabilities
 1. **Always-On-Top Sticky Companion Window (`StickyTaskContent`)**: Compact Compose Multiplatform companion window pinned above ordinary desktop windows (`alwaysOnTop = true`), rendering unfiltered Incomplete tasks and Completed tasks in stable `createdAt DESC, id DESC` order.
 2. **Independent Quick-Add**: Inline task title creation validating input against `TitlePolicy` and saving via admitted `RoomAccountStore` without mutating main window editor state.
-3. **Close-to-Hide & Native Tray Integration**: Main window and sticky window close actions hide windows rather than exiting the process; periodic background sync continues while windows are hidden. Single native system tray icon provides "Open Doggo", "Show/Hide Sticky Tasks", and "Quit".
+3. **Close-to-Hide & Native Tray Integration**: Main window and sticky window close actions hide windows rather than exiting the process; periodic background sync continues while windows are hidden. Single native system tray icon provides "Open TabbyRush", "Show/Hide Sticky Tasks", and "Quit".
 4. **No-Tray Fallback Protection**: If system tray is unavailable or fails to initialize (`!isTrayUsable`), closing the sticky window restores the main window so the application is never stranded invisibly.
 5. **Geometry Clamping & Multi-Monitor Restoration**: `restoreStickyGeometry()` clamps window coordinates against available display work areas, accommodating taskbars, display DPI scaling, and negative virtual screen origins.
-6. **Unified Suspend Teardown & Profile Locking**: Explicit "Quit" executes idempotent suspend teardown (`quitSuspend()`), draining active admissions, flushes geometry preferences, cancels coroutine scopes, closes Room SQLite database, and cleanly releases `doggo.lock` file-channel lock.
+6. **Unified Suspend Teardown & Profile Locking**: Explicit "Quit" executes idempotent suspend teardown (`quitSuspend()`), draining active admissions, flushes geometry preferences, cancels coroutine scopes, closes Room SQLite database, and cleanly releases `tabbyrush.lock` file-channel lock.
 
 ---
 
@@ -50,7 +50,7 @@ Executed via `./gradlew.bat :shared:jvmTest --rerun-tasks --dependency-verificat
 ### 2.3 Desktop Distributable Application Bundle (`:desktopApp:createDistributable`)
 Executed via `./gradlew.bat :desktopApp:createDistributable -PdesktopTarget=windows --dependency-verification=off`:
 - **Result**: **BUILD SUCCESSFUL in 10s**
-- Self-contained Windows application bundle produced at `desktopApp/build/compose/binaries/main/app/Doggo/Doggo.exe`.
+- Self-contained Windows application bundle produced at `desktopApp/build/compose/binaries/main/app/TabbyRush/TabbyRush.exe`.
 
 ---
 

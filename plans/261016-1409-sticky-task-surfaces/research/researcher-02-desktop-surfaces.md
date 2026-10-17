@@ -31,7 +31,7 @@ Research date: 2026-10-16. Planning evidence only; no build or native acceptance
 - [Compose Desktop top-level windows docs](https://kotlinlang.org/docs/multiplatform/compose-desktop-top-level-windows-management.html) — window visibility/lifetime, state, tray example.
 - [Compose Multiplatform core `v1.7.3` Window source](https://github.com/JetBrains/compose-multiplatform-core/blob/v1.7.3/compose/ui/ui/src/desktopMain/kotlin/androidx/compose/ui/window/Window.desktop.kt) — pinned signatures and lifecycle semantics.
 - [Java `GraphicsEnvironment`](https://docs.oracle.com/en/java/javase/21/docs/api/java.desktop/java/awt/GraphicsEnvironment.html), [Java `GraphicsConfiguration`](https://docs.oracle.com/en/java/javase/21/docs/api/java.desktop/java/awt/GraphicsConfiguration.html) — runtime display enumeration/bounds primitives.
-- Repo evidence: `desktopApp/src/main/kotlin/dev/doggo/desktop/single-instance-guard.kt`; `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt` (controller disposal at line 766 onward); approved brainstorm `plans/reports/brainstorm-261016-1302-sticky-task-surfaces.md`.
+- Repo evidence: `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/single-instance-guard.kt`; `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt` (controller disposal at line 766 onward); approved brainstorm `plans/reports/brainstorm-261016-1302-sticky-task-surfaces.md`.
 
 ## Unresolved questions
 

@@ -12,7 +12,7 @@
 
 Strictly conforming to exclusive file ownership boundaries, the following production and test components were delivered:
 
-### 1.1 `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-task-surfaces.kt`
+### 1.1 `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces.kt`
 - **Real `DesktopTaskSurfaceAccess` Implementation:**
   - Implements shared `TaskSurfaceAccess` and `LeaveSchedulerCancelGate`.
   - State tracking: `readiness: StateFlow<SurfaceReadiness>` (starts `Restoring`, transitions to `Ready(token)` on runtime establishment, `SignedOut` on sign-out, `Unavailable` during teardown/drain).
@@ -31,7 +31,7 @@ Strictly conforming to exclusive file ownership boundaries, the following produc
   - Action delegation: dispatches `SetCompleted` through `access.setCompleted`, and routes `OpenApp` and `Quit` to window/application lifecycle callbacks.
 - **Shared Creation Helper:** `createDefaultTodo(title, nowEpochMs, id)` pure helper used by both sticky quick-add and main editor creation.
 
-### 1.2 `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-surface-platform.kt`
+### 1.2 `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-surface-platform.kt`
 - **Platform Seam Contracts:**
   - `DesktopSurfacePlatform`: `monitorWorkAreas(): List<MonitorWorkArea>`, `traySupported(): Boolean`, `sessionDescription(): String`.
   - `DesktopSurfacePlatformProvider`: Service Provider Interface for pluggable platform providers (ready for Phase 08 Linux StatusNotifierItem).
@@ -44,7 +44,7 @@ Strictly conforming to exclusive file ownership boundaries, the following produc
   - Discovers providers via `ServiceLoader.load(DesktopSurfacePlatformProvider::class.java)`, falling back to `DefaultAwtDesktopSurfacePlatform`.
   - Supports `setForTest(platform)` test overrides for deterministic unit and lifecycle testing.
 
-### 1.3 `desktopApp/src/main/kotlin/dev/doggo/desktop/composite-desktop-leave-cancel-gate.kt`
+### 1.3 `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate.kt`
 - **Updated Composite Quiescence Order:**
   - Added `surfaceCancelGate: LeaveSchedulerCancelGate? = null` and `surfaceObserverJob: Job? = null` parameters.
   - Enforces strict sequential teardown order on account leave:
@@ -57,13 +57,13 @@ Strictly conforming to exclusive file ownership boundaries, the following produc
     7. Cancel platform notifications (`reminderCancelGate.cancelAndAwait()`)
   - Fail-closed invariant: any failure or timeout during surface or scheduler drainage throws `IllegalStateException`, leaving wipe markers intact and database files protected.
 
-### 1.4 `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt`
+### 1.4 `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt`
 - **Window & Tray Integration:**
   - Singleton retained Main `Window` and Sticky `Window(alwaysOnTop = true)` in a single Compose `application { ... }` block.
   - Visibility state management: `isMainWindowVisible` and `isStickyWindowVisible` controlled independently.
   - Close-to-hide: main window close hides main window without cancelling sync or releasing profile lock; sticky window close hides sticky window and flushes geometry preferences.
   - No usable tray fallback: if tray is unsupported or unavailable (`!isTrayUsable`), refuses to hide the last visible window; closing sticky window restores main window so the process is never stranded invisible.
-  - Tray integration: single Tray with "Open Doggo", "Show/Hide Sticky Tasks", and "Quit".
+  - Tray integration: single Tray with "Open TabbyRush", "Show/Hide Sticky Tasks", and "Quit".
   - Geometry restoration and debouncing: loads presentation from `StickyWindowPreferences`, clamps against current monitors via `restoreStickyGeometry()`, observes `WindowState` size/position changes, and flushes to disk on hide and quit.
 - **Controller Lifecycle & Teardown:**
   - Injected `accountFiles: JvmAccountFiles = JvmAccountFiles()` enabling explicit test fixture directory isolation.
@@ -79,7 +79,7 @@ Strictly conforming to exclusive file ownership boundaries, the following produc
 
 ## 2. Automated Test Suites Authored & Updated
 
-### 2.1 `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-task-surfaces-test.kt` (New Suite, 8 Tests)
+### 2.1 `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces-test.kt` (New Suite, 8 Tests)
 - `testReadinessStateFlowAndAwaitReadiness`: Verifies `Restoring` initial state, 50ms timeout to `Unavailable`, immediate resolution to `Ready(token)` on authentication, and transition to `SignedOut`.
 - `testStaleTokenRejected`: Verifies stale token operations for read, setCompleted, navigation, and publication are rejected.
 - `testTokenValidatedSetCompleted`: Verifies real SQLite atomic completion toggling: incomplete -> completed (`Changed`), duplicate completed (`Unchanged`), and missing ID (`Missing`).
@@ -91,17 +91,17 @@ Strictly conforming to exclusive file ownership boundaries, the following produc
 - `testUnfilteredStickySections`: Verifies sticky sections project both incomplete and completed tasks in stable order regardless of main filter state.
 - `testStateClearedOnSignedOut`: Verifies that on transition away from `Ready`, sticky sections, quick-add text, and error states are cleared immediately.
 
-### 2.2 `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-lifecycle-test.kt` (Updated Suite, 9 Tests)
+### 2.2 `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-lifecycle-test.kt` (Updated Suite, 9 Tests)
 - `testCloseToHideVsQuit`: Verifies closing main and sticky windows hides them while retaining `SingleInstanceGuard` file lock on disk; verifies second instance cannot launch while first is hidden; verifies `quitSuspend()` disposes controller and releases lock.
 - `testNoUsableTrayFallbackRefusesLastVisibleHide`: Verifies that when tray is unusable, closing the last visible window is refused and closing sticky window restores main window.
 - Retained existing tests for lock acquire, lock file retention on close, sync scheduler immediate/periodic/cancellation, and loopback endpoint policy.
 
-### 2.3 `desktopApp/src/test/kotlin/dev/doggo/desktop/composite-desktop-leave-cancel-gate-test.kt` (Updated Suite, 3 Tests)
+### 2.3 `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate-test.kt` (Updated Suite, 3 Tests)
 - `testSequentialQuiescenceExecution`: Verifies exact quiescence sequence: surface drained -> surface observer cancelled -> schedule observer cancelled -> sync cancelled -> reminders cancelled.
 - `testDrainFailureFailsClosedWithoutProceeding`: Verifies delivery gate drain failure stops before cancelling schedulers.
 - `testSurfaceDrainFailureFailsClosed`: Verifies surface cancel gate failure/timeout throws `IllegalStateException` without cancelling sync or notifications.
 
-### 2.4 `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-reminder-controller-lifecycle-test.kt` (Updated Suite, 4 Tests)
+### 2.4 `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-reminder-controller-lifecycle-test.kt` (Updated Suite, 4 Tests)
 - Injected `accountFiles = accountFiles` into all test cases for complete directory isolation.
 - `testWindowHidePreservesReminderSubsystemLifetime`: Injects usable tray platform, closes both windows (asserting both are hidden), confirms reminder delivery gate and schedule observer remain `OPEN` and active, and verifies explicit quit cancels schedule observer and closes delivery gate.
 - Retained existing tests for startup wipe recovery cancellation, fail-closed wipe marker retention on cancellation failure, and runtime initialization.

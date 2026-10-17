@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/start-android-emulator.sh - Launch Android Emulator for Doggo
+# scripts/start-android-emulator.sh - Launch Android Emulator for TabbyRush
 # Complies with Phase 01: checks KVM, selects GPU mode, binds emulator-5554
 set -euo pipefail
 
@@ -13,7 +13,7 @@ if ! command -v emulator >/dev/null 2>&1; then
   fi
 fi
 
-AVD_NAME="${1:-doggo_android}"
+AVD_NAME="${1:-tabbyrush_android}"
 PORT="${EMULATOR_PORT:-5554}"
 GPU_MODE="${EMULATOR_GPU:-auto}"
 XPRA_DISPLAY_TARGET="${XPRA_DISPLAY:-:100}"

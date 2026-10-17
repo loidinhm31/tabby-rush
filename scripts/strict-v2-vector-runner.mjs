@@ -146,7 +146,7 @@ try {
   const hubFixtureBytes = readFileSync(hubFixturePath);
   const hubFixtureSha256 = crypto.createHash('sha256').update(hubFixtureBytes).digest('hex');
   if (hubFixtureSha256 !== fixtureSha256) {
-    throw new Error(`Cross-repository fixture hash mismatch: Doggo (${fixtureSha256}) != Hub (${hubFixtureSha256})`);
+    throw new Error(`Cross-repository fixture hash mismatch: TabbyRush (${fixtureSha256}) != Hub (${hubFixtureSha256})`);
   }
 } catch (e) {
   if (e.code !== 'ENOENT') throw e;
@@ -184,8 +184,8 @@ function canonicalJson(obj) {
   return '{' + Object.keys(obj).sort().map((k) => JSON.stringify(k) + ':' + canonicalJson(obj[k])).join(',') + '}';
 }
 
-const v1Schema = JSON.parse(readFileSync(resolve(process.cwd(), 'integration/glean-hub/doggo-schema-v1.json'), 'utf8'));
-const v2Schema = JSON.parse(readFileSync(resolve(process.cwd(), 'integration/glean-hub/doggo-schema-v2.json'), 'utf8'));
+const v1Schema = JSON.parse(readFileSync(resolve(process.cwd(), 'integration/glean-hub/tabbyrush-schema-v1.json'), 'utf8'));
+const v2Schema = JSON.parse(readFileSync(resolve(process.cwd(), 'integration/glean-hub/tabbyrush-schema-v2.json'), 'utf8'));
 const EXPECTED_FP_V1 = '3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec';
 const EXPECTED_FP_V2 = '5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4';
 const fpV1 = crypto.createHash('sha256').update(canonicalJson(v1Schema)).digest('hex');

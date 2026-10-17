@@ -42,25 +42,25 @@ All 19 tests executed and passed under `desktopApp`:
 
 | Test Class FQCN | Test Name | Result | Duration / Notes |
 |---|---|:---:|---|
-| `dev.doggo.desktop.DesktopLifecycleTest` | `testReleaseModeDeniesHttpLoopback` | PASSED | Cleartext HTTP blocked in release mode |
-| `dev.doggo.desktop.DesktopLifecycleTest` | `testSyncSchedulerCancelAndAwaitQuiescence` | PASSED | Coroutine scope cancellation & quiescence validated |
-| `dev.doggo.desktop.DesktopLifecycleTest` | `testSingleInstanceGuardLockFileRetainedOnClose` | PASSED | FileLock released while lock file remains on disk |
-| `dev.doggo.desktop.DesktopLifecycleTest` | `testDebugModePermitsHttpLoopback` | PASSED | Loopback HTTP permitted in debug mode |
-| `dev.doggo.desktop.DesktopLifecycleTest` | `testSyncSchedulerPeriodicInterval` | PASSED | Periodic polling loop trigger timing verified |
-| `dev.doggo.desktop.DesktopLifecycleTest` | `testSyncSchedulerImmediateTrigger` | PASSED | Immediate outbox drain dispatch verified |
-| `dev.doggo.desktop.DesktopLifecycleTest` | `testSingleInstanceGuardAcquireAndPreventConcurrentLaunch` | PASSED | Second instance fails to acquire lock |
-| `dev.doggo.desktop.DesktopLifecycleTest` | `testReleaseModePermitsHttps` | PASSED | HTTPS allowed in release mode |
-| `dev.doggo.desktop.PlatformVaultDispatcherTest` | `testResolveProviderUnknownTargetFailsClosed` | PASSED | Unknown target fails closed |
-| `dev.doggo.desktop.PlatformVaultDispatcherTest` | `testResolveProviderMultipleMatchesFailsClosed` | PASSED | Ambiguous providers fail closed |
-| `dev.doggo.desktop.PlatformVaultDispatcherTest` | `testResolveProviderNoMatchFailsClosed` | PASSED | Missing provider fails closed |
-| `dev.doggo.desktop.PlatformVaultDispatcherTest` | `testDetectHostTargetOnLinux` | PASSED | Host detection identifies "linux" |
-| `dev.doggo.desktop.PlatformVaultDispatcherTest` | `testResolveProviderRealLinuxProviderDiscovered` | PASSED | META-INF/services discovery finds Linux provider |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | `testVaultStatusTransitions` | PASSED | Initialized / Closed lifecycle states |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | `testAtomicStoreAndLoad` | PASSED | Secret payload storage & round-trip retrieval |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | `testAtomicReplacement` | PASSED | In-place secret update overwrites previous |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | `testClearRemovesSecret` | PASSED | Secret removal returns null on subsequent read |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | `testMissingSecretReturnsNull` | PASSED | Non-existent secret lookup returns null |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | `testCorruptPayloadFailsClosed` | PASSED | Invalid JSON in vault fails closed |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | `testReleaseModeDeniesHttpLoopback` | PASSED | Cleartext HTTP blocked in release mode |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | `testSyncSchedulerCancelAndAwaitQuiescence` | PASSED | Coroutine scope cancellation & quiescence validated |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | `testSingleInstanceGuardLockFileRetainedOnClose` | PASSED | FileLock released while lock file remains on disk |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | `testDebugModePermitsHttpLoopback` | PASSED | Loopback HTTP permitted in debug mode |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | `testSyncSchedulerPeriodicInterval` | PASSED | Periodic polling loop trigger timing verified |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | `testSyncSchedulerImmediateTrigger` | PASSED | Immediate outbox drain dispatch verified |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | `testSingleInstanceGuardAcquireAndPreventConcurrentLaunch` | PASSED | Second instance fails to acquire lock |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | `testReleaseModePermitsHttps` | PASSED | HTTPS allowed in release mode |
+| `dev.tabbyrush.desktop.PlatformVaultDispatcherTest` | `testResolveProviderUnknownTargetFailsClosed` | PASSED | Unknown target fails closed |
+| `dev.tabbyrush.desktop.PlatformVaultDispatcherTest` | `testResolveProviderMultipleMatchesFailsClosed` | PASSED | Ambiguous providers fail closed |
+| `dev.tabbyrush.desktop.PlatformVaultDispatcherTest` | `testResolveProviderNoMatchFailsClosed` | PASSED | Missing provider fails closed |
+| `dev.tabbyrush.desktop.PlatformVaultDispatcherTest` | `testDetectHostTargetOnLinux` | PASSED | Host detection identifies "linux" |
+| `dev.tabbyrush.desktop.PlatformVaultDispatcherTest` | `testResolveProviderRealLinuxProviderDiscovered` | PASSED | META-INF/services discovery finds Linux provider |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | `testVaultStatusTransitions` | PASSED | Initialized / Closed lifecycle states |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | `testAtomicStoreAndLoad` | PASSED | Secret payload storage & round-trip retrieval |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | `testAtomicReplacement` | PASSED | In-place secret update overwrites previous |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | `testClearRemovesSecret` | PASSED | Secret removal returns null on subsequent read |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | `testMissingSecretReturnsNull` | PASSED | Non-existent secret lookup returns null |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | `testCorruptPayloadFailsClosed` | PASSED | Invalid JSON in vault fails closed |
 
 *Note on vault tests:* `LinuxSecretServiceVaultTest` exercises the vault provider logic with in-memory / mock state; it does not test interaction with a live D-Bus Secret Service daemon.
 
@@ -70,20 +70,20 @@ All 19 tests executed and passed under `desktopApp`:
 
 | Test Class FQCN | Domain / Subsystem | Total Tests | Passed | Failed | Skipped | Status |
 |---|---|---:|---:|---:|---:|:---:|
-| `dev.doggo.shared.auth.HubAuthClientTest` | Hub Auth HTTP Client & Envelopes | 8 | 8 | 0 | 0 | PASSED |
-| `dev.doggo.shared.auth.HubAuthSessionTest` | Auth Session State & Transitions | 8 | 8 | 0 | 0 | PASSED |
-| `dev.doggo.shared.auth.SingleFlightRefreshTest` | Mutex Token Refresh Deduplication | 3 | 3 | 0 | 0 | PASSED |
-| `dev.doggo.shared.contract.AccountKeyTest` | Deterministic Account Key Hashing | 5 | 5 | 0 | 0 | PASSED |
-| `dev.doggo.shared.contract.EndpointPolicyTest` | Endpoint Validation & Scheme Fencing | 8 | 8 | 0 | 0 | PASSED |
-| `dev.doggo.shared.contract.StrictDigestTest` | Record SHA-256 Digest & NIST Vectors | 5 | 5 | 0 | 0 | PASSED |
-| `dev.doggo.shared.contract.TitlePolicyTest` | Unicode / Astral Emoji Title Rules | 6 | 6 | 0 | 0 | PASSED |
-| `dev.doggo.shared.data.RoomAccountStoreTest` | BundledSQLite Room Store & Wiping | 9 | 9 | 0 | 0 | PASSED |
-| `dev.doggo.shared.sync.AccountLeaveProtocolTest` | Fail-Closed Account Teardown Protocol | 7 | 7 | 0 | 0 | PASSED |
-| `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | Orchestration & Conflict Resolution | 5 | 5 | 0 | 0 | PASSED |
-| `dev.doggo.shared.sync.HubSyncClientTest` | Strict-v1 Protocol Client & Pagination | 6 | 6 | 0 | 0 | PASSED |
-| `dev.doggo.shared.sync.OutboxReconciliationTest` | FIFO CAS Outbox Reconciliation | 10 | 10 | 0 | 0 | PASSED |
-| `dev.doggo.shared.sync.StagedFullScanTest` | Full Cursor Monotonic Promotion | 9 | 9 | 0 | 0 | PASSED |
-| `dev.doggo.shared.ui.TodoSemanticsTest` | Accessible Light UI & WCAG Contrast | 7 | 7 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.auth.HubAuthClientTest` | Hub Auth HTTP Client & Envelopes | 8 | 8 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Auth Session State & Transitions | 8 | 8 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Mutex Token Refresh Deduplication | 3 | 3 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.contract.AccountKeyTest` | Deterministic Account Key Hashing | 5 | 5 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.contract.EndpointPolicyTest` | Endpoint Validation & Scheme Fencing | 8 | 8 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.contract.StrictDigestTest` | Record SHA-256 Digest & NIST Vectors | 5 | 5 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.contract.TitlePolicyTest` | Unicode / Astral Emoji Title Rules | 6 | 6 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.data.RoomAccountStoreTest` | BundledSQLite Room Store & Wiping | 9 | 9 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | Fail-Closed Account Teardown Protocol | 7 | 7 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | Orchestration & Conflict Resolution | 5 | 5 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.sync.HubSyncClientTest` | Strict-v1 Protocol Client & Pagination | 6 | 6 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | FIFO CAS Outbox Reconciliation | 10 | 10 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.sync.StagedFullScanTest` | Full Cursor Monotonic Promotion | 9 | 9 | 0 | 0 | PASSED |
+| `dev.tabbyrush.shared.ui.TodoSemanticsTest` | Accessible Light UI & WCAG Contrast | 7 | 7 | 0 | 0 | PASSED |
 | **TOTAL** | — | **96** | **96** | **0** | **0** | **PASSED** |
 
 ---
@@ -91,7 +91,7 @@ All 19 tests executed and passed under `desktopApp`:
 ## 4. Packaging Diagnostics (`scripts/linux-package-smoke.sh --diagnose`)
 
 ```
-=== Doggo Linux Desktop Environment Diagnostics ===
+=== TabbyRush Linux Desktop Environment Diagnostics ===
 1. Host OS: Linux 7.1.10-200.fc44.x86_64 (x86_64)
 2. Java Runtime: openjdk version "25.0.4.1" 2026-08-18
 3. jpackage tool: 25.0.4.1
@@ -124,7 +124,7 @@ All 19 tests executed and passed under `desktopApp`:
 ## 6. Build Warnings & Deprecations
 
 1. **Kotlin Beta Expect/Actual Warning**:
-   - `DoggoDatabaseConstructor.kt:5:8` and `doggo-database.kt:30:1`:
+   - `TabbyRushDatabaseConstructor.kt:5:8` and `tabbyrush-database.kt:30:1`:
      `'expect'/'actual' classes ... are in Beta. You can use -Xexpect-actual-classes flag to suppress this warning.`
 2. **Java Deprecated Constructor**:
    - `platform-vault-dispatcher-test.kt:68:31`:

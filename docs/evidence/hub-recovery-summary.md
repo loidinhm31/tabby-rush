@@ -48,9 +48,9 @@ The recovery procedure implemented in `scripts/hub-strict-recovery.js` establish
   Result:
   ```
   ================================================================
-  Doggo Hub Strict-v1 Maintenance Recovery Script
+  TabbyRush Hub Strict-v1 Maintenance Recovery Script
   Database:       glean_hub
-  App ID:         doggo
+  App ID:         tabbyrush
   Source Backup:  (None - required for live recovery)
   Expected Epoch: (Not provided)
   Mode:           DRY-RUN (No mutations)
@@ -69,5 +69,5 @@ The recovery procedure implemented in `scripts/hub-strict-recovery.js` establish
 ## 3. Operational Invariants for Cluster Administrators
 
 1. **Reconciliation on Ambiguous CAS**: If a network timeout occurs during `_schemas.updateOne`, ingress traffic must remain BLOCKED. The operator must inspect `_schemas` on primary majority before taking any further action. Never blindly re-run the script or regenerate another epoch without reading back current state.
-2. **Client Sync Behavior Post-Recovery**: Connected Doggo clients presenting the previous epoch receive `HTTP 409 Conflict` (`code: "epochMismatch"`). In accordance with frozen contract, the client transitions to `ResetRequired` state and pauses synchronization. Clients never auto-rebase across epoch changes.
+2. **Client Sync Behavior Post-Recovery**: Connected TabbyRush clients presenting the previous epoch receive `HTTP 409 Conflict` (`code: "epochMismatch"`). In accordance with frozen contract, the client transitions to `ResetRequired` state and pauses synchronization. Clients never auto-rebase across epoch changes.
 3. **No Legacy Data Cross-Contamination**: Recovery scripts touch only strict collections and never read from or write to legacy Glean `app_*` collections.

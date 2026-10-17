@@ -31,8 +31,8 @@
   - `README.md`
   - `plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-12-coordinated-cutover-runbook-and-release.md`
   - `plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md`
-  - Glean Hub: `docs/doggo-strict-sync.md`
-- **Lines of Code & Docs Analyzed**: ~2,850 LOC/doc lines across Doggo and Glean Hub.
+  - Glean Hub: `docs/tabbyrush-strict-sync.md`
+- **Lines of Code & Docs Analyzed**: ~2,850 LOC/doc lines across TabbyRush and Glean Hub.
 - **Review Focus**: Credential custody, protocol ordering, recovery state matrix, gate accounting honesty, code quality.
 
 ---
@@ -60,12 +60,12 @@
 ## 2. Protocol & Architecture Integrity
 
 ### 2.1 Chronological Deployment Sequence
-Strict, unidirectional deployment ordering verified consistent across `docs/strict-v2-cutover-runbook.md`, `docs/deployment-guide.md`, `docs/system-architecture.md`, `docs/hub-schema-integration.md`, and Glean Hub `docs/doggo-strict-sync.md`:
+Strict, unidirectional deployment ordering verified consistent across `docs/strict-v2-cutover-runbook.md`, `docs/deployment-guide.md`, `docs/system-architecture.md`, `docs/hub-schema-integration.md`, and Glean Hub `docs/tabbyrush-strict-sync.md`:
 1. **All-Instance Hub Deployment**: All Glean Hub nodes deployed with fence-aware binary; ingress continues serving `strict-v1`.
-2. **Doggo Client Distribution**: Distribute Room v2 client binaries; client UI guards disable deadline/reminder submission with upgrade notice while backend is v1.
+2. **TabbyRush Client Distribution**: Distribute Room v2 client binaries; client UI guards disable deadline/reminder submission with upgrade notice while backend is v1.
 3. **Preflight Dry-Run**: `node scripts/hub-strict-upgrade.mjs --dry-run` verifies pre-conditions without mutating data.
 4. **Controlled In-Place Upgrade**: `node scripts/hub-strict-upgrade.mjs --migration-id <UUID>` acquires fence in `_coordination`, drains admitted permits, transforms records in batches of 500, preserves tombstones `data: {}`, writes migration checkpoint in `_schemas.activeMigration`, validates 16 columns, atomically updates `_schemas` via CAS, and releases fence.
-5. **Mandatory Final Read-Back Assertion**: GET `/api/v1/apps/doggo/strict-contract` asserts `syncMode: "strict-v2"`, canonical fingerprint `5f539551...`, all 16 canonical columns, and unchanged epoch UUID.
+5. **Mandatory Final Read-Back Assertion**: GET `/api/v1/apps/tabbyrush/strict-contract` asserts `syncMode: "strict-v2"`, canonical fingerprint `5f539551...`, all 16 canonical columns, and unchanged epoch UUID.
 6. **Client Replay & Transition**: Connected clients execute `ContractTransitionCoordinator` lifecycle (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`), reconcile legacy receipts, and unlock deadline UI.
 
 ### 2.2 Canonical Invariants & Fingerprints
@@ -92,7 +92,7 @@ The runbook defines exact operator procedures and safety invariants for all 6 mi
 - Documentation in `docs/strict-v2-cutover-runbook.md:3.3` and `docs/security-and-recovery.md:3` clearly forbids its use during v2 upgrades or rollback.
 
 ### 3.3 Backup Consistency Requirement
-- Runbook section 3.2 updated to explicitly note that sequential, uncoordinated collection dumps (`app_doggo`, `_schemas`, `_coordination`) during live traffic do not guarantee a point-in-time consistent cross-collection snapshot. Consistent backup requires maintenance fence or MongoDB replica-set oplog backup (`--oplog`).
+- Runbook section 3.2 updated to explicitly note that sequential, uncoordinated collection dumps (`app_tabbyrush`, `_schemas`, `_coordination`) during live traffic do not guarantee a point-in-time consistent cross-collection snapshot. Consistent backup requires maintenance fence or MongoDB replica-set oplog backup (`--oplog`).
 
 ---
 

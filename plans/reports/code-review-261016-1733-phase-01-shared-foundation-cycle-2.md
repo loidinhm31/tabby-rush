@@ -11,19 +11,19 @@
 
 ### 1.1 Scope
 - **Files reviewed (13):**
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-store.kt`
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-contracts.kt`
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-projector.kt`
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt`
-  - `androidApp/src/main/kotlin/dev/doggo/android/task-surface-host.kt`
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-task-model.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-store.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-contracts.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt`
+  - `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-host.kt`
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-model.kt`
   - `gradle/libs.versions.toml`
   - `androidApp/build.gradle.kts`
   - `androidApp/gradle.lockfile`
-  - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/task-surface-projector-test.kt`
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-store-sqlite-test.kt`
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt`
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt`
+  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-surface-projector-test.kt`
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt`
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt`
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt`
 - **Lines of code analyzed:** ~1,560 LOC
 - **Review focus:** Verification of Cycle 1 remediations, zero-allocation projections, mutation invalidation hygiene, observer snapshot convergence, and dependency provenance gates.
 - **Updated plans:** `plans/261016-1409-sticky-task-surfaces/phase-01-shared-foundation.md`.
@@ -53,7 +53,7 @@ The review score is upgraded from **9.0** to **9.2 / 10 (Conditional Pass — Ga
 *None identified (0 Critical).*
 - No data corruption or silent loss risks.
 - No mutex deadlock or re-entrancy issues identified in locked helper sequence.
-- All Room transactions execute atomically via `DoggoDao`.
+- All Room transactions execute atomically via `TabbyRushDao`.
 - No sensitive user data or tokens exposed in shared contracts.
 
 ---
@@ -61,7 +61,7 @@ The review score is upgraded from **9.0** to **9.2 / 10 (Conditional Pass — Ga
 ## 4. Warnings & Observations
 
 ### Warning 1: Server tombstone with residual local overlay can trigger `IllegalStateException`
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt:122-131,224-226,426`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt:122-131,224-226,426`
 - **Requirement:** Phase 01 Requirements §3: "Missing or tombstoned records return early with Missing without throwing an exception or enqueuing operations."
 - **Observation:** In `projectSingleTodo`, `base.deleted == true` marks `isDeletedLocally = true` only when `draft == null && latestOp == null`. If an offline client created a draft or queued an update operation before the server tombstone arrived, `loadTodoLocked(id)` projects the row as existing (`isDeletedLocally = false`). When `setCompletedLocally` proceeds to `saveTodoLocallyLocked`, line 225 throws `IllegalStateException("Cannot mutate permanently deleted tombstone with rowId: ${todo.id}")` instead of returning `CompletionChange.Missing`.
 - **Impact:** Rare edge-case crash during local completion if a server tombstone reconciles while a stale local draft exists.
@@ -79,15 +79,15 @@ The review score is upgraded from **9.0** to **9.2 / 10 (Conditional Pass — Ga
 ## 5. Medium Priority Improvements
 
 ### Medium 1: Observer collection cancellation can be bounded by state predicate
-- **Location:** `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-store-sqlite-test.kt:275`, `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt:90,124,193`
+- **Location:** `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt:275`, `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt:90,124,193`
 - **Observation:** The tests collect emissions and cancel when `emissions.size >= 2`. While this permits conflation to drop intermediate events, awaiting a target condition (e.g., `todos.any { it.completed }`) with a bounded timeout (`withTimeout(3000)`) is more resilient against delayed or burst scheduler interleavings than an arbitrary size check.
 
 ### Medium 2: Direct DAO injection under `withMutationLock` tests invalidation plumbing, not full sync workflow
-- **Location:** `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt:136-148,205-222`
+- **Location:** `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt:136-148,205-222`
 - **Observation:** Tests simulate scan promotion and conflict head injection by calling `dao.upsertServerBase` and `dao.upsertOutbox` directly inside `withMutationLock`. This validates that `withMutationLock` triggers `taskInvalidationFlow`, but does not exercise the full sync engine or conflict resolver paths.
 
 ### Medium 3: Contention test in SQLite suite is sequential
-- **Location:** `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt:237-262`
+- **Location:** `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt:237-262`
 - **Observation:** `testConcurrentTitleEditPreservedBySetCompletedLocally` executes `saveTodoLocally` followed sequentially by `setCompletedLocally`. It validates data preservation across successive mutations, but does not simulate true thread contention or overlapping coroutines competing for `withMutationLock`.
 
 ---
@@ -95,7 +95,7 @@ The review score is upgraded from **9.0** to **9.2 / 10 (Conditional Pass — Ga
 ## 6. Low Priority Suggestions
 
 ### Suggestion 1: Eliminate duplicated lock acquisition block in `withMutationLock`
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt:68-92`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt:68-92`
 - **Observation:** The inner logic (`mutex.withLock { check(!isFrozen); val result = block(); ... }`) is duplicated in both the `gate != null` and `else` branches. Extracting the inner invocation into a private inline helper reduces repetition.
 
 ### Suggestion 2: Align status terminology in evidence documentation

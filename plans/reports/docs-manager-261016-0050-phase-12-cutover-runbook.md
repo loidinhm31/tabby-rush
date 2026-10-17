@@ -67,8 +67,8 @@ Every markdown file in `docs/` was audited for line count compliance (`wc -l doc
 Execution of the documentation validator (`node ~/.omp/agent/evcrate/scripts/validate-docs.cjs docs/`) confirms:
 - **Internal Cross-References**: **194 working internal markdown links, 0 broken links**. All inter-document anchors and relative paths resolve cleanly.
 - **Validator Scanner Nuances**:
-  - *Code References (1,422 potential issues flagged)*: The validator’s regex heuristic searches `src/`, whereas Doggo’s Kotlin Multiplatform code resides in module-specific directories (`shared/src/commonMain/`, `androidApp/src/main/`, `desktopApp/src/`). All primary classes documented (`DoggoApplication`, `RoomAccountStore`, `ContractTransitionCoordinator`, `PersistedScheduleProjector`, `ReminderOccurrenceStore`, etc.) were verified directly in repository source files.
-  - *Config Keys (543 potential issues flagged)*: The validator compares uppercase tokens against `.env.example`. These tokens represent Android intent actions (`ACTION_BOOT_COMPLETED`), notification constants (`IMPORTANCE_HIGH`), visibility flags (`VISIBILITY_PRIVATE`), and Gradle signing properties (`DOGGO_KEYSTORE`). Legitimate environment variables (`APPROVED_HUB_ORIGIN`, `GLEAN_ADMIN_TOKEN`, `MONGO_URI`) are verified in runbooks.
+  - *Code References (1,422 potential issues flagged)*: The validator’s regex heuristic searches `src/`, whereas TabbyRush’s Kotlin Multiplatform code resides in module-specific directories (`shared/src/commonMain/`, `androidApp/src/main/`, `desktopApp/src/`). All primary classes documented (`TabbyRushApplication`, `RoomAccountStore`, `ContractTransitionCoordinator`, `PersistedScheduleProjector`, `ReminderOccurrenceStore`, etc.) were verified directly in repository source files.
+  - *Config Keys (543 potential issues flagged)*: The validator compares uppercase tokens against `.env.example`. These tokens represent Android intent actions (`ACTION_BOOT_COMPLETED`), notification constants (`IMPORTANCE_HIGH`), visibility flags (`VISIBILITY_PRIVATE`), and Gradle signing properties (`TABBYRUSH_KEYSTORE`). Legitimate environment variables (`APPROVED_HUB_ORIGIN`, `GLEAN_ADMIN_TOKEN`, `MONGO_URI`) are verified in runbooks.
 
 ---
 
@@ -93,7 +93,7 @@ Repomix flagged 5 suspicious files that were excluded from the output by its def
 2. `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md` (mock test token strings)
 3. `plans/reports/code-reviewer-261014-1638-phase-08-release-operations-cycle3.md` (mock test token strings)
 4. `plans/reports/docs-manager-261014-1643-phase-08-docs-verification.md` (mock test token strings)
-5. `shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt` (test URI patterns)
+5. `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/endpoint-policy-test.kt` (test URI patterns)
 
 *Direct Inspection Finding*: Each flagged file was inspected directly as a primary source. Zero real production secrets, passwords, or private keys exist; all flagged patterns are non-functional documentation templates or unit test fixtures. `docs/security-and-recovery.md` was audited independently to verify its operational contents.
 
@@ -107,11 +107,11 @@ Repomix flagged 5 suspicious files that were excluded from the output by its def
 
 ## 4. Detailed Audit of Phase 12 Changed Files
 
-A line-by-line audit was conducted across all 18 modified files, 4 untracked files in Doggo, and the sibling documentation file in Glean Hub:
+A line-by-line audit was conducted across all 18 modified files, 4 untracked files in TabbyRush, and the sibling documentation file in Glean Hub:
 
 ### 4.1 Authoritative Cutover Runbook (`docs/strict-v2-cutover-runbook.md`)
 - **Structure**: 7 comprehensive sections covering Executive Summary, Operator Prerequisites & Authorization, Pre-Cutover Backup & Verification, Coordinated Deployment Sequence, Post-Cutover Verification Checklist, Recovery & Incident Decision Matrix, and Archive & Sign-Off.
-- **Invariants Enforced**: Zero data loss (in-place `app_doggo` transformation), strict epoch invariance (preserving `strictEpoch` UUID without rotation), monotonic revision and tombstone preservation (`data: {}`), request permit draining, and atomic schema CAS.
+- **Invariants Enforced**: Zero data loss (in-place `app_tabbyrush` transformation), strict epoch invariance (preserving `strictEpoch` UUID without rotation), monotonic revision and tombstone preservation (`data: {}`), request permit draining, and atomic schema CAS.
 - **Credential Custody Precision**: Warns operators against passing tokens on command-line `argv` (visible in `/proc/<pid>/cmdline` and `ps`). Recommends reading from `$GLEAN_ADMIN_TOKEN` or passing via curl configuration files (`-K`). *Precision Note*: Environment variables prevent process-listing snooping, but do not protect against same-user inspection via `/proc/<pid>/environ`; shell tracing (`set -x`) and unredacted logging are explicitly forbidden.
 - **Backup Consistency Requirement**: Explicitly notes that sequential, uncoordinated collection dumps during live traffic do not guarantee a point-in-time consistent cross-collection snapshot. Recommends maintenance fence or replica-set oplog dump (`--oplog`).
 - **Incident Recovery Matrix**: Explicit procedures across 6 states: (1) Pre-fence rejection (clean v1, 0 mutation), (2) Fencing stall / orphan permits (keep fenced, escalate, never clear via script), (3) Interrupted batch transform (idempotent resume via same migration ID), (4) Lost publish response (read-back verify), (5) Preactivation rollback under fence (strip 12 added fields only, restore `ready-v1`), (6) Post-v2 publication failure (**forward repair only**; rollback or restoring v1 backups is strictly forbidden).
@@ -176,9 +176,9 @@ A line-by-line audit was conducted across all 18 modified files, 4 untracked fil
 - Added command section: "5. Run Strict-v2 Cutover Rehearsal & Tooling Self-Test (`node scripts/strict-v2-cutover-rehearsal.mjs --self-test`)".
 - Added `[Strict-v2 Cutover Runbook](docs/strict-v2-cutover-runbook.md)` to documentation index.
 
-### 4.13 Sibling Glean Hub Documentation (`/home/loidinh/WS/glean-hub/docs/doggo-strict-sync.md`)
+### 4.13 Sibling Glean Hub Documentation (`/home/loidinh/WS/glean-hub/docs/tabbyrush-strict-sync.md`)
 - Updated CLI command examples: corrected `--status-only` syntax note (inspects status without resuming execution).
-- Added section: "Phase 12 Coordinated Cutover Runbook & Rehearsal Tooling", cross-referencing Doggo runbooks and rehearsal scripts, and explicitly documenting Gate G7 blocker boundaries.
+- Added section: "Phase 12 Coordinated Cutover Runbook & Rehearsal Tooling", cross-referencing TabbyRush runbooks and rehearsal scripts, and explicitly documenting Gate G7 blocker boundaries.
 
 ### 4.14 Project Overview PDR & Code Standards (`docs/project-overview-pdr.md`, `docs/code-standards.md`)
 - `docs/project-overview-pdr.md`: Updated Section 14 to replace stale "phases 02–12 pending" text with an initiative-specific breakdown across all 12 phases, detailing Gate G1–G7 delivery and blocker boundaries.

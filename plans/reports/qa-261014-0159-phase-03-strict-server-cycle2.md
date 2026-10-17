@@ -1,8 +1,8 @@
 # QA Test Report: Phase 03 Strict Server & Legacy Isolation (Cycle 2)
 
 **Date:** 2026-10-14
-**Target:** Phase 03 — Doggo-only strict server and legacy isolation review cycle 2
-**Context:** Linux x86_64 (`/home/loidinh/WS/doggo`, `/home/loidinh/WS/glean-hub`)
+**Target:** Phase 03 — TabbyRush-only strict server and legacy isolation review cycle 2
+**Context:** Linux x86_64 (`/home/loidinh/WS/tabbyrush`, `/home/loidinh/WS/glean-hub`)
 
 ---
 
@@ -46,11 +46,11 @@
   - `services::sync_service::tests::*` (all legacy isolation / sharing / permission tests passed)
 
 ### Command 2: Hub Schema Provisioning Syntax Check
-- **Command:** `node --check /home/loidinh/WS/doggo/scripts/hub-schema-provision.mjs`
+- **Command:** `node --check /home/loidinh/WS/tabbyrush/scripts/hub-schema-provision.mjs`
 - **Result:** PASS (exit code 0; syntax valid; no runtime execution).
 
 ### Command 3: Hub Compatibility Smoke Syntax Check
-- **Command:** `node --check /home/loidinh/WS/doggo/scripts/hub-compatibility-smoke.mjs`
+- **Command:** `node --check /home/loidinh/WS/tabbyrush/scripts/hub-compatibility-smoke.mjs`
 - **Result:** PASS (exit code 0; syntax valid; no runtime execution).
 
 ---

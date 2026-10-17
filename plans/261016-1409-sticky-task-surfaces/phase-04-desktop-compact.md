@@ -32,11 +32,11 @@ Stateless compact composable → frozen `StickyTaskAction`;06 controls mutation/
 Exactly04 paths including tests.06 alone owns main.kt, platform capability enumeration, Tray and controller tests.08 Linux adapter consumes same geometry helpers without editing04 files. New extra path requires manifest amendment first; final acceptance returns helper defects to04.
 
 Explicit owned paths (repository-relative; all proposed creates):
-- `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-task-content.kt`
-- `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-window-geometry.kt`
-- `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-window-preferences.kt`
-- `desktopApp/src/test/kotlin/dev/doggo/desktop/sticky-window-geometry-test.kt`
-- `desktopApp/src/test/kotlin/dev/doggo/desktop/sticky-window-preferences-test.kt`
+- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-content.kt`
+- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-window-geometry.kt`
+- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-window-preferences.kt`
+- `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/sticky-window-geometry-test.kt`
+- `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/sticky-window-preferences-test.kt`
 - `plans/261016-1409-sticky-task-surfaces/reports/phase-04-compact-evidence.md`
 
 ## Implementation Steps

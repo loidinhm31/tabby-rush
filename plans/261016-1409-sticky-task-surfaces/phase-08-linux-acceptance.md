@@ -32,9 +32,9 @@ Host-selected linuxMain source set + ServiceLoader registration supplies at most
 Only08 exact Linux-specific paths, including tests. Common defects return04/06 (or shared01); Linux metadata updates return01. Docs07 owns shared roadmap/changelog/architecture;08 records final Linux verdict in its own docs/evidence and reports it to main for original doc owner updates, never duplicate writes.
 
 Explicit owned paths (repository-relative; actions/reasons in central manifest):
-- `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-task-surface-platform.kt`
-- `desktopApp/src/linuxMain/resources/META-INF/services/dev.doggo.desktop.DesktopSurfacePlatformProvider`
-- `desktopApp/src/linuxTest/kotlin/dev/doggo/desktop/linux/linux-task-surface-platform-test.kt`
+- `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-task-surface-platform.kt`
+- `desktopApp/src/linuxMain/resources/META-INF/services/dev.tabbyrush.desktop.DesktopSurfacePlatformProvider`
+- `desktopApp/src/linuxTest/kotlin/dev/tabbyrush/desktop/linux/linux-task-surface-platform-test.kt`
 - `docs/linux-acceptance.md`
 - `docs/linux-desktop-guide.md`
 - `docs/evidence/sticky-surfaces-linux-summary.md`

@@ -3,7 +3,7 @@
 **Date:** 2026-10-14
 **Target:** Phase 05 Durable Local State & Strict Per-Record Sync Test Suites
 **Command:** `JAVA_HOME=$HOME/.local/share/jvm/jdk-21 ./gradlew --dependency-verification=lenient :shared:jvmTest --rerun-tasks`
-**Environment:** Linux x86_64 Fedora (`/home/loidinh/WS/doggo`), OpenJDK 21.0.8 (`$HOME/.local/share/jvm/jdk-21`), Gradle 8.11.1
+**Environment:** Linux x86_64 Fedora (`/home/loidinh/WS/tabbyrush`), OpenJDK 21.0.8 (`$HOME/.local/share/jvm/jdk-21`), Gradle 8.11.1
 **Scope:** Working tree containing Phase 05 shared implementation and common/JVM test suites following N1-N3 remediations.
 
 ---
@@ -19,7 +19,7 @@
    - Parsed stdout/artifact test execution logs; confirmed 89 passed, 0 failed, 0 skipped.
 3. **N1-N3 Deep Analysis & Defect Identification:**
    - **N1 Evaluation:** `prepareAndFreezeBatch` now bypasses re-freezing for `STATE_UNCERTAIN` entries, retaining original `kind`, `expectedRevision`, and `digest`. Direct test `testUncertainOpRetainsExactFrozenIdentityOnRetry` validates retention and `UNKNOWN_SUPERSEDED` transition. Edge risk identified: `wasUncertain` flag logic depends on `deliveryState == STATE_UNCERTAIN || consecutiveFailures > 0`; recovered interrupted dispatches starting at `consecutiveFailures == 0` require verification.
-   - **N2 Evaluation:** `store.dao.freezeOutboxAtomic` optimistic CAS query verifies `localRevision` match before transition to `DISPATCHING`. Stale snapshots discarded from push batch. Edge risk: Tested on `FakeDoggoDao`; real bundled SQLite Room concurrency race needs end-to-end multi-threaded test.
+   - **N2 Evaluation:** `store.dao.freezeOutboxAtomic` optimistic CAS query verifies `localRevision` match before transition to `DISPATCHING`. Stale snapshots discarded from push batch. Edge risk: Tested on `FakeTabbyRushDao`; real bundled SQLite Room concurrency race needs end-to-end multi-threaded test.
    - **N3 Evaluation:** `AccountLeaveProtocol.executeLeave()` wraps scheduler cancel gate and attempts `onClearWipeMarker(accountKey)` if cancel fails. **Defect identified:** if `onClearWipeMarker` throws an exception, the failure is swallowed (`catch (_: Exception) {}`) while `store.isFrozen = false` unfreezes store. User can edit live data while un-cleared wipe marker remains on disk, causing fatal data wipe on startup. Teardown must remain fail-closed (`isFrozen = true`) if marker clear fails.
 4. **Actionable Recommendations & Next Steps:**
    - Address fail-closed defect in teardown abort path.
@@ -32,19 +32,19 @@
 
 | Test Suite | Class FQCN | Test Doubles / Engine | Total | Passed | Failed | Skipped | Status |
 |---|---|---|---:|---:|---:|---:|:---:|
-| **Hub Auth Client** | `dev.doggo.shared.auth.HubAuthClientTest` | Mock Ktor Engine | 8 | 8 | 0 | 0 | **PASS** |
-| **Hub Auth Session** | `dev.doggo.shared.auth.HubAuthSessionTest` | Fake Vault + Mock Ktor | 8 | 8 | 0 | 0 | **PASS** |
-| **Single-Flight Refresh** | `dev.doggo.shared.auth.SingleFlightRefreshTest` | Coroutine Coordinator | 3 | 3 | 0 | 0 | **PASS** |
-| **Account Key Contract** | `dev.doggo.shared.contract.AccountKeyTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
-| **Endpoint Policy Contract** | `dev.doggo.shared.contract.EndpointPolicyTest` | Pure Common Kotlin | 8 | 8 | 0 | 0 | **PASS** |
-| **Strict Digest Contract** | `dev.doggo.shared.contract.StrictDigestTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
-| **Title Policy Contract** | `dev.doggo.shared.contract.TitlePolicyTest` | Pure Common Kotlin | 6 | 6 | 0 | 0 | **PASS** |
-| **Room Account Store (JVM)** | `dev.doggo.shared.data.RoomAccountStoreTest` | Real Bundled SQLite (JVM) | 9 | 9 | 0 | 0 | **PASS** |
-| **Account Leave Protocol** | `dev.doggo.shared.sync.AccountLeaveProtocolTest` | Fake Store/Session + Callbacks | 7 | 7 | 0 | 0 | **PASS** |
-| **Account Sync Coordinator** | `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | Fake DAO + Mock Ktor | 5 | 5 | 0 | 0 | **PASS** |
-| **Hub Sync Client** | `dev.doggo.shared.sync.HubSyncClientTest` | Mock Ktor Engine | 6 | 6 | 0 | 0 | **PASS** |
-| **Outbox Reconciliation** | `dev.doggo.shared.sync.OutboxReconciliationTest` | Fake Store/DAO | 10 | 10 | 0 | 0 | **PASS** |
-| **Staged Full Scan** | `dev.doggo.shared.sync.StagedFullScanTest` | Fake DAO + Mock Ktor | 9 | 9 | 0 | 0 | **PASS** |
+| **Hub Auth Client** | `dev.tabbyrush.shared.auth.HubAuthClientTest` | Mock Ktor Engine | 8 | 8 | 0 | 0 | **PASS** |
+| **Hub Auth Session** | `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Fake Vault + Mock Ktor | 8 | 8 | 0 | 0 | **PASS** |
+| **Single-Flight Refresh** | `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Coroutine Coordinator | 3 | 3 | 0 | 0 | **PASS** |
+| **Account Key Contract** | `dev.tabbyrush.shared.contract.AccountKeyTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
+| **Endpoint Policy Contract** | `dev.tabbyrush.shared.contract.EndpointPolicyTest` | Pure Common Kotlin | 8 | 8 | 0 | 0 | **PASS** |
+| **Strict Digest Contract** | `dev.tabbyrush.shared.contract.StrictDigestTest` | Pure Common Kotlin | 5 | 5 | 0 | 0 | **PASS** |
+| **Title Policy Contract** | `dev.tabbyrush.shared.contract.TitlePolicyTest` | Pure Common Kotlin | 6 | 6 | 0 | 0 | **PASS** |
+| **Room Account Store (JVM)** | `dev.tabbyrush.shared.data.RoomAccountStoreTest` | Real Bundled SQLite (JVM) | 9 | 9 | 0 | 0 | **PASS** |
+| **Account Leave Protocol** | `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | Fake Store/Session + Callbacks | 7 | 7 | 0 | 0 | **PASS** |
+| **Account Sync Coordinator** | `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | Fake DAO + Mock Ktor | 5 | 5 | 0 | 0 | **PASS** |
+| **Hub Sync Client** | `dev.tabbyrush.shared.sync.HubSyncClientTest` | Mock Ktor Engine | 6 | 6 | 0 | 0 | **PASS** |
+| **Outbox Reconciliation** | `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | Fake Store/DAO | 10 | 10 | 0 | 0 | **PASS** |
+| **Staged Full Scan** | `dev.tabbyrush.shared.sync.StagedFullScanTest` | Fake DAO + Mock Ktor | 9 | 9 | 0 | 0 | **PASS** |
 | **TOTAL (JVM Execution)** | *All 13 Suites* | — | **89** | **89** | **0** | **0** | **PASS (100%)** |
 
 ---
@@ -95,7 +95,7 @@
 - `testEmptyPageWithHasMoreFails`: PASS. Non-progress empty record page with `hasMore: true` rejected as `SafeError.ProtocolIncompatible`.
 
 ### 2.5 HubSyncClientTest (6/6 PASS)
-- `testBootstrapSuccess`: PASS. Validates `POST /api/v1/sync/doggo/strong/bootstrap` with Dual-Auth.
+- `testBootstrapSuccess`: PASS. Validates `POST /api/v1/sync/tabby-rush/strong/bootstrap` with Dual-Auth.
 - `testBootstrapProtocolMismatchFails`: PASS. Server non-"strict-v1" protocol rejected.
 - `testPushSuccess`: PASS. Serializes push batch; parses 200 OK response and per-record operation results.
 - `testPushBatchBoundsEnforcedClientSide`: PASS. Batch limit `<= 100` and unique `rowId` rules enforced.
@@ -125,7 +125,7 @@
 | Ref | Blocker | Fix Implemented | Validation Evidence | Remaining Risk / Note |
 |---|---|---|---|---|
 | **N1** | UNCERTAIN retry re-frozen against newer base breaking idempotent retry & UnknownSuperseded transition | `prepareAndFreezeBatch` skips re-computation for `deliveryState == STATE_UNCERTAIN`, keeping original `kind`, `expectedRevision`, `epoch`, and `digest`. Marks state `DISPATCHING`. Reconcile checks `wasUncertain = op.deliveryState == STATE_UNCERTAIN \|\| op.consecutiveFailures > 0`. | `OutboxReconciliationTest.testUncertainOpRetainsExactFrozenIdentityOnRetry` | Edge case: recovered crash dispatch with `consecutiveFailures == 0` when retried becomes `DISPATCHING`; need explicit assertion that `wasUncertain` remains true if `consecutiveFailures == 0`. |
-| **N2** | Dispatch freeze overwrites concurrent coalesced edit (lost update) | `freezeOutboxAtomic` enforces optimistic concurrency CAS check `localRevision == expectedLocalRevision`. Stale snapshot discarded from batch; edited row remains untouched. | `OutboxReconciliationTest.testOptimisticConcurrencyCheckSkipsStaleFreezeOnConcurrentEdit` | Tested via `FakeDoggoDao`. Real multi-threaded SQLite Room transaction race test recommended. |
+| **N2** | Dispatch freeze overwrites concurrent coalesced edit (lost update) | `freezeOutboxAtomic` enforces optimistic concurrency CAS check `localRevision == expectedLocalRevision`. Stale snapshot discarded from batch; edited row remains untouched. | `OutboxReconciliationTest.testOptimisticConcurrencyCheckSkipsStaleFreezeOnConcurrentEdit` | Tested via `FakeTabbyRushDao`. Real multi-threaded SQLite Room transaction race test recommended. |
 | **N3** | Scheduler cancel failure leaves wipe marker on disk while unfreezing store | Added `onClearWipeMarker` rollback call in scheduler cancel catch block before `store.isFrozen = false`. | `AccountLeaveProtocolTest.testSchedulerCancelFailureAbortsTeardownFailClosed` | **Defect:** `onClearWipeMarker` exception swallowed in `catch (_: Exception) {}`. If marker clearance fails, store is unfrozen while marker remains on disk! Store must remain frozen (`isFrozen = true`) unless marker clear succeeds. |
 
 ---

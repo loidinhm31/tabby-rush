@@ -11,8 +11,8 @@ Date: 2026-10-15. Source: terminal report from `StrictUpgradeResearch`; parent v
 - `glean-hub-plugin/glean-hub-sync/src/models/app.rs:29-88`, `models/api.rs:42-76`: syncMode/strictEpoch; no independent migration state.
 - `glean-hub-plugin/glean-hub-sync/src/lib.rs:207-285`: existing route groups/legacy cleanup; no controlled migration worker.
 - `glean-hub-app/src/services/sync-admin-service.ts:94-129`, `pages/admin/edit-app.tsx:1-127`, `components/organisms/schema-editor.tsx`: ordinary editor/update path.
-- Doggo `shared/src/commonMain/kotlin/dev/doggo/shared/data/outbox-entity.kt:6-35`: frozen operation identity/payload/digest and uncertain/conflict states. `room-account-store.kt:118-203`: saved intentions coalesce only while pending.
-- Doggo `scripts/hub-strict-recovery.js`: fresh-epoch maintenance recovery, not feature migration; do not use it for this upgrade.
+- TabbyRush `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/outbox-entity.kt:6-35`: frozen operation identity/payload/digest and uncertain/conflict states. `room-account-store.kt:118-203`: saved intentions coalesce only while pending.
+- TabbyRush `scripts/hub-strict-recovery.js`: fresh-epoch maintenance recovery, not feature migration; do not use it for this upgrade.
 
 ## Recommended design
 - Freeze explicit strict-v1/v2 schema pairs; canonical field presence and explicit nulls for v2. Never change v1 digest semantics.

@@ -57,7 +57,7 @@ kotlin {
 }
 
 android {
-    namespace = "dev.doggo.shared"
+    namespace = "dev.tabbyrush.shared"
     compileSdk = 35
 
     defaultConfig {
@@ -82,7 +82,7 @@ dependencies {
 
 compose.resources {
     publicResClass = true
-    packageOfResClass = "dev.doggo.shared.resources"
+    packageOfResClass = "dev.tabbyrush.shared.resources"
     generateResClass = always
 }
 

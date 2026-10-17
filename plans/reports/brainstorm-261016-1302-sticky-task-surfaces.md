@@ -1,4 +1,4 @@
-# Doggo sticky task surfaces — agreed brainstorm
+# TabbyRush sticky task surfaces — agreed brainstorm
 
 - Status: solution approved; no implementation authorized by this report.
 - Deliverable: this decision report. Future feature artifact: Android home-screen task widget, optional next-deadline notification, one desktop always-on-top task window and tray.
@@ -6,7 +6,7 @@
 
 ## Problem and agreed requirements
 
-Expose existing Doggo tasks without requiring the full app to remain visible. These are task surfaces, not a new free-text note feature.
+Expose existing TabbyRush tasks without requiring the full app to remain visible. These are task surfaces, not a new free-text note feature.
 
 ### Shared behavior
 
@@ -42,7 +42,7 @@ Expose existing Doggo tasks without requiring the full app to remain visible. Th
 
 ### Desktop window and tray
 
-- Exactly one sticky task window per running Doggo profile, alongside the normal main window. Same process, controller/runtime, database, and single-instance guard.
+- Exactly one sticky task window per running TabbyRush profile, alongside the normal main window. Same process, controller/runtime, database, and single-instance guard.
 - Movable/resizable, always-on-top compact window. Not attached to wallpaper or integrated with Windows Sticky Notes storage.
 - Main-window Close hides main UI. Sticky-window Close hides sticky UI. Neither closes the account database or stops sync.
 - Tray commands: Open app, Show/Hide sticky, Quit. Quit performs actual scheduler/runtime teardown and process exit.
@@ -91,16 +91,16 @@ A separate desktop companion executable is unnecessary: duplicates account/sessi
 
 | Surface | Relevant existing paths | Reason |
 | --- | --- | --- |
-| Android startup/account | `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt:22-134`; `account-runtime-factory.kt`; `android-account-state-manager.kt` | Active runtime, asynchronous restore, wipe recovery |
-| Android task actions/navigation | `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt:291-345,442-471`; `main-activity.kt` | Existing task mutation/reload and account-checked task navigation |
-| Android sync | `androidApp/src/main/kotlin/dev/doggo/android/doggo-sync-worker.kt:11-76`; `android-sync-scheduler.kt` | Background reconcile, per-account work, future refresh hooks |
-| Android notifications | `androidApp/src/main/kotlin/dev/doggo/android/android-notification-adapter.kt:75-142`; `android-notification-intent-factory.kt`; `reminder-permission-controller.kt` | Reminder-only channel/identity today; reuse patterns, not reminder-specific ownership |
+| Android startup/account | `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt:22-134`; `account-runtime-factory.kt`; `android-account-state-manager.kt` | Active runtime, asynchronous restore, wipe recovery |
+| Android task actions/navigation | `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt:291-345,442-471`; `main-activity.kt` | Existing task mutation/reload and account-checked task navigation |
+| Android sync | `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-sync-worker.kt:11-76`; `android-sync-scheduler.kt` | Background reconcile, per-account work, future refresh hooks |
+| Android notifications | `androidApp/src/main/kotlin/dev/tabbyrush/android/android-notification-adapter.kt:75-142`; `android-notification-intent-factory.kt`; `reminder-permission-controller.kt` | Reminder-only channel/identity today; reuse patterns, not reminder-specific ownership |
 | Android registration/build | `androidApp/src/main/AndroidManifest.xml`; `androidApp/build.gradle.kts`; `gradle/libs.versions.toml` | Add widget component/metadata and compatible dependency; no widget exists today |
-| Desktop application lifetime | `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt:766-835` | Current Close disposes controller and exits; one Window today |
-| Desktop state/actions | `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt:163-236,295-405`; `single-instance-guard.kt`; `desktop-reminder-scheduler.kt` | Runtime reuse, state reloads, profile lock, process scheduling |
-| Shared storage/contracts | `shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-store.kt`; `todo-models.kt`; `persisted-task-schedule.kt`; `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt` | Task projection/mutations and existing deadline semantics |
-| Shared presentation | `shared/src/commonMain/kotlin/dev/doggo/shared/ui/todo-list.kt`; `todo-editor.kt`; `shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-ui-state.kt`; `todo-action.kt` | Reuse task behavior and suitable presentation parts; avoid coupling filters |
-| Account teardown | `shared/src/commonMain/kotlin/dev/doggo/shared/sync/account-leave-protocol.kt`; Android `composite-leave-scheduler-cancel-gate.kt` | Quiescence, stale-action fencing, external-content cleanup |
+| Desktop application lifetime | `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt:766-835` | Current Close disposes controller and exits; one Window today |
+| Desktop state/actions | `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt:163-236,295-405`; `single-instance-guard.kt`; `desktop-reminder-scheduler.kt` | Runtime reuse, state reloads, profile lock, process scheduling |
+| Shared storage/contracts | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-store.kt`; `todo-models.kt`; `persisted-task-schedule.kt`; `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt` | Task projection/mutations and existing deadline semantics |
+| Shared presentation | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/todo-list.kt`; `todo-editor.kt`; `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-ui-state.kt`; `todo-action.kt` | Reuse task behavior and suitable presentation parts; avoid coupling filters |
+| Account teardown | `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/account-leave-protocol.kt`; Android `composite-leave-scheduler-cancel-gate.kt` | Quiescence, stale-action fencing, external-content cleanup |
 | Acceptance/docs | `docs/android-acceptance.md`; `docs/windows-acceptance.md`; `docs/linux-acceptance.md`; `docs/system-architecture.md`; `docs/project-changelog.md` | Record new surfaces, close/tray behavior and platform evidence |
 
 No external service migration or database tooling required. Research helpers: mobile-development/docs-seeker guidance and two read-only scout agents. Implementation planning is a separate opt-in command; no implementation agents have been authorized.

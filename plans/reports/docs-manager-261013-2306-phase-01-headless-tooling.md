@@ -3,14 +3,14 @@
 **Date:** 2026-10-13
 **Agent:** Phase01DocsManager
 **Scope:** Phase 01 Headless Tooling and Android Environment Technical Documentation
-**Target Plan:** `plans/261013-0914-doggo-compose-todos/plan.md`
-**Phase File:** `plans/261013-0914-doggo-compose-todos/phase-01-headless-tooling.md`
+**Target Plan:** `plans/261013-0914-tabbyrush-compose-todos/plan.md`
+**Phase File:** `plans/261013-0914-tabbyrush-compose-todos/phase-01-headless-tooling.md`
 
 ---
 
 ## 1. Current State Assessment
 
-Phase 01 delivers the foundational headless virtualization scripts, environment setup, and verification harness for the Doggo repository on a headless Fedora Linux 44 host.
+Phase 01 delivers the foundational headless virtualization scripts, environment setup, and verification harness for the TabbyRush repository on a headless Fedora Linux 44 host.
 
 Documentation coverage has been brought to full synchronization with actual script behaviors and host capabilities:
 - Operations runbook (`docs/headless-android-setup.md`) covers Xpra virtual display execution, SDK/Studio setup, wall-clock bounded boot polling, and physical device debugging.
@@ -31,7 +31,7 @@ Documentation coverage has been brought to full synchronization with actual scri
 
 2. **`docs/host-tooling-evidence.md`**:
    - Recorded cycle-3 review smoke test on isolated display `:199` (clean daemon startup, zero listening TCP sockets associated with Xpra via `ss -ltn`, clean stop).
-   - Explicitly delineated verified host items from pending interactive items (Studio download, SDK platform-tools/`adb`, emulator package, `doggo_android` AVD, framebuffer screenshot).
+   - Explicitly delineated verified host items from pending interactive items (Studio download, SDK platform-tools/`adb`, emulator package, `tabbyrush_android` AVD, framebuffer screenshot).
    - Distinguished host observations (`/dev/kvm` mode `0666`) from system security policies.
 
 3. **`docs/codebase-summary.md`**:
@@ -60,7 +60,7 @@ Documentation coverage has been brought to full synchronization with actual scri
    - Command-line tools extraction to `$ANDROID_HOME/cmdline-tools/latest/`
    - Interactive SDK license review (`sdkmanager --licenses`)
    - Installation of SDK packages (`platform-tools`, `emulator`, `platforms;android-35`, `build-tools;35.0.0`, `system-images;android-35;google_apis;x86_64`)
-   - AVD creation (`doggo_android`)
+   - AVD creation (`tabbyrush_android`)
 2. **Visual Runtime Acceptance Gate (Pending)**:
    - Interactive remote attachment via `xpra attach ssh://loidinh@<host>/100` from graphical workstation
    - Interactive first-run wizard in Android Studio

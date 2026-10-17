@@ -7,8 +7,8 @@
 
 ## Exclusive ownership
 Create only:
-- `shared/src/commonMain/kotlin/dev/doggo/shared/ui/date-time-pickers.kt`
-- `shared/src/commonTest/kotlin/dev/doggo/shared/ui/date-time-pickers-test.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/date-time-pickers.kt`
+- `shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/date-time-pickers-test.kt`
 Read-only: `deadline-editor-section.kt`, `reminder-settings.kt`, `deadline-calculator-helpers.kt`, `todo-ui-state.kt`, build files, theme tokens.
 No deletions. Phase 04 owns rendered-test wiring and semantics tests; do not modify those files.
 
@@ -24,11 +24,11 @@ No deletions. Phase 04 owns rendered-test wiring and semantics tests; do not mod
     label: String, value: String, onClick: () -> Unit,
     modifier: Modifier = Modifier, supportingText: String? = null
 )
-@Composable internal fun DoggoDatePickerDialog(
+@Composable internal fun TabbyRushDatePickerDialog(
     initialDate: String, title: String,
     onConfirm: (String) -> Unit, onDismiss: () -> Unit
 )
-@Composable internal fun DoggoTimePickerDialog(
+@Composable internal fun TabbyRushTimePickerDialog(
     initialTime: String, title: String,
     onConfirm: (String) -> Unit, onDismiss: () -> Unit,
     fallbackTime: String = "09:00"
@@ -60,7 +60,7 @@ fun formatTime(hour: Int, minute: Int): String
 ## Implementation steps
 1. Read pinned Material3 APIs and existing theme/layout patterns; choose only APIs available in Compose Multiplatform 1.7.3.
 2. Implement/test pure parsing, canonical formatting, and UTC round-trip boundaries without adding a parallel domain validator.
-3. Implement accessible trigger, calendar dialog, and clock dialog; keep helpers/components focused, using Doggo theme tokens and bounded scrollable content for small/large-font viewports.
+3. Implement accessible trigger, calendar dialog, and clock dialog; keep helpers/components focused, using TabbyRush theme tokens and bounded scrollable content for small/large-font viewports.
 4. Keep each new file under 200 lines; avoid a generic picker framework or extra state model. Do not refactor existing large consumer/test files.
 5. Publish the signatures above and dismiss/confirm/seed rules as the Phase 01 handoff; only then release Phases 02 and 03 in parallel.
 

@@ -21,39 +21,39 @@ Additional warnings and optimizations address perpetual obsolete notification re
 
 ## 2. Reviewed Files
 
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/reminder-schedule-calculator.kt` (Checked arithmetic, 5-min grace window)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/persisted-task-schedule.kt` (Committed schedule domain model)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/persisted-schedule-projector.kt` (Draft-free projection, cancellation barriers, nullable clearing)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/reminder-capability.kt` (OS reminder capabilities)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/reminder-scheduler.kt` (Scheduled alarm handle identity, adapter contract)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/data/persisted-schedule-snapshot.kt` (Atomic Room base+outbox snapshot model)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/data/reminder-occurrence-store.kt` (Ledger lifecycle, atomic claim, orphan cancellation)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/data/schedule-reconciliation-delta.kt` (Delta model)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/data/doggo-dao.kt` (Room atomic claim, posted, skipped, and snapshot transactions)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt` (withMutationLock gating, schedule invalidation flow)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/sync/reminder-delivery-gate.kt` (Lock ordering, drain sync, generation/wipe guards)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/sync/reminder-scheduling-coordinator.kt` (Reconciliation, multi-step delivery, pre-post recheck)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/sync/account-leave-protocol.kt` (Guarded teardown, fail-closed cancellation)
-- `shared/src/commonMain/kotlin/dev/doggo/shared/sync/{staged-full-scan,outbox-reconciliation,account-sync-coordinator,contract-transition-coordinator}.kt` (Mutation locking integration)
-- `shared/src/commonTest/kotlin/dev/doggo/shared/contract/reminder-schedule-calculator-test.kt`
-- `shared/src/commonTest/kotlin/dev/doggo/shared/contract/persisted-schedule-projection-test.kt`
-- `shared/src/commonTest/kotlin/dev/doggo/shared/sync/reminder-delivery-gate-test.kt`
-- `shared/src/commonTest/kotlin/dev/doggo/shared/data/reminder-occurrence-store-test.kt`
-- `shared/src/commonTest/kotlin/dev/doggo/shared/sync/recording-native-reminder-adapter.kt`
-- `shared/src/commonTest/kotlin/dev/doggo/shared/sync/account-leave-protocol-test.kt`
-- `shared/src/jvmTest/kotlin/dev/doggo/shared/data/reminder-scheduling-coordinator-sqlite-smoke-test.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/reminder-schedule-calculator.kt` (Checked arithmetic, 5-min grace window)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-task-schedule.kt` (Committed schedule domain model)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-schedule-projector.kt` (Draft-free projection, cancellation barriers, nullable clearing)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/reminder-capability.kt` (OS reminder capabilities)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/reminder-scheduler.kt` (Scheduled alarm handle identity, adapter contract)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/persisted-schedule-snapshot.kt` (Atomic Room base+outbox snapshot model)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/reminder-occurrence-store.kt` (Ledger lifecycle, atomic claim, orphan cancellation)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/schedule-reconciliation-delta.kt` (Delta model)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/tabbyrush-dao.kt` (Room atomic claim, posted, skipped, and snapshot transactions)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt` (withMutationLock gating, schedule invalidation flow)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/reminder-delivery-gate.kt` (Lock ordering, drain sync, generation/wipe guards)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/reminder-scheduling-coordinator.kt` (Reconciliation, multi-step delivery, pre-post recheck)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/account-leave-protocol.kt` (Guarded teardown, fail-closed cancellation)
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/{staged-full-scan,outbox-reconciliation,account-sync-coordinator,contract-transition-coordinator}.kt` (Mutation locking integration)
+- `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/reminder-schedule-calculator-test.kt`
+- `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/persisted-schedule-projection-test.kt`
+- `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/reminder-delivery-gate-test.kt`
+- `shared/src/commonTest/kotlin/dev/tabbyrush/shared/data/reminder-occurrence-store-test.kt`
+- `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/recording-native-reminder-adapter.kt`
+- `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/account-leave-protocol-test.kt`
+- `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/reminder-scheduling-coordinator-sqlite-smoke-test.kt`
 
 ---
 
 ## 3. Critical Issues (MUST FIX)
 
 ### 3.1. Un-gated Outbox Error State Writes
-- **Location**: `shared/src/commonMain/kotlin/dev/doggo/shared/sync/outbox-reconciliation.kt:308, 353, 374`
+- **Location**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/outbox-reconciliation.kt:308, 353, 374`
 - **Impact**: While conflict branches (`STATE_CONFLICT`, `STATE_UNKNOWN_SUPERSEDED`) and accepted reconciliation (`reconcileAccepted`) are protected by `store.withMutationLock`, error writes for malformed accepted revisions (line 308), retryable failures (line 353), and unrecognized statuses (line 374) invoke `store.dao.updateDeliveryState` or `store.dao.upsertOutbox` directly without `withMutationLock`. This bypasses `ReminderDeliveryGate` admission tracking, teardown freeze barriers, and schedule invalidation notifications. Furthermore, line 353 writes a potentially stale `op.copy(...)` snapshot.
 - **Remediation**: Wrap all outbox state transitions inside `store.withMutationLock { ... }` and read the current outbox record from `dao` before modifying and updating.
 
 ### 3.2. Inconsistent Store Unfreezing on Teardown Abort
-- **Location**: `shared/src/commonMain/kotlin/dev/doggo/shared/sync/account-leave-protocol.kt:106, 110, 120`
+- **Location**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/account-leave-protocol.kt:106, 110, 120`
 - **Impact**: In `performGuardedTeardown()`, `store.deliveryGate?.closeAndDrain(5000L)` transitions the delivery gate to `CLOSED`. If a subsequent step fails (such as `onReadGeneration()`, `currentGen == Long.MAX_VALUE`, or `onWriteGeneration`/`onWriteWipeMarker`), the method resets `store.isFrozen = false`. This leaves the store in an inconsistent state: `isFrozen` is false, but `deliveryGate` is permanently `CLOSED`. Any subsequent user edit calling `withMutationLock` crashes with `IllegalStateException("Mutation admission rejected: delivery gate is CLOSED")`.
 - **Remediation**: Teardown failures occurring after `closeAndDrain()` must remain fail-closed with `store.isFrozen = true` so the account cannot accept further writes until properly recovered or re-torn down.
 
@@ -62,17 +62,17 @@ Additional warnings and optimizations address perpetual obsolete notification re
 ## 4. Warnings (SHOULD FIX)
 
 ### 4.1. Perpetual Obsolete Notification Removals
-- **Location**: `shared/src/commonMain/kotlin/dev/doggo/shared/data/reminder-occurrence-store.kt:105-109` and `dev/doggo/shared/sync/reminder-scheduling-coordinator.kt:63-65`
+- **Location**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/reminder-occurrence-store.kt:105-109` and `dev/tabbyrush/shared/sync/reminder-scheduling-coordinator.kt:63-65`
 - **Impact**: In `syncPlannedOccurrences()`, cancelled tasks with posted platform IDs are placed in `delta.obsoletePlatformNotificationIdsToRemove`. Because `postedPlatformId` is never cleared or marked removed in the SQLite ledger upon successful adapter removal, every subsequent execution of `coordinator.reconcile()` repeatedly attempts to dismiss the same platform notification ID.
 - **Remediation**: Acknowledge successful native removal in SQLite (e.g. transition to a `DISMISSED` state or clear `postedPlatformId` only after `adapter.removeOwnedNotification` completes) while maintaining retryability if adapter dismissal fails.
 
 ### 4.2. Flawed Wipe Race Smoke Test
-- **Location**: `shared/src/jvmTest/kotlin/dev/doggo/shared/data/reminder-scheduling-coordinator-sqlite-smoke-test.kt:179-183`
+- **Location**: `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/reminder-scheduling-coordinator-sqlite-smoke-test.kt:179-183`
 - **Impact**: In `testConcurrentCallbacksAndWipeRace()`, the wipe marker is asserted against occurrence index 0 after it was already claimed and posted by `call1`. The second call returns `false` simply because occurrence 0 is consumed, not necessarily because the wipe marker was respected.
 - **Remediation**: Test the wipe race against an unconsumed pending occurrence (e.g. index 1), and implement a barrier test verifying that in-flight delivery callbacks complete before teardown closes Room.
 
 ### 4.3. Staged Scan Promotion Decision Interleaving
-- **Location**: `shared/src/commonMain/kotlin/dev/doggo/shared/sync/staged-full-scan.kt:249-397`
+- **Location**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/staged-full-scan.kt:249-397`
 - **Impact**: `currentBase` reads and calculation of `basesToUpsert` occur outside `store.withMutationLock`; only `promoteStagingAtomic` is wrapped. A concurrent outbox reconciliation or local edit could commit an updated base revision between the snapshot read and the promotion execution.
 - **Remediation**: Revalidate base revisions inside the mutation lock or ensure mutual exclusion across the full promote phase.
 

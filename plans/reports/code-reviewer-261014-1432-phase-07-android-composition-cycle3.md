@@ -1,6 +1,6 @@
 # Code Review Cycle 3: Phase 07 — Android composition & runtime integration
 
-Date: 2026-10-14 | Reviewer: ReviewerPhase07Cycle3 | Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md`
+Date: 2026-10-14 | Reviewer: ReviewerPhase07Cycle3 | Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-07-android-integration.md`
 
 ## Verdict: 4/10 — NOT ACCEPTED. Source improved vs cycle 2 (3/10); Android compile + device gates still unrun; teardown correctness gaps remain.
 Phase 07 stays open. Not accepted ≠ rejected-for-design: cycle-2 compile blockers landed; remaining blockers = unverifiable (no SDK) + teardown/rollback defects + overclaiming docs.
@@ -30,7 +30,7 @@ Phase 07 stays open. Not accepted ≠ rejected-for-design: cycle-2 compile block
 - **W3 `AccountSyncCoordinator.requestLeave()` self-deadlocks if wired to the Android gate** (holds `coordinatorMutex`, gate then waits on same mutex ≥5 s → throws). Unused today (VM bypasses); API is a trap — remove or document.
 - **W4 [INFERENCE] Login/register error lost.** Failure flips `AUTHENTICATING→UNAUTHENTICATED`; VM collector then `onUnauthenticated()` → `_uiState.value = TodoUiState()` after `handleAuth` already set `safeError` (collector resumes after current Main coroutine). Wrong-password message likely never renders. Reset only account-bound fields.
 - **W5 Leave failures silent** (`requestLeave` executeLeave==false, `ConfirmLeave` false): no `SafeError`, guard stays. Store may be left frozen (delete-failed path) with no user feedback.
-- **W6 Release config:** `HUB_API_KEY="doggo-dev-api-key"` and placeholder `https://hub.glean.dev` in `defaultConfig` ship in release; needs per-variant fields (Phase 08 gate). `work-runtime-ktx`, androidx.test coords hard-coded (not in catalog). Release gate matches any task name containing "Release" and reads `android` ext in `whenReady` (works only without config-cache; undocumented).
+- **W6 Release config:** `HUB_API_KEY="tabbyrush-dev-api-key"` and placeholder `https://hub.glean.dev` in `defaultConfig` ship in release; needs per-variant fields (Phase 08 gate). `work-runtime-ktx`, androidx.test coords hard-coded (not in catalog). Release gate matches any task name containing "Release" and reads `android` ext in `whenReady` (works only without config-cache; undocumented).
 - **W7 No explicit Kotlin `jvmTarget`** in androidApp while `compileOptions`=17, `:shared` pins 17, host JDK 21 [INFERENCE: possible JVM-target mismatch error]. Add `kotlin { compilerOptions { jvmTarget.set(JVM_17) } }`.
 - **W8 `getOrCreateAccountRuntime` falls back to `userId = "default"`** when identity null (silent mis-partition); `TodoDeviceTest.testAccountRuntimeCreationAndStoreAccess` depends on it. Throw instead; seed identity in test.
 - **W9 Test quality:** `BackgroundIsolationTest` leaves singleton `authSession` AUTHENTICATED (tearDown clears vault files only) → `TodoDeviceTest.testInitialUiState` order-dependent; `restoreSession` result unasserted; `delay(50)` assertions racy vs init collector; plan-required scenarios (foreground+worker overlap, switch A→B, in-flight cancel, restart re-enqueue, force-stop) absent; no test for mutex-timeout fail-closed (QA cycle 3 asked for one).
@@ -42,7 +42,7 @@ Phase 07 stays open. Not accepted ≠ rejected-for-design: cycle-2 compile block
 - Every `progress` emission → full `loadTodos()` (+`getAllOutbox()` if conflicts); debounce / query by state. Conflict never cleared when count→0.
 - Document KEEP/re-enqueue policy in scheduler KDoc (plan step 4); safe in practice (round drains outbox; foreground triggers).
 - `active_account.dat`: plaintext email/username, main-thread I/O, swallowed errors; add `<exclude domain="file" path="."/>` to backup rules (backup already off).
-- Drop `ACCESS_NETWORK_STATE` permission (unused, YAGNI); drop redundant `Surface` in `MainActivity` (`DoggoApp` already themes).
+- Drop `ACCESS_NETWORK_STATE` permission (unused, YAGNI); drop redundant `Surface` in `MainActivity` (`TabbyRushApp` already themes).
 - Proxy: forward `url.pathname+url.search` (allowlist validates normalized pathname but upstream gets raw `clientReq.url` → validation/route disagreement; upstream is loopback Hub only, so Low); add `clientRes.on('error')`.
 - `android-smoke.sh`: `--reverse` moot (debug origin fixed 10.0.2.2); `--capture` overwrites `android-debug-empty.png` with whatever is on screen; help text says emulator-5554 default but code auto-detects; never runs instrumented tests/Hub smoke.
 - "Load more", UnknownSuperseded/protocol/reset UI paths have no contract action (Phase 06 owner decision).
@@ -55,7 +55,7 @@ Phase 07 stays open. Not accepted ≠ rejected-for-design: cycle-2 compile block
 - Docs now state device/SDK gates pending.
 
 ## Reviewed files (25/25 + shared cross-reads)
-androidApp: `build.gradle.kts`, `gradle.lockfile`, `src/main/AndroidManifest.xml`, `res/xml/backup_rules.xml`, `res/xml/data_extraction_rules.xml`, `src/debug/AndroidManifest.xml`, `src/debug/res/xml/network_security_config.xml`, `main-activity.kt`, `doggo-application.kt`, `session-view-model.kt`, `android-sync-scheduler.kt`, `doggo-sync-worker.kt`, `todo-device-test.kt`, `background-isolation-test.kt`; `scripts/android-smoke.sh`, `scripts/debug-fault-proxy.mjs`; `docs/android-acceptance.md`, `docs/evidence/android-test-summary.md`; 7 PNGs (cycle 2 type/size check; not re-viewed). Cross-read: `account-leave-protocol.kt`, `account-sync-coordinator.kt`, `hub-auth-session.kt`, `safe-errors.kt`, `todo-action.kt`, `todo-models.kt`, `todo-ui-state`, `android-account-files.kt`, `android-database-builder.kt`, `gradle/libs.versions.toml`, root/settings/shared build.
+androidApp: `build.gradle.kts`, `gradle.lockfile`, `src/main/AndroidManifest.xml`, `res/xml/backup_rules.xml`, `res/xml/data_extraction_rules.xml`, `src/debug/AndroidManifest.xml`, `src/debug/res/xml/network_security_config.xml`, `main-activity.kt`, `tabbyrush-application.kt`, `session-view-model.kt`, `android-sync-scheduler.kt`, `tabbyrush-sync-worker.kt`, `todo-device-test.kt`, `background-isolation-test.kt`; `scripts/android-smoke.sh`, `scripts/debug-fault-proxy.mjs`; `docs/android-acceptance.md`, `docs/evidence/android-test-summary.md`; 7 PNGs (cycle 2 type/size check; not re-viewed). Cross-read: `account-leave-protocol.kt`, `account-sync-coordinator.kt`, `hub-auth-session.kt`, `safe-errors.kt`, `todo-action.kt`, `todo-models.kt`, `todo-ui-state`, `android-account-files.kt`, `android-database-builder.kt`, `gradle/libs.versions.toml`, root/settings/shared build.
 
 ## Validation (JAVA_HOME=$HOME/.local/share/jvm/jdk-21, `--dependency-verification=off --offline`)
 | Command | Result |

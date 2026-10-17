@@ -81,9 +81,9 @@ Record merged manifest receiver/exported policy, backup=false, no new overlay/FG
 ```text
 adb devices
 adb -s <serial> install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
-adb -s <serial> shell am start -n dev.doggo.android/.MainActivity
-adb -s <serial> shell am kill dev.doggo.android
-adb -s <serial> shell am force-stop dev.doggo.android
+adb -s <serial> shell am start -n dev.tabbyrush.android/.MainActivity
+adb -s <serial> shell am kill dev.tabbyrush.android
+adb -s <serial> shell am force-stop dev.tabbyrush.android
 ```
 
 Use controlled test devices/accounts. Add widget through actual launcher, resize/scroll/toggle, use Add/Open, shade Complete/swipe, system Settings permission/channel changes, lock screen and native time/zone controls. `am kill` tests background process recreation; force-stop is separate and only next manual start is required to recover—no promise of force-stopped delivery. Use actual UI for consequential logout/wipe of disposable test account and record approval/scope; never wipe personal data. Capture multiple widget IDs and the delayed-publication/leave race, not only app screenshots. Verify ordinary offline data, background sync completed and process-death invariants.

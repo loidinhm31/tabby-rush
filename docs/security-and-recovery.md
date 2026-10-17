@@ -1,4 +1,4 @@
-# Doggo Security Model & Operational Disaster Recovery
+# TabbyRush Security Model & Operational Disaster Recovery
 
 **Document Version**: 1.3.0
 **Phase**: Phase 07 Android/Windows acceptance recorded; Phase 08 Linux pending actual Linux session
@@ -16,7 +16,7 @@
   - Linux: Freedesktop Secret Service API via D-Bus (Phase 09).
   - Windows: `WindowsDpapiVault` uses JNA `CryptProtectData` / `CryptUnprotectData` in current-user scope; it stores the encrypted account-key/token pair in `credentials.dpapi` using temporary-file and atomic replacement. Machine-wide scope and plaintext fallback are prohibited.
   - **Windows ACL limitation**: `applyRestrictiveUserAcl()` attempts an owner ACL before the atomic move, but returns when the ACL view or owner is absent and suppresses exceptions. Effective owner-only ACL enforcement is therefore best-effort, not guaranteed. The vault also treats a missing/zero-length file as no saved credentials and does not reject an empty serialized account key; these edge cases remain security-hardening concerns.
-- **API Key Classification**: The `DOGGO_API_KEY` is an extractable client application identifier, NOT an administrative credential. It identifies the client as authorized for the `doggo` app schema. Human user authentication relies exclusively on short-lived JWT access tokens and rotatable refresh tokens.
+- **API Key Classification**: The `TABBYRUSH_API_KEY` is an extractable client application identifier, NOT an administrative credential. It identifies the client as authorized for the `tabbyrush` app schema. Human user authentication relies exclusively on short-lived JWT access tokens and rotatable refresh tokens.
 - **Single-Flight Token Refresh**: Mutex-coordinated refresh ensures only one in-flight network refresh executes at a time. All concurrent requests wait on the resulting token or fail closed.
 
 ### 1.2 Network & Communication Security
@@ -29,7 +29,7 @@
 ## 2. Hub Strict Persistence Invariants
 
 1. **Dedicated Target Namespace**:
-   - Application data resides in its canonical Hub collection namespace: `app<AppId>` (e.g. `appDoggo` via `SyncService::collection_name(app_id)`).
+   - Application data resides in its canonical Hub collection namespace: `app<AppId>` (e.g. `appTabbyRush` via `SyncService::collection_name(app_id)`).
    - Strict routes isolate `todos` operations, enforcing exact column schemas, strict epoch verification, and versioned Compare-And-Swap (CAS).
 2. **CAS & Tombstone Policy**:
    - Inserts: require `expectedRevision === 0` and produce revision 1.
@@ -88,7 +88,7 @@ export CONFIRM_MAINTENANCE_QUIESCENCE="true"
 Restore the sanitized MongoDB dump into a temporary staging collection:
 ```bash
 # Protected restore using environment credentials
-mongorestore --drop --nsInclude="glean_hub.staging_doggo_restore" backup/doggo/
+mongorestore --drop --nsInclude="glean_hub.staging_tabbyrush_restore" backup/tabbyrush/
 ```
 
 #### Step 3: Configure Environment & Execute Recovery Script
@@ -96,9 +96,9 @@ Provide connection details and parameters via protected environment variables (n
 ```bash
 export MONGO_URI="mongodb+srv://<db_user>:<db_password>@<db_cluster>/glean_hub"
 export MONGO_DB_NAME="glean_hub"
-export APP_ID="doggo"
+export APP_ID="tabbyrush"
 export EXPECTED_OLD_EPOCH="550e8400-e29b-41d4-a716-446655440000"
-export SOURCE_BACKUP_COLLECTION="staging_doggo_restore"
+export SOURCE_BACKUP_COLLECTION="staging_tabbyrush_restore"
 export CONFIRM_MAINTENANCE_QUIESCENCE="true"
 
 # Preflight test without mutations
@@ -114,23 +114,23 @@ mongosh --nodb --file scripts/hub-strict-recovery.js
 3. It performs atomic Compare-And-Swap on `_schemas`:
    ```javascript
    db._schemas.updateOne(
-     { appId: "doggo", strictEpoch: EXPECTED_OLD_EPOCH, syncMode: "strict-v1" },
+     { appId: "tabby-rush", strictEpoch: EXPECTED_OLD_EPOCH, syncMode: "strict-v1" },
      { $set: { strictEpoch: newEpoch, recoveryTimestamp: new Date(), lastRecoveryStatus: "fresh_epoch_promoted" } },
      { writeConcern: { w: "majority", j: true } }
    );
    ```
 4. If CAS succeeds, the previous collection is preserved intact (never dropped).
 5. If CAS times out or is ambiguous, ingress traffic remains BLOCKED until the operator manually inspects `_schemas` on primary majority.
-6. Restart Hub API services. Connected Doggo clients will receive an `epochMismatch` HTTP 409 notice, pause in `ResetRequired` state, and await explicit operator review.
+6. Restart Hub API services. Connected TabbyRush clients will receive an `epochMismatch` HTTP 409 notice, pause in `ResetRequired` state, and await explicit operator review.
 
 ---
 
 ## 4. Strict-v2 Feature Upgrade & Incident Recovery Boundaries
 
 ### 4.1 In-Place Upgrade vs. Disaster Recovery
-Upgrading Doggo to `strict-v2` is a **data-preserving, in-place feature migration**, fundamentally distinct from emergency fresh-epoch disaster recovery:
+Upgrading TabbyRush to `strict-v2` is a **data-preserving, in-place feature migration**, fundamentally distinct from emergency fresh-epoch disaster recovery:
 - **Preserves Active Epoch**: `strictEpoch` UUID remains unchanged in `_schemas`.
-- **Preserves Collection Identity**: All data resides in `appDoggo` throughout the transform.
+- **Preserves Collection Identity**: All data resides in `appTabbyRush` throughout the transform.
 - **Preserves Monotonic Revisions**: Existing revisions, tombstones, and confirmation receipts are preserved bit-for-bit.
 - **Non-Destructive Defaults**: Missing v2 temporal fields default to null (reminders disabled) without modifying user data.
 
@@ -150,13 +150,13 @@ Consult the [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) for full
 ## 5. Sticky Task Surface Content, Wipe & Receiver Security
 
 ### 5.1 OS-Retained Content and Wipe Behavior
-- Android launcher widgets and notifications are rendered/stored by OS services and may outlive Doggo's process. The widget can retain task text in launcher-managed content; notification details are private, with a generic public title (“Next task deadline”) rather than task content.
+- Android launcher widgets and notifications are rendered/stored by OS services and may outlive TabbyRush's process. The widget can retain task text in launcher-managed content; notification details are private, with a generic public title (“Next task deadline”) rather than task content.
 - Pending account wipes and leave cleanup request cancellation of reminder alarms, task-surface boundary work, active task-surface notifications, installed widget content (including a signed-out/blank update), Glance sessions, and account-scoped surface preferences before deleting the account database and credentials. The task-surface preference file is cleared; the wipe marker is removed only after account database/artifact deletion and credential clearing succeed.
 - **Cleanup is not an OS erasure guarantee.** `TaskWidgetUpdater` catches and logs failures while pushing blank `RemoteViews`, publishing the Glance signed-out state, or closing Glance sessions. Notification-manager operations may also fail. Thus stale launcher or notification content can remain if the OS does not accept cleanup; the Cycle 2 review also found that Android `closeRuntimeInternal()` proceeds after a delivery-gate drain timeout. These unresolved findings are not waived.
 
 ### 5.2 Exported Component Audit Invariants
-- The release manifest may export only `.MainActivity` and `.DoggoTaskWidgetReceiver`. The widget receiver is permitted only with the exact `android.appwidget.action.APPWIDGET_UPDATE` action and exact app-widget provider metadata (`@xml/task_widget_info`); no additional action, category, or data filter is allowed.
-- `DoggoAlarmReceiver`, `ReminderRestoreReceiver`, `TaskSurfaceActionReceiver`, `TaskSurfaceDismissReceiver`, and `TaskSurfaceTimeReceiver` remain unexported. No service or content provider may be exported.
+- The release manifest may export only `.MainActivity` and `.TabbyRushTaskWidgetReceiver`. The widget receiver is permitted only with the exact `android.appwidget.action.APPWIDGET_UPDATE` action and exact app-widget provider metadata (`@xml/task_widget_info`); no additional action, category, or data filter is allowed.
+- `TabbyRushAlarmReceiver`, `ReminderRestoreReceiver`, `TaskSurfaceActionReceiver`, `TaskSurfaceDismissReceiver`, and `TaskSurfaceTimeReceiver` remain unexported. No service or content provider may be exported.
 - `scripts/release-security-check.mjs` enforces the exported-component allowlist and exact widget filter/metadata invariants for source manifests and release APKs. The Node security-auditor suite (`release-security-check.test.mjs`) is verified with 12/12 passing checks, and static source diagnostics report CLEAN.
 
 ### 5.3 Release and Acceptance Boundaries

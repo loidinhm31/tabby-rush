@@ -1,7 +1,7 @@
 # Planner brief — sticky task surfaces
 
 ## Deliverable and sources
-Planning only. Root `G:/ws/sharing/doggo`, Windows 10.0.26200 x64, branch main, user loidi, timezone Asia/Bangkok, date 2026-10-16. Plan directory `plans/261016-1409-sticky-task-surfaces/` (absolute root prefix for subagents). No implementation/build/lint/test/formatter execution.
+Planning only. Root `G:/ws/sharing/tabbyrush`, Windows 10.0.26200 x64, branch main, user loidi, timezone Asia/Bangkok, date 2026-10-16. Plan directory `plans/261016-1409-sticky-task-surfaces/` (absolute root prefix for subagents). No implementation/build/lint/test/formatter execution.
 Read complete approved `plans/reports/brainstorm-261016-1302-sticky-task-surfaces.md`; its acceptance items 1–12 are mandatory. Parent researched repository and designed ownership waves in `reports/01-codebase-analysis.md`. Both research gates completed: `research/researcher-01-android-surfaces.md`, `research/researcher-02-desktop-surfaces.md`. No scout needed: summary generated today. Parent updated `docs/system-architecture.md` §7 intended design before this plan; do not edit architecture yourself.
 
 ## Required artifacts

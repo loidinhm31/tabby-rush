@@ -1,6 +1,6 @@
 # Code Review: Phase 06 Shared Compose UI + Accessible Light Theme
 
-Date 2026-10-14 · Reviewer Phase06CodeReviewer · Plan `plans/261013-1540-doggo-glean-hub-reuse/phase-06-compose-ui-theme.md`
+Date 2026-10-14 · Reviewer Phase06CodeReviewer · Plan `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-06-compose-ui-theme.md`
 
 ## Score: 4.5/10 — NOT ACCEPTABLE as phase-complete; fix criticals first
 
@@ -24,13 +24,13 @@ Compiles + 96/96 JVM green, but green proves little: new test class renders no C
    | muted on white | 4.94 | 5.2 | ok |
    | ink/white 17.85 (doc 18.5), white/primary 10.69 (doc 9.2), deep/mintS 11.16 (doc 12.3) | doc "measured" values wrong |
    Affected: "Leave & Wipe Local Data" + "Confirm Delete" buttons (14sp white on coral), every error text (`colorScheme.error` on white/coralSurface: form errors, SafeErrorBanner, sync paused statuses, leave-guard list, Delete/Dismiss text buttons), `VersionCard` status/rev text (muted on coralSurface), `NoticeItem` description (muted on mintSurface). Plan Risk section explicitly said "accessibility wins" → palette not adjusted. Fix: darker functional coral (e.g. ≈#C62828 gives ≥5:1 on white and ≥4.5 on coralSurface — verify), darker muted (≈#586369), re-measure, publish script-backed table.
-3. **License notices unreachable in compact layout (Android primary target).** `showNotices` set only from the ≥840dp sidebar in `doggo-app.kt`; compact top bar has only Add + Leave. Android users cannot open notices.
+3. **License notices unreachable in compact layout (Android primary target).** `showNotices` set only from the ≥840dp sidebar in `tabbyrush-app.kt`; compact top bar has only Add + Leave. Android users cannot open notices.
 4. **Notices content wrong/incomplete.** Hard-coded 3 groups; omits Ktor, OkHttp, SQLite bundled, kotlinx-datetime, JNA (LGPL/Apache), dbus-java (LGPL/AFL), androidx security-crypto, Compose material. Copyright years/holders invented ("2020-2026 JetBrains… Google LLC"). Third card shows "SIL OFL 1.1" heading for fonts that are **not bundled** — misleading; drop it. `font-provenance.md` claims viewer shows "all bundled dependencies" → false.
 5. **Required plan states/flows missing from UI.** (Some blocked by frozen contract — then must be documented as contract gap, not silently dropped.)
    - Todo "Load more"/lazy page: none (no action in contract).
    - UnknownSuperseded retained-intent review, ResetRequired old-epoch review, ProtocolIncompatible/DataInvalid repair guidance, AuthorizationUnresolved, credential-persistence-pending: only a one-line `SyncFeedback` label; no dedicated UI.
    - Admin-login warning: only in `strings.xml`, never rendered.
-   - Approved-access flow: `AccessRequestPanel` `else` branch (any status other than pending/rejected, incl. `approved`/unknown) shows "Request Doggo Access" form → user can re-request after approval. Unknown must be distinct.
+   - Approved-access flow: `AccessRequestPanel` `else` branch (any status other than pending/rejected, incl. `approved`/unknown) shows "Request TabbyRush Access" form → user can re-request after approval. Unknown must be distinct.
    - REAUTH_REQUIRED shows only login form: no cached/local data access, no "work preserved" message, no local-only logout. Plan step 4 says reauth must preserve work/actionable recovery.
    - Leave guard shows 3 counts (contract limit); no drafts/UnknownSuperseded/reset counts, no sync-then-leave option, no "possible remote commit" explanation.
    - Local-only logout/Sign Out in `AccessRequestPanel` has no confirmation (plan: logout stays confirmed).
@@ -42,7 +42,7 @@ Compiles + 96/96 JVM green, but green proves little: new test class renders no C
 4. **IME Done bug (`account-form.kt` onDone).** Condition omits `username.isNotBlank()` for SIGNUP; Button is correctly disabled but keyboard Done submits `Register("", …)`. Duplicated submit lambda (onDone + onClick) → extract single `submit()`.
 5. **Raw epoch shown to users:** `"Last reconciled: ${lastSyncTime}ms"` in `sync-feedback.kt` — unreadable; needs date formatting (kotlinx-datetime available).
 6. **Body < 16sp** used for substantive text: `bodySmall` 14sp for errors, help text, descriptions, statuses; `labelMedium` 12sp for action buttons (Edit/Delete/Sync Now/Reconcile/Dismiss). Plan: body ≥16sp. Controls at 12sp are weak at 100% scale.
-7. **Non-text contrast:** `outline = DoggoLine #D9E3E4` on white = 1.31:1 → OutlinedTextField/OutlinedButton/Chip borders fail WCAG 1.4.11 (3:1) for inputs.
+7. **Non-text contrast:** `outline = TabbyRushLine #D9E3E4` on white = 1.31:1 → OutlinedTextField/OutlinedButton/Chip borders fail WCAG 1.4.11 (3:1) for inputs.
 8. **Editor dialog dismiss-on-outside-click** calls `CancelEditor` → silently discards typed draft (plan: raw drafts retained; explicit cancel). Use `DialogProperties(dismissOnClickOutside=false)` or confirm. Conflict dialog `onDismissRequest = DismissError` mismatched semantics, and has no "decide later"/close → keyboard/Escape no-op; trap.
 9. **No live-region** on errors/sync status; `contentDescription` on Text replaces text. Add `liveRegion = Polite`, drop redundant contentDescription (it duplicates visible text).
 10. **Password semantics.** `contentDescription = "Password input field"` replaces the field label; no explicit `password()` semantics (Compose may add from `PasswordVisualTransformation` — unverified [INFERENCE]; add explicitly + test). Docs claim "wiped from memory": JVM `String` cannot be wiped; setting state to `""` only drops a reference. Reword claim; KDoc on `AuthSubmitAction` "memory inspections" overclaims. No autofill/`KeyboardCapitalization.None`/`autoCorrect=false` on email/username.
@@ -51,14 +51,14 @@ Compiles + 96/96 JVM green, but green proves little: new test class renders no C
 13. **Docs drift/fabrication.**
     - `design-guidelines.md` §2.2 ratios wrong (above) though titled "Measured". §4 describes FAB, header counts, scrolling chips, sidebar filters/counts — not implemented. §3.1/§5 "200% without truncation", "Escape/Enter keyboard support", "contentDescription on all icon actions" unverified. Status "Frozen/Authoritative" unjustified.
     - `font-provenance.md`: no upstream revision/checksum/license-file hash (plan step 1 demanded actual audit); Alexandria attribution "Mai Erksousi" appears wrong (Google Fonts credits Mohamed Gaber) [INFERENCE – verify upstream]; glyph-coverage claims for Cal Sans unevidenced; "Inspection of reference CSS" has no captured evidence. System-font decision itself is plan-permitted; the audit backing it is not.
-14. `DoggoApp(onAuthSubmit = {})` default silently drops login/register → footgun; make required.
+14. `TabbyRushApp(onAuthSubmit = {})` default silently drops login/register → footgun; make required.
 15. Dialog/focus: no initial focus (`FocusRequester`) on editor field, no focus restore; plan lists focus/keyboard.
 
 ## Medium
-- DRY: `doggo-app.kt` (437 LOC) duplicates Add button, user label, SyncFeedback, error banner, TodoList across compact/expanded; split `AuthGate`, `ExpandedWorkspace`, `CompactWorkspace`. Six identical `Card(surface, large, elevation)` shells → shared `DoggoDialogCard`. `ButtonDefaults.buttonColors(primary,onPrimary)` repeated ~10× = Material default → delete.
+- DRY: `tabbyrush-app.kt` (437 LOC) duplicates Add button, user label, SyncFeedback, error banner, TodoList across compact/expanded; split `AuthGate`, `ExpandedWorkspace`, `CompactWorkspace`. Six identical `Card(surface, large, elevation)` shells → shared `TabbyRushDialogCard`. `ButtonDefaults.buttonColors(primary,onPrimary)` repeated ~10× = Material default → delete.
 - `TitlePolicy.normalizeAndValidate` re-run every recomposition, allocating boxed `MutableList<Int>` per keystroke; wrap in `remember(editor.rawTitle)`. Private `String.codePointCount` extension hand-rolled; counts differ from policy (policy rejects lone surrogates, counter does not) and ignores trim.
-- `DoggoCustomColors` data class + `staticCompositionLocalOf` never varied → YAGNI; plain `object` of constants suffices. Duplicate top-level `DoggoXxx` vals + class defaults.
-- `DoggoTypography` repeats `fontFamily = SansSerif` 15×; default is already SansSerif — drop.
+- `TabbyRushCustomColors` data class + `staticCompositionLocalOf` never varied → YAGNI; plain `object` of constants suffices. Duplicate top-level `TabbyRushXxx` vals + class defaults.
+- `TabbyRushTypography` repeats `fontFamily = SansSerif` 15×; default is already SansSerif — drop.
 - Unused imports (`Icon`, `IconButton` in `todo-list.kt`, others likely).
 - "My Tasks" not marked heading; `SyncFeedback` `Triple` allocated every recomposition.
 - Signup help text states char limits; plan said byte-based limits.
@@ -89,7 +89,7 @@ Todo items remain unchecked: implementation incomplete against Requirements (sta
 3. Add scroll to forms/dialogs/sidebar; fix todo row layout/truncation/semantics for 200%.
 4. Expose LicenseNotices in compact layout; correct/complete notice content; drop OFL card.
 5. Fix approved/unknown access states, reauth recovery, logout confirm, admin warning, IME Done bug, raw timestamp, VersionCard null label, dismiss semantics.
-6. Wire or delete `strings.xml`; dedupe doggo-app/cards.
+6. Wire or delete `strings.xml`; dedupe tabbyrush-app/cards.
 7. Request contract amendment (or document gap) for Load more / UnknownSuperseded / reset review / leave counts.
 8. Re-audit font provenance with revision+checksum evidence or trim claims.
 

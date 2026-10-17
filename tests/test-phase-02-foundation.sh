@@ -56,34 +56,34 @@ assert_test "libs.versions.toml pins agp 8.7.3" "grep -q 'agp = \"8.7.3\"' gradl
 assert_test "libs.versions.toml pins room 2.7.0-alpha12" "grep -q 'room = \"2.7.0-alpha12\"' gradle/libs.versions.toml"
 
 # 6. Shared module configuration
-assert_test "shared/build.gradle.kts configures dev.doggo.shared namespace" "grep -q 'namespace = \"dev.doggo.shared\"' shared/build.gradle.kts"
+assert_test "shared/build.gradle.kts configures dev.tabbyrush.shared namespace" "grep -q 'namespace = \"dev.tabbyrush.shared\"' shared/build.gradle.kts"
 assert_test "shared/build.gradle.kts targets minSdk 26" "grep -q 'minSdk = 26' shared/build.gradle.kts"
 assert_test "shared/build.gradle.kts configures JVM 17 target" "grep -q 'JVM_17' shared/build.gradle.kts"
 assert_test "shared/build.gradle.kts configures room schemaDirectory" "grep -q 'schemaDirectory' shared/build.gradle.kts"
 
 # 7. Kotlin contract sources exist
-assert_test "hub-config.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/hub-config.kt ]"
-assert_test "account-identity.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-identity.kt ]"
-assert_test "account-key.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-key.kt ]"
-assert_test "credential-vault.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/credential-vault.kt ]"
-assert_test "auth-session.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/auth-session.kt ]"
-assert_test "account-store.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-store.kt ]"
-assert_test "sync-coordinator.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/sync-coordinator.kt ]"
-assert_test "sync-scheduler.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/sync-scheduler.kt ]"
-assert_test "todo-models.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-models.kt ]"
-assert_test "todo-ui-state.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-ui-state.kt ]"
-assert_test "todo-action.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-action.kt ]"
-assert_test "app-factories.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/app-factories.kt ]"
-assert_test "safe-errors.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/safe-errors.kt ]"
-assert_test "title-policy.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/title-policy.kt ]"
-assert_test "endpoint-policy.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/endpoint-policy.kt ]"
-assert_test "strict-sync-contract.kt exists" "[ -f shared/src/commonMain/kotlin/dev/doggo/shared/contract/strict-sync-contract.kt ]"
+assert_test "hub-config.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/hub-config.kt ]"
+assert_test "account-identity.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-identity.kt ]"
+assert_test "account-key.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-key.kt ]"
+assert_test "credential-vault.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/credential-vault.kt ]"
+assert_test "auth-session.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/auth-session.kt ]"
+assert_test "account-store.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-store.kt ]"
+assert_test "sync-coordinator.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/sync-coordinator.kt ]"
+assert_test "sync-scheduler.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/sync-scheduler.kt ]"
+assert_test "todo-models.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-models.kt ]"
+assert_test "todo-ui-state.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-ui-state.kt ]"
+assert_test "todo-action.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-action.kt ]"
+assert_test "app-factories.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/app-factories.kt ]"
+assert_test "safe-errors.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/safe-errors.kt ]"
+assert_test "title-policy.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/title-policy.kt ]"
+assert_test "endpoint-policy.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/endpoint-policy.kt ]"
+assert_test "strict-sync-contract.kt exists" "[ -f shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/strict-sync-contract.kt ]"
 
 # 8. Test suites exist
-assert_test "strict-digest-test.kt exists" "[ -f shared/src/commonTest/kotlin/dev/doggo/shared/contract/strict-digest-test.kt ]"
-assert_test "title-policy-test.kt exists" "[ -f shared/src/commonTest/kotlin/dev/doggo/shared/contract/title-policy-test.kt ]"
-assert_test "endpoint-policy-test.kt exists" "[ -f shared/src/commonTest/kotlin/dev/doggo/shared/contract/endpoint-policy-test.kt ]"
-assert_test "account-key-test.kt exists" "[ -f shared/src/commonTest/kotlin/dev/doggo/shared/contract/account-key-test.kt ]"
+assert_test "strict-digest-test.kt exists" "[ -f shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/strict-digest-test.kt ]"
+assert_test "title-policy-test.kt exists" "[ -f shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/title-policy-test.kt ]"
+assert_test "endpoint-policy-test.kt exists" "[ -f shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/endpoint-policy-test.kt ]"
+assert_test "account-key-test.kt exists" "[ -f shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/account-key-test.kt ]"
 
 # 9. Documentation deliverables exist
 assert_test "docs/system-architecture.md exists" "[ -f docs/system-architecture.md ]"
@@ -94,9 +94,9 @@ assert_test "docs/foundation-evidence.md exists" "[ -f docs/foundation-evidence.
 
 # 10. Contract isolation & redaction checks
 assert_test "CommonMain has zero android.* imports" "! grep -r '^import android\\.' shared/src/commonMain/kotlin/"
-assert_test "CredentialBundle redacts credentials in toString" "grep -q 'CredentialBundle(\\[REDACTED\\])' shared/src/commonMain/kotlin/dev/doggo/shared/contract/credential-vault.kt"
-assert_test "HubConfig redacts appApiKey in toString" "grep -q 'appApiKey=\\[REDACTED\\]' shared/src/commonMain/kotlin/dev/doggo/shared/contract/hub-config.kt"
-assert_test "All Kotlin sources have package dev.doggo.shared.contract" "[ -z \"\$(grep -L '^package dev\\.doggo\\.shared\\.contract' shared/src/commonMain/kotlin/dev/doggo/shared/contract/*.kt)\" ]"
+assert_test "CredentialBundle redacts credentials in toString" "grep -q 'CredentialBundle(\\[REDACTED\\])' shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/credential-vault.kt"
+assert_test "HubConfig redacts appApiKey in toString" "grep -q 'appApiKey=\\[REDACTED\\]' shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/hub-config.kt"
+assert_test "All Kotlin sources have package dev.tabbyrush.shared.contract" "[ -z \"\$(grep -L '^package dev\\.tabbyrush\\.shared\\.contract' shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/*.kt)\" ]"
 
 # 11. Functional Policy & Canonical Digest Vectors Check (using Node.js runner)
 assert_test "Functional policy and digest vectors PASS" "node -e '

@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 
-Phase 08 delivers the operational tooling, security auditing capabilities, disaster recovery runbooks, and live Hub verification harnesses required for the production release of Doggo on Android.
+Phase 08 delivers the operational tooling, security auditing capabilities, disaster recovery runbooks, and live Hub verification harnesses required for the production release of TabbyRush on Android.
 
 All documentation in `docs/` and root `README.md` has been reviewed, updated, and validated for internal link hygiene, codebase alignment, and cross-document consistency. Operational tooling is explicitly distinguished between verified offline execution paths and pending live production/operator gates.
 

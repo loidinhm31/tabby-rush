@@ -24,7 +24,7 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
    - Dispatcher enforces exactly one matching provider; fails closed with explicit error if zero or multiple providers are present.
    - Never falls back to plaintext token files.
 4. **Single Instance Safety**:
-   - `SingleInstanceGuard` acquires an OS file-channel lock on `doggo.lock` BEFORE initializing database or vault.
+   - `SingleInstanceGuard` acquires an OS file-channel lock on `tabbyrush.lock` BEFORE initializing database or vault.
    - Second launch detects lock and exits cleanly without racing sync or touching database.
    - Lock file is retained on exit to prevent inode recycling races.
 5. **Foreground Sync & Quiescence**:
@@ -55,7 +55,7 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 
 | Gate | Requirement | Verification Method | Status |
 |---|---|---|---|
-| **D-Bus Notification Adapter** | Session bus communication with `org.freedesktop.Notifications`, capability probing, and missing-daemon error handling | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.linux.LinuxNotificationAdapterTest"` | PASS (4/4 tests passing) |
+| **D-Bus Notification Adapter** | Session bus communication with `org.freedesktop.Notifications`, capability probing, and missing-daemon error handling | `./gradlew :desktopApp:test --tests "dev.tabbyrush.desktop.linux.LinuxNotificationAdapterTest"` | PASS (4/4 tests passing) |
 | **Workstation Bus Probe** | Introspect user D-Bus at `/run/user/1000/bus` for `org.freedesktop.Notifications` | `busctl --user introspect org.freedesktop.Notifications /org/freedesktop/Notifications` | Safely caught: `org.freedesktop.DBus.Error.ServiceUnknown` (Returns `LinuxNotificationStatus.Unavailable` without crash) |
 | **Dependency Locking** | Reconciled `desktopApp/gradle-linux.lockfile` without Windows JNA dependencies | `./gradlew :desktopApp:test` (without `--write-locks`) | PASS (23/23 tests passing) |
 | **Live Visual Notification Bubble** | Native notification bubble display and removal in active desktop session | Live desktop session notification | BLOCKED (Headless Fedora host has no active notification daemon; G2 gate prerequisite remaining) |
@@ -64,11 +64,11 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 
 | Gate | Requirement | Verification Method | Status |
 |---|---|---|---|
-| **Desktop Reminder Scheduler** | Bounded 15s wake loop, bounded re-evaluation against backward clock drift, replace-based deadline wake, cancel-and-await quiescence | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.DesktopReminderSchedulerTest"` | PASS (5/5 tests passing) |
-| **Composite Leave Cancel Gate** | Strict 5-step ordered quiescence: drain delivery gate -> cancel observer -> cancel reminder scheduler -> cancel sync scheduler -> cancel notifications | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.CompositeDesktopLeaveCancelGateTest"` | PASS (2/2 tests passing) |
-| **Linux Reminder Adapter** | D-Bus notification posting, account-scoped tracking, capabilities probe tolerance for minimal daemons, close error propagation (`IllegalStateException`) | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.linux.LinuxReminderAdapterTest"` | PASS (6/6 tests passing) |
-| **Low-Level D-Bus Notifications** | Low-level Freedesktop D-Bus session communication and missing daemon/session error mapping | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.linux.LinuxNotificationAdapterTest"` | PASS (4/4 tests passing) |
-| **Controller Reminder Lifecycle** | Subsystem initialization, delivery gate linkage, startup wipe recovery notification cleanup, and fail-closed marker retention on cancellation error | `./gradlew :desktopApp:test --tests "dev.doggo.desktop.DesktopReminderControllerLifecycleTest"` | PASS (3/3 tests passing) |
+| **Desktop Reminder Scheduler** | Bounded 15s wake loop, bounded re-evaluation against backward clock drift, replace-based deadline wake, cancel-and-await quiescence | `./gradlew :desktopApp:test --tests "dev.tabbyrush.desktop.DesktopReminderSchedulerTest"` | PASS (5/5 tests passing) |
+| **Composite Leave Cancel Gate** | Strict 5-step ordered quiescence: drain delivery gate -> cancel observer -> cancel reminder scheduler -> cancel sync scheduler -> cancel notifications | `./gradlew :desktopApp:test --tests "dev.tabbyrush.desktop.CompositeDesktopLeaveCancelGateTest"` | PASS (2/2 tests passing) |
+| **Linux Reminder Adapter** | D-Bus notification posting, account-scoped tracking, capabilities probe tolerance for minimal daemons, close error propagation (`IllegalStateException`) | `./gradlew :desktopApp:test --tests "dev.tabbyrush.desktop.linux.LinuxReminderAdapterTest"` | PASS (6/6 tests passing) |
+| **Low-Level D-Bus Notifications** | Low-level Freedesktop D-Bus session communication and missing daemon/session error mapping | `./gradlew :desktopApp:test --tests "dev.tabbyrush.desktop.linux.LinuxNotificationAdapterTest"` | PASS (4/4 tests passing) |
+| **Controller Reminder Lifecycle** | Subsystem initialization, delivery gate linkage, startup wipe recovery notification cleanup, and fail-closed marker retention on cancellation error | `./gradlew :desktopApp:test --tests "dev.tabbyrush.desktop.DesktopReminderControllerLifecycleTest"` | PASS (3/3 tests passing) |
 | **ServiceLoader SPI Provider** | Target-specific discovery of `LinuxReminderAdapterProvider` under Linux host | `PlatformReminderDispatcher.createAdapter("linux")` | PASS (Discovered and instantiated) |
 | **Distributable Application Assembly** | Self-contained bundled application packaging with Linux reminder classes | `./gradlew -PdesktopTarget=linux :desktopApp:createDistributable` | PASS (Application bundle generated at `desktopApp/build/compose/binaries/main/app`) |
 | **Live Visual Notification Bubble** | Native notification bubble display and removal in active desktop session | Live desktop session notification | BLOCKED (Headless workstation lacks active notification daemon; Gate G2 physical execution pending hardware/desktop testbed) |

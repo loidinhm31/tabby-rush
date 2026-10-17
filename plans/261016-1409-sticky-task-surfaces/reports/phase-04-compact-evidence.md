@@ -10,16 +10,16 @@
 
 Strictly conforming to exclusive file ownership boundaries, the following production and test components were delivered:
 
-### 1.1 `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-task-content.kt`
+### 1.1 `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-content.kt`
 - **Stateless Compact Composable:** `StickyTaskContent(state: StickyTaskState, onAction: (StickyTaskAction) -> Unit)`.
 - **Section Ordering & Partitioning:** Renders Incomplete tasks followed by Completed tasks in a single scrollable `LazyColumn` in stable encounter order.
 - **Readiness-Gated Rendering:** Renders task content and mutations only when `state.readiness` is `SurfaceReadiness.Ready(token)`. For `Restoring`, `SignedOut`, `Locked`, and `Unavailable`, presents clean, non-sensitive recovery/status views.
 - **Persistent Recovery Controls:** Heading bar provides dedicated, permanently visible `Open App` and `Quit` buttons (`StickyTaskAction.OpenApp`, `StickyTaskAction.Quit`) regardless of tray or readiness status. Flexible heading layout prevents crowding or clipping on narrow viewports (down to 200dp).
 - **Independent Quick-Add Buffer:** Controller-owned inline text field with raw title validation, error banner display, and submission progress indicator. Keyboard navigation supports Enter-to-submit (when enabled and non-blank) and Escape to clear focus without mutating the controller buffer. Never creates main `EditorState` or dispatches main `TodoAction` variants.
 - **Desired Completion Dispatch:** Task toggles dispatch `StickyTaskAction.SetCompleted(token, todo.id, checked)` with the requested boolean state.
-- **Accessibility & Touch Targets:** Uses `DoggoTheme` tokens, minimum 48dp click/touch targets (`DoggoThemeTokens.MinTouchTargetSize`), and explicit semantic descriptions (`contentDescription`, `stateDescription`).
+- **Accessibility & Touch Targets:** Uses `TabbyRushTheme` tokens, minimum 48dp click/touch targets (`TabbyRushThemeTokens.MinTouchTargetSize`), and explicit semantic descriptions (`contentDescription`, `stateDescription`).
 
-### 1.2 `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-window-geometry.kt`
+### 1.2 `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-window-geometry.kt`
 - **Contract Models:** Defines `StickyWindowGeometry(xDp, yDp, widthDp, heightDp, savedScaleX, savedScaleY)`, `MonitorWorkArea(id, primary, xDp, yDp, widthDp, heightDp, scaleX, scaleY)`, and `StickyWindowPresentation(visible, geometry)`.
 - **Restoration & Multi-Monitor Math:** `restoreStickyGeometry(saved: StickyWindowGeometry?, monitors: List<MonitorWorkArea>): StickyWindowGeometry`:
   - **Negative Origin Preservation:** Preserves valid negative virtual coordinates for secondary monitors placed to the left or above the primary monitor.
@@ -29,7 +29,7 @@ Strictly conforming to exclusive file ownership boundaries, the following produc
   - **Reachability Clamping:** Keeps the entire title bar reachable (`yDp >= monitor.yDp` and within horizontal work area bounds) and ensures content visibility within usable work areas.
   - **Scale Metadata:** Records target monitor's current `scaleX` and `scaleY` in returned geometry without applying double scale multiplication to normalized dp coordinates.
 
-### 1.3 `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-window-preferences.kt`
+### 1.3 `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-window-preferences.kt`
 - **Presentation Storage Outside Room/Sync:** `StickyWindowPreferences(file: File)` manages `sticky-window.properties` containing only presentation metadata (`version`, `visible`, `xDp`, `yDp`, `widthDp`, `heightDp`, `savedScaleX`, `savedScaleY`).
 - **Atomic Replacement:** Saves via a UUID-named temporary file in the parent directory, flushes to disk with `FileOutputStream.fd.sync()`, and renames using `StandardCopyOption.ATOMIC_MOVE` (with `AtomicMoveNotSupportedException` fallback to `REPLACE_EXISTING`), cleaning temporary files in `finally`.
 - **Defensive Recovery:** Missing, empty, unparseable, or corrupted files (e.g. NaN, infinite, negative sizes) fall back to safe default hidden presentation (`visible = false`, 360×520 dp).
@@ -39,7 +39,7 @@ Strictly conforming to exclusive file ownership boundaries, the following produc
 
 ## 2. Automated Test Suite
 
-### 2.1 `desktopApp/src/test/kotlin/dev/doggo/desktop/sticky-window-geometry-test.kt`
+### 2.1 `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/sticky-window-geometry-test.kt`
 Exhaustive unit test suite comprising 15 test cases:
 1. `testEmptyMonitorListReturnsDefaultReachableGeometry`: Returns reachable 360×520 dp at (0, 0).
 2. `testNullSavedGeometryPlacesOnPrimaryMonitorWorkArea`: Centers default geometry on primary monitor.
@@ -57,7 +57,7 @@ Exhaustive unit test suite comprising 15 test cases:
 14. `testTiedIntersectionAreaSelectsDeterministically`: Breaks equal-area ties deterministically by ID.
 15. `testTiedIntersectionWithOnePrimaryFavorsPrimary`: Favors primary display in equal-area tie scenarios.
 
-### 2.2 `desktopApp/src/test/kotlin/dev/doggo/desktop/sticky-window-preferences-test.kt`
+### 2.2 `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/sticky-window-preferences-test.kt`
 Thorough persistence unit test suite comprising 7 test cases:
 1. `testMissingFileReturnsDefaultHiddenPresentation`: Initial launch defaults to hidden at 360×520 dp.
 2. `testRoundTripPersistence`: Verifies exact serialization and deserialization of presentation state.

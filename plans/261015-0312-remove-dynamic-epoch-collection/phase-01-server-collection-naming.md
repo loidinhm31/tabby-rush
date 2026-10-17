@@ -24,7 +24,7 @@
 ## Related Code Files
 - Modify: `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/app_service.rs`
 - Modify: `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/strong_sync_tests.rs`
-- Modify: `/home/loidinh/WS/glean-hub/docs/doggo-strict-sync.md`
+- Modify: `/home/loidinh/WS/glean-hub/docs/tabbyrush-strict-sync.md`
 - Modify: `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync/AGENTS.md`
 
 ---
@@ -33,8 +33,8 @@
 1. In `app_service.rs`, modify `strict_collection_name` to return `format!("app_{}", app_id)`.
 2. In `app_service.rs`, update `register_strict_app` to check if `coll_name` is in `db.list_collection_names()`; if not, create it.
 3. In `app_service.rs`, ensure `validate_strict_admission` topology check matches `get_strict_collection` (`is_writable`).
-4. In `strong_sync_tests.rs`, update `test_strict_collection_naming` to assert `app_doggo`.
-5. Update docs in `glean-hub/docs/doggo-strict-sync.md` and `glean-hub/glean-hub-plugin/glean-hub-sync/AGENTS.md`.
+4. In `strong_sync_tests.rs`, update `test_strict_collection_naming` to assert `app_tabbyrush`.
+5. Update docs in `glean-hub/docs/tabbyrush-strict-sync.md` and `glean-hub/glean-hub-plugin/glean-hub-sync/AGENTS.md`.
 6. Run `cargo test -p glean-hub-sync` and `cargo check --workspace` in `glean-hub`.
 
 ---

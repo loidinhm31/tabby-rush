@@ -1,21 +1,21 @@
 # Exclusive implementation file ownership
 
-Repository root: `G:/ws/sharing/doggo/`. Every path below is repository-relative; one exact path per row. `M` existing modify; `C` proposed create; `R` retained/inspect-only metadata, phase01 alone may modify if dependency resolution actually changes it. **No source implementation is authorized by this planning artifact.** Ownership is exclusive across phases, including later fixes. Read-only dependencies are not ownership. Phase07/08 return common defects to original owner; they never edit another phase's tests/source/docs. An unlisted necessary file requires a manifest/contract update before work, not opportunistic edits.
+Repository root: `G:/ws/sharing/tabbyrush/`. Every path below is repository-relative; one exact path per row. `M` existing modify; `C` proposed create; `R` retained/inspect-only metadata, phase01 alone may modify if dependency resolution actually changes it. **No source implementation is authorized by this planning artifact.** Ownership is exclusive across phases, including later fixes. Read-only dependencies are not ownership. Phase07/08 return common defects to original owner; they never edit another phase's tests/source/docs. An unlisted necessary file requires a manifest/contract update before work, not opportunistic edits.
 
 ## Phase01 — contracts, authoritative store and build foundation
 
 | Path | Owner | Action | Reason |
 | --- | --- | --- | --- |
-| `shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-store.kt` | 01 | M | General observation and desired-completion contract |
-| `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-contracts.kt` | 01 | C | Proposed token/readiness/access/result/snapshot and completion types |
-| `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-projector.kt` | 01 | C | Proposed stable partition, deadline selection and selection key |
-| `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt` | 01 | M | Sole discovered AccountStore implementor; locked helpers and invalidation |
-| `shared/src/commonTest/kotlin/dev/doggo/shared/contract/task-surface-projector-test.kt` | 01 | C | Proposed ordering, conflicts, deadline/tie/date-only boundaries |
-| `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-store-sqlite-test.kt` | 01 | C | Proposed real-SQLite observer/completion/concurrent edit and reopen tests |
-| `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt` | 01 | C | Proposed real-sync promotion, reconciliation and conflict invalidation |
-| `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt` | 01 | M | Existing persistence/outbox/temporal regression coverage |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-host.kt` | 01 | C | Proposed host owner/access and refresh-reason interface only |
-| `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-task-model.kt` | 01 | C | Proposed compact state/actions independent of main editor |
+| `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-store.kt` | 01 | M | General observation and desired-completion contract |
+| `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-contracts.kt` | 01 | C | Proposed token/readiness/access/result/snapshot and completion types |
+| `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt` | 01 | C | Proposed stable partition, deadline selection and selection key |
+| `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt` | 01 | M | Sole discovered AccountStore implementor; locked helpers and invalidation |
+| `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-surface-projector-test.kt` | 01 | C | Proposed ordering, conflicts, deadline/tie/date-only boundaries |
+| `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt` | 01 | C | Proposed real-SQLite observer/completion/concurrent edit and reopen tests |
+| `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt` | 01 | C | Proposed real-sync promotion, reconciliation and conflict invalidation |
+| `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt` | 01 | M | Existing persistence/outbox/temporal regression coverage |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-host.kt` | 01 | C | Proposed host owner/access and refresh-reason interface only |
+| `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-model.kt` | 01 | C | Proposed compact state/actions independent of main editor |
 | `gradle/libs.versions.toml` | 01 | M | Aligned stable Glance artifacts, test dependency only if needed |
 | `androidApp/build.gradle.kts` | 01 | M | Glance/test dependency integration; retain SDK levels |
 | `gradle/verification-metadata.xml` | 01 | M | Authenticate newly introduced artifacts only; preserve baseline hold |
@@ -31,85 +31,85 @@ No AccountStore delegation or interface test double was found in supplied source
 
 | Path | Owner | Action | Reason |
 | --- | --- | --- | --- |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-widget.kt` | 02 | C | Proposed real Glance responsive sections |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-widget-receiver.kt` | 02 | C | Proposed launcher receiver, cold-safe host updates |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-widget-actions.kt` | 02 | C | Proposed desired-state callback and immutable Add/Open intents |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-widget-updater.kt` | 02 | C | Proposed all-ID refresh/clear and session quiescence |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget.kt` | 02 | C | Proposed real Glance responsive sections |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-receiver.kt` | 02 | C | Proposed launcher receiver, cold-safe host updates |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-actions.kt` | 02 | C | Proposed desired-state callback and immutable Add/Open intents |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-updater.kt` | 02 | C | Proposed all-ID refresh/clear and session quiescence |
 | `androidApp/src/main/res/xml/task-widget-info.xml` | 02 | C | Proposed launcher provider sizing/metadata |
 | `androidApp/src/main/res/layout/task-widget-initial.xml` | 02 | C | Proposed non-sensitive initial/loading RemoteViews |
 | `androidApp/src/main/res/values/task-widget-strings.xml` | 02 | C | Proposed accessible widget labels/states |
-| `androidApp/src/test/kotlin/dev/doggo/android/task-widget-model-test.kt` | 02 | C | Proposed production projection/action payload boundaries |
-| `androidApp/src/androidTest/kotlin/dev/doggo/android/task-widget-device-test.kt` | 02 | C | Proposed real widget render/callback/all-ID tests |
+| `androidApp/src/test/kotlin/dev/tabbyrush/android/task-widget-model-test.kt` | 02 | C | Proposed production projection/action payload boundaries |
+| `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-widget-device-test.kt` | 02 | C | Proposed real widget render/callback/all-ID tests |
 | `plans/261016-1409-sticky-task-surfaces/reports/phase-02-widget-evidence.md` | 02 | C | Proposed leaf proof and pending integrated launcher checks |
 
 ## Phase03 — Android notification/settings leaf
 
 | Path | Owner | Action | Reason |
 | --- | --- | --- | --- |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-preferences.kt` | 03 | C | Proposed local account opt-in and durable suppression/receipt |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-notification.kt` | 03 | C | Proposed quiet channel/post/cancel coordinator |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-intents.kt` | 03 | C | Proposed Complete/Open/delete identities and parsing |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-action-receiver.kt` | 03 | C | Proposed private admitted Complete callback |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-dismiss-receiver.kt` | 03 | C | Proposed posted-receipt-checked durable dismissal |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-time-receiver.kt` | 03 | C | Proposed bounded clock/date/zone reconciliation |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-refresh-worker.kt` | 03 | C | Proposed inexact no-network-constrained boundary work |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-permission-controller.kt` | 03 | C | Proposed capability snapshots, separate opt-in permission flow support |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-settings.kt` | 03 | C | Proposed standalone settings composable with real callbacks |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-preferences.kt` | 03 | C | Proposed local account opt-in and durable suppression/receipt |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-notification.kt` | 03 | C | Proposed quiet channel/post/cancel coordinator |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-intents.kt` | 03 | C | Proposed Complete/Open/delete identities and parsing |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-action-receiver.kt` | 03 | C | Proposed private admitted Complete callback |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-dismiss-receiver.kt` | 03 | C | Proposed posted-receipt-checked durable dismissal |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-time-receiver.kt` | 03 | C | Proposed bounded clock/date/zone reconciliation |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-refresh-worker.kt` | 03 | C | Proposed inexact no-network-constrained boundary work |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-permission-controller.kt` | 03 | C | Proposed capability snapshots, separate opt-in permission flow support |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-settings.kt` | 03 | C | Proposed standalone settings composable with real callbacks |
 | `androidApp/src/main/res/drawable/task-surface-notification-icon.xml` | 03 | C | Proposed monochrome small icon |
 | `androidApp/src/main/res/values/task-surface-strings.xml` | 03 | C | Proposed channel/rationale/privacy/unavailable labels |
-| `androidApp/src/test/kotlin/dev/doggo/android/task-surface-notification-test.kt` | 03 | C | Proposed production selection/capability/dismissal transition tests |
-| `androidApp/src/androidTest/kotlin/dev/doggo/android/task-surface-preferences-device-test.kt` | 03 | C | Proposed actual persistence/receipt/process-reopen tests |
+| `androidApp/src/test/kotlin/dev/tabbyrush/android/task-surface-notification-test.kt` | 03 | C | Proposed production selection/capability/dismissal transition tests |
+| `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-surface-preferences-device-test.kt` | 03 | C | Proposed actual persistence/receipt/process-reopen tests |
 | `plans/261016-1409-sticky-task-surfaces/reports/phase-03-notification-evidence.md` | 03 | C | Proposed leaf evidence; no native acceptance overclaim |
 
 ## Phase04 — desktop compact presentation leaf
 
 | Path | Owner | Action | Reason |
 | --- | --- | --- | --- |
-| `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-task-content.kt` | 04 | C | Proposed scrollable compact UI and independent quick-add callbacks |
-| `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-window-geometry.kt` | 04 | C | Proposed multi-monitor/DPI work-area geometry conversion/clamp |
-| `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-window-preferences.kt` | 04 | C | Proposed atomic presentation-only file |
-| `desktopApp/src/test/kotlin/dev/doggo/desktop/sticky-window-geometry-test.kt` | 04 | C | Proposed negative origin/DPI/hotplug/minimum boundary tests |
-| `desktopApp/src/test/kotlin/dev/doggo/desktop/sticky-window-preferences-test.kt` | 04 | C | Proposed real temp-file corrupt/restart/atomic replacement tests |
+| `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-content.kt` | 04 | C | Proposed scrollable compact UI and independent quick-add callbacks |
+| `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-window-geometry.kt` | 04 | C | Proposed multi-monitor/DPI work-area geometry conversion/clamp |
+| `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-window-preferences.kt` | 04 | C | Proposed atomic presentation-only file |
+| `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/sticky-window-geometry-test.kt` | 04 | C | Proposed negative origin/DPI/hotplug/minimum boundary tests |
+| `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/sticky-window-preferences-test.kt` | 04 | C | Proposed real temp-file corrupt/restart/atomic replacement tests |
 | `plans/261016-1409-sticky-task-surfaces/reports/phase-04-compact-evidence.md` | 04 | C | Proposed leaf compile and geometry proof |
 
 ## Phase05 — Android integration single owner
 
 | Path | Owner | Action | Reason |
 | --- | --- | --- | --- |
-| `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt` | 05 | M | Real host/readiness/process-owned coordination |
-| `androidApp/src/main/kotlin/dev/doggo/android/account-runtime.kt` | 05 | M | Surface observer/admission lifetime |
-| `androidApp/src/main/kotlin/dev/doggo/android/account-runtime-factory.kt` | 05 | M | Real coordinator wiring and teardown hooks |
-| `androidApp/src/main/kotlin/dev/doggo/android/android-account-state-manager.kt` | 05 | M | Startup marker recovery and OS clearing |
-| `androidApp/src/main/kotlin/dev/doggo/android/composite-leave-scheduler-cancel-gate.kt` | 05 | M | Drain observers/jobs/OS surfaces before Room close |
-| `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt` | 05 | M | ID completion, fresh navigation, create route, UI-independent observer use |
-| `androidApp/src/main/kotlin/dev/doggo/android/main-activity.kt` | 05 | M | ActivityResult permission, Add/Open/settings routes and resume |
-| `androidApp/src/main/kotlin/dev/doggo/android/doggo-sync-worker.kt` | 05 | M | Existing sync completion refresh without cadence change |
-| `androidApp/src/main/kotlin/dev/doggo/android/android-sync-scheduler.kt` | 05 | M | Existing per-account cancellation composition, preserve cadence |
-| `androidApp/src/main/kotlin/dev/doggo/android/reminder-restore-receiver.kt` | 05 | M | Existing startup/restore entry reconciles independent surfaces |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-access.kt` | 05 | C | Proposed real runtime access and serialized publication implementation |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-runtime-coordinator.kt` | 05 | C | Proposed process-owned observers and refresh coalescing |
-| `androidApp/src/main/kotlin/dev/doggo/android/task-surface-create-screen.kt` | 05 | C | Proposed compact creation route reusing existing editor/validation |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt` | 05 | M | Real host/readiness/process-owned coordination |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/account-runtime.kt` | 05 | M | Surface observer/admission lifetime |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/account-runtime-factory.kt` | 05 | M | Real coordinator wiring and teardown hooks |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/android-account-state-manager.kt` | 05 | M | Startup marker recovery and OS clearing |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/composite-leave-scheduler-cancel-gate.kt` | 05 | M | Drain observers/jobs/OS surfaces before Room close |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt` | 05 | M | ID completion, fresh navigation, create route, UI-independent observer use |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/main-activity.kt` | 05 | M | ActivityResult permission, Add/Open/settings routes and resume |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-sync-worker.kt` | 05 | M | Existing sync completion refresh without cadence change |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/android-sync-scheduler.kt` | 05 | M | Existing per-account cancellation composition, preserve cadence |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/reminder-restore-receiver.kt` | 05 | M | Existing startup/restore entry reconciles independent surfaces |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-access.kt` | 05 | C | Proposed real runtime access and serialized publication implementation |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-runtime-coordinator.kt` | 05 | C | Proposed process-owned observers and refresh coalescing |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-create-screen.kt` | 05 | C | Proposed compact creation route reusing existing editor/validation |
 | `androidApp/src/main/AndroidManifest.xml` | 05 | M | Register completed components with narrow exported policy |
 | `scripts/release-security-check.mjs` | 05 | M | Source/merged manifest widget allowlist and invariants |
 | `scripts/release-security-check.test.mjs` | 05 | C | Proposed production auditor XML/manifest policy behavior tests |
-| `androidApp/src/test/kotlin/dev/doggo/android/composite-leave-scheduler-cancel-gate-test.kt` | 05 | M | Existing cancellation regressions |
-| `androidApp/src/androidTest/kotlin/dev/doggo/android/task-surface-account-device-test.kt` | 05 | C | Proposed real runtime/Room readiness, stale generation and wipe races |
-| `androidApp/src/androidTest/kotlin/dev/doggo/android/task-surface-navigation-device-test.kt` | 05 | C | Proposed actual ActivityResult/Add/Open account-safe route tests |
+| `androidApp/src/test/kotlin/dev/tabbyrush/android/composite-leave-scheduler-cancel-gate-test.kt` | 05 | M | Existing cancellation regressions |
+| `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-surface-account-device-test.kt` | 05 | C | Proposed real runtime/Room readiness, stale generation and wipe races |
+| `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-surface-navigation-device-test.kt` | 05 | C | Proposed actual ActivityResult/Add/Open account-safe route tests |
 | `plans/261016-1409-sticky-task-surfaces/reports/phase-05-android-evidence.md` | 05 | C | Proposed owner integration evidence and security audit |
 
 ## Phase06 — desktop integration single owner
 
 | Path | Owner | Action | Reason |
 | --- | --- | --- | --- |
-| `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt` | 06 | M | Sole main/controller/runtime integration and creation helper |
-| `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-task-surfaces.kt` | 06 | C | Proposed real access implementation, singleton window/tray shell and actions |
-| `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-surface-platform.kt` | 06 | C | Proposed complete generic AWT implementation and Linux provider seam |
-| `desktopApp/src/main/kotlin/dev/doggo/desktop/composite-desktop-leave-cancel-gate.kt` | 06 | M | Surface observer drain/clear in account teardown |
+| `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt` | 06 | M | Sole main/controller/runtime integration and creation helper |
+| `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces.kt` | 06 | C | Proposed real access implementation, singleton window/tray shell and actions |
+| `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-surface-platform.kt` | 06 | C | Proposed complete generic AWT implementation and Linux provider seam |
+| `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate.kt` | 06 | M | Surface observer drain/clear in account teardown |
 | `desktopApp/src/main/resources/task-surface-tray.png` | 06 | C | Proposed bundled native tray image, no external asset dependency |
-| `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-lifecycle-test.kt` | 06 | M | Close hides versus Quit/profile-lock contract |
-| `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-reminder-controller-lifecycle-test.kt` | 06 | M | Process lifetime reminder observation regression |
-| `desktopApp/src/test/kotlin/dev/doggo/desktop/composite-desktop-leave-cancel-gate-test.kt` | 06 | M | Surface and existing scheduler teardown ordering |
-| `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-task-surfaces-test.kt` | 06 | C | Proposed real controller/SQLite input-isolation, account and singleton behavior |
+| `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-lifecycle-test.kt` | 06 | M | Close hides versus Quit/profile-lock contract |
+| `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-reminder-controller-lifecycle-test.kt` | 06 | M | Process lifetime reminder observation regression |
+| `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate-test.kt` | 06 | M | Surface and existing scheduler teardown ordering |
+| `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces-test.kt` | 06 | C | Proposed real controller/SQLite input-isolation, account and singleton behavior |
 | `plans/261016-1409-sticky-task-surfaces/reports/phase-06-desktop-evidence.md` | 06 | C | Proposed owner integration and Windows native smoke record |
 
 No controller extraction into extra files is assumed: keep existing controller in main.kt and split new shell/access code into the declared file. Any extraction needs a manifest amendment; no second owner for main.kt.
@@ -149,9 +149,9 @@ Screenshots are future real captures, never generated mock UI. Redact test accou
 
 | Path | Owner | Action | Reason |
 | --- | --- | --- | --- |
-| `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-task-surface-platform.kt` | 08 | C | Proposed real Linux session/tray capability adapter using generic seam |
-| `desktopApp/src/linuxMain/resources/META-INF/services/dev.doggo.desktop.DesktopSurfacePlatformProvider` | 08 | C | Proposed Linux-only provider registration |
-| `desktopApp/src/linuxTest/kotlin/dev/doggo/desktop/linux/linux-task-surface-platform-test.kt` | 08 | C | Proposed real environment/capability/geometry boundary tests |
+| `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-task-surface-platform.kt` | 08 | C | Proposed real Linux session/tray capability adapter using generic seam |
+| `desktopApp/src/linuxMain/resources/META-INF/services/dev.tabbyrush.desktop.DesktopSurfacePlatformProvider` | 08 | C | Proposed Linux-only provider registration |
+| `desktopApp/src/linuxTest/kotlin/dev/tabbyrush/desktop/linux/linux-task-surface-platform-test.kt` | 08 | C | Proposed real environment/capability/geometry boundary tests |
 | `docs/linux-acceptance.md` | 08 | M | Separate real-session surface verdict, do not close native reminder holds |
 | `docs/linux-desktop-guide.md` | 08 | M | Session/tray/focus/no-tray/manual restore instructions |
 | `docs/evidence/sticky-surfaces-linux-summary.md` | 08 | C | Proposed distro/session/window manager/capability/runtime evidence |

@@ -1,6 +1,6 @@
 # Code Review Cycle 2: Phase 06 Shared Compose UI + Accessible Light Theme
 
-Date 2026-10-14 · Reviewer Phase06CodeReviewerCycle2 · Plan `plans/261013-1540-doggo-glean-hub-reuse/phase-06-compose-ui-theme.md`
+Date 2026-10-14 · Reviewer Phase06CodeReviewerCycle2 · Plan `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-06-compose-ui-theme.md`
 
 ## Score: 6/10 — NOT ACCEPTED as phase-complete
 
@@ -45,7 +45,7 @@ Cycle 1 remediations mostly real + verified in code. Contrast fixed (recomputed)
 - W4. **Body <16sp** unchanged: `bodySmall` 14sp for errors, help, statuses, access note, version metadata; `labelLarge` 14sp / `labelMedium` 12sp / `labelSmall` 12sp for actions ("Edit", "Delete", "Notices", "Leave", "Reconcile", "Sync Now", "Pending sync"). Plan requires body ≥16sp. Design doc §3.1 claims body "strictly ≥16sp (bodyLarge/bodyMedium)" — sidesteps usage of bodySmall.
 - W5. **`strings.xml` dead**: 42 strings, 0 `Res.string`/`stringResource` usage; UI hard-coded English; diverging copy. Wire or delete (YAGNI/DRY). Plan lists the file as owned deliverable → wire it.
 - W6. **`formatTimestamp`**: `Instant.toString().substringBefore('.')` – whole-second instant has no '.' → leaves trailing `Z` ("…05:41:29Z"); fractional case drops `Z` → unlabeled UTC shown as local. Use `toLocalDateTime(TimeZone.currentSystemDefault())` and format explicit. Blanket `catch (Exception)` unnecessary.
-- W7. **Docs numbers not "exact"** (doc claims script-exact luminance). Recomputed vs doc: Ink/Page 17.15 (doc 16.98), Ink/Cream 16.25 (15.74), White/PrimaryDeep **12.94 (doc 13.68)**, White/Coral 5.62 (5.63), Coral/CoralS 4.91 (4.90), Muted/White 6.31 (6.28), Muted/MintS 5.44 (5.47), Outline/White 4.72 (4.68), Mint/White **2.18 (doc "1.8")**. All pass thresholds; only accuracy. Theme comments carry same drift (`DoggoPrimaryDeep 13.68`). Other doc drift: §4 says "Licenses" button (actual "Notices"); §5 claims Escape/Enter keyboard support + "Transient password memory is cleared" (JVM `String` just dropped ref; KDoc `AuthSubmitAction` "memory inspections" overclaim) — unverified; status "Authoritative (Cycle 2 Verified)" unjustified w/o ui tests.
+- W7. **Docs numbers not "exact"** (doc claims script-exact luminance). Recomputed vs doc: Ink/Page 17.15 (doc 16.98), Ink/Cream 16.25 (15.74), White/PrimaryDeep **12.94 (doc 13.68)**, White/Coral 5.62 (5.63), Coral/CoralS 4.91 (4.90), Muted/White 6.31 (6.28), Muted/MintS 5.44 (5.47), Outline/White 4.72 (4.68), Mint/White **2.18 (doc "1.8")**. All pass thresholds; only accuracy. Theme comments carry same drift (`TabbyRushPrimaryDeep 13.68`). Other doc drift: §4 says "Licenses" button (actual "Notices"); §5 claims Escape/Enter keyboard support + "Transient password memory is cleared" (JVM `String` just dropped ref; KDoc `AuthSubmitAction` "memory inspections" overclaim) — unverified; status "Authoritative (Cycle 2 Verified)" unjustified w/o ui tests.
 - W8. **Contrast test incomplete**: asserts 10 pairs; used-but-untested pairs: muted/cream (compact bar), muted/coralSurface (VersionCard), ink/mintSurface, ink/coralSurface, mintSurface-on-primaryDeep + coralSurface-on-primaryDeep (sidebar text/Leave), primary/mintSurface, primaryDeep/cream. All pass (5.74, 5.51, 15.4, 15.59, 11.16, 11.3, 9.22, 11.78) → add so future palette edits cannot regress. Test hand-lists pairs rather than tied to usage; acceptable but weak.
 - W9. **Unknown access status → request form** (`else` branch) so unknown/`none` identical; plan: unknown distinct, approved-without-grant stays admin-pending. Only approved/pending/rejected distinct.
 - W10. **Doc/provenance**: `font-provenance.md` still claims viewer shows "all bundled dependencies" (viewer is hand-curated); Alexandria authorship/checksum audit not evidenced (cycle 1 question open). System-font decision itself is plan-permitted.
@@ -54,7 +54,7 @@ Cycle 1 remediations mostly real + verified in code. Contrast fixed (recomputed)
 - `AccessRequestPanel` logout confirm OK, but copy says "sign out ... on this device" vs `LeaveGuard` "Leave & Wipe Local Data": `AuthSubmitAction.Logout` semantics undefined (local-only wipe vs session) — confirmation text may misstate.
 - Compact top bar Leave `TextButton` + error color: fine contrast, but destructive action adjacent to Add/Notices at 12sp.
 - Conflict dialog still says "another client" for all conflicts; known conflict vs UnknownSuperseded copy absent.
-- DRY: `doggo-app.kt` 461 LOC duplicates compact/expanded header; 7 identical dialog `Card` shells; `ButtonDefaults.buttonColors(primary,onPrimary)` repeated ~10× (= default). `DoggoCustomColors` data class never varied (YAGNI). `fontFamily = SansSerif` repeated 15× (default).
+- DRY: `tabbyrush-app.kt` 461 LOC duplicates compact/expanded header; 7 identical dialog `Card` shells; `ButtonDefaults.buttonColors(primary,onPrimary)` repeated ~10× (= default). `TabbyRushCustomColors` data class never varied (YAGNI). `fontFamily = SansSerif` repeated 15× (default).
 - `String.codePointCount` hand-rolled counter vs `TitlePolicy` differ (lone surrogates, trim).
 - Signup help says "bytes" limits good; password field not `KeyboardCapitalization.None`/autofill hints.
 - `LicenseNotices` content hard-coded; phases 09/10 shall share — single source not established.
@@ -66,7 +66,7 @@ Cycle 1 remediations mostly real + verified in code. Contrast fixed (recomputed)
 4. Complete contrast test matrix + regenerate doc table from the test output; correct doc/theme comments.
 5. Wire `strings.xml` or delete.
 6. Scrollable compact header; FlowRow rows.
-7. Extract `DoggoDialogCard`, `AuthGate`, `ExpandedWorkspace`, `CompactWorkspace`; drop default-equal color overrides.
+7. Extract `TabbyRushDialogCard`, `AuthGate`, `ExpandedWorkspace`, `CompactWorkspace`; drop default-equal color overrides.
 
 ## Positive
 - Contrast palette fix correct; verified all asserted pairs; test is true math (not tautology) and covers non-text 3:1.

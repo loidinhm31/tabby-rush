@@ -1,4 +1,4 @@
-# Doggo Hub Schema Integration
+# TabbyRush Hub Schema Integration
 
 Date: 2026-10-16
 Phase: Phase 12 Coordinated Cutover Runbook & Release Documentation Delivered (Production Cutover Blocked Pending Gates G2, G3, G6, and G7)
@@ -6,14 +6,14 @@ Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Hu
 
 ---
 ## Overview
-Doggo integrates with Glean Hub using the opt-in `strict-v1` synchronization protocol. This integration establishes complete namespace and logic isolation from legacy sync applications while reusing Hub's dual-authentication and app registry infrastructure.
+TabbyRush integrates with Glean Hub using the opt-in `strict-v1` synchronization protocol. This integration establishes complete namespace and logic isolation from legacy sync applications while reusing Hub's dual-authentication and app registry infrastructure.
 
 ## Schema Specification
 Strict apps register with an immutable, strict schema containing exclusively the `todos` table:
 
 ```json
 {
-  "appId": "doggo",
+  "appId": "tabby-rush",
   "syncMode": "strict-v1",
   "schema": {
     "todos": {
@@ -37,13 +37,13 @@ Strict apps register with an immutable, strict schema containing exclusively the
 2. **Server-Generated Epoch**:
    - Server creates a lowercase UUIDv4 epoch string (e.g. `550e8400-e29b-41d4-a716-446655440000`).
 3. **Storage Provisioning**:
-   - Targets designated MongoDB collection: `app<AppId>` (e.g. `appDoggo` via `SyncService::collection_name(app_id)`).
+   - Targets designated MongoDB collection: `app<AppId>` (e.g. `appTabbyRush` via `SyncService::collection_name(app_id)`).
    - Sets up compound scan index `{ userId: 1, tableName: 1, rowId: 1 }`.
    - Verifies collection is uncapped, has no custom validators, no TTL indexes, and simple/absent collation.
 4. **Registry Publication Last**:
    - Server registers `AppSchema` in `_schemas` collection only after storage and indexes pass admission.
 5. **Mandatory Read-Back**:
-   - Operator and provisioning scripts must verify `GET /api/v1/apps/doggo` echoing `syncMode: "strict-v1"` and matching `strictEpoch`.
+   - Operator and provisioning scripts must verify `GET /api/v1/apps/tabby-rush` echoing `syncMode: "strict-v1"` and matching `strictEpoch`.
 
 ---
 
@@ -55,11 +55,11 @@ Glean Hub provides controlled in-place schema upgrades from `strict-v1` to `stri
 
 ### Canonical Schemas & Fingerprints
 1. **`strict-v1` (Active Baseline)**:
-   - File: `integration/glean-hub/doggo-schema-v1.json`
+   - File: `integration/glean-hub/tabbyrush-schema-v1.json`
    - Fingerprint: `3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec`
    - 4 columns: `id`, `title`, `completed`, `createdAt`.
 2. **`strict-v2` (Target Version)**:
-   - File: `integration/glean-hub/doggo-schema-v2.json`
+   - File: `integration/glean-hub/tabbyrush-schema-v2.json`
    - Fingerprint: `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`
    - 16 columns: adds `deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`.
 
@@ -157,22 +157,22 @@ Phase 04 delivers administrative operator tooling to discover strict contracts, 
 - **Usage Synopsis**:
   ```bash
   # 1. Preflight dry-run check (non-mutating)
-  node scripts/hub-strict-upgrade.mjs --app-id doggo --dry-run
+  node scripts/hub-strict-upgrade.mjs --app-id tabbyrush --dry-run
 
   # 2. Execute full migration (automated bounded polling and final read-back assertion)
-  node scripts/hub-strict-upgrade.mjs --app-id doggo
+  node scripts/hub-strict-upgrade.mjs --app-id tabbyrush
 
   # 3. Resume interrupted execution with explicit migration ID (resumes server transform)
-  node scripts/hub-strict-upgrade.mjs --app-id doggo --migration-id <UUID>
+  node scripts/hub-strict-upgrade.mjs --app-id tabbyrush --migration-id <UUID>
 
   # 4. Passive status inspection (queries current state without initiating mutations)
-  node scripts/hub-strict-upgrade.mjs --app-id doggo --migration-id <UUID> --status-only
+  node scripts/hub-strict-upgrade.mjs --app-id tabbyrush --migration-id <UUID> --status-only
   ```
 - **CLI Flags & Options**:
   | Flag | Default | Description |
   |---|---|---|
   | `--origin <URL>` | `$APPROVED_HUB_ORIGIN` / `$GLEAN_ORIGIN` / `http://127.0.0.1:3000` | Glean Hub server origin URL |
-  | `--app-id <ID>` | `doggo` (or `$DOGGO_APP_ID`) | Target strict application identifier |
+  | `--app-id <ID>` | `tabbyrush` (or `$TABBYRUSH_APP_ID`) | Target strict application identifier |
   | `--token <JWT>` | `$GLEAN_ADMIN_TOKEN` | Admin JWT bearer token scoped to target app |
   | `--expected-version <VER>` | `strict-v1` | Source protocol version expected on server |
   | `--expected-fingerprint <HEX>` | `3361a80f...` | Canonical schema fingerprint of source version |
@@ -210,7 +210,7 @@ Phase 04 delivers administrative operator tooling to discover strict contracts, 
 |---|---|:---:|:---:|---|
 | Hub Admin Service & Preload Unit Tests | `pnpm --prefix ../glean-hub/glean-hub-app test:unit` | 13 tests (2 suites) | **PASS** | 120 ms, Node native runner (8 service contract tests + 5 preload tests; browser UI interactions unexercised) |
 | Hub Admin Web Production Build | `pnpm --prefix ../glean-hub/glean-hub-app build` | 10,411 modules | **PASS** | `tsc` clean, 9.87s Vite bundle |
-| Doggo Strict Upgrade CLI Test Suite | `node scripts/hub-strict-upgrade.test.mjs` | 7 tests (1 suite) | **PASS** | 10.8s, local mock HTTP server; exercises dry-run, interrupted POST recovery, polling, and read-back |
+| TabbyRush Strict Upgrade CLI Test Suite | `node scripts/hub-strict-upgrade.test.mjs` | 7 tests (1 suite) | **PASS** | 10.8s, local mock HTTP server; exercises dry-run, interrupted POST recovery, polling, and read-back |
 | Hub Live Smoke Offline Fixture Suite | `node scripts/hub-live-smoke.mjs --fixture-test` | 18 checks (5 suites) | **PASS** | Strict-v1 protocol fixtures against in-process mock server |
 | Strict-v2 Vector Runner | `node scripts/strict-v2-vector-runner.mjs` | 23 checks (2 fp + 21 vectors) | **PASS** | Preimage framing & SHA-256 digests |
 | Release Security Static Audit | `node scripts/release-security-check.mjs --diagnose-source` | 6 static checks | **PASS** | 0 findings / 0 violations under script's static rules |
@@ -230,7 +230,7 @@ Phase 04 operator tooling and script suites are verified in unit tests and again
 
 Phase 12 delivers the authoritative operational runbook and staging rehearsal tooling for executing the strict-v1 to strict-v2 upgrade:
 1. **Authoritative Runbook (`docs/strict-v2-cutover-runbook.md`)**:
-   - Enforces strict deployment ordering: all-node Hub binary deploy -> Doggo client distribution -> non-mutating preflight dry-run -> controlled in-place upgrade via `hub-strict-upgrade.mjs` or Web Admin UI with durable migration UUID -> mandatory read-back assertion of all 16 columns and v2 fingerprint -> client replay & transition.
+   - Enforces strict deployment ordering: all-node Hub binary deploy -> TabbyRush client distribution -> non-mutating preflight dry-run -> controlled in-place upgrade via `hub-strict-upgrade.mjs` or Web Admin UI with durable migration UUID -> mandatory read-back assertion of all 16 columns and v2 fingerprint -> client replay & transition.
    - Documents state-specific failure recovery: pre-fence rejection, orphan permit stalls, interrupted batch resumption with matching migration ID, lost publish response handling, preactivation rollback under fence, and forward-repair-only rule once v2 is published.
    - Explicitly quarantines legacy `scripts/hub-strict-recovery.js` as an emergency fresh-epoch restore tool for `strict-v1` only; it must never be used for v2 upgrades.
 2. **Tooling Rehearsal Suite (`scripts/strict-v2-cutover-rehearsal.mjs`)**:

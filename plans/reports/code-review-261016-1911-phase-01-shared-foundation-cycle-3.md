@@ -11,19 +11,19 @@
 
 ### 1.1 Scope
 - **Files reviewed (13):**
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-store.kt`
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-contracts.kt`
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-projector.kt`
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt`
-  - `androidApp/src/main/kotlin/dev/doggo/android/task-surface-host.kt`
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-task-model.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-store.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-contracts.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt`
+  - `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-host.kt`
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-model.kt`
   - `gradle/libs.versions.toml`
   - `androidApp/build.gradle.kts`
   - `androidApp/gradle.lockfile`
-  - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/task-surface-projector-test.kt`
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-store-sqlite-test.kt`
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt`
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt`
+  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-surface-projector-test.kt`
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt`
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt`
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt`
 - **Lines of code analyzed:** ~1,680 LOC
 - **Review focus:** Cycle 2 findings remediation (server tombstone with residual draft/outbox overlay, dependency provenance accounting), concurrency semantics, predicate-based observer bounds, zero-allocation projection, and architectural readiness for downstream leaf phases (Phases 02, 03, 04).
 - **Updated plans:** `plans/261016-1409-sticky-task-surfaces/phase-01-shared-foundation.md`, `plans/261016-1409-sticky-task-surfaces/reports/phase-01-foundation-evidence.md`.
@@ -52,7 +52,7 @@ The review score is upgraded to **9.4 / 10 (Conditional Pass — Terminal Handof
 *None identified (0 Critical).*
 - No data corruption or silent loss risks.
 - Mutex serialization ensures atomic state transitions without deadlock or recursive re-entrancy.
-- Room transactions execute atomically via `DoggoDao`.
+- Room transactions execute atomically via `TabbyRushDao`.
 - No sensitive user data or tokens exposed in shared contracts or logs.
 
 ---
@@ -60,7 +60,7 @@ The review score is upgraded to **9.4 / 10 (Conditional Pass — Terminal Handof
 ## 4. Warnings List (High Priority Findings)
 
 ### Warning 1: Unbounded initial await in observer coroutine tests
-- **Location:** `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt:100,140,214` and `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-store-sqlite-test.kt:358`
+- **Location:** `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt:100,140,214` and `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt:358`
 - **Impact:** While target condition convergence is properly bounded by `withTimeout(3000)`, the preceding `initialEmitted.await()` runs directly under `runBlocking` without a timeout. If an unexpected regression breaks initial collection emission, the test runner would block indefinitely rather than failing fast.
 - **Recommendation:** Enclose `initialEmitted.await()` within `withTimeout(3000)` and call `collectJob.cancelAndJoin()` in the `finally` block before cleaning up database resources:
   ```kotlin
@@ -83,7 +83,7 @@ The review score is upgraded to **9.4 / 10 (Conditional Pass — Terminal Handof
 ## 5. Medium Priority Improvements
 
 ### Medium 1: Redundant primary-key lookup in `setCompletedLocally`
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt:426,430`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt:426,430`
 - **Observation:** `setCompletedLocally` queries `dao.getServerBase(id)` to guard against server tombstones, and then immediately invokes `loadTodoLocked(id)` which executes `dao.getServerBase(id)` a second time.
 - **Recommendation:** Pass the pre-fetched `existingBase` into `loadTodoLocked(id, existingBase)` to avoid the duplicate SQLite query:
   ```kotlin
@@ -95,12 +95,12 @@ The review score is upgraded to **9.4 / 10 (Conditional Pass — Terminal Handof
   ```
 
 ### Medium 2: Test name overstates concurrent race guarantee
-- **Location:** `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-store-sqlite-test.kt:258`
+- **Location:** `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt:258`
 - **Observation:** `testSetCompletedLocallyPreservesConcurrentlyChangedFields` sets up a task on `server_base` and asserts that `setCompletedLocally` preserves existing non-conflicting fields (deadline, reminder, token). The test executes sequentially without competing threads.
 - **Recommendation:** Rename to `testSetCompletedLocallyPreservesExistingTemporalFields` to avoid conflating sequential field preservation with concurrent race resolution.
 
 ### Medium 3: Direct DAO manipulation under `withMutationLock` tests invalidation dispatch rather than full sync engine
-- **Location:** `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt:144-148,218-222`
+- **Location:** `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt:144-148,218-222`
 - **Observation:** Promotion and conflict injection tests simulate sync by calling `dao.upsertServerBase` directly inside `withMutationLock`. This validates that `withMutationLock` triggers `taskInvalidationFlow`, but does not test the sync engine or conflict resolver directly.
 
 ---
@@ -108,7 +108,7 @@ The review score is upgraded to **9.4 / 10 (Conditional Pass — Terminal Handof
 ## 6. Low Priority Suggestions
 
 ### Suggestion 1: Eliminate duplicated lock acquisition block in `withMutationLock`
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt:73-80,83-90`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt:73-80,83-90`
 - **Observation:** The inner lock execution and invalidation emission logic (`mutex.withLock { check(!isFrozen); val result = block(); ... }`) is duplicated in both branches of `if (gate != null)`. Extracting the inner invocation into a private inline helper reduces code duplication.
 
 ---

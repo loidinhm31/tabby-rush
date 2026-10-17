@@ -1,6 +1,6 @@
-# Doggo
+# TabbyRush
 
-Doggo is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization.
+TabbyRush is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization.
 
 The application reuses the **Glean Hub** backend infrastructure with an opt-in, strict per-record synchronization protocol (`strict-v1`), ensuring complete data isolation from legacy Hub clients while delivering native offline capability, durable Room KMP persistence, and an accessible light theme.
 
@@ -81,10 +81,10 @@ node scripts/release-security-check.mjs --diagnose-source
 
 ### 4. Build Android Release APK (Requires SDK & Keystore)
 ```bash
-export DOGGO_KEYSTORE="/path/to/keystore.jks"
-export DOGGO_KEY_ALIAS="doggo-release"
-export DOGGO_STORE_PASSWORD="<password>"
-export DOGGO_KEY_PASSWORD="<password>"
+export TABBYRUSH_KEYSTORE="/path/to/keystore.jks"
+export TABBYRUSH_KEY_ALIAS="tabbyrush-release"
+export TABBYRUSH_STORE_PASSWORD="<password>"
+export TABBYRUSH_KEY_PASSWORD="<password>"
 
 ./gradlew :androidApp:assembleRelease
 ```

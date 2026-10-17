@@ -14,19 +14,19 @@
 
 ### Scope
 - **Files reviewed**:
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-reminder-scheduler.kt` (159 LOC)
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/composite-desktop-leave-cancel-gate.kt` (49 LOC)
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-reminder-adapter.kt` (16 LOC)
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-reminder-adapter-provider.kt` (20 LOC)
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/platform-reminder-dispatcher.kt` (58 LOC)
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt` (560 LOC)
-  - `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-notification-adapter.kt` (240 LOC)
-  - `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-notification-adapter.kt` (229 LOC)
-  - `desktopApp/src/linuxTest/kotlin/dev/doggo/desktop/linux/linux-reminder-adapter-test.kt` (174 LOC)
-  - `desktopApp/src/windowsTest/kotlin/dev/doggo/desktop/windows/windows-reminder-adapter-test.kt` (125 LOC)
-  - `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-reminder-controller-lifecycle-test.kt` (182 LOC)
-  - `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-reminder-scheduler-test.kt` (350 LOC)
-  - `desktopApp/src/test/kotlin/dev/doggo/desktop/composite-desktop-leave-cancel-gate-test.kt` (141 LOC)
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-reminder-scheduler.kt` (159 LOC)
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate.kt` (49 LOC)
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-reminder-adapter.kt` (16 LOC)
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-reminder-adapter-provider.kt` (20 LOC)
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/platform-reminder-dispatcher.kt` (58 LOC)
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt` (560 LOC)
+  - `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-notification-adapter.kt` (240 LOC)
+  - `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-notification-adapter.kt` (229 LOC)
+  - `desktopApp/src/linuxTest/kotlin/dev/tabbyrush/desktop/linux/linux-reminder-adapter-test.kt` (174 LOC)
+  - `desktopApp/src/windowsTest/kotlin/dev/tabbyrush/desktop/windows/windows-reminder-adapter-test.kt` (125 LOC)
+  - `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-reminder-controller-lifecycle-test.kt` (182 LOC)
+  - `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-reminder-scheduler-test.kt` (350 LOC)
+  - `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate-test.kt` (141 LOC)
 - **Lines of code analyzed**: ~2,300 LOC
 - **Review focus**: Cycle 1 high-priority remediation verification, fail-closed cancellation propagation, Windows toast account isolation, EDT unburdening, empty capability tolerance, test coverage expansion.
 - **Updated plans**:
@@ -50,7 +50,7 @@ Cycle 1 high-priority findings have been systematically resolved in source and v
 ## Remediation Verification Details
 
 ### 1. Fail-Closed Cancellation Error Propagation (RESOLVED)
-- **Source**: `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-notification-adapter.kt:215-231`
+- **Source**: `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-notification-adapter.kt:215-231`
   ```kotlin
   override suspend fun cancelAllForAccount(accountKey: AccountKey) = withContext(ioDispatcher) {
       val accountIds = postedNotificationIds.remove(accountKey.value) ?: return@withContext
@@ -70,7 +70,7 @@ Cycle 1 high-priority findings have been systematically resolved in source and v
       }
   }
   ```
-- **Windows Equivalent**: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-notification-adapter.kt:201-220` mirrors error collection and throws `IllegalStateException`.
+- **Windows Equivalent**: `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-notification-adapter.kt:201-220` mirrors error collection and throws `IllegalStateException`.
 - **Consumer Behavior**: `DesktopController.completePendingWipesOnStartup()` (`main.kt:125-131`):
   ```kotlin
   try {
@@ -86,12 +86,12 @@ Cycle 1 high-priority findings have been systematically resolved in source and v
   - `DesktopReminderControllerLifecycleTest.testStartupWipeRecoveryRetainsMarkerWhenReminderCancellationFails`: Verified wipe marker, SQLite DB, and vault secrets remain preserved when adapter throws.
 
 ### 2. Windows Multi-Account Toast Isolation (RESOLVED)
-- **Source**: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-notification-adapter.kt:201-220`
+- **Source**: `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-notification-adapter.kt:201-220`
 - **Fix**: Removed global `windowsAdapter.cancelAllNotifications()`. Iterates solely across `postedPlatformIds[accountKey.value]` and targets `windowsAdapter.cancelNotification(tag = parts[1], group = parts[0])` where group is `d_${accountKey.value.take(12)}`.
 - **Automated Proof**: `WindowsReminderAdapterTest.testCancelAllForAccountClearsToasts` posts notifications for two distinct accounts (`accountKey1` with tasks t1/t2, `accountKey2` with task t3), cancels account 1, and verifies that `fakeBridge.cleared` contains only t1 and t2, leaving account 2's toast untouched.
 
 ### 3. EDT Threading & Concurrency Review (RESOLVED)
-- **Source**: `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt:203-230` & `desktop-reminder-scheduler.kt:36-64`
+- **Source**: `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt:203-230` & `desktop-reminder-scheduler.kt:36-64`
 - **Orchestration**:
   - `DesktopReminderScheduler` constructed with `ioDispatcher = Dispatchers.IO`.
   - Wake loop launched via `scope.launch(ioDispatcher) { runWakeLoop() }`.
@@ -110,7 +110,7 @@ Cycle 1 high-priority findings have been systematically resolved in source and v
   - Verified no Swing EDT blocking occurs during Room reads or IPC operations.
 
 ### 4. Linux Capabilities Tolerance for Minimal Daemons (RESOLVED)
-- **Source**: `desktopApp/src/linuxMain/kotlin/dev/doggo/desktop/linux/linux-notification-adapter.kt:160-168`
+- **Source**: `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-notification-adapter.kt:160-168`
 - **Fix**: `val canPost = status is LinuxNotificationStatus.Success`. Dropped `&& caps.isNotEmpty()`. Minimal daemons returning an empty capability array now report `canPostNotifications = true`.
 
 ---
@@ -128,7 +128,7 @@ Cycle 1 high-priority findings have been systematically resolved in source and v
 ## Medium Priority Improvements
 
 ### 1. Windows Native Toast Bridge Remains Candidate Stub
-- **Location**: `desktopApp/src/windowsMain/kotlin/dev/doggo/desktop/windows/windows-notification-adapter.kt:39-71`
+- **Location**: `desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-notification-adapter.kt:39-71`
 - **Observation**: `JnaWindowsToastBridge` returns `WindowsNotificationStatus.Unavailable` for all operations. Real COM/WinRT integration remains to be implemented.
 - **Restart Limitation**: `cancelAllForAccount` operates against the in-memory `postedPlatformIds` map. After a process restart, active toasts displayed in Windows Action Center for a wiped account cannot be cleared until the native bridge provides group-level clearance without relying on in-memory state.
 - **Action**: Tracked for Phase 11 on physical Windows testbed.

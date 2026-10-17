@@ -146,7 +146,7 @@ Inspect device definitions to select a device ID (e.g., `pixel_6`):
 ```bash
 avdmanager list device
 avdmanager create avd \
-  --name doggo_android \
+  --name tabbyrush_android \
   --package "system-images;android-35;google_apis;x86_64" \
   --device "pixel_6"
 ```
@@ -154,7 +154,7 @@ avdmanager create avd \
 ### Launch Emulator
 Launch inside the Xpra session:
 ```bash
-./scripts/start-android-emulator.sh doggo_android
+./scripts/start-android-emulator.sh tabbyrush_android
 ```
 
 - **GPU Acceleration**: Defaults to `-gpu auto`. If GLX errors occur under Xpra, set `EMULATOR_GPU=swiftshader` for software rasterization.

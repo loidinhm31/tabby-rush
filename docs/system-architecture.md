@@ -1,4 +1,4 @@
-# Doggo System Architecture
+# TabbyRush System Architecture
 
 Last Updated: 2026-10-17
 Phase: Foundational phases 01–12 delivered with separate release gates still open. Sticky Task Surfaces Phase 07: delivered / documentation & automated verification evidenced; native hardware acceptance conditionally held (Gate G2); Linux acceptance pending Phase 08. Gate G3 live cluster execution and Gate G7 production cutover remain blocked.
@@ -8,7 +8,7 @@ Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Re
 
 ## 1. Architectural Scope & Principles
 
-Doggo is designed as an Android-first shared Compose Multiplatform application developed on a headless Linux host. Development and validation rely on an isolated virtualization architecture that enables full graphical IDE and Android emulator capabilities without installing desktop environments (GNOME/KDE) or exposing insecure network services.
+TabbyRush is designed as an Android-first shared Compose Multiplatform application developed on a headless Linux host. Development and validation rely on an isolated virtualization architecture that enables full graphical IDE and Android emulator capabilities without installing desktop environments (GNOME/KDE) or exposing insecure network services.
 
 ### Core Architectural Principles
 1. **Headless Isolation**: The host operates in headless server boot mode. Graphical access is strictly encapsulated within user-isolated virtual display servers.
@@ -42,7 +42,7 @@ flowchart TD
 
     subgraph AndroidSubsystem["Android Tooling Environment"]
       Studio["Android Studio GUI\n(~/.local/share/android-studio)"]
-      Emulator["Android Emulator\n(Port 5554, AVD: doggo_android)"]
+      Emulator["Android Emulator\n(Port 5554, AVD: tabbyrush_android)"]
       SDK["Android SDK\n($HOME/Android/Sdk)"]
     end
 
@@ -96,9 +96,9 @@ flowchart TD
   subgraph ClientApp["Android Application Layer (androidApp / Phase 07)"]
     MainActivity["MainActivity\n(Single Exported Activity)"]
     SessionVM["SessionViewModel\n(Retained ViewModel / StateFlow)"]
-    DoggoAppContainer["DoggoApplication\n(Singletons / Active Runtime / Wipe Recovery)"]
+    TabbyRushAppContainer["TabbyRushApplication\n(Singletons / Active Runtime / Wipe Recovery)"]
     Scheduler["AndroidSyncScheduler\n(WorkManager / cancelAndAwait)"]
-    SyncWorker["DoggoSyncWorker\n(Fencing / Auth / Gen Check)"]
+    SyncWorker["TabbyRushSyncWorker\n(Fencing / Auth / Gen Check)"]
   end
 
   subgraph DesktopLayer["Desktop Application Layer (Phase 09-10)"]
@@ -113,7 +113,7 @@ flowchart TD
       Coordinator["AccountSyncCoordinator\n(3-Stage Sync / Mutex)"]
       TransitionCoordinator["ContractTransitionCoordinator\n(6-Phase Pipeline / Durable Checkpoints)"]
       Store["RoomAccountStore\n(Store Mutex & Atomic Ops)"]
-      RoomDB[("DoggoDatabase (Room v2)\nserver_base | outbox\neditor_drafts | scan_staging\naccount_sync_meta\naccount_local_settings\nreminder_delivery_ledger")]
+      RoomDB[("TabbyRushDatabase (Room v2)\nserver_base | outbox\neditor_drafts | scan_staging\naccount_sync_meta\naccount_local_settings\nreminder_delivery_ledger")]
       Reconciliation["OutboxReconciliation\n(FIFO Dispatch / CAS Ack)"]
       Scan["StagedFullScan\n(Pre-Scan Check / Promotion)"]
       LeaveProtocol["AccountLeaveProtocol\n(Fail-Closed Teardown)"]
@@ -147,14 +147,14 @@ flowchart TD
     StrictRoutes["Strict Routes\n(/api/v1/sync/:app_id/strong/{bootstrap,push,pull,legacy-receipts})"]
     AdminStrict["Admin Strict Registration\n(POST /api/v1/strict-apps)"]
     AdmissionHelper["Admission Validator\n(Exact index, topology, uncapped, no TTL)"]
-    MongoDB["MongoDB Target Collection\n(appDoggo)"]
+    MongoDB["MongoDB Target Collection\n(appTabbyRush)"]
   end
 
   MainActivity --> UI
   MainActivity --> SessionVM
   SessionVM --> UI
-  SessionVM --> DoggoAppContainer
-  DoggoAppContainer --> Scheduler
+  SessionVM --> TabbyRushAppContainer
+  TabbyRushAppContainer --> Scheduler
   Scheduler --> SyncWorker
   SyncWorker --> Coordinator
   DesktopApp --> UI
@@ -200,8 +200,8 @@ flowchart TD
 ```
 
 ### 4.1 Storage Namespace & Backend Isolation
-Strict sync completely segregates Doggo data from legacy Hub storage:
-- **Naming Pattern**: Canonical Hub collection naming: `app<AppId>` (e.g. `appDoggo` via `SyncService::collection_name(app_id)`).
+Strict sync completely segregates TabbyRush data from legacy Hub storage:
+- **Naming Pattern**: Canonical Hub collection naming: `app<AppId>` (e.g. `appTabbyRush` via `SyncService::collection_name(app_id)`).
 - **Document Key (`_id`)**: Exact composite key `userId:rowId` preventing cross-user collisions.
 - **Scan Index**: Exact compound index `{ userId: 1, tableName: 1, rowId: 1 }` with simple collation.
 - **Publication-Last Registration**: Schema entry published only after storage and indexes pass admission.
@@ -223,18 +223,18 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
 - **Implementation Observation**: In `services/strong_sync_service.rs`, `get_strict_collection` runs `hello` to inspect topology and falls back to standalone (`w: 1, local`) if `hello` errors. This behavior is flagged for downstream review to ensure fail-closed topology verification rather than transient fail-open on replica sets.
 
 ### 4.5 Hub Authentication & Protected Session Subsystem (Phase 04)
-- **Session State Machine (`HubAuthSession`)**: `UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`. Evaluates `/me.apps` for `"doggo"` grant.
+- **Session State Machine (`HubAuthSession`)**: `UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `ACCESS_PENDING`, `REAUTH_REQUIRED`. Evaluates `/me.apps` for `"tabbyrush"` grant.
 - **Single-Flight Refresh (`SingleFlightRefreshCoordinator`)**: Deduplicates simultaneous refresh requests to a single leader network request.
 - **Generation Fencing**: Atomic generation counter fences stale async completions on quiesce/logout/switch.
 - **Prohibited Automatic POST Replays**: `authorizedRequest()` refreshes tokens on HTTP 401 but never replays mutating POST requests.
-- **Android Keystore Vault (`AndroidKeystoreVault`)**: AES-256-GCM encryption per account key (`doggo_vault_key_{accountKey}`), fresh 12-byte random nonces per write, AAD binding (`"doggo_vault_v1:" + accountKey`), atomic file replacement.
+- **Android Keystore Vault (`AndroidKeystoreVault`)**: AES-256-GCM encryption per account key (`tabbyrush_vault_key_{accountKey}`), fresh 12-byte random nonces per write, AAD binding (`"tabbyrush_vault_v1:" + accountKey`), atomic file replacement.
 
 ### 4.6 Local Storage & Strict Synchronization Subsystem (Phases 05–06 of Deadlines/Reminders Plan)
 
-1. **Room KMP Persistence (`DoggoDatabase`)**:
+1. **Room KMP Persistence (`TabbyRushDatabase`)**:
    - Backed by `BundledSQLiteDriver`. Destructive migration is strictly forbidden; explicit step-by-step migration `DatabaseMigrations.MIGRATION_1_2` upgrades schema version 1 (`shared/schemas/.../1.json`) to schema version 2 (`shared/schemas/.../2.json`, identity hash `06a93ffbac4a0570d56446f47e0e3e4c`). Both Android (`createAndroidDatabaseBuilder`) and JVM (`createJvmDatabaseBuilder`) builders register `DatabaseMigrations.ALL`.
    - Seven stores: `server_base` (authoritative base & tombstones with 12 temporal fields), `outbox` (queued/frozen strict mutations with 12 temporal fields and provenance tracking), `editor_drafts` (uncommitted local edits with 12 temporal fields), `scan_staging` (cursor pagination staging with 12 temporal fields), `account_sync_meta` (account sync metadata and active epoch), `account_local_settings` (device- and account-local reminder defaults), and `reminder_delivery_ledger` (durable native reminder claim outcomes and cancellation).
-2. **Domain Models & Strict Invariants (`dev.doggo.shared.contract`)**:
+2. **Domain Models & Strict Invariants (`dev.tabbyrush.shared.contract`)**:
    - `TaskDeadline`: Immutable value class (`date`, nullable `time`, `zone`, `offsetSeconds`, nullable `reminderAnchorTime`, `anchorEpochMs`, `overdueEpochMs`). Enforces non-empty date and zone. Date-only deadlines require non-null `reminderAnchorTime`. Timed deadlines require null `reminderAnchorTime` and `overdueEpochMs == anchorEpochMs`.
    - `ReminderRule`: Immutable value class (`enabled`, non-negative `leadMinutes`, nullable `intervalMinutes`, `count` in 1..10). When `count == 1`, `intervalMinutes` must be null; when `count > 1`, `intervalMinutes` must be non-null and `>= 15`. Provides `ReminderRule.DISABLED`.
    - `Todo`: Integrates `TaskDeadline?`, `ReminderRule`, and `scheduleToken: String?`. Validates schedule consistency: when deadline is null, reminders must be disabled (lead 0, count 1, interval null) and token null; when deadline is present, non-empty `scheduleToken` is required and checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) verifies `last <= anchor` (last scheduled reminder occurrence cannot exceed deadline anchor).
@@ -246,7 +246,7 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
 4. **Account Partitioning & New Entities**:
    - `AccountLocalSettingsEntity`: Stores device- and account-local reminder and notification defaults (singleton `id = 'singleton'`). Strictly account-partitioned, wiped on logout, and never sent to Hub.
    - `ReminderDeliveryLedgerEntity`: Durable occurrence state and claim outcomes for native reminders. Composite PK: 5-tuple (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`). Indices on `[accountKey, generation, taskId]` and `[dueEpochMs]`. Status values: `PENDING`, `CLAIMED`, `POSTED`, `MISSED`, `CANCELLED`, `SKIPPED`. Cancellation: `ACTIVE`, `CANCELLED`. Account-partitioned, wiped on logout, never sent over wire.
-   - `DoggoDao.wipeAllTablesAtomic()` transactionally clears all 7 tables in a single SQLite transaction, distinct from the multi-step external filesystem/credential teardown protocol in `AccountLeaveProtocol`.
+   - `TabbyRushDao.wipeAllTablesAtomic()` transactionally clears all 7 tables in a single SQLite transaction, distinct from the multi-step external filesystem/credential teardown protocol in `AccountLeaveProtocol`.
 5. **Account Directory Partitioning & Filesystem Model**:
    - Partitioned strictly by canonical `AccountKey` SHA-256 string.
    - `AndroidAccountFiles` and `JvmAccountFiles` verify `canonicalFile.toPath().startsWith(canonicalBase.toPath())` to reject path traversal outside the base root (intra-tree symlinks and TOCTOU races are outside this check).
@@ -292,20 +292,20 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
    - `DELETE`: If base is missing or deleted, purges outbox entry; otherwise mints fresh v2 UUID `opId`, binds base `serverRevision`, and replaces atomically.
 16. **Intent-Masked Rebase Safety & Atomic Regressive Cleanup**:
    - Non-destructive rebase: In `RoomAccountStore.reconcileAccepted()`, acknowledging a legacy strict-v1 outbox operation (`op.contractVersion == CONTRACT_VERSION_V1`) or a masked edit without deadline/reminder intents preserves remote temporal fields (`deadlineDate`, `deadlineTime`, `reminderEnabled`, `scheduleToken`, etc.) from `currentBase`.
-   - Atomic regressive cleanup: `DoggoDao.discardRegressiveReconcileAtomic` wraps `deleteDraft` and `deleteOutbox` in a single SQLite transaction, ensuring atomic cleanup when server revision is lower than confirmed base.
+   - Atomic regressive cleanup: `TabbyRushDao.discardRegressiveReconcileAtomic` wraps `deleteDraft` and `deleteOutbox` in a single SQLite transaction, ensuring atomic cleanup when server revision is lower than confirmed base.
    - Cross-version server compatibility guard: In `AccountSyncCoordinator.executeSyncRound()`, if the server reports protocol `strict-v1` and the local outbox contains any strict-v2 operations (`dao.countOutboxByVersion(CONTRACT_VERSION_V2) > 0`), sync aborts with `SafeError.ProtocolIncompatible("SERVER_VERSION_REGRESSION")`.
 
 ### 4.7 Shared Compose UI & Accessible Light Theme Subsystem (Phase 06 of Foundation Plan)
 *(Note: This subsection documents Phase 06 of the initial UI foundation plan, distinct from Phase 06 client version transition in the task deadlines plan).*
 
-1. **Light Theme & Design Tokens (`DoggoTheme`, `DoggoColors`)**:
-   - Material 3 `LightColorScheme` mapping with custom semantic extensions (`DoggoCustomColors`).
+1. **Light Theme & Design Tokens (`TabbyRushTheme`, `TabbyRushColors`)**:
+   - Material 3 `LightColorScheme` mapping with custom semantic extensions (`TabbyRushCustomColors`).
    - Dynamic colors are disabled to avoid overriding calculated token ratios.
    - Calculated high-contrast pairings: 16 verified opaque token pairs exceeding 4.5:1 (text) and 3.0:1 (outline borders). Overall rendered control contrast across OEM devices is deferred to Phase 07.
-2. **Platform-Universal Typography (`DoggoTypography`)**:
+2. **Platform-Universal Typography (`TabbyRushTypography`)**:
    - Pinned 12sp–34sp type scale built on Compose `FontFamily.SansSerif`.
    - Documented omission of upstream Latin-only binary font assets (`font-provenance.md`), delegating font resolution to platform system fonts. Broad Unicode script rendering, TalkBack/Orca, and OS-level 200% scaling require platform testing.
-3. **Responsive Breakpoint Layout (`DoggoApp`)**:
+3. **Responsive Breakpoint Layout (`TabbyRushApp`)**:
    - Compact mode (<840dp): Vertical layout with warm cream header and scrolling list. Note: compact top bar is non-scrolling in `Scaffold.topBar`, tracked for Phase 07 200% font scale verification.
    - Expanded desktop mode (>=840dp): Two-column layout with fixed-width deep teal navigation sidebar (280dp) and constrained-width task workspace (max 760dp).
 4. **Credential Security & Privacy in UI (`AccountForm`)**:
@@ -322,9 +322,9 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
 
 ### 4.8 Native Android Architecture & Runtime Integration (Phase 07)
 
-1. **Application Process Container & Singletons (`DoggoApplication`)**:
+1. **Application Process Container & Singletons (`TabbyRushApplication`)**:
    - Manages process-scoped singletons: `hubConfig` (dynamically configured via `BuildConfig.DEBUG`), `vault` (`AndroidKeystoreVault`), `accountFiles` (`AndroidAccountFiles`), `syncScheduler` (`AndroidSyncScheduler`), and `authSession` (`HubAuthSession`).
-   - Active account runtime is encapsulated in `AccountRuntime` (`accountKey`, `generation`, `database`, `store`, `coordinator`, `leaveProtocol`). Foreground UI (`SessionViewModel`) and background jobs (`DoggoSyncWorker`) share the exact same runtime instance and `coordinatorMutex`.
+   - Active account runtime is encapsulated in `AccountRuntime` (`accountKey`, `generation`, `database`, `store`, `coordinator`, `leaveProtocol`). Foreground UI (`SessionViewModel`) and background jobs (`TabbyRushSyncWorker`) share the exact same runtime instance and `coordinatorMutex`.
 2. **Cold-Start Active Identity Persistence & Session Restoration**:
    - When an account authenticates, `saveActiveAccount(identity, accountKey)` writes serialized account identity to `active_account.tmp` and executes `StandardCopyOption.ATOMIC_MOVE`.
    - On application cold start, `completePendingWipesOnStartup()` executes synchronously before `checkAndRestoreEstablishedSession()` restores the auth session from the vault, ensuring wiped accounts cannot resurrect.
@@ -334,16 +334,16 @@ Strict sync completely segregates Doggo data from legacy Hub storage:
    - Collects `coordinator.progress` to update `TodoUiState.syncProgress`, inspect and present conflicts via `ConflictReviewDialog`, and reload todos.
    - Sanitizes storage errors to `SafeError.Internal` and validation errors to `SafeError.Validation`, preventing raw system exception details from leaking to the UI layer. Passwords and auth tokens are not retained in ViewModel fields or `SavedStateHandle` after submission.
 4. **WorkManager Sync Scheduling & Worker Fencing**:
-   - `AndroidSyncScheduler` schedules unique one-shot sync (`doggo_sync_oneshot_<key>_<gen>`) with `NetworkType.CONNECTED` constraint and `ExistingWorkPolicy.KEEP`, and unique periodic 15-minute sync (`doggo_sync_periodic_<key>`) with `ExistingPeriodicWorkPolicy.UPDATE`.
-   - All sync tasks are tagged with `doggo_sync_account_<accountKey>`.
-   - `DoggoSyncWorker` enforces check order: wipe marker check (fails closed) -> auth session check (retries if unauthenticated) -> account key check (drops mismatch) -> persisted generation check (drops stale work) -> runtime generation check.
+   - `AndroidSyncScheduler` schedules unique one-shot sync (`tabbyrush_sync_oneshot_<key>_<gen>`) with `NetworkType.CONNECTED` constraint and `ExistingWorkPolicy.KEEP`, and unique periodic 15-minute sync (`tabbyrush_sync_periodic_<key>`) with `ExistingPeriodicWorkPolicy.UPDATE`.
+   - All sync tasks are tagged with `tabbyrush_sync_account_<accountKey>`.
+   - `TabbyRushSyncWorker` enforces check order: wipe marker check (fails closed) -> auth session check (retries if unauthenticated) -> account key check (drops mismatch) -> persisted generation check (drops stale work) -> runtime generation check.
 5. **Teardown Quiescence & Fail-Closed Wipe Protocol**:
    - `cancelAndAwait(accountKey)` cancels WorkManager tasks by account tag, polls `WorkInfo.state.isFinished` for up to 5s (throwing `IllegalStateException` on timeout), and polls `coordinatorMutex.tryLock()` for up to 5s (throwing `IllegalStateException` on timeout).
    - `completePendingWipesOnStartup()` scans `accounts/*/wipe.marker` synchronously during `Application.onCreate`, cancelling tasks, deleting database files, clearing vault credentials, and removing markers fail-closed.
 6. **Manifest Hardening, Cleartext Policies & Release Gating**:
    - Base manifest enforces single exported `MainActivity`, `allowBackup="false"`, and `usesCleartextTraffic="false"`.
    - Debug manifest links `network_security_config.xml` strictly allowing `127.0.0.1`, `localhost`, and `10.0.2.2`. Merged manifest inspection across dependencies is pending AGP compilation.
-   - `build.gradle.kts` release signing task graph gate checks for `DOGGO_KEYSTORE`, `DOGGO_KEY_ALIAS`, `DOGGO_STORE_PASSWORD`, and `DOGGO_KEY_PASSWORD`, failing closed with a `GradleException` if any are missing.
+   - `build.gradle.kts` release signing task graph gate checks for `TABBYRUSH_KEYSTORE`, `TABBYRUSH_KEY_ALIAS`, `TABBYRUSH_STORE_PASSWORD`, and `TABBYRUSH_KEY_PASSWORD`, failing closed with a `GradleException` if any are missing.
 7. **Diagnostic & Fault Injection Infrastructure**:
    - `scripts/debug-fault-proxy.mjs`: Dedicated loopback HTTP proxy (127.0.0.1:3000 -> 3001) for deterministic sync fault injection (`drop-push-response`, `drop-refresh-response`) with strict route allowlist and zero payload logging.
    - `scripts/android-smoke.sh`: Device smoke verification runner supporting device auto-detection, reverse port forwarding, and evidence screenshot capture.
@@ -355,7 +355,7 @@ Desktop code is shared at the JVM layer while platform-specific providers are se
 
 On Windows, `WindowsDpapiVault` calls JNA-backed `CryptProtectData` and `CryptUnprotectData` with `CRYPTPROTECT_UI_FORBIDDEN` and current-user scope. It serializes the account key and token pair as one JSON payload, protects the bytes through DPAPI, then atomically replaces `credentials.dpapi`. Plaintext byte buffers are cleared after cryptographic operations. The vault attempts an owner-only ACL through `AclFileAttributeView`, but unsupported views, absent owners, and ACL exceptions are not surfaced; effective filesystem ACL enforcement is therefore not guaranteed by this implementation.
 
-The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descriptor registers the Windows provider. The distributable contains a bundled Java runtime and `Doggo.exe`; the MSI is configured for per-user installation. `scripts/windows-package-smoke.ps1` inspects packaged classes/provider registration, checks Linux D-Bus exclusion, hashes the MSI, reports Authenticode status, and reads MSI properties using Windows Installer COM. Phase 10 implementation is recorded at **100% (2026-10-14)**; technical acceptance remains blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not guaranteed by the current source, and clean-user runtime/sync plus uninstall/reinstall evidence remain open. The evidence report records a generated unsigned MSI, not an interactive installation.
+The Windows `META-INF/services/dev.tabbyrush.desktop.CredentialVaultProvider` descriptor registers the Windows provider. The distributable contains a bundled Java runtime and `TabbyRush.exe`; the MSI is configured for per-user installation. `scripts/windows-package-smoke.ps1` inspects packaged classes/provider registration, checks Linux D-Bus exclusion, hashes the MSI, reports Authenticode status, and reads MSI properties using Windows Installer COM. Phase 10 implementation is recorded at **100% (2026-10-14)**; technical acceptance remains blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not guaranteed by the current source, and clean-user runtime/sync plus uninstall/reinstall evidence remain open. The evidence report records a generated unsigned MSI, not an interactive installation.
 
 ### 4.10 Native Notification Candidates & Strict Timezone Architecture (Phase 02)
 
@@ -368,9 +368,9 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
    - **Input Validation**: Zone IDs are validated against platform tzdb; calendar date/time bounds and leap-year rules are strictly enforced.
 
 2. **Native Android Notification & Alarm Architecture (`androidApp` / Phase 08 Delivered)**:
-   - `AndroidNotificationAdapter`: Implements `NativeReminderAdapter`, managing the `doggo_reminders` notification channel (`IMPORTANCE_HIGH`, lights, vibration, `VISIBILITY_PRIVATE`), exact scheduling via `AlarmManager.setExactAndAllowWhileIdle` (falling back to `setAndAllowWhileIdle`), public generic notification pairing (`setPublicVersion`), and active notification cancellation.
-   - `AndroidAlarmRegistry`: Synchronized SharedPreferences storage (`doggo_alarms_<accountKey>`) tracking scheduled alarms (`generation:taskId:scheduleToken:occurrenceIndex`) and active notification IDs per account via synchronous `commit()` writes.
-   - `DoggoAlarmReceiver`: Non-exported (`android:exported="false"`) BroadcastReceiver receiving explicit `ACTION_DELIVER_REMINDER` intents. Enforces direct-boot storage barrier (`UserManager.isUserUnlocked`), validates identity-only extras (no user text in alarm PendingIntent extras or data URIs; task title loaded freshly from SQLite at delivery time), and checks wipe markers, generation matches, and active account identity before bounded delivery (`goAsync()`, cooperative 9,000ms timeout) via `ReminderSchedulingCoordinator`.
+   - `AndroidNotificationAdapter`: Implements `NativeReminderAdapter`, managing the `tabbyrush_reminders` notification channel (`IMPORTANCE_HIGH`, lights, vibration, `VISIBILITY_PRIVATE`), exact scheduling via `AlarmManager.setExactAndAllowWhileIdle` (falling back to `setAndAllowWhileIdle`), public generic notification pairing (`setPublicVersion`), and active notification cancellation.
+   - `AndroidAlarmRegistry`: Synchronized SharedPreferences storage (`tabbyrush_alarms_<accountKey>`) tracking scheduled alarms (`generation:taskId:scheduleToken:occurrenceIndex`) and active notification IDs per account via synchronous `commit()` writes.
+   - `TabbyRushAlarmReceiver`: Non-exported (`android:exported="false"`) BroadcastReceiver receiving explicit `ACTION_DELIVER_REMINDER` intents. Enforces direct-boot storage barrier (`UserManager.isUserUnlocked`), validates identity-only extras (no user text in alarm PendingIntent extras or data URIs; task title loaded freshly from SQLite at delivery time), and checks wipe markers, generation matches, and active account identity before bounded delivery (`goAsync()`, cooperative 9,000ms timeout) via `ReminderSchedulingCoordinator`.
    - `ReminderRestoreReceiver`: Non-exported (`android:exported="false"`) BroadcastReceiver handling system events (`BOOT_COMPLETED`, `USER_UNLOCKED`, `MY_PACKAGE_REPLACED`, `TIME_SET`, `TIMEZONE_CHANGED`, `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`). Enforces direct-boot storage barrier and wipe-first ordering (`completePendingWipesSuspend()`) before reconciling active account reminders. Note: permission action signals grants, not revocations.
    - `CompositeLeaveSchedulerCancelGate`: Coordinates 4-stage teardown during account leave: (1) delivery gate drain -> (2) schedule observer cancel -> (3) WorkManager sync cancel -> (4) AlarmManager/notification cancel.
    - `ReminderPermissionController`: Evaluates sealed capability state (`Exact`, `BestEffort`, `NotificationDenied`, `ChannelDisabled`) and builds platform settings intents.
@@ -382,7 +382,7 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
    - Reconciled dependency locking in `desktopApp/gradle-linux.lockfile`. Desktop bubble delivery requires an active desktop notification daemon in Phase 09.
 
 4. **Windows Desktop Notification Candidate (`desktopApp/src/windowsMain`)**:
-   - `WindowsNotificationAdapter` configures stable AUMID `dev.doggo.desktop` and default group `doggo_reminders`.
+   - `WindowsNotificationAdapter` configures stable AUMID `dev.tabbyrush.desktop` and default group `tabbyrush_reminders`.
    - `escapeXml()` sanitizes XML attribute and entity characters (`&`, `<`, `>`, `"`, `'`) for toast templates.
    - **Status: Unimplemented / Candidate**: `JnaWindowsToastBridge` explicitly returns `isAvailable() = false` and `WindowsNotificationStatus.Unavailable` for all operations. Real WinRT/COM toast delivery and MSI AUMID history removal remain outstanding implementation and runtime acceptance work in Phase 09.
 
@@ -405,7 +405,7 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
    - Manages `reminder_delivery_ledger` in SQLite under composite primary key 5-tuple (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`).
    - Semantic schedule token rotation: schedule tokens rotate exclusively on temporal schedule changes; task title updates modify notification copy without altering schedule tokens or duplicating occurrence opportunities.
    - Task reopen preservation: completing and reopening a task reactivates ledger records from `CANCELLED` to `ACTIVE` while preserving prior consumed claim outcomes (`CLAIMED`, `POSTED`), ensuring occurrence opportunities are not duplicated.
-   - Atomic claim-before-post (`evaluateAndClaimDueOpportunity`): evaluates the 5-minute grace window, marks older unconsumed opportunities `SKIPPED` in SQLite, and atomically transitions the eligible occurrence from `PENDING` to `CLAIMED` via Room `@Transaction` (`DoggoDao.claimOccurrenceAtomic`).
+   - Atomic claim-before-post (`evaluateAndClaimDueOpportunity`): evaluates the 5-minute grace window, marks older unconsumed opportunities `SKIPPED` in SQLite, and atomically transitions the eligible occurrence from `PENDING` to `CLAIMED` via Room `@Transaction` (`TabbyRushDao.claimOccurrenceAtomic`).
    - Native notification removal acknowledgment: upon successful removal via `adapter.removeOwnedNotification()`, `clearPostedNotificationId()` transactionally clears `postedPlatformId` in SQLite.
 
 4. **Three-Tier Lock Hierarchy & Teardown Gate (`ReminderDeliveryGate`)**:
@@ -424,7 +424,7 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 6. **Fail-Closed Teardown & Startup Recovery (`AccountLeaveProtocol`)**:
    - Drains in-flight deliveries and mutations via `deliveryGate.closeAndDrain(5000L)` before touching database files; drain timeout remains frozen fail-closed.
    - Fail-closed marker retention: if background scheduler cancellation (`schedulerCancelGate.cancelAndAwait()`) fails or throws, `AccountLeaveProtocol.executeLeave()` retains `wipe.marker` and remains frozen fail-closed.
-   - Interrupted startup recovery (`completePendingWipe`): checks `hasPendingWipe(accountKey)`, cancels schedulers via `schedulerCancelGate`, deletes remaining database files (`doggo.db`, `doggo.db-wal`, `doggo.db-shm`), clears vault credentials, and clears `wipe.marker` fail-closed.
+   - Interrupted startup recovery (`completePendingWipe`): checks `hasPendingWipe(accountKey)`, cancels schedulers via `schedulerCancelGate`, deletes remaining database files (`tabbyrush.db`, `tabbyrush.db-wal`, `tabbyrush.db-shm`), clears vault credentials, and clears `wipe.marker` fail-closed.
 ---
 
 ## 5. Security & Isolation Invariants
@@ -435,7 +435,7 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 4. **Credential Safety**: Authentication tokens and keystores are never written to version control; `.gitignore` strictly excludes `local.properties`, keystores, and credentials.
 5. **Memory-Only Unpersisted Secrets**: Passwords and raw credential tokens are excluded from logs, error envelopes, and toString representations.
 6. **Strict Storage Isolation**: Strict-mode collections (`app_<appId>`) are strictly unreachable by legacy sync routes, background cleanup jobs, and older Hub binaries.
-7. **Key Custody & Perms**: Provisioning outputs write API keys with strict `0600` file permissions; scripts support protected environment variables (`GLEAN_ADMIN_TOKEN`, `DOGGO_APP_KEY`) to prevent command-line argument exposure.
+7. **Key Custody & Perms**: Provisioning outputs write API keys with strict `0600` file permissions; scripts support protected environment variables (`GLEAN_ADMIN_TOKEN`, `TABBYRUSH_APP_KEY`) to prevent command-line argument exposure.
 8. **Opaque In-Memory Credential Custody**: Tokens are held in memory and persisted only through the platform-protected vault (Android Keystore, Linux Secret Service, or Windows current-user DPAPI). `StateFlow` and public state models emit only `AccountIdentity`, `AccountKey`, and `AuthState`; `CredentialBundle.toString()` redacts token strings.
 9. **Single-Flight Generation Fencing**: Foreground and background refresh calls are deduplicated into a single network operation; generation fencing discards stale async completions on quiesce or logout.
 10. **Prohibited Automatic POST Replays**: The HTTP auth layer never automatically replays mutating POST requests across 401 refresh cycles; coordinator controls retry idempotency.
@@ -451,14 +451,14 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 20. **Single Exported Activity**: Manifest declares only `MainActivity` as exported (`android:exported="true"`) with launcher intent filters. Zero public services, receivers, or content providers are declared in the application manifest. Merged manifest verification is pending AGP compilation.
 21. **Strict Backup & Data Extraction Exclusions**: `backup_rules.xml` (API <= 30) and `data_extraction_rules.xml` (API >= 31) explicitly exclude private SQLite databases, shared preferences, and `accounts/` partition directories from cloud backups and device-to-device transfers.
 22. **Cleartext Restrictions & Debug NSC**: Cleartext HTTP traffic is disabled globally (`usesCleartextTraffic="false"`). Debug builds override this exclusively for loopback development hosts (`127.0.0.1`, `localhost`, `10.0.2.2`) via `network_security_config.xml`. Custom trust anchors and public domain overrides are prohibited.
-23. **WorkManager Account-Tag Cancellation**: All WorkManager sync requests are tagged with `doggo_sync_account_<accountKey>`, ensuring `cancel` and `cancelAndAwait` cancel all pending and running work for an account across generation increments.
+23. **WorkManager Account-Tag Cancellation**: All WorkManager sync requests are tagged with `tabbyrush_sync_account_<accountKey>`, ensuring `cancel` and `cancelAndAwait` cancel all pending and running work for an account across generation increments.
 24. **Teardown Quiescence & Wipe Fail-Closed Enforcement**: `cancelAndAwait()` verifies WorkManager and coordinator mutex quiescence with 5s deadlines, throwing `IllegalStateException` on timeout. Startup recovery completes pending wipes fail-closed before any account or database resources are initialized.
-25. **Release Signing Custody Fail-Closed Gate**: The Gradle task graph dynamically inspects release build tasks; execution fails closed with a `GradleException` if `DOGGO_KEYSTORE`, `DOGGO_KEY_ALIAS`, `DOGGO_STORE_PASSWORD`, or `DOGGO_KEY_PASSWORD` are missing or the keystore file does not exist.
+25. **Release Signing Custody Fail-Closed Gate**: The Gradle task graph dynamically inspects release build tasks; execution fails closed with a `GradleException` if `TABBYRUSH_KEYSTORE`, `TABBYRUSH_KEY_ALIAS`, `TABBYRUSH_STORE_PASSWORD`, or `TABBYRUSH_KEY_PASSWORD` are missing or the keystore file does not exist.
 
 26. **Windows DPAPI Scope**: Windows credentials use DPAPI user scope; machine-wide protection and plaintext token fallback are not used. JSON credentials are written as one encrypted bundle and atomically replaced.
 27. **Windows ACL Caveat**: The vault attempts to apply an owner ACL, but the current implementation suppresses ACL-view/owner errors; restricted ACLs are not guaranteed when that operation fails or is unavailable.
 28. **Windows MSI Release Status**: The recorded MSI is unsigned and has only been generated and inspected. Authenticode signing and interactive installer/runtime acceptance are separate release gates.
-29. **Non-Exported Alarm Receiver Isolation**: `DoggoAlarmReceiver` strictly specifies `android:exported="false"` in `AndroidManifest.xml` preventing inter-app intent injection or unauthorized alarm notification spoofing; intent handling validates all required extras before posting.
+29. **Non-Exported Alarm Receiver Isolation**: `TabbyRushAlarmReceiver` strictly specifies `android:exported="false"` in `AndroidManifest.xml` preventing inter-app intent injection or unauthorized alarm notification spoofing; intent handling validates all required extras before posting.
 30. **Decoupled Mobile Notification & Timing Permissions**: Notification posting authorization (`POST_NOTIFICATIONS`) and exact-alarm scheduling permission (`SCHEDULE_EXACT_ALARM`) are checked independently, preventing silent alarm scheduling failures or unauthorized notifications.
 31. **Explicit Desktop Notification Unavailability**: Desktop Linux D-Bus and Windows toast adapters return explicit `Unavailable` statuses when host daemons (`ServiceUnknown`) or native bridges (WinRT/COM) are not present, preventing unhandled runtime exceptions or false-positive success reporting.
 32. **Fail-Closed DST Ambiguity Resolution**: Timezone and DST calculations reject ambiguous overlaps and non-existent gaps with explicit exceptions rather than silently shifting or rounding to erroneous local instants.
@@ -472,21 +472,21 @@ The Windows `META-INF/services/dev.doggo.desktop.CredentialVaultProvider` descri
 40. **Atomic Claim-Before-Post Invariant**: Reminders execute claim-before-post in SQLite via `claimOccurrenceAtomic` inside a Room transaction before invoking native notification adapters, enforcing at most one posting attempt per durable occurrence identity. Crashes after claim may forfeit alerts to avoid double posting; unconstrained retry loops are prohibited.
 41. **Fail-Closed Teardown Marker Retention**: If background scheduler cancellation fails during `AccountLeaveProtocol.executeLeave()`, the process retains `wipe.marker` and remains frozen fail-closed. Rolling back to an unfrozen state with an un-cleared wipe marker is forbidden.
 42. **Opaque OS Alarm Handle Identity**: `ScheduledAlarmHandle` serializes strictly non-sensitive identity keys (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`, `triggerAtEpochMs`). Task titles and user payload text are never passed to OS alarm schedulers; title text is fetched freshly from SQLite at delivery time after account and generation validation.
-43. **Android Storage Barrier & Identity-Only Receivers**: `DoggoAlarmReceiver` and `ReminderRestoreReceiver` enforce `android:exported="false"`, verify `UserManager.isUserUnlocked` before accessing databases, validate identity-only intent extras with no user text in alarm PendingIntent extras or data URIs, and run bounded under `goAsync()` with a 9,000ms cooperative timeout.
+43. **Android Storage Barrier & Identity-Only Receivers**: `TabbyRushAlarmReceiver` and `ReminderRestoreReceiver` enforce `android:exported="false"`, verify `UserManager.isUserUnlocked` before accessing databases, validate identity-only intent extras with no user text in alarm PendingIntent extras or data URIs, and run bounded under `goAsync()` with a 9,000ms cooperative timeout.
 44. **Coordinated Four-Stage Account Teardown**: `CompositeLeaveSchedulerCancelGate` guarantees clean quiescence during account departure by strictly sequencing: (1) delivery gate drain, (2) schedule observation job cancellation, (3) WorkManager sync task cancellation, and (4) AlarmManager/notification clearing. In contrast, local runtime teardown (`closeRuntimeInternal`) initiates delivery gate draining and cancels observation without joining before closing the Room database.
 45. **Cold-Start Notification Navigation Buffering**: When `MainActivity` receives `ACTION_VIEW_TASK` while authentication or task storage is hydrating, `SessionViewModel.selectTaskFromNotification` buffers the target in `pendingTarget`. Upon data load, it verifies that the active account matches the notification intent and has no pending wipe marker before opening the task editor.
 
 
 ## 6. Deadlines, Reminders & Strict Upgrade Design (Phases 01–12 Status)
 
-Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved). Phase 02 logic contracts and platform candidate adapters delivered on 2026-10-15 (Gate G2 physical native delivery formally recorded as BLOCKED pending missing host prerequisites). Phase 03 backend contracts, admission guards, and in-place migration engine delivered on 2026-10-15 with passing unit/contract checks; production admission remains on hold with Gate G3 live multi-instance replica-set acceptance unexecuted pending staging testbed, coordination-document compatibility/backfill for documents missing `permitCount` requiring live verification, and exact cumulative accounting across mid-batch crash interruption requiring formal revalidation. Phase 04 operator tooling delivered on 2026-10-15. Phase 05 Shared Task Model & Explicit Room v2 Migration delivered on 2026-10-15: Room database version 2 schema, explicit `MIGRATION_1_2`, shared temporal models (`TaskDeadline`, `ReminderRule`, checked 64-bit arithmetic in `Todo`), and new entities (`AccountLocalSettingsEntity`, `ReminderDeliveryLedgerEntity`) verified via `:shared:jvmTest` (128 passing tests). Phase 06 Client Version Transition, Safe Replay & Intention Preservation delivered on 2026-10-15: `ContractTransitionCoordinator` 7-state / 6-transition pipeline, legacy receipt reconciliation under `RouteClassification.DUAL_AUTH_STRICT`, intent-masked rebasing in `RoomAccountStore.reconcileAccepted()`, atomic cleanup via `DoggoDao.discardRegressiveReconcileAtomic()`, and migration-mode equal-revision temporal enrichment in `StagedFullScan` verified via reported test suites (243 passing checks with 0 failures); connected platform acceptance and live mixed-version cutover remain pending Phases 08–11.
+Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved). Phase 02 logic contracts and platform candidate adapters delivered on 2026-10-15 (Gate G2 physical native delivery formally recorded as BLOCKED pending missing host prerequisites). Phase 03 backend contracts, admission guards, and in-place migration engine delivered on 2026-10-15 with passing unit/contract checks; production admission remains on hold with Gate G3 live multi-instance replica-set acceptance unexecuted pending staging testbed, coordination-document compatibility/backfill for documents missing `permitCount` requiring live verification, and exact cumulative accounting across mid-batch crash interruption requiring formal revalidation. Phase 04 operator tooling delivered on 2026-10-15. Phase 05 Shared Task Model & Explicit Room v2 Migration delivered on 2026-10-15: Room database version 2 schema, explicit `MIGRATION_1_2`, shared temporal models (`TaskDeadline`, `ReminderRule`, checked 64-bit arithmetic in `Todo`), and new entities (`AccountLocalSettingsEntity`, `ReminderDeliveryLedgerEntity`) verified via `:shared:jvmTest` (128 passing tests). Phase 06 Client Version Transition, Safe Replay & Intention Preservation delivered on 2026-10-15: `ContractTransitionCoordinator` 7-state / 6-transition pipeline, legacy receipt reconciliation under `RouteClassification.DUAL_AUTH_STRICT`, intent-masked rebasing in `RoomAccountStore.reconcileAccepted()`, atomic cleanup via `TabbyRushDao.discardRegressiveReconcileAtomic()`, and migration-mode equal-revision temporal enrichment in `StagedFullScan` verified via reported test suites (243 passing checks with 0 failures); connected platform acceptance and live mixed-version cutover remain pending Phases 08–11.
 
 ### 6.1 Wire Schema & Fingerprints
 - Target sync protocol: `strict-v2`. Full replacement payloads, absent fields rejected, nulls explicit.
 - Canonical schema files:
-  - `strict-v1`: `integration/glean-hub/doggo-schema-v1.json` (fingerprint: `3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec`).
-  - `strict-v2`: `integration/glean-hub/doggo-schema-v2.json` (fingerprint: `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`).
-  - Active `integration/glean-hub/doggo-schema.json` remains strictly on v1 until cutover.
+  - `strict-v1`: `integration/glean-hub/tabbyrush-schema-v1.json` (fingerprint: `3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec`).
+  - `strict-v2`: `integration/glean-hub/tabbyrush-schema-v2.json` (fingerprint: `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`).
+  - Active `integration/glean-hub/tabbyrush-schema.json` remains strictly on v1 until cutover.
 - Table columns (16): `id` (string), `title` (string), `completed` (boolean), `createdAt` (integer), `deadlineDate` (nullable string), `deadlineTime` (nullable string), `deadlineZone` (nullable string), `deadlineOffsetSeconds` (nullable integer), `reminderAnchorTime` (nullable string), `deadlineAnchorEpochMs` (nullable integer), `deadlineOverdueEpochMs` (nullable integer), `reminderEnabled` (boolean), `reminderLeadMinutes` (integer), `reminderIntervalMinutes` (nullable integer), `reminderCount` (integer), `scheduleToken` (nullable string). Primary key: `id`.
 
 ### 6.2 Strict Binary Digest Specification
@@ -497,7 +497,7 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
   - Booleans: 1 byte (`0x00`=false, `0x01`=true).
   - Integers: 8-byte big-endian two's complement signed 64-bit integers (`createdAt`, `reminderLeadMinutes`, `reminderCount`). Nullable integers use 1 byte presence tag (`0x00`=null, `0x01`=present + 8 bytes).
 - Validation rules: Wire input with `reminderCount == 1` MUST have `reminderIntervalMinutes: null`; wire input with non-null interval is rejected (`invalidRecord`), never silently normalized. Repeating count 2..10 requires interval >= 15m. Last scheduled occurrence cannot exceed anchor instant.
-- Reference vectors: `integration/glean-hub/strict-v2-vectors.json` stores 9 valid vectors with explicit preimage hex and SHA-256 hashes, and 11 boundary/overflow rejection vectors. Validated across Kotlin (`dev.doggo.shared.contract.StrictSyncV2Digest`), Rust (`glean_hub_sync::models::strong_sync_v2`), and Node (`scripts/strict-v2-vector-runner.mjs`) per Phase 01 QA report ([QA report](../plans/reports/qa-261015-0938-phase-01-freeze-temporal-model.md)).
+- Reference vectors: `integration/glean-hub/strict-v2-vectors.json` stores 9 valid vectors with explicit preimage hex and SHA-256 hashes, and 11 boundary/overflow rejection vectors. Validated across Kotlin (`dev.tabbyrush.shared.contract.StrictSyncV2Digest`), Rust (`glean_hub_sync::models::strong_sync_v2`), and Node (`scripts/strict-v2-vector-runner.mjs`) per Phase 01 QA report ([QA report](../plans/reports/qa-261015-0938-phase-01-freeze-temporal-model.md)).
 
 ### 6.3 Management API, Fencing & In-Place Migration (Phase 03 Delivered Logic)
 - **Delivered Endpoints**:
@@ -522,14 +522,14 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
 - **Gate G2 Blocked**: Physical native delivery is formally blocked on missing implementation and workstation prerequisites:
   1. Android: Android native reminder adapters, receivers, and cancel gates delivered in Phase 08; connected physical device/emulator and Doze mode execution remain pending Phase 11.
   2. Linux: Process-scoped scheduler, ServiceLoader SPI provider, D-Bus notification adapter, and composite leave cancel gate delivered in Phase 09; live desktop session notification display with an active notification daemon remains pending Phase 11.
-  3. Windows: Process-scoped scheduler, Windows adapter wrapper, AUMID configuration (`dev.doggo.desktop`), and group scoping delivered in Phase 09; native WinRT/COM toast bridge (`JnaWindowsToastBridge`) remains an unintegrated candidate stub (`Unavailable`), and installed MSI testing is pending Phase 11.
+  3. Windows: Process-scoped scheduler, Windows adapter wrapper, AUMID configuration (`dev.tabbyrush.desktop`), and group scoping delivered in Phase 09; native WinRT/COM toast bridge (`JnaWindowsToastBridge`) remains an unintegrated candidate stub (`Unavailable`), and installed MSI testing is pending Phase 11.
 ### 6.6 Hub Versioned Admission & Migration Status (Phase 03 / Gate G3 Staging Hold)
 - **Delivered Logic Contracts**: Strict upgrade models, coordination permit service, in-place migration engine, app-scoped admin authorization middleware, and legacy receipt reconciliation routes in `glean-hub-sync`.
 - **Automated Verification**: Reported test runs pass 54 tests in Rust `glean-hub-sync` (1 ignored: `test_strong_sync_live_mongo_acceptance_gate` due to missing `MONGO_TEST_URI`), 23/23 vector runner checks (`scripts/strict-v2-vector-runner.mjs`), 18/18 live smoke offline fixture checks (`hub-live-smoke.mjs --fixture-test`), and 116 shared JVM tests (`:shared:jvmTest --dependency-verification=off`).
 - **Gate G3 Staging Hold**: Phase 03 backend contracts and logic are delivered with passing unit/contract checks. Production admission remains on hold: (1) Gate G3 live multi-instance replica-set acceptance is unexecuted pending staging testbed, (2) coordination-document compatibility/backfill for documents missing `permitCount` requires live verification, and (3) exact cumulative accounting across mid-batch crash interruption requires formal revalidation.
 
 ### 6.7 Client Version Transition, Safe Replay & Intention Preservation (Phase 06 Delivered)
-- **Delivered Logic Contracts**: `ContractTransitionCoordinator` in `:shared` managing the 6-phase transition pipeline (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`), durable phase checkpoints in `account_sync_meta`, legacy receipt DTOs and client integration under `RouteClassification.DUAL_AUTH_STRICT`, intent-masked non-destructive rebasing in `RoomAccountStore.reconcileAccepted()`, atomic transactional cleanup for regressive server revisions via `DoggoDao.discardRegressiveReconcileAtomic()`, migration-mode equal-revision temporal enrichment in `StagedFullScan`, and accessible `isUnknownSuperseded` warning card in Compose UI `ConflictReview`.
+- **Delivered Logic Contracts**: `ContractTransitionCoordinator` in `:shared` managing the 6-phase transition pipeline (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`), durable phase checkpoints in `account_sync_meta`, legacy receipt DTOs and client integration under `RouteClassification.DUAL_AUTH_STRICT`, intent-masked non-destructive rebasing in `RoomAccountStore.reconcileAccepted()`, atomic transactional cleanup for regressive server revisions via `TabbyRushDao.discardRegressiveReconcileAtomic()`, migration-mode equal-revision temporal enrichment in `StagedFullScan`, and accessible `isUnknownSuperseded` warning card in Compose UI `ConflictReview`.
 - **Automated Verification**: Total 243 executed checks passed with 0 failures:
   1. `:shared:jvmTest` (155 tests PASS across 20 classes), including `ContractTransitionTest` (4 tests), `AccountSyncCoordinatorTest` (9 tests), `HubSyncClientTest` (12 tests), `OutboxReconciliationTest` (12 tests), `StagedFullScanTest` (13 tests), `RoomAccountStoreTest` (21 tests), `TodoSemanticsTest` (8 tests).
   2. `:desktopApp:test` (32 tests PASS across 6 classes).
@@ -544,7 +544,7 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
 - **Code Review Remediations Applied**:
   1. Outbox error state mutation admission: Wrapped all outbox error state transitions (retryable failures, malformed accepted revisions, unrecognized statuses) in `store.withMutationLock` to ensure gate admission tracking and schedule invalidation flow notifications.
   2. Teardown abort fail-closed consistency: Retained frozen state and persistent `wipe.marker` on teardown abort if scheduler cancellation fails.
-  3. Ledger notification removal acknowledgment: Added `clearPostedNotificationId()` to acknowledged native removals in the SQLite ledger via `DoggoDao.clearPostedNotificationId`.
+  3. Ledger notification removal acknowledgment: Added `clearPostedNotificationId()` to acknowledged native removals in the SQLite ledger via `TabbyRushDao.clearPostedNotificationId`.
   4. Volatile gate reference: Annotated `store.deliveryGate` with `@kotlin.jvm.Volatile` in `RoomAccountStore` for multi-threaded visibility across coroutine dispatchers.
   5. Authoritative teardown barrier proof: Implemented `ReminderTeardownBarrierSqliteTest` demonstrating that `AccountLeaveProtocol.executeLeave()` enters `CLOSING` and drains in-flight delivery callbacks before closing Room or deleting database files.
 - **Automated Verification**: Total 270 executed checks passed with 0 failures:
@@ -558,9 +558,9 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
 
 ### 6.9 Android Alarms, Private Notifications and Restoration (Phase 08 / Gate G2 Logic Delivered)
 - **Delivered Logic Contracts**:
-  - `AndroidNotificationAdapter`: Native adapter implementing `NativeReminderAdapter`. Manages the `doggo_reminders` high-importance notification channel with `VISIBILITY_PRIVATE`, pairs notifications with generic public fallbacks (`VISIBILITY_PUBLIC`, text: "Task reminder"), schedules exact alarms via `AlarmManager.setExactAndAllowWhileIdle` with graceful fallback to `setAndAllowWhileIdle`, and removes active notifications.
-  - `AndroidAlarmRegistry`: Synchronized SharedPreferences storage (`doggo_alarms_<accountKey>`) tracking active alarm keys (`generation:taskId:scheduleToken:occurrenceIndex`) and active notification IDs via synchronous `commit()` writes.
-  - `DoggoAlarmReceiver`: Non-exported (`android:exported="false"`) BroadcastReceiver handling `ACTION_DELIVER_REMINDER`. Enforces direct-boot storage check (`UserManager.isUserUnlocked`), parses identity-only extras, verifies absence of wipe markers, checks generation alignment, confirms active account match, and executes bounded delivery under `goAsync()` with a 9,000ms cooperative timeout via `ReminderSchedulingCoordinator`.
+  - `AndroidNotificationAdapter`: Native adapter implementing `NativeReminderAdapter`. Manages the `tabbyrush_reminders` high-importance notification channel with `VISIBILITY_PRIVATE`, pairs notifications with generic public fallbacks (`VISIBILITY_PUBLIC`, text: "Task reminder"), schedules exact alarms via `AlarmManager.setExactAndAllowWhileIdle` with graceful fallback to `setAndAllowWhileIdle`, and removes active notifications.
+  - `AndroidAlarmRegistry`: Synchronized SharedPreferences storage (`tabbyrush_alarms_<accountKey>`) tracking active alarm keys (`generation:taskId:scheduleToken:occurrenceIndex`) and active notification IDs via synchronous `commit()` writes.
+  - `TabbyRushAlarmReceiver`: Non-exported (`android:exported="false"`) BroadcastReceiver handling `ACTION_DELIVER_REMINDER`. Enforces direct-boot storage check (`UserManager.isUserUnlocked`), parses identity-only extras, verifies absence of wipe markers, checks generation alignment, confirms active account match, and executes bounded delivery under `goAsync()` with a 9,000ms cooperative timeout via `ReminderSchedulingCoordinator`.
   - `ReminderRestoreReceiver`: Non-exported (`android:exported="false"`) BroadcastReceiver handling system lifecycle events (`BOOT_COMPLETED`, `USER_UNLOCKED`, `MY_PACKAGE_REPLACED`, `TIME_SET`, `TIMEZONE_CHANGED`, `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`). Enforces direct-boot barrier, completes pending wipes via `completePendingWipesSuspend()`, and reconciles active account reminders under `goAsync()`.
   - `CompositeLeaveSchedulerCancelGate`: Composite cancellation gate enforcing a strict 4-stage teardown ordering: (1) `deliveryGate.closeAndDrain()` (throws on timeout), (2) `scheduleObserverJob.cancelAndJoin()`, (3) `syncScheduler.cancelAndAwait(accountKey)`, and (4) `reminderCoordinator.cancelAndAwait(accountKey)`.
   - `ReminderPermissionController`: Manages sealed capability states (`Exact`, `BestEffort`, `NotificationDenied`, `ChannelDisabled`), decoupled runtime permissions, and system settings intent factories.
@@ -591,7 +591,7 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
   - **Window Close Lifecycle vs. Teardown**: Ordinary window close in `DesktopController.dispose()` executes `disposeSuspend()`, cooperatively cancelling observers and draining runtime gates before closing Room database files and releasing the `SingleInstanceGuard` file lock; no background tray icon or hidden daemon process survives window exit.
   - **Linux Freedesktop D-Bus Notification Adapter (`LinuxNativeReminderAdapter`)**: Bridges shared `NativeReminderAdapter` to `org.freedesktop.Notifications` via `DbusLinuxNotificationAdapter` over `Dispatchers.IO`. Probes daemon capabilities and treats successful query as enabling notifications even if the capabilities list is empty (supporting minimal daemons like dunst and mako). Maps returned uint32 notification IDs to account keys in an in-memory map. `cancelAllForAccount()` aggregates daemon close errors and throws `IllegalStateException`.
   - **Startup Wipe Recovery Integration**: `DesktopController.completePendingWipesOnStartup()` catches exceptions during reminder cancellation and executes `return@forEach`, retaining `wipe.marker` and database files fail-closed if native notification cancellation fails.
-  - **Windows Candidate Adapter (`WindowsNativeReminderAdapter`)**: Configures AUMID `dev.doggo.desktop`, group prefix `d_${accountKey.value.take(12)}`, and tag `t_${taskId.take(16)}_$occurrenceIndex` with XML escaping on title and message text. `cancelAllForAccount()` iterates account-scoped identifiers and cancels group notifications.
+  - **Windows Candidate Adapter (`WindowsNativeReminderAdapter`)**: Configures AUMID `dev.tabbyrush.desktop`, group prefix `d_${accountKey.value.take(12)}`, and tag `t_${taskId.take(16)}_$occurrenceIndex` with XML escaping on title and message text. `cancelAllForAccount()` iterates account-scoped identifiers and cancels group notifications.
 - **Known Limitations & Technical Boundaries**:
   - *Process-Memory Tracking Limitation*: In both desktop adapters, posted notification ID tracking is held in in-memory collections (`ConcurrentHashMap`). If the process restarts or crashes with active desktop notifications displayed, subsequent startup wipe recovery cannot discover or clear those previously posted notifications through the adapter.
   - *Individual Removal Status*: In both desktop adapters, individual `removeOwnedNotification()` calls remove local tracking references without verifying whether the underlying native daemon or bridge succeeded in closing the notification.
@@ -623,7 +623,7 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
   - `RoomAccountStore` Temporal Projection Refactoring: Refactored `resolveTemporalProjection` so local drafts and outbox mutations take precedence as a complete snapshot unit over `server_base`. Explicit null deadline fields in local state are treated as an intentional clearing of the deadline rather than falling back field-by-field to `server_base` (verified by `testClearingDeadlineToServerBaseDoesNotResurrect`).
   - Schedule Token Semantic Rotation: `saveTodoLocally` enforces `hasScheduleSemanticChange()`. Editing task title or description preserves the existing `scheduleToken`; editing deadline date, time, zone, offset, or reminder rule generates a new UUID `scheduleToken`. (Task completion acts as an independent cancellation barrier in `PersistedScheduleProjector`).
   - Platform Controller Integrations: `SessionViewModel` on Android routes notification deep links through `openEdit(task)` ensuring full deadline hydration, preventing accidental schedule wipe on edit; emits 15s `ClockTick` flow. `DesktopController` on Desktop coordinates settings actions, submit validation, and 15s `ClockTick` flow.
-  - `DateTimePickerButton`, `DoggoDatePickerDialog`, `DoggoTimePickerDialog`, and `DateTimePickerFormats` (`date-time-pickers.kt`): Shared Material 3 controls used for deadline date, deadline time, the task's date-only reminder anchor, and settings default anchor. DatePicker has no mode toggle; time selection is clock-dial only with no `TimeInput`, enforcing no date/time typing for all four values.
+  - `DateTimePickerButton`, `TabbyRushDatePickerDialog`, `TabbyRushTimePickerDialog`, and `DateTimePickerFormats` (`date-time-pickers.kt`): Shared Material 3 controls used for deadline date, deadline time, the task's date-only reminder anchor, and settings default anchor. DatePicker has no mode toggle; time selection is clock-dial only with no `TimeInput`, enforcing no date/time typing for all four values.
   - Date handling normalizes initial and selected epoch milliseconds through UTC midnight and converts back through UTC, preventing local-zone day drift; DatePicker is configured for years `0..9999`. Dates and times remain canonical `YYYY-MM-DD` / 24-hour `HH:mm` strings. Deadline timezone and DST gap/overlap resolution remain on the existing `DeadlineCalculatorHelpers` / `StrictTimeZoneResolver` path.
 - **Automated Verification & Recorded Results**:
   - QA test execution report (`plans/reports/qa-261015-2245-phase-10-validation.md`) records 306 automated test/check assertions across 7 test suites, plus 2 packaging assembly builds (`:desktopApp:createDistributable` standalone bundle and `:androidApp:assembleDebug` APK build), totaling 308 checks (189 shared JVM tests across 26 classes, 49 desktop tests across 10 classes, 12 Android unit tests across 4 classes, 23 strict-v2 vectors/fingerprints, 18 Hub offline fixture smoke checks, 6 static release security checks, 9 Hub strict upgrade CLI tests).
@@ -632,7 +632,7 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
 
 ### 6.12 Adversarial Integration, File-Backed SQLite Persistence and Platform Acceptance Boundaries (Phase 11 / Gate G6 Logic Delivered)
 - **Delivered Architecture, Adversarial Testing & Tooling**:
-  - **Adversarial Scheduler Boundary Suite (`AdversarialSchedulerBoundaryTest`)**: Multiplatform test suite verifying mathematical and temporal edge cases in `dev.doggo.shared.contract`:
+  - **Adversarial Scheduler Boundary Suite (`AdversarialSchedulerBoundaryTest`)**: Multiplatform test suite verifying mathematical and temporal edge cases in `dev.tabbyrush.shared.contract`:
     - *Repetition bounds*: Strictly rejects intervals < 15 minutes, repetition counts < 1 or > 10, and non-repeating intervals when count == 1.
     - *Arithmetic overflow*: Checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) prevents timestamp overflow on adversarial inputs.
     - *Date-only morning overdue calculation*: Integrates production `DeadlineCalculatorHelpers.validateAndComputeDeadline` path to prove that date-only tasks (09:00:00 local anchor) do not become overdue during the anchor morning; overdue boundary is strictly the start of the next calendar day in the captured timezone (tested across DST fall-back transitions).
@@ -646,15 +646,15 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
     - *Cross-contract intent rebase*: Verifies that a client submitting a strict-v1 title-only modification against a remote record with a strict-v2 deadline rebases cleanly via intent masking, preserving the remote deadline and reminder rule without clobbering temporal attributes.
     - *Conflict lock isolation*: Confirms that an operation encountering `UNKNOWN_SUPERSEDED` locks subsequent row mutations fail-closed until explicitly resolved.
   - **Debug Fault-Injection Proxy (`scripts/debug-fault-proxy.mjs` & `debug-fault-proxy.test.mjs`)**: Loopback HTTP fault proxy simulating real-world network anomalies:
-    - Allowlisted routes: `/api/v1/sync/doggo/strong/push`, `/api/v1/sync/doggo/strong/pull`, and `/api/v1/sync/doggo/strong/legacy-receipts`.
+    - Allowlisted routes: `/api/v1/sync/tabby-rush/strong/push`, `/api/v1/sync/tabby-rush/strong/pull`, and `/api/v1/sync/tabby-rush/strong/legacy-receipts`.
     - Sensitive log redaction: Unlisted path rejections (403) log the HTTP method only, completely suppressing client URL path strings to prevent sensitive parameter reflection in logs.
     - Fault scenarios: `drop-push-response`, `drop-legacy-receipts-response`, and upstream 502 Bad Gateway forwarding. On dropped responses, the proxy terminates the client socket to accurately simulate connection hangups.
 - **Production Remediations Verified in Phase 11**:
-  - *Projector Token Assignment Fix*: In `shared/src/commonMain/kotlin/dev/doggo/shared/contract/persisted-schedule-projector.kt`, the outbox fold under `INTENT_REMINDER` now assigns `scheduleToken = op.scheduleToken` when `deadline != null && op.scheduleToken != null`. Previously, omitting this assignment emitted a stale base token, causing native adapters to skip rescheduling modified reminders.
+  - *Projector Token Assignment Fix*: In `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-schedule-projector.kt`, the outbox fold under `INTENT_REMINDER` now assigns `scheduleToken = op.scheduleToken` when `deadline != null && op.scheduleToken != null`. Previously, omitting this assignment emitted a stale base token, causing native adapters to skip rescheduling modified reminders.
   - *Temporal Fixture Alignment*: America/New_York offsets for 2026-11-01 15:00 were corrected from `-14400L` (EDT) to `-18000L` (EST) across `AdversarialSchedulerBoundaryTest.kt` and `AdversarialSyncSqliteTest.kt`, eliminating contradictions with the 02:00 DST fallback.
 - **Automated Verification & Recorded Results**:
   - Total 397 reported verification targets across 14 verification groups (393 automated test and contract checks: 392 passed, 0 failures, 1 ignored live Mongo test: `test_strong_sync_live_mongo_acceptance_gate` in `glean-hub-sync` when `MONGO_TEST_URI` is unset; plus 4 build, lint, and packaging targets passed).
-  - Doggo client suites: `:shared:jvmTest` (202 tests PASS across 28 classes), `:desktopApp:test` (49 tests PASS across 10 classes), `:androidApp:testDebugUnitTest` (12 tests PASS across 4 classes), `strict-v2-vector-runner.mjs` (23/23 checks PASS), `hub-live-smoke.mjs --fixture-test` (18/18 checks PASS), `release-security-check.mjs --diagnose-source` (6/6 checks PASS), `hub-strict-upgrade.test.mjs` (9/9 CLI tests PASS), `debug-fault-proxy.test.mjs` (6/6 proxy tests PASS), `:desktopApp:createDistributable` (standalone Linux bundle PASS), `:androidApp:assembleDebug` (debug APK PASS).
+  - TabbyRush client suites: `:shared:jvmTest` (202 tests PASS across 28 classes), `:desktopApp:test` (49 tests PASS across 10 classes), `:androidApp:testDebugUnitTest` (12 tests PASS across 4 classes), `strict-v2-vector-runner.mjs` (23/23 checks PASS), `hub-live-smoke.mjs --fixture-test` (18/18 checks PASS), `release-security-check.mjs --diagnose-source` (6/6 checks PASS), `hub-strict-upgrade.test.mjs` (9/9 CLI tests PASS), `debug-fault-proxy.test.mjs` (6/6 proxy tests PASS), `:desktopApp:createDistributable` (standalone Linux bundle PASS), `:androidApp:assembleDebug` (debug APK PASS).
   - Glean Hub backend suites: `cargo test -p glean-hub-sync --locked` (54 passed, 1 ignored), `cargo clippy -p glean-hub-sync --locked` (clean, 0 warnings), `pnpm test:unit` (13 tests PASS), `pnpm build` (clean Vite production bundle).
   - Independent code review approved at **8.6 / 10** (`plans/reports/code-review-261015-2345-phase-11-adversarial-acceptance.md`).
 - **Gate Status & Platform Accounting (Honest Boundaries Policy)**:
@@ -668,10 +668,10 @@ Phase 01 Contract and Transition Design frozen on 2026-10-15 (Gate G1 approved).
 
 ### 6.13 Coordinated Cutover, Recovery Runbook & Release Documentation (Phase 12 Delivered)
 - **Delivered Architecture, Runbooks & Tooling**:
-  - **Authoritative Operational Runbook (`docs/strict-v2-cutover-runbook.md`)**: Complete, step-by-step operational guide for the strict-v1 to strict-v2 data-preserving schema migration on Glean Hub for Doggo. Enforces strict deployment ordering:
+  - **Authoritative Operational Runbook (`docs/strict-v2-cutover-runbook.md`)**: Complete, step-by-step operational guide for the strict-v1 to strict-v2 data-preserving schema migration on Glean Hub for TabbyRush. Enforces strict deployment ordering:
     1. *All-Node Hub Deployment*: Deploy fence-aware, version-capable Hub backend across all instances; ingress continues serving strict-v1.
-    2. *Client Publication*: Distribute Room v2 Doggo clients across Android, Linux, and Windows; client-side UI guard keeps deadline submission disabled with an upgrade prompt while the backend remains on v1.
-    3. *Non-Mutating Preflight*: Run dry-run validation via `node scripts/hub-strict-upgrade.mjs --app-id doggo --dry-run`.
+    2. *Client Publication*: Distribute Room v2 TabbyRush clients across Android, Linux, and Windows; client-side UI guard keeps deadline submission disabled with an upgrade prompt while the backend remains on v1.
+    3. *Non-Mutating Preflight*: Run dry-run validation via `node scripts/hub-strict-upgrade.mjs --app-id tabbyrush --dry-run`.
     4. *Controlled In-Place Upgrade*: Execute via CLI or Web Admin UI with a durable migration UUID. The backend fences new traffic, drains admitted request permits, transforms documents in batches of 500, validates all documents, publishes canonical `strict-v2` in `_schemas` via CAS, and releases the fence.
     5. *Mandatory Post-Cutover Read-Back*: Verify `syncMode === 'strict-v2'`, canonical fingerprint `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`, all 16 columns active, and unchanged active epoch UUID.
     6. *Client Replay & Transition*: Connected clients transition to `ready-v2`, reconcile legacy receipts, and unlock full deadline and reminder functionality.
@@ -701,24 +701,24 @@ The separate Sticky Task Surfaces plan delivered its shared contracts and Androi
 - Runtime-owned `observeTodos()` feeds task projections. `RoomAccountStore.setCompletedLocally` reloads under the mutation lock and returns `Missing`, `Unchanged`, or `Changed`; a changed task preserves current fields and advances `updatedAt` monotonically. Projections omit deleted tasks and separate incomplete/completed items; deadline selection retains conflict state.
 
 ### Android Glance widget
-- `DoggoTaskWidget` is a native Glance app widget with responsive layouts (`SizeMode.Responsive` for 2×2, 3×2, 3×3, 4×4+) and incomplete/completed task sections. Its actions open Doggo, start task creation, or request a desired completion state through the account-scoped surface access path.
-- Exported policy strictly limits Android components: only `MainActivity` and canonical `DoggoTaskWidgetReceiver` (with verified provider meta-data and `APPWIDGET_UPDATE` action) are exported; all other receivers are private (`android:exported="false"`). Zero exported services or content providers.
+- `TabbyRushTaskWidget` is a native Glance app widget with responsive layouts (`SizeMode.Responsive` for 2×2, 3×2, 3×3, 4×4+) and incomplete/completed task sections. Its actions open TabbyRush, start task creation, or request a desired completion state through the account-scoped surface access path.
+- Exported policy strictly limits Android components: only `MainActivity` and canonical `TabbyRushTaskWidgetReceiver` (with verified provider meta-data and `APPWIDGET_UPDATE` action) are exported; all other receivers are private (`android:exported="false"`). Zero exported services or content providers.
 - Account runtime observers refresh task and persisted-deadline projections; the widget shows unavailable/signed-out placeholders with zero title leakage rather than treating stale account data as current.
 - Lifecycle cleanup attempts to blank all widget IDs, publish signed-out state, close Glance sessions, and stop surface work before account data is removed. See “Lifecycle, acceptance, and open findings” below for the unresolved cleanup warning.
 
 ### Android quiet deadline notification
-- The opt-in task-surface notification uses the low-importance `doggo_task_surfaces` channel, with sound, vibration, lights, and badge disabled. Its content is private (`VISIBILITY_PRIVATE`); the public lock-screen version (`setPublicVersion`) is generic (“Task deadline reminder”, text: “Unlock device to view task title and details”) and directs the user to open Doggo without exposing task titles.
+- The opt-in task-surface notification uses the low-importance `tabbyrush_task_surfaces` channel, with sound, vibration, lights, and badge disabled. Its content is private (`VISIBILITY_PRIVATE`); the public lock-screen version (`setPublicVersion`) is generic (“Task deadline reminder”, text: “Unlock device to view task title and details”) and directs the user to open TabbyRush without exposing task titles.
 - The account runtime derives the next eligible deadline from persisted schedules; task-surface notification preference defaults to disabled. Actions use explicit immutable pending intents and account-token validation.
 - API 34+ swipe dismissal records a durable suppression key in `TaskSurfacePreferences`, preventing re-posting of the same selection and deadline across background sync, clock drift, or process restarts until selection or deadline changes.
 
 ### Compose Multiplatform desktop sticky window and tray
-- `DesktopStickyTaskController` owns the compact `StickyTaskContent` window, task observation, and actions. The window requests always-on-top behavior (`alwaysOnTop = true`). Tray controls are exposed only when the host reports usable tray support; they provide Open Doggo, show/hide, and Quit.
-- Closing the compact window hides it; explicit Quit tears down the surface runtime via unified suspend teardown (`quitSuspend()`), releasing the single-instance file lock (`doggo.lock`). When no usable tray is available, the application preserves a visible recovery path (unhiding the main window on sticky close) instead of allowing the sticky surface to strand the user.
+- `DesktopStickyTaskController` owns the compact `StickyTaskContent` window, task observation, and actions. The window requests always-on-top behavior (`alwaysOnTop = true`). Tray controls are exposed only when the host reports usable tray support; they provide Open TabbyRush, show/hide, and Quit.
+- Closing the compact window hides it; explicit Quit tears down the surface runtime via unified suspend teardown (`quitSuspend()`), releasing the single-instance file lock (`tabbyrush.lock`). When no usable tray is available, the application preserves a visible recovery path (unhiding the main window on sticky close) instead of allowing the sticky surface to strand the user.
 - `StickyWindowPreferences` persists only presentation state (visibility, geometry, and scale) outside Room. Defaults keep the window hidden. Geometry behavior is covered by unit tests; native stacking, tray operation, and multi-monitor/DPI restoration have not been accepted in an interactive Windows session and remain held at Gate G2.
 
 ### Lifecycle, acceptance, and open findings
 - Account leave/wipe coordinates surface shutdown with notifications, scheduled boundary work, widget blanking, Glance sessions, and presentation preferences before local account data removal.
-- *Open Android Safety Finding 1 (Delivery Drain Timeout)*: In `DoggoApplication.closeRuntimeInternal()` (`doggo-application.kt:188-203`), a drain timeout throws, is caught and logged, then returns before observer-job cancellation or Room closure. `closeActiveRuntime()` subsequently clears `activeRuntime` regardless. This leaves coroutine jobs running and the database unclosed; it is an incomplete teardown, not safe database closure.
+- *Open Android Safety Finding 1 (Delivery Drain Timeout)*: In `TabbyRushApplication.closeRuntimeInternal()` (`tabbyrush-application.kt:188-203`), a drain timeout throws, is caught and logged, then returns before observer-job cancellation or Room closure. `closeActiveRuntime()` subsequently clears `activeRuntime` regardless. This leaves coroutine jobs running and the database unclosed; it is an incomplete teardown, not safe database closure.
 - *Open Android Safety Finding 2 (Widget Cleanup Error Swallowing)*: In `task-widget-updater.kt:222-226, 240-244`, RemoteViews blanking and Glance session closure catch `Throwable` non-fatally during leave protocol, risking ghost widget state on launcher if AppWidgetManager fails.
 - *Glance Process Death & Provenance Holds*: Launcher session survival across OS process death and Glance artifact provenance remain physical execution holds.
 - Phase 07 results are report-attributed; the recorded Gradle build/test commands used `--dependency-verification=off`, so they do not close the 149-checksum verification baseline or separate Glance provenance hold.

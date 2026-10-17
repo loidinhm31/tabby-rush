@@ -10,21 +10,21 @@
 
 ### Scope
 - **Files reviewed**:
-  1. `shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-models.kt`
-  2. `shared/src/commonMain/kotlin/dev/doggo/shared/data/server-base-entity.kt`
-  3. `shared/src/commonMain/kotlin/dev/doggo/shared/data/editor-draft-entity.kt`
-  4. `shared/src/commonMain/kotlin/dev/doggo/shared/data/scan-staging-entity.kt`
-  5. `shared/src/commonMain/kotlin/dev/doggo/shared/data/outbox-entity.kt`
-  6. `shared/src/commonMain/kotlin/dev/doggo/shared/data/account-local-settings-entity.kt`
-  7. `shared/src/commonMain/kotlin/dev/doggo/shared/data/reminder-delivery-ledger-entity.kt`
-  8. `shared/src/commonMain/kotlin/dev/doggo/shared/data/doggo-dao.kt`
-  9. `shared/src/commonMain/kotlin/dev/doggo/shared/data/doggo-database.kt`
-  10. `shared/src/commonMain/kotlin/dev/doggo/shared/data/database-migrations.kt`
-  11. `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt`
-  12. `shared/schemas/dev.doggo.shared.data.DoggoDatabase/2.json`
-  13. `shared/src/commonTest/kotlin/dev/doggo/shared/contract/task-deadline-reminder-models-test.kt`
-  14. `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-migration-v1-to-v2-test.kt`
-  15. `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt`
+  1. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-models.kt`
+  2. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/server-base-entity.kt`
+  3. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/editor-draft-entity.kt`
+  4. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/scan-staging-entity.kt`
+  5. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/outbox-entity.kt`
+  6. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/account-local-settings-entity.kt`
+  7. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/reminder-delivery-ledger-entity.kt`
+  8. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/tabbyrush-dao.kt`
+  9. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/tabbyrush-database.kt`
+  10. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/database-migrations.kt`
+  11. `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt`
+  12. `shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/2.json`
+  13. `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-deadline-reminder-models-test.kt`
+  14. `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-migration-v1-to-v2-test.kt`
+  15. `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt`
 - **Lines of code analyzed**: ~3,288 lines
 - **Review focus**: Phase 05 shared temporal model, Room schema version 2 migration, outbox provenance/intent masks, account-local settings/ledger, BundledSQLite restart stability.
 - **Updated plans**: `plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-05-shared-model-and-room-migration.md`
@@ -64,7 +64,7 @@ JVM BundledSQLite test execution passes cleanly. Connected Android device testin
 2. **Non-Atomic Reconcile Cleanup on Regressive Server Revision**:
    - **Location**: `RoomAccountStore.kt:505-510`
    - **Impact**: When `serverRevision < currentBase.serverRevision`, the store deletes the draft (`deleteDraft`) and outbox (`deleteOutbox`) in separate non-transactional DAO calls. A crash or process termination between these calls leaves a partially reconciled state.
-   - **Remediation**: Wrap both operations in a single `@Transaction` method in `DoggoDao` (e.g., `discardRegressiveReconcileAtomic(opId, rowId, clearDraft)`).
+   - **Remediation**: Wrap both operations in a single `@Transaction` method in `TabbyRushDao` (e.g., `discardRegressiveReconcileAtomic(opId, rowId, clearDraft)`).
 
 ---
 

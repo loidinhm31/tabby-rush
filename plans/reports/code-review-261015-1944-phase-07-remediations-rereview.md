@@ -23,7 +23,7 @@ All test suites pass cleanly under JDK 21 Temurin (181 JVM unit/integration test
 #### 3.1. Un-gated Outbox Error State Writes
 - **Initial Status**: CRITICAL.
 - **Remediation Verified**:
-  - In `shared/src/commonMain/kotlin/dev/doggo/shared/sync/outbox-reconciliation.kt`:
+  - In `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/outbox-reconciliation.kt`:
     - All outbox error state writes (omitted op, rowId mismatch, digest mismatch, invalid acceptedRevision, revision conflict, retryable failure, op ID reuse/invalid record, unrecognized status) are now wrapped inside `store.withMutationLock { ... }`.
     - In the `RETRYABLE_FAILURE` branch, the implementation re-reads `current` from `store.dao.getOutboxEntry(op.opId)` and checks `current.deliveryState == OutboxEntity.STATE_DISPATCHING` under the mutation lock before updating consecutive failures, preventing resurrection of deleted or superseded records.
 - **Status**: **RESOLVED**.
@@ -31,7 +31,7 @@ All test suites pass cleanly under JDK 21 Temurin (181 JVM unit/integration test
 #### 3.2. Inconsistent Store Unfreezing on Teardown Abort
 - **Initial Status**: CRITICAL.
 - **Remediation Verified**:
-  - In `shared/src/commonMain/kotlin/dev/doggo/shared/sync/account-leave-protocol.kt`:
+  - In `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/account-leave-protocol.kt`:
     - Once `closeAndDrain()` is invoked in `performGuardedTeardown()`, none of the failure paths (`!drained`, generation read error, generation overflow `Long.MAX_VALUE`, marker persistence failure, scheduler cancel failure, database deletion failure) unfreeze the store.
     - `store.isFrozen` remains `true` (fail-closed), preventing inconsistent mutation admission while the delivery gate is `CLOSED`.
     - Only pre-teardown review abort (`review.hasReviewWork`) unfreezes the store before `closeAndDrain()` is called.
@@ -44,7 +44,7 @@ All test suites pass cleanly under JDK 21 Temurin (181 JVM unit/integration test
 #### 4.1. Perpetual Obsolete Notification Removals
 - **Initial Status**: WARNING.
 - **Remediation Verified**:
-  - `doggo-dao.kt` added `@Query("UPDATE reminder_delivery_ledger SET postedPlatformId = NULL, updatedAtEpochMs = :nowEpochMs WHERE accountKey = :accountKey AND generation = :generation AND postedPlatformId = :platformNotificationId")`.
+  - `tabbyrush-dao.kt` added `@Query("UPDATE reminder_delivery_ledger SET postedPlatformId = NULL, updatedAtEpochMs = :nowEpochMs WHERE accountKey = :accountKey AND generation = :generation AND postedPlatformId = :platformNotificationId")`.
   - Exposed via `ReminderOccurrenceStore.clearPostedNotificationId()`.
   - `ReminderSchedulingCoordinator.reconcile()` clears `postedPlatformId` in the SQLite ledger after successful native removal via `adapter.removeOwnedNotification()`. If the adapter throws, the record is retained as obsolete for subsequent retry.
 - **Status**: **RESOLVED**.
@@ -60,7 +60,7 @@ All test suites pass cleanly under JDK 21 Temurin (181 JVM unit/integration test
 #### 4.3. Staged Scan Promotion Decision Interleaving
 - **Initial Status**: WARNING.
 - **Remediation Verified**:
-  - In `shared/src/commonMain/kotlin/dev/doggo/shared/sync/staged-full-scan.kt`, the entire `promoteStaging` method is now defined as `= store.withMutationLock { ... }`.
+  - In `shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/staged-full-scan.kt`, the entire `promoteStaging` method is now defined as `= store.withMutationLock { ... }`.
   - The evaluation of `preScanConfirmed`, base comparison against current SQLite state, divergent revision checks, and atomic promotion are serialized under `withMutationLock`.
 - **Status**: **RESOLVED**.
 

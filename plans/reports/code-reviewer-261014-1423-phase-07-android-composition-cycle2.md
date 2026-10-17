@@ -1,13 +1,13 @@
 # Code Review Cycle 2: Phase 07 — Android composition & runtime integration
 
-Date: 2026-10-14 | Reviewer: ReviewerPhase07Cycle2 | Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-07-android-integration.md` (status lines updated)
+Date: 2026-10-14 | Reviewer: ReviewerPhase07Cycle2 | Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-07-android-integration.md` (status lines updated)
 
 ## Verdict: 3/10 — REJECT. Not buildable. Do not mark Phase 07 done.
 Cycle 1 API-name fixes landed partially; the same class of blind-edit defects remains (new unresolved symbols). Worse: `:androidApp` has no Kotlin plugin, so none of the Kotlin has ever been compiled by anything. Docs are now honest about unexecuted status (good); they still overstate cancel semantics.
 
 ## Critical (blocking)
 
-**C1. No Kotlin Android plugin in `androidApp/build.gradle.kts`.** Plugins = `android.application`, `compose.multiplatform`, `compose.compiler` only. AGP 8.7.3 has no built-in Kotlin. Verified: `./gradlew :androidApp:tasks --all` lists `compileDebugJavaWithJavac` but NO `compileDebugKotlin`. Every `.kt` file (app + androidTest) is ignored; APK would be built without `DoggoApplication`/`MainActivity` classes (crash at launch) — assembleDebug can "pass" green and be wrong. Fix: add `kotlin-android` alias (`org.jetbrains.kotlin.android`, version.ref kotlin) in catalog + root `apply false` + androidApp plugins; re-list tasks and confirm `compileDebugKotlin`.
+**C1. No Kotlin Android plugin in `androidApp/build.gradle.kts`.** Plugins = `android.application`, `compose.multiplatform`, `compose.compiler` only. AGP 8.7.3 has no built-in Kotlin. Verified: `./gradlew :androidApp:tasks --all` lists `compileDebugJavaWithJavac` but NO `compileDebugKotlin`. Every `.kt` file (app + androidTest) is ignored; APK would be built without `TabbyRushApplication`/`MainActivity` classes (crash at launch) — assembleDebug can "pass" green and be wrong. Fix: add `kotlin-android` alias (`org.jetbrains.kotlin.android`, version.ref kotlin) in catalog + root `apply false` + androidApp plugins; re-list tasks and confirm `compileDebugKotlin`.
 
 **C2. Unresolved symbols still in source (compile errors, verified by grep vs `shared/src`):**
 | Site | Problem | Real API |
@@ -23,11 +23,11 @@ Cycle-1 "C1 fixed" claim is therefore false. Expect more once the Kotlin plugin 
 **C4. Acceptance gates all unmet** (plan success criteria): no SDK/emulator → `assembleDebug` FAIL, `connectedDebugAndroidTest` not run, no merged-manifest inspection, no real Hub/proxy device run, lockfile is stub `empty=`, 7 PNGs are rendered mockups (docs now say so) not device captures. Phase stays pending; docs label this honestly.
 
 ## High
-- **H1. Startup wipe recovery fail-open** (`doggo-application.kt:68-90`): return of `deleteDatabaseAndArtifacts` ignored, then vault cleared + marker cleared + active account cleared even if DB files survive. Shared `AccountLeaveProtocol.completePendingWipe(...)` already implements "clear marker only if deleted" — reuse it (DRY + correctness). Also `clearActiveAccount()` runs for ANY wiped account, not just the active one (drops a healthy session). Also `runBlocking` Keystore call on main thread in `Application.onCreate` (ANR/StrictMode). Move to IO barrier before restore.
+- **H1. Startup wipe recovery fail-open** (`tabbyrush-application.kt:68-90`): return of `deleteDatabaseAndArtifacts` ignored, then vault cleared + marker cleared + active account cleared even if DB files survive. Shared `AccountLeaveProtocol.completePendingWipe(...)` already implements "clear marker only if deleted" — reuse it (DRY + correctness). Also `clearActiveAccount()` runs for ANY wiped account, not just the active one (drops a healthy session). Also `runBlocking` Keystore call on main thread in `Application.onCreate` (ANR/StrictMode). Move to IO barrier before restore.
 - **H2. `cancelAndAwait` is not a real quiescence barrier** (`android-sync-scheduler.kt:84-119`): (a) WorkManager marks CANCELLED immediately; `isFinished` poll does not prove the worker coroutine stopped. (b) Coordinator wait uses `tryLock` for 5s then silently proceeds → fail-open; a foreground sync round >5s lets leave close/delete the DB mid-round (isFrozen only fences at checkpoints). (c) Called via `coordinator.requestLeave()` (holds the mutex) it always burns 5s then proceeds. Fix: throw if mutex not acquired (shared leave protocol already rolls back on exception); don't hold the mutex in callers. Docs claim `coordinatorMutex.withLock` — inaccurate. Blocking `.get()` on Default dispatcher; prefer `await()`.
 - **H3. Login/register error swallowed (likely)** [INFERENCE, uncompiled]: failure sets state UNAUTHENTICATED; collector then runs `onUnauthenticated()` → `_uiState.value = TodoUiState()` which wipes the `safeError` that `handleAuth` set just before. Wrong-password message may never show. Fix: reset only account-bound fields, preserve safeError/transient form errors.
 - **H4. Leave failures silent**: `requestLeave`/`ConfirmLeave` return false (marker/gen write failed, scheduler cancel failed, delete failed) → nothing shown, `leaveGuard` stays up. Surface `SafeError`.
-- **H5. Release config**: `HUB_API_KEY="doggo-dev-api-key"` in `defaultConfig` ships in release; `https://hub.glean.dev` unvalidated placeholder. Release-specific `buildConfigField` required (Phase 08 gate), no dev key in release.
+- **H5. Release config**: `HUB_API_KEY="tabbyrush-dev-api-key"` in `defaultConfig` ships in release; `https://hub.glean.dev` unvalidated placeholder. Release-specific `buildConfigField` required (Phase 08 gate), no dev key in release.
 - **H6. `testWorkerFailsOnGenerationMismatch` fails for the wrong reason**: `restoreSession` requires `key == AccountKey.create(origin, userId)`; the fixture key `aaaa…` never matches → returns false (unasserted) → state UNAUTHENTICATED → worker returns `retry()`, test expects `failure()` → test fails/never reaches generation check. Derive key via `AccountKey.create(app.hubConfig.canonicalOrigin, userId)` and assert restore true.
 
 ## Medium
@@ -36,14 +36,14 @@ Cycle-1 "C1 fixed" claim is therefore false. Expect more once the Kotlin plugin 
 - Perf: every `progress` emission does full `loadTodos()` + `getAllOutbox()` (whole outbox) when `conflictCount>0`. Debounce / query by state. Conflict never cleared when count returns to 0.
 - `onAction` spawns an unordered coroutine per action (rapid toggles interleave). Serialize via a Channel/Mutex.
 - `active_account.dat`: non-atomic write (other files use tmp+ATOMIC_MOVE), plaintext email/username, main-thread I/O (`saveActiveAccount` inside collector), not covered by `file` exclude (only `accounts`), swallowed exceptions. Backup is off so impact is low; still add `<exclude domain="file" path="."/>`.
-- `DoggoApplication.instance` global lateinit used by VM/Worker/Scheduler; hurts testability; instrumented tests share state (setUp doesn't reset authSession). VM init collector's first emission resets `_uiState`, clobbering early actions (flaky tests: `delay(50)` assertions).
+- `TabbyRushApplication.instance` global lateinit used by VM/Worker/Scheduler; hurts testability; instrumented tests share state (setUp doesn't reset authSession). VM init collector's first emission resets `_uiState`, clobbering early actions (flaky tests: `delay(50)` assertions).
 - Scheduler KDoc doesn't document KEEP/re-enqueue policy (plan step 4 requires it). Safe in practice (full outbox drained per run + foreground trigger) but undocumented.
 - "Load more" (plan step 7) has no contract (`TodoAction` lacks it) — `loadTodos()` unpaged; UnknownSuperseded/protocol/reset only have generic safeError path. Needs Phase 06 contract owner.
 - `android-smoke.sh`: `--reverse` is moot (debug origin hard-coded `10.0.2.2:3000`, USB path 127.0.0.1 unsupported); `--capture` overwrites `android-debug-empty.png` with whatever screen is up; help text says emulator-5554 default but code auto-detects; never runs instrumented tests/Hub smoke.
 - `gradle.taskGraph.whenReady` release gate matches any task containing "Release" (lintVitalRelease etc.), reads `android` ext at execution time → requires `--no-configuration-cache` (undocumented in file); `proguard` not configured (minify=false OK until 08). Versions `work-runtime-ktx:2.9.1` and androidx.test coords hard-coded, not in catalog.
 
 ## Low
-- MainActivity wraps `Surface` outside `DoggoTheme` while `DoggoApp` already does Surface+Theme: redundant, drop.
+- MainActivity wraps `Surface` outside `TabbyRushTheme` while `TabbyRushApp` already does Surface+Theme: redundant, drop.
 - Proxy: forwards raw `clientReq.url` (not normalized path) → `/api/v1/auth/me/../../auth/login` passes allowlist (verified; upstream is loopback Hub only). Forward `url.pathname+search`. No `clientRes.on('error')`.
 - Placeholder launcher icon; `Log` lines print AccountKey (stable pseudonymous id); `SafeError` text built from raw `e.message`.
 
@@ -56,7 +56,7 @@ Cycle-1 "C1 fixed" claim is therefore false. Expect more once the Kotlin plugin 
 - Docs/summary now truthful about unexecuted gates.
 
 ## Reviewed files (25/25)
-androidApp: `build.gradle.kts`, `gradle.lockfile` (stub), `src/main/AndroidManifest.xml`, `res/xml/{backup_rules,data_extraction_rules}.xml`, `src/debug/AndroidManifest.xml`, `src/debug/res/xml/network_security_config.xml`, `main-activity.kt`, `doggo-application.kt`, `session-view-model.kt`, `android-sync-scheduler.kt`, `doggo-sync-worker.kt`, `todo-device-test.kt`, `background-isolation-test.kt`; `scripts/android-smoke.sh`, `scripts/debug-fault-proxy.mjs`; `docs/android-acceptance.md`, `docs/evidence/android-test-summary.md`; 7 PNGs (type/size checked: 1080x2400 RGB). Cross-read shared contracts/auth/sync/data signatures, `gradle/libs.versions.toml`, settings/root/shared build files.
+androidApp: `build.gradle.kts`, `gradle.lockfile` (stub), `src/main/AndroidManifest.xml`, `res/xml/{backup_rules,data_extraction_rules}.xml`, `src/debug/AndroidManifest.xml`, `src/debug/res/xml/network_security_config.xml`, `main-activity.kt`, `tabbyrush-application.kt`, `session-view-model.kt`, `android-sync-scheduler.kt`, `tabbyrush-sync-worker.kt`, `todo-device-test.kt`, `background-isolation-test.kt`; `scripts/android-smoke.sh`, `scripts/debug-fault-proxy.mjs`; `docs/android-acceptance.md`, `docs/evidence/android-test-summary.md`; 7 PNGs (type/size checked: 1080x2400 RGB). Cross-read shared contracts/auth/sync/data signatures, `gradle/libs.versions.toml`, settings/root/shared build files.
 
 ## Validation
 - `bash -n scripts/android-smoke.sh`: pass. `node --check scripts/debug-fault-proxy.mjs`: pass.

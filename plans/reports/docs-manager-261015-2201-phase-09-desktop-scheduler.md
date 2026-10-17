@@ -26,7 +26,7 @@ Prior to these updates, `./docs/system-architecture.md`, `./docs/linux-acceptanc
     2. `DesktopReminderScheduler` process-scoped wake loop with 15s bounded timeout on `Dispatchers.IO`, bounded re-evaluation against backward clock drift, replace-based conflated updates (`Channel.CONFLATED`), and SQLite claim-before-post grace window evaluation.
     3. `CompositeDesktopLeaveCancelGate` 5-step strict quiescence during account leave (`AccountLeaveProtocol`) vs. ordinary single-window close disposal in `DesktopController.dispose()`.
     4. `LinuxNativeReminderAdapter` Freedesktop D-Bus integration, capabilities probe tolerance for minimal daemons (dunst, mako), process-memory notification tracking, and fail-closed error propagation.
-    5. `WindowsNativeReminderAdapter` candidate adapter with AUMID `dev.doggo.desktop`, group `d_<accountKey.take(12)>`, tag `t_<taskId.take(16)>_<index>`, XML escaping, and explicit stub disclosure for unimplemented `JnaWindowsToastBridge`.
+    5. `WindowsNativeReminderAdapter` candidate adapter with AUMID `dev.tabbyrush.desktop`, group `d_<accountKey.take(12)>`, tag `t_<taskId.take(16)>_<index>`, XML escaping, and explicit stub disclosure for unimplemented `JnaWindowsToastBridge`.
     6. Disclosed limitations & technical boundaries: in-memory notification tracking limits across restarts, individual removal status verification absence, truncated Windows identifiers collision risk, and ordinary window close disposal error handling.
     7. Automated verification breakdown: 298 passing automated checks across 7 test/check groups plus 1 standalone packaging assembly build (`:desktopApp:createDistributable`).
 

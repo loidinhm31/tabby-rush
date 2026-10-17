@@ -3,8 +3,8 @@
 **Date:** 2026-10-14
 **Agent:** Phase02DocsManager
 **Scope:** Phase 02 Frozen Foundation & Domain Contracts Technical Documentation
-**Target Plan:** `plans/261013-1540-doggo-glean-hub-reuse/plan.md`
-**Phase File:** `plans/261013-1540-doggo-glean-hub-reuse/phase-02-frozen-foundation.md`
+**Target Plan:** `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md`
+**Phase File:** `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-02-frozen-foundation.md`
 
 ---
 

@@ -1,6 +1,6 @@
 # Code Review Cycle 3 — Phase 05 Durable Local State & Strict Per-Record Sync
 
-Date 2026-10-14 · Reviewer: EvcCodeReviewerPhase05Cycle3 · Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-05-local-sync-state.md`
+Date 2026-10-14 · Reviewer: EvcCodeReviewerPhase05Cycle3 · Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-05-local-sync-state.md`
 
 ## Score: **7/10** — NOT yet accepted. N2, N3 resolved. N1 only partly resolved: 1 critical (N1b) remains.
 
@@ -9,14 +9,14 @@ Date 2026-10-14 · Reviewer: EvcCodeReviewerPhase05Cycle3 · Plan: `plans/261013
 | # | Status | Evidence |
 |---|---|---|
 | N1 UNCERTAIN retry re-frozen | **Partial** | Part 1 fixed: `prepareAndFreezeBatch` UNCERTAIN branch keeps kind/expectedRevision/digest/epoch, flips to DISPATCHING only (`outbox-reconciliation.kt:72-78`). Part 2 (UnknownSuperseded) still wrong in common paths → see N1b. |
-| N2 freeze overwrites coalesced edit | **Resolved** | PENDING path uses `freezeOutboxAtomic` (`@Transaction` DAO, re-read by opId, requires `localRevision==expected && state==PENDING`; `doggo-dao.kt:214-226`). Stale → op dropped from batch, not pushed, row untouched. Coalesce only targets PENDING so UNCERTAIN branch has no race. Caveat: CAS only unit-tested on `FakeDoggoDao`; real-Room not exercised (SQLite txn serialization makes it sound by design). |
+| N2 freeze overwrites coalesced edit | **Resolved** | PENDING path uses `freezeOutboxAtomic` (`@Transaction` DAO, re-read by opId, requires `localRevision==expected && state==PENDING`; `tabbyrush-dao.kt:214-226`). Stale → op dropped from batch, not pushed, row untouched. Coalesce only targets PENDING so UNCERTAIN branch has no race. Caveat: CAS only unit-tested on `FakeTabbyRushDao`; real-Room not exercised (SQLite txn serialization makes it sound by design). |
 | N3 leave gate failure leaves marker + unfreezes | **Resolved** | Gate-fail → `onClearWipeMarker` → unfreeze only if clear succeeded; else stays frozen + marker (committed/fail-closed) (`account-leave-protocol.kt:114-130`). **QA cycle-3 report §3/§6 item 1 is stale**: it claims `catch(_){}` then unconditional `isFrozen=false`; current code has `markerCleared` guard. Test asserts marker cleared on happy-abort; marker-clear-failure path has no test. |
 
 ## Critical issues
 
 **N1b. `wasUncertain` proxy misses UNCERTAIN ops with `consecutiveFailures==0` → CONFLICT instead of UNKNOWN_SUPERSEDED.**
 - Dispatched snapshot is `op.copy(deliveryState=DISPATCHING)` (`:74`), so `op.deliveryState==UNCERTAIN` at `:248` is always false; only `op.consecutiveFailures>0` works.
-- `consecutiveFailures` incremented only in `markBatchUncertain` (`:173`) and RETRYABLE_FAILURE (`:271`). NOT incremented by: `recoverInterruptedDispatches` SQL (`doggo-dao.kt:76`, crash/restart — the canonical UNCERTAIN source), response-omitted / rowId-mismatch / digest-mismatch / acceptedRevision-mismatch paths (`updateDeliveryState`, `:193-232`).
+- `consecutiveFailures` incremented only in `markBatchUncertain` (`:173`) and RETRYABLE_FAILURE (`:271`). NOT incremented by: `recoverInterruptedDispatches` SQL (`tabbyrush-dao.kt:76`, crash/restart — the canonical UNCERTAIN source), response-omitted / rowId-mismatch / digest-mismatch / acceptedRevision-mismatch paths (`updateDeliveryState`, `:193-232`).
 - Reproduced (scratch test, deleted): DISPATCHING op → `recoverInterruptedDispatches` → `UNCERTAIN failures=0` → freeze → REVISION_CONFLICT → final state `CONFLICT` (expected `UNKNOWN_SUPERSEDED`). Violates plan §5/§6 ("conflict after previously uncertain delivery becomes UnknownSuperseded"); user gets plain conflict UX/reapply on an op that may have committed.
 - Existing N1 test only passes because it seeds `consecutiveFailures=1` (`outbox-reconciliation-test.kt:475`).
 - Fix: capture `wasUncertain` before flipping state (return pair/flag from `prepareAndFreezeBatch`, or persist an explicit `hasBeenUncertain`/`attempts` marker); or make recovery + all UNCERTAIN transitions increment `consecutiveFailures`. Add test: crash-recovered (failures=0) → retry → conflict → UNKNOWN_SUPERSEDED; and omitted-result → retry → conflict.
@@ -44,7 +44,7 @@ Date 2026-10-14 · Reviewer: EvcCodeReviewerPhase05Cycle3 · Plan: `plans/261013
 - Suite stable: 89 pre-existing tests pass.
 
 ## Reviewed files
-`shared/src/commonMain/.../sync/{outbox-reconciliation,account-leave-protocol,account-sync-coordinator(grep)}.kt`; `.../data/{doggo-dao,room-account-store}.kt`; `commonTest/.../sync/{outbox-reconciliation-test,account-leave-protocol-test}.kt`; plan phase-05; cycle-2 review + cycle-3 QA reports. ~1.2k LOC read.
+`shared/src/commonMain/.../sync/{outbox-reconciliation,account-leave-protocol,account-sync-coordinator(grep)}.kt`; `.../data/{tabbyrush-dao,room-account-store}.kt`; `commonTest/.../sync/{outbox-reconciliation-test,account-leave-protocol-test}.kt`; plan phase-05; cycle-2 review + cycle-3 QA reports. ~1.2k LOC read.
 
 ## Validation
 | Command | Result |

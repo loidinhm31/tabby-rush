@@ -2,10 +2,10 @@
 
 **Date**: 2026-10-15  
 **Execution Context**: Linux Fedora 44 x86_64 | Node.js v24.16.0 | pnpm 10.28.2 | JDK 21 LTS (`/home/loidinh/.local/share/jvm/jdk-21`) | Gradle 8.11.1  
-**Target Phase**: Phase 04 — Hub admin UI (`glean-hub-app`) and API-only upgrade script (`doggo`)  
+**Target Phase**: Phase 04 — Hub admin UI (`glean-hub-app`) and API-only upgrade script (`tabbyrush`)  
 **Repositories Tested**:
 - `/home/loidinh/WS/glean-hub/glean-hub-app`
-- `/home/loidinh/WS/doggo`
+- `/home/loidinh/WS/tabbyrush`
 - `/home/loidinh/WS/glean-hub/glean-hub-plugin/glean-hub-sync` (backend sanity check)
 
 ---
@@ -16,11 +16,11 @@
 |:---:|---|---|---|---|:---:|:---:|:---:|:---:|:---:|
 | 1 | `pnpm test:unit` | `glean-hub-app` | Sync admin service upgrade contracts & preload recovery | Node Unit Tests | 13 tests | 13 | 0 | 0 | 120.31 ms |
 | 2 | `pnpm build` | `glean-hub-app` | TypeScript type-check (`tsc`) + Vite production bundle | Build | 10,411 modules | Pass | 0 | 0 | 21.95s (9.87s vite) |
-| 3 | `node scripts/hub-strict-upgrade.test.mjs` | `doggo` | CLI upgrade runner preconditions, recovery, polling, redaction (mock server) | Node CLI Tests | 7 tests | 7 | 0 | 0 | 10.80s (10.74s runner) |
-| 4 | `node scripts/hub-live-smoke.mjs --fixture-test` | `doggo` | Offline fixture validation of strict-v1 sync protocol | Protocol Fixture Checks | 18 checks | 18 | 0 | 0 | Not captured |
-| 5 | `node scripts/strict-v2-vector-runner.mjs` | `doggo` | Canonical fingerprints & strict-v2 wire vector suite | Wire Vector Checks | 23 checks (2 fp + 21 vectors) | 23 | 0 | 0 | Not captured |
-| 6 | `node scripts/release-security-check.mjs --diagnose-source` | `doggo` | Static manifest, export, cleartext, secret rules | Static Audit Checks | 6 checks | 6 (0 findings) | 0 | 0 | Not captured |
-| 7 | `JAVA_HOME=... ./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` | `doggo` | Shared Kotlin Multiplatform JVM test suites | Gradle Task Run | 15 tasks executed | Pass | 0 | 0 | 6.97s wall |
+| 3 | `node scripts/hub-strict-upgrade.test.mjs` | `tabbyrush` | CLI upgrade runner preconditions, recovery, polling, redaction (mock server) | Node CLI Tests | 7 tests | 7 | 0 | 0 | 10.80s (10.74s runner) |
+| 4 | `node scripts/hub-live-smoke.mjs --fixture-test` | `tabbyrush` | Offline fixture validation of strict-v1 sync protocol | Protocol Fixture Checks | 18 checks | 18 | 0 | 0 | Not captured |
+| 5 | `node scripts/strict-v2-vector-runner.mjs` | `tabbyrush` | Canonical fingerprints & strict-v2 wire vector suite | Wire Vector Checks | 23 checks (2 fp + 21 vectors) | 23 | 0 | 0 | Not captured |
+| 6 | `node scripts/release-security-check.mjs --diagnose-source` | `tabbyrush` | Static manifest, export, cleartext, secret rules | Static Audit Checks | 6 checks | 6 (0 findings) | 0 | 0 | Not captured |
+| 7 | `JAVA_HOME=... ./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` | `tabbyrush` | Shared Kotlin Multiplatform JVM test suites | Gradle Task Run | 15 tasks executed | Pass | 0 | 0 | 6.97s wall |
 | * | `cargo test --locked` | `glean-hub-sync` | Rust Hub sync models, admission, and upgrade routes | Rust Backend Tests | 54 tests (+1 ignored) | 54 | 0 | 0 | 30.73s wall |
 
 **Execution Result**: All requested validation commands completed successfully with zero reported failures. UI interaction behavior and live backend migration remain unverified.
@@ -50,7 +50,7 @@
   - `stops at the visible boundary when session storage is unavailable`: PASS (0.11ms)
 - **Observed Diagnostics**:
   - `[auth] Missing API keys for: glean-hub (VITE_GLEAN_HUB_API_KEY)...`: logged during test environment initialization.
-  - `[AuthService] Suppressed server error: {"error":"Admin token not scoped to app doggo"}`: logged during 403 test case.
+  - `[AuthService] Suppressed server error: {"error":"Admin token not scoped to app tabbyrush"}`: logged during 403 test case.
 
 ### 2.2 Glean Hub App Production Build (`pnpm build`)
 - **Working Dir**: `/home/loidinh/WS/glean-hub/glean-hub-app`
@@ -65,8 +65,8 @@
   - Runtime font URL reference warnings: `/fonts/jetbrains-mono/*.woff2` and `/fonts/ibm-plex-sans/*.woff2` were not resolved at build time and remain unchanged for runtime resolution.
   - Dynamic import notices for embedded sub-apps (`money-insight`, `cham-lang`).
 
-### 2.3 Doggo Strict Upgrade CLI Test Suite (`node scripts/hub-strict-upgrade.test.mjs`)
-- **Working Dir**: `/home/loidinh/WS/doggo`
+### 2.3 TabbyRush Strict Upgrade CLI Test Suite (`node scripts/hub-strict-upgrade.test.mjs`)
+- **Working Dir**: `/home/loidinh/WS/tabbyrush`
 - **Command**: `node scripts/hub-strict-upgrade.test.mjs`
 - **Result**: PASS (exit 0, duration 10.74s runner / 10.80s wall time)
 - **Suite: `hub-strict-upgrade.mjs CLI tests` (7/7 PASS)**:
@@ -78,20 +78,20 @@
   - `handles interrupted POST by recovering status using the same migration ID`: PASS (10259.18ms)
   - `handles --status-only query for an existing migration`: PASS (41.48ms)
 
-### 2.4 Doggo Hub Live Smoke Fixture Test (`node scripts/hub-live-smoke.mjs --fixture-test`)
-- **Working Dir**: `/home/loidinh/WS/doggo`
+### 2.4 TabbyRush Hub Live Smoke Fixture Test (`node scripts/hub-live-smoke.mjs --fixture-test`)
+- **Working Dir**: `/home/loidinh/WS/tabbyrush`
 - **Scope**: Offline local HTTP fixture server self-test validating strict-v1 protocol invariants
 - **Result**: PASS (exit 0, 18/18 checks passed, duration not captured)
   - **Suite 1: Health & App Admission (2/2 PASS)**
     - `GET /api/v1/health` healthy without redirect (HTTP 200)
-    - `GET /api/v1/apps/doggo` echoes strict admission mode and schema (`syncMode=strict-v1`, `epoch=550e8400-e29b-41d4-a716-446655440000`)
+    - `GET /api/v1/apps/tabbyrush` echoes strict admission mode and schema (`syncMode=strict-v1`, `epoch=550e8400-e29b-41d4-a716-446655440000`)
   - **Suite 2: Security & Negative Route Isolation (3/3 PASS)**
     - Strict sync bootstrap rejects missing API key (HTTP 403)
     - Strict sync bootstrap rejects invalid API key (HTTP 403)
     - Legacy sync route rejects strict-v1 app with HTTP 426 (`protocolUnsupported`)
   - **Suite 3: Authentication & Access Session (4/4 PASS)**
     - User account registration (`POST /auth/register` HTTP 200)
-    - User credential login (`POST /auth/login` accessToken scoped to `doggo`)
+    - User credential login (`POST /auth/login` accessToken scoped to `tabbyrush`)
     - Token refresh exchange (`POST /auth/refresh`)
     - Identity and grants verification (`GET /auth/me`)
   - **Suite 4: Strict Strong Sync Operations (7/7 PASS)**
@@ -106,8 +106,8 @@
     - Revision-CAS delete produces permanent empty tombstone at revision 2
     - Pull confirms tombstone preservation (`rowId` match, `deleted: true`, `data: {}`)
 
-### 2.5 Doggo Strict-v2 Vector Runner (`node scripts/strict-v2-vector-runner.mjs`)
-- **Working Dir**: `/home/loidinh/WS/doggo`
+### 2.5 TabbyRush Strict-v2 Vector Runner (`node scripts/strict-v2-vector-runner.mjs`)
+- **Working Dir**: `/home/loidinh/WS/tabbyrush`
 - **Result**: PASS (exit 0, duration not captured)
 - **Fingerprint Parity (2/2 PASS)**:
   - Canonical strict-v1 SHA-256: `3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec`
@@ -126,8 +126,8 @@
 - **Rejection Vectors (11/11 PASS)**:
   - Rejections verified for revision out of range, payload on delete, negative created timestamp, negative lead minutes, repetition count out of bounds, interval not null when count=1, interval < 15 min, deadline parameters present without deadlineDate, missing required fields when deadlineDate present, invalid reminder anchor on timed deadlines, last reminder after anchor.
 
-### 2.6 Doggo Release Security Audit (`node scripts/release-security-check.mjs --diagnose-source`)
-- **Working Dir**: `/home/loidinh/WS/doggo`
+### 2.6 TabbyRush Release Security Audit (`node scripts/release-security-check.mjs --diagnose-source`)
+- **Working Dir**: `/home/loidinh/WS/tabbyrush`
 - **Mode**: Diagnostic Static Source Audit
 - **Result**: CLEAN (0 findings / 0 violations under script's static rules, exit 0, duration not captured)
   - `usesCleartextTraffic="false"` verified in base Android manifest: PASS
@@ -137,8 +137,8 @@
   - Release Hub origin enforces HTTPS (`https://api-glean-hub.qm-hub-v001.cloud`): PASS
   - Secret scanning audit: 0 hardcoded private keys or passwords detected in source: PASS
 
-### 2.7 Doggo Shared JVM Multiplatform Test Suite (`./gradlew :shared:jvmTest`)
-- **Working Dir**: `/home/loidinh/WS/doggo`
+### 2.7 TabbyRush Shared JVM Multiplatform Test Suite (`./gradlew :shared:jvmTest`)
+- **Working Dir**: `/home/loidinh/WS/tabbyrush`
 - **Command**: `JAVA_HOME=/home/loidinh/.local/share/jvm/jdk-21 ./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks`
 - **Result**: BUILD SUCCESSFUL in 6.97s wall time (15 actionable tasks: 15 executed)
 - **Note on Test Counts**: Individual test and suite counts are not directly emitted to stdout by Gradle without custom test logging and direct access to generated report XML files was not available during this run. The task completed with exit status 0 and 15 executed tasks.

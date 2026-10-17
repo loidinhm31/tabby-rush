@@ -11,7 +11,7 @@ Current schema/digest are fixed v1; current fresh-epoch script is destructive to
 ## Requirements
 - Exact v1/v2 admission, typed version-aware payloads/digest, preserved CAS/scan/tombstone guarantees.
 - One authorized migration operation, durable idempotency/exclusion and publish-last activation.
-- Physical `appDoggo` collection and strict epoch preserved. Live data gains defaults; tombstones remain empty; protected receipt/revision fields unchanged.
+- Physical `appTabbyRush` collection and strict epoch preserved. Live data gains defaults; tombstones remain empty; protected receipt/revision fields unchanged.
 - Reconciliation-only legacy receipts work on v2; no general legacy writes after activation.
 
 ## Architecture
@@ -27,8 +27,8 @@ Use phase-01 management API/state/permit contract. Server owns target schema reg
 
 ## Related code files
 Hub root `/home/loidinh/WS/glean-hub`.
-Modify `glean-hub-plugin/glean-hub-sync/src/models/{strong_sync,app,api}.rs`, `services/{app_service,strong_sync_service}.rs`, `routes/strong_sync.rs`, `middleware/{dual_auth,sync_mode_guard}.rs`, `src/lib.rs`, existing admission binary/service and backend tests; `docs/doggo-strict-sync.md`.
-Create focused `src/services/strict_upgrade_service.rs`, `src/models/strict_upgrade.rs`, `src/routes/strict_upgrades.rs`, and gate module within same plugin; no generic migration framework. Add behavior tests under current crate test convention. Doggo versioned fixture/digest vectors consumed read-only from phase 01.
+Modify `glean-hub-plugin/glean-hub-sync/src/models/{strong_sync,app,api}.rs`, `services/{app_service,strong_sync_service}.rs`, `routes/strong_sync.rs`, `middleware/{dual_auth,sync_mode_guard}.rs`, `src/lib.rs`, existing admission binary/service and backend tests; `docs/tabbyrush-strict-sync.md`.
+Create focused `src/services/strict_upgrade_service.rs`, `src/models/strict_upgrade.rs`, `src/routes/strict_upgrades.rs`, and gate module within same plugin; no generic migration framework. Add behavior tests under current crate test convention. TabbyRush versioned fixture/digest vectors consumed read-only from phase 01.
 
 ## Implementation Steps
 1. Add explicit supported contract/schema registry and version-aware request parsing; preserve v1 framing exactly and legacy isolation.
@@ -84,5 +84,5 @@ If selected permit algorithm cannot be proved on actual topology, replace design
   2. Concurrent read/write request permit drain under active migration.
   3. Crash injection during transform batches with resumption from checkpoint.
   4. Publish-response packet loss with idempotent replay.
-  5. Physical collection `appDoggo` and protected-field fingerprint preservation under real DB storage.
+  5. Physical collection `appTabbyRush` and protected-field fingerprint preservation under real DB storage.
 - **Residual Scope & Downstream Phases:** Downstream Phase 04 (Hub admin UI & upgrade script) and Phase 05 (Shared Room migration) can proceed on logic and contract foundations under Gate G1/Phase 03 logic delivery (Phase 06 implementation remains dependent on Phase 05), while Gate G3 live cluster execution and 3 open code remediations remain prerequisites for production admission.

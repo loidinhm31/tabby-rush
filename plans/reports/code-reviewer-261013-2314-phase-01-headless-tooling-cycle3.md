@@ -1,6 +1,6 @@
 # Code Review (Cycle 3, final): Phase 01 Headless tooling and Android environment
 
-Plan: plans/261013-1540-doggo-glean-hub-reuse/phase-01-headless-tooling.md (pending 0%; not edited, runtime gate unmet; do not mark accepted).
+Plan: plans/261013-1540-tabbyrush-glean-hub-reuse/phase-01-headless-tooling.md (pending 0%; not edited, runtime gate unmet; do not mark accepted).
 Score: **8.5/10** (prior 7.5). Static/script scope clean; all cycle-2 defects fixed + verified. Remaining: host-dependent test, unbounded `wait-for-device` in doc, runtime acceptance gate (env prerequisite).
 
 ## Critical

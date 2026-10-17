@@ -78,9 +78,9 @@ Proposed management API: `GET /api/v1/apps/:app_id/strict-contract`, `POST /api/
 - Map errors: unauthorized 401, app scope forbidden 403, invalid/unsupported schema 400, stale precondition/concurrent ID conflict 409, protocolUnsupported 426, migrationInProgress/indeterminateStorage 503. Existing envelope convention `{error,code}` retained; no account/task text in diagnostics.
 
 ## Related code files
-Roots: Doggo `/home/loidinh/WS/doggo`, Hub `/home/loidinh/WS/glean-hub`.
-- Modify later: Doggo `integration/glean-hub/doggo-schema.json`, `docs/system-architecture.md`, `docs/local-storage-and-sync.md`, `docs/hub-schema-integration.md`; Hub `docs/doggo-strict-sync.md`.
-- Reference: Doggo `shared/src/commonMain/kotlin/dev/doggo/shared/{contract/strict-sync-contract,data/outbox-entity,sync/outbox-reconciliation}.kt`; Hub `glean-hub-plugin/glean-hub-sync/src/{models/strong_sync,services/strong_sync_service,services/app_service,middleware/dual_auth}.rs`.
+Roots: TabbyRush `/home/loidinh/WS/tabbyrush`, Hub `/home/loidinh/WS/glean-hub`.
+- Modify later: TabbyRush `integration/glean-hub/tabbyrush-schema.json`, `docs/system-architecture.md`, `docs/local-storage-and-sync.md`, `docs/hub-schema-integration.md`; Hub `docs/tabbyrush-strict-sync.md`.
+- Reference: TabbyRush `shared/src/commonMain/kotlin/dev/tabbyrush/shared/{contract/strict-sync-contract,data/outbox-entity,sync/outbox-reconciliation}.kt`; Hub `glean-hub-plugin/glean-hub-sync/src/{models/strong_sync,services/strong_sync_service,services/app_service,middleware/dual_auth}.rs`.
 - Create during execution: versioned canonical v1/v2 fixtures and vector fixture under existing integration/test conventions; no implementation files in this planning session.
 
 ## Implementation Steps

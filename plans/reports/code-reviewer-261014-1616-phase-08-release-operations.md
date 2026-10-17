@@ -5,7 +5,7 @@ Score: **3/10 — NOT ACCEPTED**
 ## Critical (MUST FIX)
 1. **hub-live-smoke.mjs contradicts frozen contract (docs/api-contract.md, hub-schema-provision.mjs, hub-compatibility-smoke.mjs).** Would fail against a real Hub; 15/15 is circular (fixture encodes same wrong contract).
    - Auth: register/login send `{username,password}`; contract = `{username,email,password}` / `{email,password}`. Reads `token`; contract = `accessToken`. No approval polling (`/apps/access-requests`), `/auth/me` result not used.
-   - Admission read-back: `GET /api/v1/strict-apps/doggo` (not a contract route) vs `GET /api/v1/apps/:id`. Epoch/protocol/schema not verified.
+   - Admission read-back: `GET /api/v1/strict-apps/tabbyrush` (not a contract route) vs `GET /api/v1/apps/:id`. Epoch/protocol/schema not verified.
    - Push: omits `protocol`, `epoch`, per-op `epoch/tableName/digest`; uses `action/baseRevision`+`acks/ack/conflict` vs `kind/expectedRevision` + `results/accepted/revisionConflict`. Pull: `limit` vs `batchSize`/`tableName`/`epoch`/`cursor`. rowIds not UUIDv4.
    - Legacy rejection probes invented route `/sync/legacy/...`, accepts 400/403/404; contract = 426 `protocolUnsupported` on real legacy route.
    - Vacuous passes: pull-found-record and tombstone checks `passed:true` even when record/tombstone absent (L~500, ~545 "tombstone filtering"). Bootstrap negative checks send `{}` w/o dual auth proof.
@@ -26,7 +26,7 @@ Score: **3/10 — NOT ACCEPTED**
 ## Warnings (SHOULD FIX)
 - `hub-recovery-summary.md` dry-run log shows `Expected Epoch: (Not provided)` — evidence of nothing; dry-run needs no mongo.
 - 7 PNGs are generated design mockups ("pixel-precise") named `android-release-*` under `docs/evidence`; plan requires sanitized *release* UI captures. Labeled "mockup/baseline" in docs (OK) but file names imply evidence of release build; rename or mark clearly. PDR/changelog "release visual design baseline".
-- deployment-guide: Hub host prerequisite "Node.js v20+" wrong (Hub is Rust); read-back path `GET /api/v1/strict-apps/doggo` wrong (`/apps/:id`); hardcoded `/home/loidinh/...` JAVA_HOME in doc and README; `--api-key` via argv in smoke example; no `--environment production --confirm-app doggo` per plan §3 (flags match actual hub-schema-provision: `--origin --token --schema --out`, so plan text vs script diverge — resolve); no rollback/version-guard/ProtocolIncompatible section (plan §10); no admin-sign-in warning, no key-loss/no-rotation statement, no JWT-not-revocable disclosure (plan §5); no Mongo topology/journaling admission section (plan §1); `adb install -r` conflicts with debug-signature uninstall approval.
+- deployment-guide: Hub host prerequisite "Node.js v20+" wrong (Hub is Rust); read-back path `GET /api/v1/strict-apps/tabbyrush` wrong (`/apps/:id`); hardcoded `/home/loidinh/...` JAVA_HOME in doc and README; `--api-key` via argv in smoke example; no `--environment production --confirm-app tabbyrush` per plan §3 (flags match actual hub-schema-provision: `--origin --token --schema --out`, so plan text vs script diverge — resolve); no rollback/version-guard/ProtocolIncompatible section (plan §10); no admin-sign-in warning, no key-loss/no-rotation statement, no JWT-not-revocable disclosure (plan §5); no Mongo topology/journaling admission section (plan §1); `adb install -r` conflicts with debug-signature uninstall approval.
 - README presents Linux/Windows vault, "Fail-Closed Account Lifecycle" etc. as features with no mention of Phase 07 NOT ACCEPTED blockers; README command §1 `--dependency-verification=off` presented as normal. Add blocker note.
 - Phase 07 blockers (teardown generation rollback, cancellation swallowing, worker TOCTOU) ARE carried forward explicitly in release-acceptance.md, android-release-summary.md, roadmap; but Remediation checklist omits an explicit "no release until Phase 07 re-review ≥ accepted" gate and omits that sync-worker cancellation/TOCTOU need device test evidence.
 - Duplicate smoke-header claims in `hub-live-smoke.mjs` docblock (items 3, 6) list checks not implemented.
@@ -56,5 +56,5 @@ All 20 owned artifacts; cross-read: phase-08 plan, file-ownership.md, contracts.
 
 ## Unresolved questions
 - Is `apps` the real registry collection and are `strictEpoch/recoveryTimestamp/lastRecoveryStatus/epoch/updatedAt` fields consistent with Phase 03 Rust (external Hub repo not available to verify)?
-- Plan §3 says `hub-schema-provision.mjs --environment production --confirm-app doggo`; actual script has no such flags — plan wrong or 03 script incomplete?
+- Plan §3 says `hub-schema-provision.mjs --environment production --confirm-app tabbyrush`; actual script has no such flags — plan wrong or 03 script incomplete?
 - Should Phase 08 status be "implementation in progress / tooling not accepted" until C1–C6 fixed?

@@ -33,15 +33,15 @@ Single existing application creates retained Window visibility states and one co
 Exactly06 paths including controller tests and generic seam.04 retains helper/input view tests;01 metadata/shared store;08 only Linux source/provider/tests/evidence/docs. Late common bug returns to06 rather than Linux claiming main.kt.07 never edits runtime/test files.
 
 Explicit owned paths (repository-relative; actions/reasons in central manifest):
-- `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt`
-- `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-task-surfaces.kt`
-- `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-surface-platform.kt`
-- `desktopApp/src/main/kotlin/dev/doggo/desktop/composite-desktop-leave-cancel-gate.kt`
+- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt`
+- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces.kt`
+- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-surface-platform.kt`
+- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate.kt`
 - `desktopApp/src/main/resources/task-surface-tray.png`
-- `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-lifecycle-test.kt`
-- `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-reminder-controller-lifecycle-test.kt`
-- `desktopApp/src/test/kotlin/dev/doggo/desktop/composite-desktop-leave-cancel-gate-test.kt`
-- `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-task-surfaces-test.kt`
+- `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-lifecycle-test.kt`
+- `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-reminder-controller-lifecycle-test.kt`
+- `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate-test.kt`
+- `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces-test.kt`
 - `plans/261016-1409-sticky-task-surfaces/reports/phase-06-desktop-evidence.md`
 
 ## Implementation Steps

@@ -8,10 +8,10 @@
 
 ## Exclusive ownership
 Modify only:
-- `shared/src/commonMain/kotlin/dev/doggo/shared/ui/reminder-settings.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/reminder-settings.kt`
 Read-only:
-- `shared/src/commonMain/kotlin/dev/doggo/shared/ui/date-time-pickers.kt`
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-ui-state.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/date-time-pickers.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-ui-state.kt`
 No created/deleted files. Do not edit deadline integration, shared components, tests, build files, docs, or plan status.
 
 ## Existing behavior to preserve
@@ -29,7 +29,7 @@ Picker Cancel/dismiss -> unchanged draft; outer Cancel -> CloseSettings, no Save
 ```
 - Replace anchor `OutlinedTextField` with `DateTimePickerButton`, label `Default date-only anchor time`, canonical displayed value (or `Choose time`).
 - Preserve supporting text: “Used for date-only task reminders (initial default 09:00).”
-- Local boolean controls one `DoggoTimePickerDialog`, title matching label, `initialTime = defaultAnchorTime`, `fallbackTime = "09:00"`.
+- Local boolean controls one `TabbyRushTimePickerDialog`, title matching label, `initialTime = defaultAnchorTime`, `fallbackTime = "09:00"`.
 - On picker Confirm, assign selected value to draft and close; no `TodoAction`, I/O, persistence, rescheduling, or permission operation.
 - Picker Cancel/outside-dismiss/Back/Escape where supported only closes; reopening seeds from current draft, not discarded tentative selection.
 - Outer Save continues to submit all draft preferences together; retain existing blank-anchor fallback behavior. New selections are already canonical.
@@ -37,7 +37,7 @@ Picker Cancel/dismiss -> unchanged draft; outer Cancel -> CloseSettings, no Save
 
 ## Implementation steps
 1. Read Phase 01 contract; add local picker visibility state alongside existing settings drafts, without changing other draft initialization behavior.
-2. Replace only default anchor text-field block with shared trigger and existing supporting text. Use Doggo spacing, full width, >=48dp click target.
+2. Replace only default anchor text-field block with shared trigger and existing supporting text. Use TabbyRush spacing, full width, >=48dp click target.
 3. Conditionally compose shared clock dialog; wire confirm to draft assignment and dismiss to visibility reset. Do not expose `TimeInput` or keyboard-mode switch.
 4. Ensure displayed draft refreshes after confirmation; repeated opening starts from that draft. Do not reinitialize all settings when incoming capability/state refreshes.
 5. Preserve platform capability card, OS Settings/Exact Alarms actions, notifications/default-reminder toggles, numeric bounds, and outer Save/Cancel payload construction.

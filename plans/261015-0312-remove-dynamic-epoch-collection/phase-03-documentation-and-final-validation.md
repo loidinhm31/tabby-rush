@@ -1,7 +1,7 @@
 # Phase 03: Documentation Reconciliation & Full Quality Gates
 
 **Context Links**
-- Doggo docs: `docs/*`
+- TabbyRush docs: `docs/*`
 - Glean Hub docs: `/home/loidinh/WS/glean-hub/docs/*`
 
 ---
@@ -9,12 +9,12 @@
 ## Overview
 - **Priority:** Medium
 - **Current Status:** Completed
-- **Description:** Reconcile all architecture specifications, PDRs, and runbooks across Doggo and Glean Hub to accurately document the transition from dynamic `_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>` to direct target collections `app_<appId>`. Run all end-to-end quality and review gates.
+- **Description:** Reconcile all architecture specifications, PDRs, and runbooks across TabbyRush and Glean Hub to accurately document the transition from dynamic `_strict_v1_<appIdLength>_<appId>_<epochNoHyphens>` to direct target collections `app_<appId>`. Run all end-to-end quality and review gates.
 
 ---
 
 ## Requirements
-1. Update `docs/system-architecture.md`, `docs/project-overview-pdr.md`, `docs/hub-schema-integration.md`, `docs/code-standards.md`, `docs/security-and-recovery.md`, `docs/evidence/hub-recovery-summary.md` in Doggo.
+1. Update `docs/system-architecture.md`, `docs/project-overview-pdr.md`, `docs/hub-schema-integration.md`, `docs/code-standards.md`, `docs/security-and-recovery.md`, `docs/evidence/hub-recovery-summary.md` in TabbyRush.
 2. Update `docs/project-changelog.md` and `docs/project-roadmap.md`.
 3. Verify all linters, formatting, and tests across both repositories.
 4. Run subagent code review with `evc-code-reviewer` and QA review.

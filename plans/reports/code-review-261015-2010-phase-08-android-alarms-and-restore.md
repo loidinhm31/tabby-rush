@@ -28,7 +28,7 @@ Additionally, runtime replacement now drains in-flight reminder deliveries (`clo
 #### 3.1. Cold-Start Notification Tap Drops Navigation
 - **Initial Status**: CRITICAL.
 - **Remediation Verified**:
-  - In `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt`:
+  - In `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt`:
     - Added `private var pendingTarget: Pair<String, String>? = null`.
     - `selectTaskFromNotification()` checks if `currentAccountKey` is null or `allTodos.isEmpty()`. If so, stores `pendingTarget = Pair(accountKey, taskId)`.
     - Once session is restored and `reloadTodos()` loads tasks from `RoomAccountStore`, it triggers `dispatchTaskSelection(k, t)`.
@@ -43,7 +43,7 @@ Additionally, runtime replacement now drains in-flight reminder deliveries (`clo
 #### 4.1. Startup Wipe Recovery Does Not Await Sync Quiescence
 - **Initial Status**: WARNING.
 - **Remediation Verified**:
-  - In `androidApp/src/main/kotlin/dev/doggo/android/android-account-state-manager.kt`:
+  - In `androidApp/src/main/kotlin/dev/tabbyrush/android/android-account-state-manager.kt`:
     - `completePendingWipes()` calls `syncScheduler.cancelAndAwait(key)` inside `runBlocking(Dispatchers.Default)` prior to deleting database artifacts and clearing wipe markers.
     - If work cancellation times out or fails, exception aborts wipe completion, maintaining fail-closed marker state for retry on subsequent launch.
 - **Status**: **RESOLVED**.
@@ -51,7 +51,7 @@ Additionally, runtime replacement now drains in-flight reminder deliveries (`clo
 #### 4.2. Concurrency Race and Non-Durable Writes in `AndroidAlarmRegistry`
 - **Initial Status**: WARNING.
 - **Remediation Verified**:
-  - In `androidApp/src/main/kotlin/dev/doggo/android/android-alarm-registry.kt`:
+  - In `androidApp/src/main/kotlin/dev/tabbyrush/android/android-alarm-registry.kt`:
     - Added companion static mutex `lock` synchronizing all read/write methods across any registry instance for the same account.
     - Switched from asynchronous `.apply()` to synchronous `.commit()`, returning status and ensuring durable disk writes before receiver returns.
     - Added API 24+ `context.deleteSharedPreferences(prefName)` in `clearAll()`.
@@ -60,7 +60,7 @@ Additionally, runtime replacement now drains in-flight reminder deliveries (`clo
 #### 4.3. Unit Test Substitutes Anonymous Implementation for Production Cancel Gate
 - **Initial Status**: WARNING.
 - **Remediation Verified**:
-  - In `androidApp/src/test/kotlin/dev/doggo/android/composite-leave-scheduler-cancel-gate-test.kt`:
+  - In `androidApp/src/test/kotlin/dev/tabbyrush/android/composite-leave-scheduler-cancel-gate-test.kt`:
     - Replaced anonymous test objects with direct instantiations of the production `CompositeLeaveSchedulerCancelGate` class.
     - Implemented 3 comprehensive tests: `testProductionGateDrainsAndCancelsInOrder`, `testProductionGateFailsClosedWhenDrainTimesOut`, and `testProductionGateFailsClosedWhenSyncCancelThrows`.
 - **Status**: **RESOLVED**.
@@ -87,7 +87,7 @@ Additionally, runtime replacement now drains in-flight reminder deliveries (`clo
 1. **Non-Blocking Wipe Recovery in Broadcast Receivers**:
    - In `ReminderRestoreReceiver.kt`, moved `app.completePendingWipesOnStartup()` inside the `goAsync()` coroutine block under `EXECUTION_TIMEOUT_MS` (9s) timeout. This guarantees `onReceive()` returns immediately without blocking Android's main UI thread on sync quiescence.
 2. **Delivery Quiescence on Runtime Teardown**:
-   - In `DoggoApplication.closeRuntimeInternal()`, added `runtime.deliveryGate.closeAndDrain()` before database closure and store freeze. This prevents races between background delivery admissions and database connection teardown during runtime replacement or explicit leave.
+   - In `TabbyRushApplication.closeRuntimeInternal()`, added `runtime.deliveryGate.closeAndDrain()` before database closure and store freeze. This prevents races between background delivery admissions and database connection teardown during runtime replacement or explicit leave.
 
 ---
 
@@ -108,7 +108,7 @@ Additionally, runtime replacement now drains in-flight reminder deliveries (`clo
 ## 6. Suggestions (NICE TO HAVE)
 
 ### 6.1. Notification Grouping for Multi-Task Reminders
-- **Suggestion**: When multiple reminders fire concurrently or accumulate while device is idle, configure `setGroup("doggo_reminders_group")` with an optional summary notification on API 24+ to keep the notification shade compact.
+- **Suggestion**: When multiple reminders fire concurrently or accumulate while device is idle, configure `setGroup("tabbyrush_reminders_group")` with an optional summary notification on API 24+ to keep the notification shade compact.
 
 ---
 
@@ -117,24 +117,24 @@ Additionally, runtime replacement now drains in-flight reminder deliveries (`clo
 | File | Status | LOC | Responsibilities / Evaluation |
 |---|:---:|:---:|---|
 | `androidApp/src/main/AndroidManifest.xml` | Modified | 51 | Declares permissions (`POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED`), unexported receivers. |
-| `androidApp/src/main/kotlin/dev/doggo/android/android-notification-adapter.kt` | Modified | 189 | AlarmManager & NotificationManager bridge; private lock-screen notifications; fallback logic. |
-| `androidApp/src/main/kotlin/dev/doggo/android/android-notification-intent-factory.kt` | Added | 112 | Immutable PendingIntents, identity URIs without user text, channel setup. |
-| `androidApp/src/main/kotlin/dev/doggo/android/android-alarm-registry.kt` | Added | 90 | SharedPreferences-backed scheduled alarms and active notifications; companion lock synchronization; commit writes. |
-| `androidApp/src/main/kotlin/dev/doggo/android/doggo-alarm-receiver.kt` | Modified | 98 | Direct-boot check, payload/generation/wipe verification, bounded `goAsync` delivery. |
-| `androidApp/src/main/kotlin/dev/doggo/android/reminder-restore-receiver.kt` | Added | 87 | Broadcast receiver for boot, unlock, upgrade, timezone changes; async wipe completion under `goAsync`. |
-| `androidApp/src/main/kotlin/dev/doggo/android/reminder-permission-controller.kt` | Added | 106 | Sealed permission states, settings intents, channel preflight, POST_NOTIFICATIONS checks. |
-| `androidApp/src/main/kotlin/dev/doggo/android/composite-leave-scheduler-cancel-gate.kt` | Added | 42 | Coordinated teardown: delivery drain -> observer cancel -> sync cancel -> alarm cancel. |
-| `androidApp/src/main/kotlin/dev/doggo/android/account-runtime.kt` | Added | 26 | Account-scoped container for Room DB, stores, and coordinators. |
-| `androidApp/src/main/kotlin/dev/doggo/android/account-runtime-factory.kt` | Added | 126 | Instantiates isolated runtime components without requiring active network auth. |
-| `androidApp/src/main/kotlin/dev/doggo/android/android-account-state-manager.kt` | Added | 92 | Manages `active_account.dat` atomic file swaps and startup pending wipe recovery with `cancelAndAwait`. |
-| `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt` | Modified | 136 | Startup wipe ordering, direct-boot runtime guards, lazy singletons, delivery gate draining on close. |
-| `androidApp/src/main/kotlin/dev/doggo/android/main-activity.kt` | Modified | 64 | Launcher activity, notification click intent routing, permission refresh. |
-| `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt` | Modified | 199 | Handles notification task selection with `pendingTarget` cold-start caching, authentication lifecycle, UI state. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/android-notification-adapter.kt` | Modified | 189 | AlarmManager & NotificationManager bridge; private lock-screen notifications; fallback logic. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/android-notification-intent-factory.kt` | Added | 112 | Immutable PendingIntents, identity URIs without user text, channel setup. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/android-alarm-registry.kt` | Added | 90 | SharedPreferences-backed scheduled alarms and active notifications; companion lock synchronization; commit writes. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-alarm-receiver.kt` | Modified | 98 | Direct-boot check, payload/generation/wipe verification, bounded `goAsync` delivery. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/reminder-restore-receiver.kt` | Added | 87 | Broadcast receiver for boot, unlock, upgrade, timezone changes; async wipe completion under `goAsync`. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/reminder-permission-controller.kt` | Added | 106 | Sealed permission states, settings intents, channel preflight, POST_NOTIFICATIONS checks. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/composite-leave-scheduler-cancel-gate.kt` | Added | 42 | Coordinated teardown: delivery drain -> observer cancel -> sync cancel -> alarm cancel. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/account-runtime.kt` | Added | 26 | Account-scoped container for Room DB, stores, and coordinators. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/account-runtime-factory.kt` | Added | 126 | Instantiates isolated runtime components without requiring active network auth. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/android-account-state-manager.kt` | Added | 92 | Manages `active_account.dat` atomic file swaps and startup pending wipe recovery with `cancelAndAwait`. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt` | Modified | 136 | Startup wipe ordering, direct-boot runtime guards, lazy singletons, delivery gate draining on close. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/main-activity.kt` | Modified | 64 | Launcher activity, notification click intent routing, permission refresh. |
+| `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt` | Modified | 199 | Handles notification task selection with `pendingTarget` cold-start caching, authentication lifecycle, UI state. |
 | `androidApp/build.gradle.kts` | Modified | 189 | Added test logging and coroutines-test dependency; verified `minSdk = 26`. |
-| `androidApp/src/test/kotlin/dev/doggo/android/android-notification-adapter-test.kt` | Modified | 113 | Request code determinism, tag formatting, key serialization, capability models. |
-| `androidApp/src/test/kotlin/dev/doggo/android/composite-leave-scheduler-cancel-gate-test.kt` | Added | 117 | Direct production gate tests: order, drain timeout, throw. |
-| `androidApp/src/test/kotlin/dev/doggo/android/reminder-permission-controller-test.kt` | Added | 33 | Asserts permission string constants and sealed class type hierarchy. |
-| `androidApp/src/androidTest/kotlin/dev/doggo/android/background-isolation-test.kt` | Modified | 132 | Instrumented verification of startup wipe clearing alarm registry. |
+| `androidApp/src/test/kotlin/dev/tabbyrush/android/android-notification-adapter-test.kt` | Modified | 113 | Request code determinism, tag formatting, key serialization, capability models. |
+| `androidApp/src/test/kotlin/dev/tabbyrush/android/composite-leave-scheduler-cancel-gate-test.kt` | Added | 117 | Direct production gate tests: order, drain timeout, throw. |
+| `androidApp/src/test/kotlin/dev/tabbyrush/android/reminder-permission-controller-test.kt` | Added | 33 | Asserts permission string constants and sealed class type hierarchy. |
+| `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/background-isolation-test.kt` | Modified | 132 | Instrumented verification of startup wipe clearing alarm registry. |
 
 ---
 

@@ -60,14 +60,14 @@ Combined desktop and shared JVM suites: 121/121 reported passing.
 
 ### 2.2 Distributable Application Bundle
 - Task: `:desktopApp:createDistributable`
-- Output Path: `desktopApp/build/compose/binaries/main/app/Doggo/`
-- Launcher: `Doggo.exe` (native PE executable)
+- Output Path: `desktopApp/build/compose/binaries/main/app/TabbyRush/`
+- Launcher: `TabbyRush.exe` (native PE executable)
 - Bundled JRE: Verified present at `runtime/bin/server/jvm.dll`
 - Package Audit: `scripts/windows-package-smoke.ps1 -DistDir ...` verified zero Linux D-Bus jars and confirmed presence of Windows DPAPI classes and SPI descriptor.
 
 ### 2.3 MSI Installer Package Status
 - Task: `:desktopApp:packageMsi`
-- Output Path: `desktopApp/build/compose/binaries/main/msi/Doggo-1.0.0.msi`
+- Output Path: `desktopApp/build/compose/binaries/main/msi/TabbyRush-1.0.0.msi`
 - File Size: 100.68 MB (105,566,496 bytes)
 - SHA-256 Digest: `698A29B8B67AC32E8F175BCA56651B066C91479E3793EC5B30F7676FB194B240`
 - Status: PASS (Successfully generated via WiX 3.11 binaries downloaded by Compose Desktop plugin)

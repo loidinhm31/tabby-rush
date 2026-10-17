@@ -1,7 +1,7 @@
 /**
  * scripts/hub-strict-recovery.js
  *
- * Maintenance-only recovery script for Doggo strict-v1 Hub persistence.
+ * Maintenance-only recovery script for TabbyRush strict-v1 Hub persistence.
  * Designed for execution via:
  *   CONFIRM_MAINTENANCE_QUIESCENCE=true MONGO_URI="..." EXPECTED_OLD_EPOCH="..." SOURCE_BACKUP_COLLECTION="..." mongosh --nodb --file scripts/hub-strict-recovery.js
  * (Also executable via Node.js for CLI preflight and dry-run syntax checks).
@@ -13,7 +13,7 @@
  *    - Generates a new external UUID v4 epoch (canonical lowercase). Never reuses or reopens a stale epoch.
  * 3. Target Collection Provisioning:
  *    - Uses canonical collection namespace matching backend convention:
- *      `app<AppId>` (e.g. `appDoggo`)
+ *      `app<AppId>` (e.g. `appTabbyRush`)
  *    - Creates exact scan index: { userId: 1, tableName: 1, rowId: 1 } with simple collation, not capped, no TTL.
  * 4. Sanitized Data Import:
  *    - Requires non-empty SOURCE_BACKUP_COLLECTION. Cannot publish an unseeded or empty epoch.
@@ -28,7 +28,7 @@
  *    - Missing or failing admission helper blocks registry CAS unconditionally.
  * 6. Journaled Registry CAS on `_schemas`:
  *    - Performs atomic Compare-And-Swap on `_schemas` collection:
- *      { appId: 'doggo', strictEpoch: <EXPECTED_OLD_EPOCH>, syncMode: 'strict-v1' } -> { strictEpoch: <NEW_EPOCH> }.
+ *      { appId: 'tabby-rush', strictEpoch: <EXPECTED_OLD_EPOCH>, syncMode: 'strict-v1' } -> { strictEpoch: <NEW_EPOCH> }.
  *    - Uses writeConcern: { w: 'majority', j: true }.
  * 7. Fail-Closed Safety:
  *    - Pre-CAS failure aborts and preserves the old epoch and old namespace intact.
@@ -42,7 +42,7 @@ var env = isNode ? process.env : {};
 var CONFIG = {
   mongoUri: env.MONGO_URI || '',
   dbName: env.MONGO_DB_NAME || 'glean_hub',
-  appId: env.APP_ID || 'doggo',
+  appId: env.APP_ID || 'tabbyrush',
   expectedOldEpoch: env.EXPECTED_OLD_EPOCH || '',
   confirmQuiescence: env.CONFIRM_MAINTENANCE_QUIESCENCE === 'true',
   dryRun: env.DRY_RUN === 'true',
@@ -93,7 +93,7 @@ function toBsonLong(v) {
 
 function printBanner() {
   console.log('================================================================');
-  console.log('Doggo Hub Strict-v1 Maintenance Recovery Script');
+  console.log('TabbyRush Hub Strict-v1 Maintenance Recovery Script');
   console.log('Database:       ' + CONFIG.dbName);
   console.log('App ID:         ' + CONFIG.appId);
   console.log('Source Backup:  ' + (CONFIG.sourceCollection || '(None - required for live recovery)'));
@@ -125,7 +125,7 @@ function validatePrerequisites() {
     if (CONFIG.sourceCollection.startsWith('app') ||
         CONFIG.sourceCollection === '_schemas' ||
         CONFIG.sourceCollection.startsWith('system.')) {
-      errors.push("SOURCE_BACKUP_COLLECTION cannot be an active app collection ('" + CONFIG.sourceCollection + "'), internal, or system collection. Must be an isolated staging collection (e.g. 'staging_doggo_restore' or 'backup_doggo').");
+      errors.push("SOURCE_BACKUP_COLLECTION cannot be an active app collection ('" + CONFIG.sourceCollection + "'), internal, or system collection. Must be an isolated staging collection (e.g. 'staging_tabbyrush_restore' or 'backup_tabbyrush').");
     }
   }
 

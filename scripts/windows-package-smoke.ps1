@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Doggo Windows Desktop & MSI Package Verification Smoke Runner.
+    TabbyRush Windows Desktop & MSI Package Verification Smoke Runner.
     Phase 10 Validation & Diagnostics Harness.
 
 .DESCRIPTION
@@ -19,8 +19,8 @@
 
 .EXAMPLE
     .\scripts\windows-package-smoke.ps1 -Diagnose
-    .\scripts\windows-package-smoke.ps1 -DistDir desktopApp\build\compose\binaries\main\app\Doggo
-    .\scripts\windows-package-smoke.ps1 -MsiPath desktopApp\build\compose\binaries\main\msi\Doggo-1.0.0.msi
+    .\scripts\windows-package-smoke.ps1 -DistDir desktopApp\build\compose\binaries\main\app\TabbyRush
+    .\scripts\windows-package-smoke.ps1 -MsiPath desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.0.msi
 #>
 
 [CmdletBinding()]
@@ -34,7 +34,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 function Show-Diagnostics {
-    Write-Host "=== Doggo Windows Desktop Environment Diagnostics ===" -ForegroundColor Cyan
+    Write-Host "=== TabbyRush Windows Desktop Environment Diagnostics ===" -ForegroundColor Cyan
 
     # 1. Host OS
     $os = [System.Environment]::OSVersion
@@ -93,8 +93,8 @@ function Test-DistributableBundle {
 
     # 1. Verify launcher executable
     $exeCandidates = @(
-        (Join-Path $Path "Doggo.exe"),
-        (Join-Path $Path "doggo.exe")
+        (Join-Path $Path "TabbyRush.exe"),
+        (Join-Path $Path "tabbyrush.exe")
     )
     $launcher = $exeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 
@@ -102,7 +102,7 @@ function Test-DistributableBundle {
         $fileInfo = Get-Item $launcher
         Write-Host "[PASS] Launcher executable found: $($fileInfo.Name) ($([math]::Round($fileInfo.Length / 1KB, 2)) KB)" -ForegroundColor Green
     } else {
-        Write-Error "[FAIL] Launcher executable (Doggo.exe) not found in $Path"
+        Write-Error "[FAIL] Launcher executable (TabbyRush.exe) not found in $Path"
         return $false
     }
 
@@ -151,7 +151,7 @@ function Test-DistributableBundle {
                 if ($entry.FullName -like "*WindowsDpapiVault*") {
                     $foundWindowsVault = $true
                 }
-                if ($entry.FullName -eq "META-INF/services/dev.doggo.desktop.CredentialVaultProvider") {
+                if ($entry.FullName -eq "META-INF/services/dev.tabbyrush.desktop.CredentialVaultProvider") {
                     $stream = $entry.Open()
                     $reader = $null
                     try {
@@ -160,7 +160,7 @@ function Test-DistributableBundle {
                             $line = $reader.ReadLine().Trim()
                             if ($line -ne "" -and -not $line.StartsWith("#")) {
                                 $registeredProviders.Add($line)
-                                if ($line -eq "dev.doggo.desktop.windows.WindowsDpapiVaultProvider") {
+                                if ($line -eq "dev.tabbyrush.desktop.windows.WindowsDpapiVaultProvider") {
                                     $foundWindowsSpi = $true
                                 }
                             }
@@ -277,16 +277,16 @@ function Test-MsiPackage {
         }
 
         # Validate mandatory properties and expected values
-        if ($extractedProps["ProductName"] -ne "Doggo") {
-            Write-Error "[FAIL] ProductName mismatch: expected 'Doggo', got '$($extractedProps['ProductName'])'"
+        if ($extractedProps["ProductName"] -ne "TabbyRush") {
+            Write-Error "[FAIL] ProductName mismatch: expected 'TabbyRush', got '$($extractedProps['ProductName'])'"
             return $false
         }
         if ($extractedProps["ProductVersion"] -ne "1.0.0") {
             Write-Error "[FAIL] ProductVersion mismatch: expected '1.0.0', got '$($extractedProps['ProductVersion'])'"
             return $false
         }
-        if ($extractedProps["Manufacturer"] -ne "Doggo Team") {
-            Write-Error "[FAIL] Manufacturer mismatch: expected 'Doggo Team', got '$($extractedProps['Manufacturer'])'"
+        if ($extractedProps["Manufacturer"] -ne "TabbyRush Team") {
+            Write-Error "[FAIL] Manufacturer mismatch: expected 'TabbyRush Team', got '$($extractedProps['Manufacturer'])'"
             return $false
         }
         if ($extractedProps["UpgradeCode"] -ne "{A6C507C8-88FE-4E49-8F43-A6125039281A}") {

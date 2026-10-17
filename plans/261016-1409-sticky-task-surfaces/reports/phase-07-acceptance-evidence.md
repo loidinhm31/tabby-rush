@@ -11,9 +11,9 @@
 
 | ID | Scenario | Source / Test Reference | Recorded Automated Evidence | Runtime Evidence | Remaining Hold / Caveat |
 |:---:|---|---|---|---|---|
-| **1** | Glance widget scrolling & toggle | `TaskWidgetModelTest.kt`, `DoggoTaskWidget.kt` | Android unit test suite (34/34 reported) | PNG is a design mockup only | Native launcher interaction and process-death behavior held at Gate G2 |
+| **1** | Glance widget scrolling & toggle | `TaskWidgetModelTest.kt`, `TabbyRushTaskWidget.kt` | Android unit test suite (34/34 reported) | PNG is a design mockup only | Native launcher interaction and process-death behavior held at Gate G2 |
 | **2** | Offline widget/sticky Add & sync | `DesktopTaskSurfacesTest.kt`, `TaskSurfaceCreateScreen.kt` | Desktop tests (99/99 reported) and fixtures | PNG is a design mockup only | Native surface interaction held at G2; live multi-device sync held at G6 |
-| **3** | Multi-surface background convergence | `DoggoSyncWorker.kt`, `DesktopSyncScheduler.kt` | Shared tests (231/231 reported) | No native runtime capture | Live three-device sync held at G6 |
+| **3** | Multi-surface background convergence | `TabbyRushSyncWorker.kt`, `DesktopSyncScheduler.kt` | Shared tests (231/231 reported) | No native runtime capture | Live three-device sync held at G6 |
 | **4** | Oldest-overdue notification selection | `TaskSurfaceNotificationTest.kt`, `selectNextDeadline` | Android unit test (10/10 reported) | PNG is a design mockup only | Native notification/shade acceptance held at Gate G2 |
 | **5** | Stale generation & duplicate actions | `AndroidTaskSurfaceAccess.kt`, `SessionViewModel.kt` | Unit/source evidence recorded | No physical action-delivery evidence | Native action delivery held at Gate G2 |
 | **6** | Permission denial & API 34+ swipe | `TaskSurfacePreferences.kt`, `main-activity.kt` | Unit tests and preference codecs recorded | No native notification evidence | Native permission and dismissal behavior held at Gate G2 |
@@ -47,12 +47,12 @@ The 99 desktop-test count is attributed to this 2026-10-17 Phase 07 report; the 
 | Desktop App Unit Tests | `./gradlew.bat :desktopApp:test --rerun-tasks --dependency-verification=off` | **PASS** | 99 / 99 tests green across 13 test classes |
 | Android App Unit Tests | `./gradlew.bat :androidApp:testDebugUnitTest --rerun-tasks --dependency-verification=off` | **PASS** | 34 / 34 tests green across 6 test classes |
 | **Total Gradle Tests** | *All three suites combined* | **PASS** | **364 / 364 tests passing (100% Green, 0 failures)** |
-| Exported Component Auditor | `node --test scripts/release-security-check.test.mjs` | **PASS** | 12 / 12 checks green (audits canonical `MainActivity` & `DoggoTaskWidgetReceiver`) |
+| Exported Component Auditor | `node --test scripts/release-security-check.test.mjs` | **PASS** | 12 / 12 checks green (audits canonical `MainActivity` & `TabbyRushTaskWidgetReceiver`) |
 | Diagnostic Source Security | `node scripts/release-security-check.mjs --diagnose-source` | **PASS** | CLEAN (Cleartext disabled, backup disabled, HTTPS origin, 0 source secrets) |
 | Hub Offline Live Smoke | `node scripts/hub-live-smoke.mjs --fixture-test` | **PASS** | 18 / 18 checks green (Strict-v1 health, auth, push, pull, tombstone CAS) |
 | Strict-v2 Rehearsal | `node scripts/strict-v2-cutover-rehearsal.mjs --self-test` | **PASS** | 8 / 8 checks green (CLI token redaction, dry-run, same-ID retry, read-back) |
 | Android Debug Assemble | `./gradlew.bat :androidApp:assembleDebug --dependency-verification=off` | **PASS** | Debug APK built with bundled native SQLite driver in 30s |
-| Desktop Distributable | `./gradlew.bat :desktopApp:createDistributable -PdesktopTarget=windows --dependency-verification=off` | **PASS** | Self-contained Windows bundle produced (`Doggo.exe`) in 10s |
+| Desktop Distributable | `./gradlew.bat :desktopApp:createDistributable -PdesktopTarget=windows --dependency-verification=off` | **PASS** | Self-contained Windows bundle produced (`TabbyRush.exe`) in 10s |
 | Strict Dependency Provenance| `./gradlew.bat :shared:jvmTest --dependency-verification=strict` | **HELD** | 149 unmatched classpath checksums in `gradle/verification-metadata.xml` |
 
 ---
@@ -61,7 +61,7 @@ The 99 desktop-test count is attributed to this 2026-10-17 Phase 07 report; the 
 
 1. **Supply-Chain Verification Baseline**: 149 classpath checksums in `gradle/verification-metadata.xml` remain unmatched; recorded builds used `--dependency-verification=off`. The separate Glance artifact provenance hold remains unresolved.
 2. **Open Android Safety Findings**:
-   - `DoggoApplication.closeRuntimeInternal()` catches and logs a delivery-gate drain-timeout exception, then returns before observer-job cancellation or Room closure. `closeActiveRuntime()` nevertheless clears `activeRuntime`; coroutine jobs remain and the database is not closed.
+   - `TabbyRushApplication.closeRuntimeInternal()` catches and logs a delivery-gate drain-timeout exception, then returns before observer-job cancellation or Room closure. `closeActiveRuntime()` nevertheless clears `activeRuntime`; coroutine jobs remain and the database is not closed.
    - `TaskWidgetUpdater.kt` catches `Throwable` during RemoteViews blanking and Glance session closure, risking retained widget state on OS failure.
 3. **Hardware & Release Gate Holds**:
    - Gate G2: Native Android launcher/shade/device scenarios and native Windows window/tray/multi-monitor acceptance remain held. The Windows installed MSI clean-host acceptance is also pending.

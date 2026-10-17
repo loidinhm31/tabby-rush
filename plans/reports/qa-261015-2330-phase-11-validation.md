@@ -3,14 +3,14 @@
 **Date**: 2026-10-15  
 **Context**: Linux Fedora 44 x86_64 | JDK 21 LTS (`/home/loidinh/.local/share/jvm/jdk-21`) | Android SDK (`/home/loidinh/Android/Sdk`) | Gradle 8.11.1 | Node.js v24.16.0 | Cargo 1.95.0 | pnpm 10.28.2  
 **Target Phase**: `Phase 11 — Adversarial integration and separately observed platform acceptance`  
-**Working Directories**: `/home/loidinh/WS/doggo` & `/home/loidinh/WS/glean-hub`  
+**Working Directories**: `/home/loidinh/WS/tabbyrush` & `/home/loidinh/WS/glean-hub`  
 **Artifact Path**: `plans/reports/qa-261015-2330-phase-11-validation.md`  
 
 ---
 
 ## 1. Executive Summary & Test Results Overview
 
-Full test suites across Doggo multiplatform client and Glean Hub backend executed under recorded configuration.
+Full test suites across TabbyRush multiplatform client and Glean Hub backend executed under recorded configuration.
 
 ### Summary Verdict
 - **Automated Regression & Packaging Targets**: 100% PASS across all executable suites (399 total targets: 398 passed, 0 failures, 0 errors, 1 ignored live MongoDB test).
@@ -20,16 +20,16 @@ Full test suites across Doggo multiplatform client and Glean Hub backend execute
 
 | Index | Repository | Command / Suite | Category | Scope | Total | Pass | Fail | Skip / Ignored | Status |
 |:---:|---|---|---|---|:---:|:---:|:---:|:---:|:---:|
-| 1 | `doggo` | `./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` | Unit / Integration | Shared KMP JVM & SQLite Suite | 202 | 202 | 0 | 0 | PASS |
-| 2 | `doggo` | `./gradlew :desktopApp:test --dependency-verification=off --rerun-tasks` | Unit / Platform | Desktop App & Lifecycle Suite | 49 | 49 | 0 | 0 | PASS |
-| 3 | `doggo` | `./gradlew :androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks` | Unit / Platform | Android Debug Unit Suite | 12 | 12 | 0 | 0 | PASS |
-| 4 | `doggo` | `node scripts/strict-v2-vector-runner.mjs` | Contract Vectors | Strict v2 Wire Vectors & Fingerprints | 23 | 23 | 0 | 0 | PASS |
-| 5 | `doggo` | `node scripts/hub-live-smoke.mjs --fixture-test` | Protocol Fixture | Hub Offline Protocol Smoke Harness | 18 | 18 | 0 | 0 | PASS |
-| 6 | `doggo` | `node scripts/release-security-check.mjs --diagnose-source` | Security Diagnostic | Static Manifest & Secret Audit | 6 | 6 | 0 | 0 | PASS |
-| 7 | `doggo` | `node scripts/hub-strict-upgrade.test.mjs` | Integration CLI | Hub Strict Upgrade CLI Harness | 9 | 9 | 0 | 0 | PASS |
-| 8 | `doggo` | `node scripts/debug-fault-proxy.test.mjs` | Fault Injection | Debug Fault Proxy Route & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
-| 9 | `doggo` | `./gradlew :desktopApp:createDistributable --dependency-verification=off` | Packaging Build | Desktop Linux App Distributable Bundle | 1 | 1 | 0 | 0 | PASS |
-| 10 | `doggo` | `./gradlew :androidApp:assembleDebug --dependency-verification=off` | Packaging Build | Android Debug APK Compilation | 1 | 1 | 0 | 0 | PASS |
+| 1 | `tabbyrush` | `./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` | Unit / Integration | Shared KMP JVM & SQLite Suite | 202 | 202 | 0 | 0 | PASS |
+| 2 | `tabbyrush` | `./gradlew :desktopApp:test --dependency-verification=off --rerun-tasks` | Unit / Platform | Desktop App & Lifecycle Suite | 49 | 49 | 0 | 0 | PASS |
+| 3 | `tabbyrush` | `./gradlew :androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks` | Unit / Platform | Android Debug Unit Suite | 12 | 12 | 0 | 0 | PASS |
+| 4 | `tabbyrush` | `node scripts/strict-v2-vector-runner.mjs` | Contract Vectors | Strict v2 Wire Vectors & Fingerprints | 23 | 23 | 0 | 0 | PASS |
+| 5 | `tabbyrush` | `node scripts/hub-live-smoke.mjs --fixture-test` | Protocol Fixture | Hub Offline Protocol Smoke Harness | 18 | 18 | 0 | 0 | PASS |
+| 6 | `tabbyrush` | `node scripts/release-security-check.mjs --diagnose-source` | Security Diagnostic | Static Manifest & Secret Audit | 6 | 6 | 0 | 0 | PASS |
+| 7 | `tabbyrush` | `node scripts/hub-strict-upgrade.test.mjs` | Integration CLI | Hub Strict Upgrade CLI Harness | 9 | 9 | 0 | 0 | PASS |
+| 8 | `tabbyrush` | `node scripts/debug-fault-proxy.test.mjs` | Fault Injection | Debug Fault Proxy Route & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
+| 9 | `tabbyrush` | `./gradlew :desktopApp:createDistributable --dependency-verification=off` | Packaging Build | Desktop Linux App Distributable Bundle | 1 | 1 | 0 | 0 | PASS |
+| 10 | `tabbyrush` | `./gradlew :androidApp:assembleDebug --dependency-verification=off` | Packaging Build | Android Debug APK Compilation | 1 | 1 | 0 | 0 | PASS |
 | 11 | `glean-hub` | `cargo test -p glean-hub-sync --locked` | Backend Integration | Hub Sync Crate Tests | 55 | 54 | 0 | 1 | PASS* |
 | 12 | `glean-hub` | `cargo clippy -p glean-hub-sync --locked` | Static Analysis | Rust Code Quality / Linter | 1 | 1 | 0 | 0 | PASS |
 | 13 | `glean-hub` | `pnpm test:unit` (in `glean-hub-app`) | Unit | Admin UI Service & Vite Preload Suite | 13 | 13 | 0 | 0 | PASS |
@@ -40,7 +40,7 @@ Full test suites across Doggo multiplatform client and Glean Hub backend execute
 
 ---
 
-## 2. Doggo Test Suite Breakdowns
+## 2. TabbyRush Test Suite Breakdowns
 
 ### 2.1 Shared KMP JVM & SQLite Integration Suite (`:shared:jvmTest`)
 - **Total Test Classes**: 28
@@ -50,34 +50,34 @@ Full test suites across Doggo multiplatform client and Glean Hub backend execute
 
 | Test Class | Passed | Failed | Skipped | Time |
 |---|:---:|:---:|:---:|:---:|
-| `dev.doggo.shared.auth.HubAuthClientTest` | 9 | 0 | 0 | 0.344s |
-| `dev.doggo.shared.auth.HubAuthSessionTest` | 8 | 0 | 0 | 0.111s |
-| `dev.doggo.shared.auth.SingleFlightRefreshTest` | 3 | 0 | 0 | 0.005s |
-| `dev.doggo.shared.contract.AccountKeyTest` | 5 | 0 | 0 | 0.002s |
-| `dev.doggo.shared.contract.AdversarialSchedulerBoundaryTest` | 7 | 0 | 0 | 0.011s |
-| `dev.doggo.shared.contract.EndpointPolicyTest` | 8 | 0 | 0 | 0.004s |
-| `dev.doggo.shared.contract.PersistedScheduleProjectionTest` | 5 | 0 | 0 | 0.001s |
-| `dev.doggo.shared.contract.ReminderScheduleCalculatorTest` | 9 | 0 | 0 | 0.002s |
-| `dev.doggo.shared.contract.StrictDigestTest` | 5 | 0 | 0 | 0.003s |
-| `dev.doggo.shared.contract.StrictTimeZoneResolverTest` | 7 | 0 | 0 | 0.026s |
-| `dev.doggo.shared.contract.StrictV2DigestExtendedTest` | 6 | 0 | 0 | 0.004s |
-| `dev.doggo.shared.contract.StrictV2DigestVectorTest` | 5 | 0 | 0 | 0.003s |
-| `dev.doggo.shared.contract.TaskDeadlineReminderModelsTest` | 6 | 0 | 0 | 0.002s |
-| `dev.doggo.shared.contract.TitlePolicyTest` | 6 | 0 | 0 | 0.004s |
-| `dev.doggo.shared.data.AdversarialSyncSqliteTest` | 5 | 0 | 0 | 0.126s |
-| `dev.doggo.shared.data.ReminderOccurrenceStoreTest` | 4 | 0 | 0 | 0.014s |
-| `dev.doggo.shared.data.ReminderSchedulingCoordinatorSqliteSmokeTest` | 2 | 0 | 0 | 0.052s |
-| `dev.doggo.shared.data.ReminderTeardownBarrierSqliteTest` | 1 | 0 | 0 | 0.012s |
-| `dev.doggo.shared.data.RoomAccountStoreTest` | 23 | 0 | 0 | 0.190s |
-| `dev.doggo.shared.data.RoomMigrationV1ToV2Test` | 1 | 0 | 0 | 0.019s |
-| `dev.doggo.shared.sync.AccountLeaveProtocolTest` | 7 | 0 | 0 | 0.016s |
-| `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | 9 | 0 | 0 | 0.049s |
-| `dev.doggo.shared.sync.ContractTransitionTest` | 4 | 0 | 0 | 0.024s |
-| `dev.doggo.shared.sync.HubSyncClientTest` | 12 | 0 | 0 | 0.048s |
-| `dev.doggo.shared.sync.OutboxReconciliationTest` | 12 | 0 | 0 | 0.016s |
-| `dev.doggo.shared.sync.ReminderDeliveryGateTest` | 4 | 0 | 0 | 0.006s |
-| `dev.doggo.shared.sync.StagedFullScanTest` | 14 | 0 | 0 | 0.059s |
-| `dev.doggo.shared.ui.TodoSemanticsTest` | 15 | 0 | 0 | 0.054s |
+| `dev.tabbyrush.shared.auth.HubAuthClientTest` | 9 | 0 | 0 | 0.344s |
+| `dev.tabbyrush.shared.auth.HubAuthSessionTest` | 8 | 0 | 0 | 0.111s |
+| `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | 3 | 0 | 0 | 0.005s |
+| `dev.tabbyrush.shared.contract.AccountKeyTest` | 5 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.shared.contract.AdversarialSchedulerBoundaryTest` | 7 | 0 | 0 | 0.011s |
+| `dev.tabbyrush.shared.contract.EndpointPolicyTest` | 8 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.shared.contract.PersistedScheduleProjectionTest` | 5 | 0 | 0 | 0.001s |
+| `dev.tabbyrush.shared.contract.ReminderScheduleCalculatorTest` | 9 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.shared.contract.StrictDigestTest` | 5 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.shared.contract.StrictTimeZoneResolverTest` | 7 | 0 | 0 | 0.026s |
+| `dev.tabbyrush.shared.contract.StrictV2DigestExtendedTest` | 6 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.shared.contract.StrictV2DigestVectorTest` | 5 | 0 | 0 | 0.003s |
+| `dev.tabbyrush.shared.contract.TaskDeadlineReminderModelsTest` | 6 | 0 | 0 | 0.002s |
+| `dev.tabbyrush.shared.contract.TitlePolicyTest` | 6 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.shared.data.AdversarialSyncSqliteTest` | 5 | 0 | 0 | 0.126s |
+| `dev.tabbyrush.shared.data.ReminderOccurrenceStoreTest` | 4 | 0 | 0 | 0.014s |
+| `dev.tabbyrush.shared.data.ReminderSchedulingCoordinatorSqliteSmokeTest` | 2 | 0 | 0 | 0.052s |
+| `dev.tabbyrush.shared.data.ReminderTeardownBarrierSqliteTest` | 1 | 0 | 0 | 0.012s |
+| `dev.tabbyrush.shared.data.RoomAccountStoreTest` | 23 | 0 | 0 | 0.190s |
+| `dev.tabbyrush.shared.data.RoomMigrationV1ToV2Test` | 1 | 0 | 0 | 0.019s |
+| `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | 7 | 0 | 0 | 0.016s |
+| `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | 9 | 0 | 0 | 0.049s |
+| `dev.tabbyrush.shared.sync.ContractTransitionTest` | 4 | 0 | 0 | 0.024s |
+| `dev.tabbyrush.shared.sync.HubSyncClientTest` | 12 | 0 | 0 | 0.048s |
+| `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | 12 | 0 | 0 | 0.016s |
+| `dev.tabbyrush.shared.sync.ReminderDeliveryGateTest` | 4 | 0 | 0 | 0.006s |
+| `dev.tabbyrush.shared.sync.StagedFullScanTest` | 14 | 0 | 0 | 0.059s |
+| `dev.tabbyrush.shared.ui.TodoSemanticsTest` | 15 | 0 | 0 | 0.054s |
 
 ### 2.2 Desktop App Suite Breakdown (`:desktopApp:test`)
 - **Total Test Classes**: 10
@@ -87,16 +87,16 @@ Full test suites across Doggo multiplatform client and Glean Hub backend execute
 
 | Test Class | Passed | Failed | Skipped | Time |
 |---|:---:|:---:|:---:|:---:|
-| `dev.doggo.desktop.CompositeDesktopLeaveCancelGateTest` | 2 | 0 | 0 | 0.196s |
-| `dev.doggo.desktop.DesktopControllerEnvTest` | 4 | 0 | 0 | 0.085s |
-| `dev.doggo.desktop.DesktopLifecycleTest` | 8 | 0 | 0 | 0.012s |
-| `dev.doggo.desktop.DesktopReminderControllerLifecycleTest` | 3 | 0 | 0 | 0.037s |
-| `dev.doggo.desktop.DesktopReminderSchedulerTest` | 6 | 0 | 0 | 0.032s |
-| `dev.doggo.desktop.DotEnvLoaderTest` | 5 | 0 | 0 | 0.004s |
-| `dev.doggo.desktop.PlatformVaultDispatcherTest` | 5 | 0 | 0 | 0.004s |
-| `dev.doggo.desktop.linux.LinuxNotificationAdapterTest` | 4 | 0 | 0 | 0.012s |
-| `dev.doggo.desktop.linux.LinuxReminderAdapterTest` | 6 | 0 | 0 | 0.016s |
-| `dev.doggo.desktop.linux.LinuxSecretServiceVaultTest` | 6 | 0 | 0 | 0.026s |
+| `dev.tabbyrush.desktop.CompositeDesktopLeaveCancelGateTest` | 2 | 0 | 0 | 0.196s |
+| `dev.tabbyrush.desktop.DesktopControllerEnvTest` | 4 | 0 | 0 | 0.085s |
+| `dev.tabbyrush.desktop.DesktopLifecycleTest` | 8 | 0 | 0 | 0.012s |
+| `dev.tabbyrush.desktop.DesktopReminderControllerLifecycleTest` | 3 | 0 | 0 | 0.037s |
+| `dev.tabbyrush.desktop.DesktopReminderSchedulerTest` | 6 | 0 | 0 | 0.032s |
+| `dev.tabbyrush.desktop.DotEnvLoaderTest` | 5 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.desktop.PlatformVaultDispatcherTest` | 5 | 0 | 0 | 0.004s |
+| `dev.tabbyrush.desktop.linux.LinuxNotificationAdapterTest` | 4 | 0 | 0 | 0.012s |
+| `dev.tabbyrush.desktop.linux.LinuxReminderAdapterTest` | 6 | 0 | 0 | 0.016s |
+| `dev.tabbyrush.desktop.linux.LinuxSecretServiceVaultTest` | 6 | 0 | 0 | 0.026s |
 
 ### 2.3 Android Debug Unit Suite Breakdown (`:androidApp:testDebugUnitTest`)
 - **Total Test Classes**: 4
@@ -106,10 +106,10 @@ Full test suites across Doggo multiplatform client and Glean Hub backend execute
 
 | Test Class | Passed | Failed | Skipped | Time |
 |---|:---:|:---:|:---:|:---:|
-| `dev.doggo.android.AndroidNotificationAdapterTest` | 6 | 0 | 0 | 0.065s |
-| `dev.doggo.android.BuildConfigTest` | 1 | 0 | 0 | 0.000s |
-| `dev.doggo.android.CompositeLeaveSchedulerCancelGateTest` | 3 | 0 | 0 | 0.144s |
-| `dev.doggo.android.ReminderPermissionControllerTest` | 2 | 0 | 0 | 0.001s |
+| `dev.tabbyrush.android.AndroidNotificationAdapterTest` | 6 | 0 | 0 | 0.065s |
+| `dev.tabbyrush.android.BuildConfigTest` | 1 | 0 | 0 | 0.000s |
+| `dev.tabbyrush.android.CompositeLeaveSchedulerCancelGateTest` | 3 | 0 | 0 | 0.144s |
+| `dev.tabbyrush.android.ReminderPermissionControllerTest` | 2 | 0 | 0 | 0.001s |
 
 ---
 
@@ -124,7 +124,7 @@ Full test suites across Doggo multiplatform client and Glean Hub backend execute
 - **Result**: 23/23 checks passed.
 
 ### 3.2 Hub Offline Fixture Smoke Harness (`node scripts/hub-live-smoke.mjs --fixture-test`)
-- **Suite 1 (Health & App Admission)**: 2/2 passed (`/api/v1/health`, `/api/v1/apps/doggo` admission mode).
+- **Suite 1 (Health & App Admission)**: 2/2 passed (`/api/v1/health`, `/api/v1/apps/tabbyrush` admission mode).
 - **Suite 2 (Security & Negative Route Isolation)**: 3/3 passed (missing API key 403, invalid API key 403, legacy sync 426).
 - **Suite 3 (Authentication & Access Session)**: 4/4 passed (register, login, refresh, `/auth/me`).
 - **Suite 4 (Strict Strong Sync Operations)**: 7/7 passed (bootstrap, invalid JWT 401, epoch mismatch 409, insert create, frozen retry replay, revisionConflict, pull validation).
@@ -183,7 +183,7 @@ During Phase 11 QA validation and strategic review, four concrete code and test 
    - Fixed outbox fold in `PersistedScheduleProjector`: `scheduleToken = op.scheduleToken` now correctly assigned when `deadline != null && op.scheduleToken != null` under `INTENT_REMINDER` updates.
    - Added `testScheduleTokenAssignmentAndPreservation` in `AdversarialSchedulerBoundaryTest.kt` verifying that non-temporal edits (title only) preserve existing tokens without churn, reminder edits advance tokens, and deadline clearing resets tokens to null.
 2. **`debug-fault-proxy.mjs` Logging & Error Handling**:
-   - Expanded route allowlist to include `/api/v1/sync/doggo/strong/legacy-receipts`.
+   - Expanded route allowlist to include `/api/v1/sync/tabby-rush/strong/legacy-receipts`.
    - Prevented sensitive path leakage: unlisted path rejections log static method only, suppressing unverified client path strings.
    - Added `drop-legacy-receipts-response` scenario for fault-injection testing.
    - In `scripts/debug-fault-proxy.test.mjs`, added active `console.warn` interception verifying that `secret-path` is completely absent from warning logs upon 403 rejection.
@@ -230,15 +230,15 @@ In accordance with Phase 11 plan specifications and the authoritative acceptance
 
 ## 7. Pass Counts & Final Metrics
 
-- **Doggo Shared KMP JVM & SQLite Suite**: 202 passed, 0 failed, 0 skipped (28 test classes)
-- **Doggo Desktop App Suite**: 49 passed, 0 failed, 0 skipped (10 test classes)
-- **Doggo Android Debug Unit Suite**: 12 passed, 0 failed, 0 skipped (4 test classes)
+- **TabbyRush Shared KMP JVM & SQLite Suite**: 202 passed, 0 failed, 0 skipped (28 test classes)
+- **TabbyRush Desktop App Suite**: 49 passed, 0 failed, 0 skipped (10 test classes)
+- **TabbyRush Android Debug Unit Suite**: 12 passed, 0 failed, 0 skipped (4 test classes)
 - **Strict v2 Wire Vectors**: 23 checks (2 fingerprints + 10 valid + 11 rejections)
 - **Hub Offline Fixture Smoke**: 18 checks (5 suites)
 - **Static Security Diagnostic**: 6 checks
 - **Hub Strict Upgrade CLI Suite**: 9 tests
 - **Debug Fault Proxy Suite**: 8 tests
-- **Doggo Packaging Build Targets**: 2 passed (`:desktopApp:createDistributable`, `:androidApp:assembleDebug`)
+- **TabbyRush Packaging Build Targets**: 2 passed (`:desktopApp:createDistributable`, `:androidApp:assembleDebug`)
 - **Hub Sync Backend Crate**: 54 passed, 0 failed, 1 ignored (live Mongo gate)
 - **Hub Sync Clippy**: 0 warnings, 0 errors
 - **Hub Admin Web App Unit Suite**: 13 passed, 0 failed (2 suites)

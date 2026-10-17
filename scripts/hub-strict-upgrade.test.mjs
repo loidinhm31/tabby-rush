@@ -89,7 +89,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
 
           return res.end(
             JSON.stringify({
-              appId: 'doggo',
+              appId: 'tabby-rush',
               syncMode: currentSyncMode,
               epoch: currentEpoch,
               schemaFingerprint: currentFingerprint,
@@ -123,7 +123,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
             return res.end(
               JSON.stringify({
                 migrationId: body.migrationId,
-                appId: 'doggo',
+                appId: 'tabby-rush',
                 state: 'preflight-passed',
                 sourceVersion: 'strict-v1',
                 targetVersion: 'strict-v2',
@@ -137,7 +137,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
           return res.end(
             JSON.stringify({
               migrationId: body.migrationId,
-              appId: 'doggo',
+              appId: 'tabby-rush',
               state: simulatedMigrationState,
               sourceVersion: 'strict-v1',
               targetVersion: 'strict-v2',
@@ -165,7 +165,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
           return res.end(
             JSON.stringify({
               migrationId: migId,
-              appId: 'doggo',
+              appId: 'tabby-rush',
               state: simulatedMigrationState,
               sourceVersion: 'strict-v1',
               targetVersion: 'strict-v2',
@@ -282,7 +282,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
     assert.ok(stdout.includes('Initiating upgrade with Migration ID:'));
     assert.ok(stdout.includes('ready-v2'));
     assert.ok(stdout.includes('Performing mandatory final contract read-back assertion...'));
-    assert.ok(stdout.includes('VERIFIED: Application \'doggo\' successfully upgraded to strict-v2'));
+    assert.ok(stdout.includes('VERIFIED: Application \'tabbyrush\' successfully upgraded to strict-v2'));
     assert.equal(currentSyncMode, 'strict-v2');
   });
 

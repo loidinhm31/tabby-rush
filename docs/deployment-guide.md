@@ -1,4 +1,4 @@
-# Doggo Deployment & Operations Guide
+# TabbyRush Deployment & Operations Guide
 
 **Document Version**: 1.5.0
 **Phase**: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08; production cutover remains blocked by G3/G6/G7
@@ -8,10 +8,10 @@
 
 ## 1. Overview & Operational Responsibilities
 
-This guide details the end-to-end operational procedures required to deploy and maintain Doggo with isolated strict-v1 synchronization against Glean Hub.
+This guide details the end-to-end operational procedures required to deploy and maintain TabbyRush with isolated strict-v1 synchronization against Glean Hub.
 
 In strict adherence to architectural boundaries:
-- **Client Distribution**: The Doggo Android client ships with fixed, compile-time approved Hub endpoints; no administrative or database credentials are ever distributed to end-user devices.
+- **Client Distribution**: The TabbyRush Android client ships with fixed, compile-time approved Hub endpoints; no administrative or database credentials are ever distributed to end-user devices.
 - **Backend Infrastructure**: Glean Hub (implemented in Rust with the `glean-hub-sync` extension) and its underlying MongoDB persistence remain strictly under operator custody.
 - **Sync Protocol Isolation**: The strict-v1 protocol runs in dedicated namespaces and route trees, completely isolated from legacy Glean clients.
 - **Desktop Distribution**: Linux uses the self-contained image or RPM and Freedesktop Secret Service; Windows uses a self-contained application image or per-user MSI and current-user DPAPI. Each target uses its own dependency lock and OS credential provider.
@@ -42,12 +42,12 @@ export APPROVED_HUB_ORIGIN="https://hub.example.com"
 node scripts/hub-schema-provision.mjs \
   --origin "$APPROVED_HUB_ORIGIN" \
   --token "$GLEAN_ADMIN_TOKEN" \
-  --schema integration/glean-hub/doggo-schema.json \
-  --out /secure/credentials/doggo-credentials.json
+  --schema integration/glean-hub/tabbyrush-schema.json \
+  --out /secure/credentials/tabbyrush-credentials.json
 ```
 
 **Verification Invariants:**
-- Inspects `GET /api/v1/apps/doggo` read-back.
+- Inspects `GET /api/v1/apps/tabby-rush` read-back.
 - Asserts `syncMode === 'strict-v1'`.
 - Validates the 4 canonical columns in `todos`: `id` (string), `title` (string), `completed` (boolean), `createdAt` (integer).
 - Saves the dedicated `apiKey` into custody with restrictive `0600` file permissions.
@@ -60,12 +60,12 @@ node scripts/hub-schema-provision.mjs \
 The release signing key must be managed securely outside the repository. To generate a release keypair:
 
 ```bash
-export DOGGO_KEYSTORE="/secure/keystores/doggo-release.jks"
-export DOGGO_KEY_ALIAS="doggo-release"
+export TABBYRUSH_KEYSTORE="/secure/keystores/tabbyrush-release.jks"
+export TABBYRUSH_KEY_ALIAS="tabbyrush-release"
 
 keytool -genkeypair \
-  -keystore "$DOGGO_KEYSTORE" \
-  -alias "$DOGGO_KEY_ALIAS" \
+  -keystore "$TABBYRUSH_KEYSTORE" \
+  -alias "$TABBYRUSH_KEY_ALIAS" \
   -keyalg RSA \
   -keysize 3072 \
   -validity 10000 \
@@ -76,10 +76,10 @@ keytool -genkeypair \
 Provide signing credentials via environment variables and run the release build:
 
 ```bash
-export DOGGO_KEYSTORE="/secure/keystores/doggo-release.jks"
-export DOGGO_KEY_ALIAS="doggo-release"
-export DOGGO_STORE_PASSWORD="<store_password>"
-export DOGGO_KEY_PASSWORD="<key_password>"
+export TABBYRUSH_KEYSTORE="/secure/keystores/tabbyrush-release.jks"
+export TABBYRUSH_KEY_ALIAS="tabbyrush-release"
+export TABBYRUSH_STORE_PASSWORD="<store_password>"
+export TABBYRUSH_KEY_PASSWORD="<key_password>"
 
 # Set path to JDK 21 LTS
 export JAVA_HOME="/path/to/jdk-21"
@@ -122,12 +122,12 @@ Run the live smoke verification suite to validate end-to-end functionality befor
 
 ```bash
 export APPROVED_HUB_ORIGIN="https://hub.example.com"
-export DOGGO_API_KEY="<provisioned_api_key>"
+export TABBYRUSH_API_KEY="<provisioned_api_key>"
 
 # Live Hub execution
 node scripts/hub-live-smoke.mjs \
   --origin "$APPROVED_HUB_ORIGIN" \
-  --app-id doggo
+  --app-id tabbyrush
 
 # Or execute local fixture test mode for automated regression
 node scripts/hub-live-smoke.mjs --fixture-test
@@ -198,10 +198,10 @@ export JAVA_HOME="${JAVA_HOME:-/path/to/jdk-21}"
 > **Security Notice**: Production builds and distributions must use strict Gradle dependency verification (`gradle/verification-metadata.xml`). Bypassing verification (`--dependency-verification=off` or `--dependency-verification=lenient`) is restricted to local diagnostic troubleshooting on offline dev workstations and must never be used to produce distributable artifacts.
 
 The resulting standalone application bundle is placed at:
-`desktopApp/build/compose/binaries/main/app/Doggo/bin/Doggo`
+`desktopApp/build/compose/binaries/main/app/TabbyRush/bin/TabbyRush`
 
 The resulting native RPM package is placed at:
-`desktopApp/build/compose/binaries/main/rpm/doggo-1.0.0.rpm`
+`desktopApp/build/compose/binaries/main/rpm/tabbyrush-1.0.0.rpm`
 
 ### 7.3 Packaging Smoke & Diagnostic Verification
 Before deploying or distributing, run the Linux package smoke runner:
@@ -211,44 +211,44 @@ Before deploying or distributing, run the Linux package smoke runner:
 bash scripts/linux-package-smoke.sh --diagnose
 
 # 2. Verify unpacked standalone distributable image
-bash scripts/linux-package-smoke.sh --dist desktopApp/build/compose/binaries/main/app/Doggo
+bash scripts/linux-package-smoke.sh --dist desktopApp/build/compose/binaries/main/app/TabbyRush
 
 # 3. Audit built RPM metadata, file listing, permissions, and dependencies
-bash scripts/linux-package-smoke.sh --rpm desktopApp/build/compose/binaries/main/rpm/doggo-1.0.0.rpm
+bash scripts/linux-package-smoke.sh --rpm desktopApp/build/compose/binaries/main/rpm/tabbyrush-1.0.0.rpm
 ```
 
 ### 7.4 Installation & Verification
 Install the built RPM package onto the Fedora/RHEL workstation:
 
 ```bash
-sudo dnf install -y desktopApp/build/compose/binaries/main/rpm/doggo-1.0.0.rpm
+sudo dnf install -y desktopApp/build/compose/binaries/main/rpm/tabbyrush-1.0.0.rpm
 ```
 
 **Desktop Post-Installation Checklist:**
-- [ ] Launch application; verify `SingleInstanceGuard` acquires exclusive lock on `~/.local/share/doggo/accounts/doggo.lock`.
+- [ ] Launch application; verify `SingleInstanceGuard` acquires exclusive lock on `~/.local/share/tabbyrush/accounts/tabbyrush.lock`.
 - [ ] Attempt concurrent second launch; verify clean exit without database or vault access.
-- [ ] Create account or login; verify credentials saved in Secret Service via `secret-tool search --all service doggo account <account_key>` (lists item paths without printing token payload).
-- [ ] Verify tasks persist in `~/.local/share/doggo/accounts/<account_key>/doggo.db`.
+- [ ] Create account or login; verify credentials saved in Secret Service via `secret-tool search --all service tabbyrush account <account_key>` (lists item paths without printing token payload).
+- [ ] Verify tasks persist in `~/.local/share/tabbyrush/accounts/<account_key>/tabbyrush.db`.
 - [ ] Verify foreground periodic sync operates every 15 minutes via `DesktopSyncScheduler`.
 - [ ] Execute account logout; verify fail-closed wipe of database files, wipe markers, and Secret Service credentials.
 
 ### 7.5 Clean Uninstallation
 To cleanly remove the package and local user data:
 ```bash
-# 1. Ensure all Doggo desktop processes have cleanly exited to prevent file lock and inode recycling race conditions
-pkill -f 'dev.doggo.desktop.MainKt' || true
+# 1. Ensure all TabbyRush desktop processes have cleanly exited to prevent file lock and inode recycling race conditions
+pkill -f 'dev.tabbyrush.desktop.MainKt' || true
 
 # 2. Remove RPM package
-sudo dnf remove -y doggo
+sudo dnf remove -y tabbyrush
 
 # 3. Query existing Secret Service credentials securely without displaying secret tokens
-secret-tool search --all service doggo
+secret-tool search --all service tabbyrush
 
 # 4. Clear credentials from Secret Service daemon
-secret-tool clear service doggo account <account_key>
+secret-tool clear service tabbyrush account <account_key>
 
 # 5. Remove application data and local SQLite databases after process termination
-rm -rf ~/.local/share/doggo
+rm -rf ~/.local/share/tabbyrush
 ```
 
 ## 8. Windows Desktop & MSI Deployment
@@ -273,14 +273,14 @@ Run the target-specific build, Windows desktop tests, and shared JVM regression 
 .\gradlew.bat -PdesktopTarget=windows :desktopApp:packageMsi
 ```
 
-The Windows lockfile is `desktopApp\gradle-windows.lockfile`; ordinary builds consume the target-specific lock without `--write-locks`. The self-contained application image is written to `desktopApp\build\compose\binaries\main\app\Doggo\`. The MSI output is `desktopApp\build\compose\binaries\main\msi\Doggo-1.0.0.msi`. `createDistributable` includes the runtime and `Doggo.exe`; it does not require WiX.
+The Windows lockfile is `desktopApp\gradle-windows.lockfile`; ordinary builds consume the target-specific lock without `--write-locks`. The self-contained application image is written to `desktopApp\build\compose\binaries\main\app\TabbyRush\`. The MSI output is `desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.0.msi`. `createDistributable` includes the runtime and `TabbyRush.exe`; it does not require WiX.
 
 ### 8.3 Audit the Bundle and MSI
 Inspect the distributable and MSI using the Windows-specific PowerShell harness:
 
 ```powershell
-.\scripts\windows-package-smoke.ps1 -DistDir desktopApp\build\compose\binaries\main\app\Doggo
-.\scripts\windows-package-smoke.ps1 -MsiPath desktopApp\build\compose\binaries\main\msi\Doggo-1.0.0.msi
+.\scripts\windows-package-smoke.ps1 -DistDir desktopApp\build\compose\binaries\main\app\TabbyRush
+.\scripts\windows-package-smoke.ps1 -MsiPath desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.0.msi
 ```
 
 The bundle audit checks the launcher/runtime, Windows DPAPI class and SPI registration, exactly one registered vault provider, and absence of Linux D-Bus/Secret Service classes. The MSI audit calculates SHA-256, reports Authenticode status, and reads Windows Installer metadata through COM. See [Windows Test Summary](./evidence/windows-test-summary.md) for the recorded 100.68 MB unsigned development MSI and its exact hash; rebuilds may have different hashes.
@@ -291,12 +291,12 @@ The evidence records successful MSI generation and package metadata inspection, 
 For an authorized operator acceptance run:
 
 ```powershell
-msiexec.exe /i "desktopApp\build\compose\binaries\main\msi\Doggo-1.0.0.msi"
+msiexec.exe /i "desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.0.msi"
 ```
 
-After installation, verify the per-user Start Menu entry launches Doggo without a developer JDK on `PATH`, then exercise login, offline restart, task edits, and synchronization. Verify credentials remain usable only in the intended Windows user context. Treat sync quiescence and clearing local account data and vault credentials on account leave as acceptance requirements to test, not as established Windows behavior. Use the [Windows Acceptance](./windows-acceptance.md) matrix for the complete runtime and accessibility checklist. The seven Windows PNGs are design mockups, not installed-app captures; Windows Narrator, scaling, and live UI states still need operator verification.
+After installation, verify the per-user Start Menu entry launches TabbyRush without a developer JDK on `PATH`, then exercise login, offline restart, task edits, and synchronization. Verify credentials remain usable only in the intended Windows user context. Treat sync quiescence and clearing local account data and vault credentials on account leave as acceptance requirements to test, not as established Windows behavior. Use the [Windows Acceptance](./windows-acceptance.md) matrix for the complete runtime and accessibility checklist. The seven Windows PNGs are design mockups, not installed-app captures; Windows Narrator, scaling, and live UI states still need operator verification.
 
-To uninstall, close Doggo and use Windows **Settings → Apps → Installed apps** or the ProductCode inspected from the MSI. Uninstalling the package is not a promise that per-user account data is erased; use Doggo's guarded account-leave flow before removal when account data should be cleared. Verify same-version reinstall separately; it does not establish future upgrade behavior.
+To uninstall, close TabbyRush and use Windows **Settings → Apps → Installed apps** or the ProductCode inspected from the MSI. Uninstalling the package is not a promise that per-user account data is erased; use TabbyRush's guarded account-leave flow before removal when account data should be cleared. Verify same-version reinstall separately; it does not establish future upgrade behavior.
 
 Phase 10 implementation is recorded at **100% (2026-10-14)**; technical acceptance is blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not guaranteed by the current source, and clean-user runtime/sync plus uninstall/reinstall evidence remain open. Upstream Phase 09 installed-RPM acceptance is also open. Do not report package generation or metadata inspection as installed-runtime acceptance.
 
@@ -305,12 +305,12 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**; technical acceptan
 ## 9. Strict-v2 Protocol Migration & Cutover Operations
 
 ### 9.1 Architecture & Deployment Ordering
-Upgrading Doggo and Glean Hub to `strict-v2` (task deadlines, strict timezones, and native reminders) requires strict versioned coordination. Deploying schema changes or database modifications in isolation is strictly prohibited.
+Upgrading TabbyRush and Glean Hub to `strict-v2` (task deadlines, strict timezones, and native reminders) requires strict versioned coordination. Deploying schema changes or database modifications in isolation is strictly prohibited.
 
 The authorized deployment ordering is:
 1. **All-Node Backend Deployment**: Deploy the fence-aware Glean Hub backend binary across all instances. Ingress continues serving `strict-v1`.
-2. **Client Publication**: Publish updated Doggo clients (Android APK, Linux package, Windows MSI) containing Room 1→2 migration and `ContractTransitionCoordinator`. UI guards keep deadline submission disabled with an upgrade prompt while the backend remains on v1.
-3. **Non-Mutating Preflight**: Execute dry-run preflight via `node scripts/hub-strict-upgrade.mjs --app-id doggo --dry-run`.
+2. **Client Publication**: Publish updated TabbyRush clients (Android APK, Linux package, Windows MSI) containing Room 1→2 migration and `ContractTransitionCoordinator`. UI guards keep deadline submission disabled with an upgrade prompt while the backend remains on v1.
+3. **Non-Mutating Preflight**: Execute dry-run preflight via `node scripts/hub-strict-upgrade.mjs --app-id tabbyrush --dry-run`.
 4. **Controlled In-Place Upgrade**: Execute the upgrade via CLI or Web Admin UI with a durable migration UUID. The backend fences new traffic, drains admitted request permits, transforms documents in batches of 500, validates all documents, publishes canonical `strict-v2` in `_schemas` via CAS, and releases the fence.
 5. **Mandatory Post-Cutover Read-Back**: Verify `syncMode === 'strict-v2'`, canonical fingerprint `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`, all 16 columns active, and unchanged active epoch UUID.
 6. **Client Replay & Transition**: Connected clients transition to `ready-v2`, reconcile legacy receipts, and unlock full deadline and reminder functionality.
@@ -327,7 +327,7 @@ node scripts/strict-v2-cutover-rehearsal.mjs --self-test
 export GLEAN_ADMIN_TOKEN="<operator_admin_token>"
 node scripts/strict-v2-cutover-rehearsal.mjs \
   --staging-origin "https://staging-hub.example.com" \
-  --app-id doggo \
+  --app-id tabbyrush \
   --confirm-disposable-staging
 ```
 *Note: Tooling self-tests verify client-side CLI orchestration; physical Gate G3 multi-instance cluster migration must be verified on a live MongoDB replica set before production cutover.*
@@ -344,7 +344,7 @@ Phase 07 records implementation, automated tests, and build evidence. Native And
   - Launcher Host: Requires an Android home screen launcher supporting Jetpack Glance / AppWidgetManager.
   - No Auto-Start / FGS: Does not register background auto-start broadcast receivers, exact alarm permissions, or foreground services. All updates are triggered reactively by database observers or WorkManager boundary wake.
 - **Quiet Deadline Notification**:
-  - Channel `doggo_task_surfaces`: Low-importance, no-sound, no-vibration alert for the single next task deadline.
+  - Channel `tabbyrush_task_surfaces`: Low-importance, no-sound, no-vibration alert for the single next task deadline.
   - Opt-In Policy: Disabled by default; requires explicit user opt-in in task surface settings.
   - Runtime Permissions: On Android 13+ (API 33+), requests `POST_NOTIFICATIONS` only upon explicit user enablement in settings. Rejection shows informative guidance without repeated nagging.
   - Swipe Dismissal: On Android 14+ (API 34+), user swipe dismissal records a durable suppression key preventing re-posting of the same task and deadline until selection or deadline changes.

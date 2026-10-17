@@ -1,6 +1,6 @@
 # Code Review: Phase 02 Frozen Foundation (37 files)
 
-Date 2026-10-14 · Plan `plans/261013-1540-doggo-glean-hub-reuse/phase-02-frozen-foundation.md` · Score **5/10**
+Date 2026-10-14 · Plan `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-02-frozen-foundation.md` · Score **5/10**
 
 ## Scope
 37 owned files (root Gradle, shared build, 16 contracts, 4 tests, 5 docs) + `tests/test-phase-02-foundation.sh` + QA report. Static review; Gradle/Kotlin NOT runnable on host (only JDK 25 present, no `~/.gradle`, no Android SDK).
@@ -21,8 +21,8 @@ Date 2026-10-14 · Plan `plans/261013-1540-doggo-glean-hub-reuse/phase-02-frozen
 6. **api-contract.md ambiguity.** Uses `u32_be(origin.length)`; code uses UTF-8 **byte** length. State "byte length". Example digest `e3b0c442…b855` in push response = SHA-256 of empty string → misleading.
 7. **Redaction untested.** No test asserts `CredentialBundle.toString()`/`HubConfig.toString()`; QA only greps the literal string. `CredentialBundle.hashCode` derives from raw token hashes; `equals` non-constant-time (low risk). `HubConfig` is a data class: `copy()/component3()` expose key; no init validation of origin/key blank.
 8. **PII in default toString.** `AccountIdentity` (email), `AccessRequestInfo.message`, `Todo.title`, `TodoUiState`, `SafeError.message` print raw. Code-standard "never print credentials" fine, but add PII rule / redact `AccountIdentity.email`. `SafeError.message` has no "never carry server text/secrets" guard.
-9. **Plan deliverables missing in shared/build.gradle.kts:** compose resources `packageOfResClass=dev.doggo.shared.resources`; androidInstrumentedTest/jvmTest roots; Room schema dir exists but no gate documented. Unused deps (YAGNI): datetime, serialization plugin, ktor, room, compose.material3, `coroutines-swing` (desktopApp concern), activity-compose, lifecycle — none used by Phase 02 sources.
-10. **Docs misstate architecture.** `system-architecture.md` says shared is "Pure KMP library" while commonMain depends on Compose/Room/Ktor (only *signatures* are pure). Foundation-evidence/api docs hardcode absolute `/home/loidinh/WS/doggo` (toolchain-versions §3). Toolchain says JDK 21 required; host has only JDK 25 (no toolchain resolver configured, no `foojay`/`jvmToolchain`) → build will fail on host without JAVA_HOME setup.
+9. **Plan deliverables missing in shared/build.gradle.kts:** compose resources `packageOfResClass=dev.tabbyrush.shared.resources`; androidInstrumentedTest/jvmTest roots; Room schema dir exists but no gate documented. Unused deps (YAGNI): datetime, serialization plugin, ktor, room, compose.material3, `coroutines-swing` (desktopApp concern), activity-compose, lifecycle — none used by Phase 02 sources.
+10. **Docs misstate architecture.** `system-architecture.md` says shared is "Pure KMP library" while commonMain depends on Compose/Room/Ktor (only *signatures* are pure). Foundation-evidence/api docs hardcode absolute `/home/loidinh/WS/tabbyrush` (toolchain-versions §3). Toolchain says JDK 21 required; host has only JDK 25 (no toolchain resolver configured, no `foojay`/`jvmToolchain`) → build will fail on host without JAVA_HOME setup.
 11. **QA suite is mostly vacuous.** 56 asserts = file existence + greps; "functional" Node block tests Node's own crypto/regex, not Kotlin. Passes with items 1–2 broken. Don't count as acceptance.
 12. **`.gitignore` gaps:** `.kotlin/` (Kotlin 2.x session dir), `*.pem`/`*.key`, `google-services.json`, `*.hprof`. Low.
 13. `gradle.properties`: `kotlin.mpp.enableCInteropCommonization` (no native targets) and `kotlin.mpp.androidSourceSetLayoutVersion=2` (default/deprecated) are noise; `configuration-cache=false` undocumented.

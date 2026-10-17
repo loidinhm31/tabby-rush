@@ -2,15 +2,15 @@
 
 **Date:** 2026-10-14
 **Agent:** EvcProjectManager
-**Target Plan:** `plans/261013-1540-doggo-glean-hub-reuse/plan.md`
-**Phase File:** `plans/261013-1540-doggo-glean-hub-reuse/phase-04-auth-session.md`
+**Target Plan:** `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md`
+**Phase File:** `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-04-auth-session.md`
 **Roadmap:** `docs/project-roadmap.md`
 
 ---
 
 ## 1. Executive Summary & Achievements
 
-Phase 04 (Hub Authentication and Protected Session) delivered the client-side authentication and session management layer for Doggo's isolated strict sync, securing credential custody and access lifecycle before local sync integration.
+Phase 04 (Hub Authentication and Protected Session) delivered the client-side authentication and session management layer for TabbyRush's isolated strict sync, securing credential custody and access lifecycle before local sync integration.
 
 ### Delivered Artifacts (14 Files)
 1. **Auth DTOs & HTTP Client (`hub-auth-dtos.kt`, `hub-http-client.kt`)**:

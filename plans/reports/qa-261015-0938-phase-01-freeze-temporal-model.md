@@ -2,7 +2,7 @@
 
 - Date: 2026-10-15
 - Phase: Phase 01 — Freeze temporal model and strict transition
-- Target: Doggo (`/home/loidinh/WS/doggo`) & Glean Hub (`/home/loidinh/WS/glean-hub`)
+- Target: TabbyRush (`/home/loidinh/WS/tabbyrush`) & Glean Hub (`/home/loidinh/WS/glean-hub`)
 
 ---
 
@@ -27,8 +27,8 @@
 - Scope: 16 test classes, 108 unit/integration tests across shared KMP layer.
 - Outcome: 108 passed, 0 failed, 0 skipped. Execution time: 0.588s in test runner (wall time: 6.46s).
 - Targeted Phase 01 suites:
-  - `dev.doggo.shared.contract.StrictV2DigestVectorTest`: 5/5 passed. Validates migrated null/default vector, date-only deadline, timed DST overlap, repeating count 10, and disabled rule with deadline.
-  - `dev.doggo.shared.contract.StrictV2DigestExtendedTest`: 5/5 passed. Validates cleared deadline, Unicode title & zone, zero-data-bytes delete, negative epoch instants, and boundary/overflow rejections:
+  - `dev.tabbyrush.shared.contract.StrictV2DigestVectorTest`: 5/5 passed. Validates migrated null/default vector, date-only deadline, timed DST overlap, repeating count 10, and disabled rule with deadline.
+  - `dev.tabbyrush.shared.contract.StrictV2DigestExtendedTest`: 5/5 passed. Validates cleared deadline, Unicode title & zone, zero-data-bytes delete, negative epoch instants, and boundary/overflow rejections:
     - `reminderCount` in 1..10 bounds.
     - Repeating interval >= 15 min when count > 1; null interval when count = 1.
     - Non-negative `createdAt` and `reminderLeadMinutes`.
@@ -40,7 +40,7 @@
 ### 2. Node.js Strict-v2 Vector Verification
 - Command: `node scripts/strict-v2-vector-runner.mjs`
 - Scope: Independent JS preimage encoder, checked 64-bit bounds validation, and SHA-256 digest calculation against `integration/glean-hub/strict-v2-vectors.json`.
-- Outcome: 9/9 valid vectors passed; 11/11 rejection vectors verified. Cross-repository fixture SHA-256 comparison between Doggo and Glean Hub passed identically. Execution time: ~0.08s.
+- Outcome: 9/9 valid vectors passed; 11/11 rejection vectors verified. Cross-repository fixture SHA-256 comparison between TabbyRush and Glean Hub passed identically. Execution time: ~0.08s.
 
 ### 3. Node.js Hub Live Smoke Offline Fixture Test
 - Command: `node scripts/hub-live-smoke.mjs --fixture-test`

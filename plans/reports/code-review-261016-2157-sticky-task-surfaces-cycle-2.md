@@ -1,4 +1,4 @@
-# Code Review Cycle 2: Doggo Sticky Task Surfaces
+# Code Review Cycle 2: TabbyRush Sticky Task Surfaces
 
 **Report Path:** `plans/reports/code-review-261016-2157-sticky-task-surfaces-cycle-2.md`  
 **Date:** 2026-10-16  
@@ -11,10 +11,10 @@
 
 ### Scope
 - **Files Reviewed (50+ files across Phases 02–06):**
-  - **Remediation 1 (Desktop Drain Signal Reset & Lifecycle Gate):** `desktopApp/src/main/kotlin/dev/doggo/desktop/desktop-task-surfaces.kt` and regression test in `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-task-surfaces-test.kt`.
-  - **Remediation 2 (Android Runtime Closure Quiescence & Cancellation Join):** `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt`.
-  - **Remediation 3 (Session ViewModel Token & Generation Matching):** `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt`.
-  - **Remediation 4 (Desktop Test Suite Virtual-Time Polling):** `desktopApp/src/test/kotlin/dev/doggo/desktop/desktop-task-surfaces-test.kt`.
+  - **Remediation 1 (Desktop Drain Signal Reset & Lifecycle Gate):** `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces.kt` and regression test in `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces-test.kt`.
+  - **Remediation 2 (Android Runtime Closure Quiescence & Cancellation Join):** `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt`.
+  - **Remediation 3 (Session ViewModel Token & Generation Matching):** `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt`.
+  - **Remediation 4 (Desktop Test Suite Virtual-Time Polling):** `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces-test.kt`.
   - **Supporting Integrations & Audits:** `main-activity.kt`, `account-runtime.kt`, `composite-leave-scheduler-cancel-gate.kt`, `composite-desktop-leave-cancel-gate.kt`, `task-widget-updater.kt`, `task-surface-preferences.kt`, `AndroidManifest.xml`, `release-security-check.mjs`.
 - **Lines of Code Analyzed:** ~8,040 lines (full surface changes across Kotlin, XML, and security tools).
 - **Review Focus:** Rigorous verification of all four Cycle 1 remediations, multi-account lifecycle isolation, token fencing, fail-closed teardown invariants, and test suite green status.
@@ -26,7 +26,7 @@
 
 Cycle 2 review confirms that all four critical defects identified in Cycle 1 have been remediated:
 1. **Desktop Drain Signal Reset & Gate Lifecycle:** `DesktopTaskSurfaceAccess.onAccountAuthenticated()` now strictly enforces `check(gateState != SurfaceGateState.CLOSING)` and resets `drainSignal = null`. In-flight drain completion correctly cleans up state. New regression test `testDrainReopenNewInFlightDrainCycle` proves subsequent drains cannot falsely complete prematurely on a reused signal.
-2. **Android Runtime Closure Drain Check & Observer Join:** `DoggoApplication.closeRuntimeInternal()` now explicitly captures and logs the return value of `runtime.deliveryGate.closeAndDrain()`, awaits `cancelAndJoin()` on `surfaceObserverJob` and `scheduleObserverJob`, sets `store.isFrozen = true`, safely closes the Room database, and preserves `CancellationException` propagation.
+2. **Android Runtime Closure Drain Check & Observer Join:** `TabbyRushApplication.closeRuntimeInternal()` now explicitly captures and logs the return value of `runtime.deliveryGate.closeAndDrain()`, awaits `cancelAndJoin()` on `surfaceObserverJob` and `scheduleObserverJob`, sets `store.isFrozen = true`, safely closes the Room database, and preserves `CancellationException` propagation.
 3. **Session ViewModel Intent Fencing:** `dispatchTaskSelectionWithToken` and `dispatchCreateWithToken` strictly validate that `accountKey` is non-blank and matches the active account token. Surface create intents enforce `generation >= 0L` matching `currentToken.generation`, eliminating the generation bypass.
 4. **Desktop Test Suite Green (98/98):** Virtual-time polling against real SQLite background coroutines in `desktop-task-surfaces-test.kt` has been wrapped in `withContext(Dispatchers.Default)`, resolving the test hang and bringing the desktop suite to 98/98 passing tests.
 
@@ -42,12 +42,12 @@ All 363 Gradle tests are green across shared, desktop, and Android modules, secu
 ### Warnings (High Priority Findings)
 
 1. **Android Runtime Closure Fails Open on Delivery Drain Timeout**
-   - **File:** `androidApp/src/main/kotlin/dev/doggo/android/doggo-application.kt:191-198`
+   - **File:** `androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt:191-198`
    - **Description:** When `runtime.deliveryGate.closeAndDrain()` returns `false` (timeout), `closeRuntimeInternal` logs a warning (`"proceeding defensively"`) but proceeds to freeze store and close Room database. If in-flight deliveries are still executing against SQLite, closing the database can trigger unhandled exceptions or corrupt transaction state.
    - **Recommendation:** In Phase 07, align `closeRuntimeInternal` with `CompositeLeaveSchedulerCancelGate`: throw or abort destructive closure when delivery drain fails, ensuring fail-closed semantics.
 
 2. **Widget Cleanup Error Swallowing in Leave Protocol**
-   - **File:** `androidApp/src/main/kotlin/dev/doggo/android/task-widget-updater.kt:222-226, 240-244`
+   - **File:** `androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-updater.kt:222-226, 240-244`
    - **Description:** `pushBlankRemoteViews()` and `closeGlanceSessions()` catch `Throwable` and log non-fatal messages. When called by `CompositeLeaveSchedulerCancelGate`, unhandled Glance/AppWidgetManager failures do not abort `AccountLeaveProtocol`, potentially leaving ghost widget data on launcher without failing closed.
    - **Recommendation:** Differentiate normal updater refreshes from destructive wipe operations, or verify on device that Glance sessions never resurrect prior titles.
 
@@ -62,9 +62,9 @@ All 363 Gradle tests are green across shared, desktop, and Android modules, secu
 1. **Medium — Synchronous Preferences Commit on IO Dispatcher**
    - `TaskSurfacePreferences` synchronizes on a companion object lock and executes synchronous `editor.commit()`. While safely off-main (`withContext(Dispatchers.IO)`), account-partitioned locks (`ConcurrentHashMap<AccountKey, Mutex>`) would prevent cross-account contention under rapid notification intervals.
 2. **Low — Deprecated Compose Resource API in Desktop**
-   - `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt:1005` uses deprecated `painterResource(resourcePath)`. Migrate to multiplatform Compose resource accessors.
+   - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt:1005` uses deprecated `painterResource(resourcePath)`. Migrate to multiplatform Compose resource accessors.
 3. **Low — Standardize Intent Action String Constants**
-   - Consolidate `"dev.doggo.android.ACTION_VIEW_TASK"` across `MainActivity`, `TaskSurfaceIntents`, and `AndroidNotificationIntentFactory` to reference `TaskSurfaceIntents.ACTION_VIEW_TASK`.
+   - Consolidate `"dev.tabbyrush.android.ACTION_VIEW_TASK"` across `MainActivity`, `TaskSurfaceIntents`, and `AndroidNotificationIntentFactory` to reference `TaskSurfaceIntents.ACTION_VIEW_TASK`.
 
 ---
 
@@ -73,7 +73,7 @@ All 363 Gradle tests are green across shared, desktop, and Android modules, secu
 1. **Regression Test Rigor:** `testDrainReopenNewInFlightDrainCycle` specifically exercises the multi-stage lifecycle (authenticate -> drain -> re-authenticate -> launch in-flight -> drain held -> complete), ensuring no regression on reused signals.
 2. **Defensive Concurrency:** Observer cancellations in `closeRuntimeInternal` and `CompositeDesktopLeaveCancelGate` enforce structured `cancelAndJoin()`, preventing coroutine leaks and race conditions against database closure.
 3. **Strict Intent Validation:** Zero-trust intent handling in `SessionViewModel` rejects malformed or unauthenticated surface intents before they can invoke navigation or mutations.
-4. **Clean Security Architecture:** 12/12 Node security tests and static manifest auditor confirm zero unauthorized exported components (only `MainActivity` and `DoggoTaskWidgetReceiver` exported with narrow filter/metadata).
+4. **Clean Security Architecture:** 12/12 Node security tests and static manifest auditor confirm zero unauthorized exported components (only `MainActivity` and `TabbyRushTaskWidgetReceiver` exported with narrow filter/metadata).
 
 ---
 

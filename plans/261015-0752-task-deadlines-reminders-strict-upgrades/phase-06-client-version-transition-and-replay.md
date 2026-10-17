@@ -13,7 +13,7 @@ Old clients cannot be globally drained. Frozen accepted/uncertain requests canno
 - Explicit supported version negotiation and incompatibility preserving local data.
 - Exact legacy receipt reconciliation; safe never-sent intention translation only; durable restart/checkpoints/FIFO.
 - Non-destructive intent-masked rebasing in `RoomAccountStore.reconcileAccepted`: acknowledging legacy strict-v1 outbox operations must never erase remote v2 deadline metadata when local base has equal or higher revision.
-- Atomic transactional cleanup on regressive server revision reconciliation via `DoggoDao.discardRegressiveReconcileAtomic` (wrapping `deleteDraft` and `deleteOutbox` in a single SQLite transaction).
+- Atomic transactional cleanup on regressive server revision reconciliation via `TabbyRushDao.discardRegressiveReconcileAtomic` (wrapping `deleteDraft` and `deleteOutbox` in a single SQLite transaction).
 - Full v2 round-trip across nullable/removal, conflicts, scans, tombstones and account leave.
 - Historical v1 support limited to required transition/reconciliation, not default alias/shim or permissive payload fallback.
 ## Architecture
@@ -27,8 +27,8 @@ State: ready-v1→upgrade-detected→dispatch-quiesced→legacy-reconciling→v2
 - Full scans discard stale contract cursor/staging, retain base identities/outbox; completed scan and transition checkpoint must be durable together where used to permit dispatch.
 
 ## Related code files
-Doggo root `/home/loidinh/WS/doggo`.
-Modify shared `contract/{strict-sync-contract,endpoint-policy,safe-errors,account-store}.kt`, `sync/{hub-sync-dtos,hub-sync-client,staged-full-scan,outbox-reconciliation,account-sync-coordinator}.kt`, relevant `data/{doggo-dao,room-account-store,account-sync-meta-entity,outbox-entity}.kt`, UI `conflict-review.kt` and both session/controller error projections.
+TabbyRush root `/home/loidinh/WS/tabbyrush`.
+Modify shared `contract/{strict-sync-contract,endpoint-policy,safe-errors,account-store}.kt`, `sync/{hub-sync-dtos,hub-sync-client,staged-full-scan,outbox-reconciliation,account-sync-coordinator}.kt`, relevant `data/{tabbyrush-dao,room-account-store,account-sync-meta-entity,outbox-entity}.kt`, UI `conflict-review.kt` and both session/controller error projections.
 Create narrow sync contract-transition coordinator if existing coordinator would exceed focused scope; retain v1 digest function only as explicit historical implementation. Extend existing `commonTest` sync/digest suites and JVM storage tests; versioned canonical schema/vector fixtures from phase 01. Update `docs/local-storage-and-sync.md`, `docs/sync-acceptance.md`, Hub integration specs.
 
 ## Implementation Steps
@@ -53,7 +53,7 @@ Create narrow sync contract-transition coordinator if existing coordinator would
   - **Transition State Machine & Coordinator:** `ContractTransitionCoordinator.kt` implementing the deterministic 7-state transition lifecycle across 6 transitions (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`) with durable phase resumption and fail-closed error handling.
   - **Legacy Receipts Reconciliation:** Scoped route `/api/v1/sync/{appId}/strong/legacy-receipts` to `RouteClassification.DUAL_AUTH_STRICT` and implemented `fetchLegacyReceipts` in `HubSyncClient.kt`, matching deterministic preimage and digest against original frozen v1 operations.
   - **Intent-Masked Rebasing:** `RoomAccountStore.reconcileAccepted` protects remote v2 temporal fields (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`) from being overwritten or cleared by legacy strict-v1 acknowledgements or partial title edits.
-  - **Atomic Regressive Revision Cleanup:** `DoggoDao.discardRegressiveReconcileAtomic` atomically purges outbox entries and discards stale drafts within a single SQLite transaction on server revision regression.
+  - **Atomic Regressive Revision Cleanup:** `TabbyRushDao.discardRegressiveReconcileAtomic` atomically purges outbox entries and discards stale drafts within a single SQLite transaction on server revision regression.
   - **Scoped Staged Scan Normalization:** `StagedFullScan.kt` restricts equal-revision default normalization to active migration passes (`isMigration = true`), preserving strict `DIVERGENT_REVISION` mismatch detection during steady-state operation.
   - **Accessible Conflict Resolution UI:** `ConflictReview` and `VersionCard` in `conflict-review.kt` with WCAG 2.1 AA verified color contrast tokens, comprehensive deadline/reminder parameter inspection, and explicit warning prompts on `isUnknownSuperseded` conflicts with duplicate-copy risk disclosure.
 
@@ -74,7 +74,7 @@ Create narrow sync contract-transition coordinator if existing coordinator would
   - Zero critical blocking defects; zero high-priority findings.
   - Fail-closed ambiguity handling verified for `UNKNOWN_SUPERSEDED` receipts and `INTENT_REQUIRES_REVIEW` mutations.
   - Intent-masked rebasing verified preserving remote temporal metadata from being cleared by legacy v1 or partial title edits.
-  - Atomic concurrency protection verified in `DoggoDao.discardRegressiveReconcileAtomic`.
+  - Atomic concurrency protection verified in `TabbyRushDao.discardRegressiveReconcileAtomic`.
   - WCAG 2.1 AA verified color contrast tokens and warning banner verified in `ConflictReview`.
   - 4 technical qualifications noted: untracked deliverable files staged for commit, dependency verification disabled pending metadata regeneration, test environment boundaries (offline fixtures vs live cluster), and scoped equal-revision normalization.
 

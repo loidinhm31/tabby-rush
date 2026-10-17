@@ -16,7 +16,7 @@
 ## Sequential Thinking Problem Decomposition
 
 1. **Scope & Inventory Audit:**
-   - Verified presence of all 25 Phase 07 paths from `plans/261013-1540-doggo-glean-hub-reuse/file-ownership.md`. All 25 files exist and contain non-trivial implementations.
+   - Verified presence of all 25 Phase 07 paths from `plans/261013-1540-tabbyrush-glean-hub-reuse/file-ownership.md`. All 25 files exist and contain non-trivial implementations.
 2. **Script Syntax & Execution Audit:**
    - Ran `bash -n` on `scripts/android-smoke.sh`: establishes Bash syntax validity.
    - Ran `node --check` on `scripts/debug-fault-proxy.mjs`: establishes ES module syntax validity.
@@ -58,20 +58,20 @@
 
 | Test Class FQCN | Domain / Layer | Test Doubles / Engine | Tests | Passed | Failed |
 |---|---|---|---:|---:|---:|
-| `dev.doggo.shared.auth.HubAuthClientTest` | Authentication HTTP | Mock Ktor Engine | 8 | 8 | 0 |
-| `dev.doggo.shared.auth.HubAuthSessionTest` | Auth Session State | Fake Vault + Mock Ktor | 8 | 8 | 0 |
-| `dev.doggo.shared.auth.SingleFlightRefreshTest` | Token Concurrency | Coroutine Mutex Double | 3 | 3 | 0 |
-| `dev.doggo.shared.contract.AccountKeyTest` | Core Contract | Pure Common Kotlin | 5 | 5 | 0 |
-| `dev.doggo.shared.contract.EndpointPolicyTest` | Contract Routing | Pure Common Kotlin | 8 | 8 | 0 |
-| `dev.doggo.shared.contract.StrictDigestTest` | Hashing Invariants | Pure Common Kotlin | 5 | 5 | 0 |
-| `dev.doggo.shared.contract.TitlePolicyTest` | Sanitization Contract | Pure Common Kotlin | 6 | 6 | 0 |
-| `dev.doggo.shared.data.RoomAccountStoreTest` | Local Persistence | Bundled SQLite (JVM) | 9 | 9 | 0 |
-| `dev.doggo.shared.sync.AccountLeaveProtocolTest` | Teardown & Wipe | Fake Store + Session | 7 | 7 | 0 |
-| `dev.doggo.shared.sync.AccountSyncCoordinatorTest` | Strict Sync Pipeline | Fake DAO + Mock Ktor | 5 | 5 | 0 |
-| `dev.doggo.shared.sync.HubSyncClientTest` | Backend Sync Client | Mock Ktor Engine | 6 | 6 | 0 |
-| `dev.doggo.shared.sync.OutboxReconciliationTest` | Outbox & Replay CAS | Fake Store / DAO | 10 | 10 | 0 |
-| `dev.doggo.shared.sync.StagedFullScanTest` | Full Sync Scan | Fake DAO + Mock Ktor | 9 | 9 | 0 |
-| `dev.doggo.shared.ui.TodoSemanticsTest` | Compose Accessibility | Semantic Node Test | 7 | 7 | 0 |
+| `dev.tabbyrush.shared.auth.HubAuthClientTest` | Authentication HTTP | Mock Ktor Engine | 8 | 8 | 0 |
+| `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Auth Session State | Fake Vault + Mock Ktor | 8 | 8 | 0 |
+| `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Token Concurrency | Coroutine Mutex Double | 3 | 3 | 0 |
+| `dev.tabbyrush.shared.contract.AccountKeyTest` | Core Contract | Pure Common Kotlin | 5 | 5 | 0 |
+| `dev.tabbyrush.shared.contract.EndpointPolicyTest` | Contract Routing | Pure Common Kotlin | 8 | 8 | 0 |
+| `dev.tabbyrush.shared.contract.StrictDigestTest` | Hashing Invariants | Pure Common Kotlin | 5 | 5 | 0 |
+| `dev.tabbyrush.shared.contract.TitlePolicyTest` | Sanitization Contract | Pure Common Kotlin | 6 | 6 | 0 |
+| `dev.tabbyrush.shared.data.RoomAccountStoreTest` | Local Persistence | Bundled SQLite (JVM) | 9 | 9 | 0 |
+| `dev.tabbyrush.shared.sync.AccountLeaveProtocolTest` | Teardown & Wipe | Fake Store + Session | 7 | 7 | 0 |
+| `dev.tabbyrush.shared.sync.AccountSyncCoordinatorTest` | Strict Sync Pipeline | Fake DAO + Mock Ktor | 5 | 5 | 0 |
+| `dev.tabbyrush.shared.sync.HubSyncClientTest` | Backend Sync Client | Mock Ktor Engine | 6 | 6 | 0 |
+| `dev.tabbyrush.shared.sync.OutboxReconciliationTest` | Outbox & Replay CAS | Fake Store / DAO | 10 | 10 | 0 |
+| `dev.tabbyrush.shared.sync.StagedFullScanTest` | Full Sync Scan | Fake DAO + Mock Ktor | 9 | 9 | 0 |
+| `dev.tabbyrush.shared.ui.TodoSemanticsTest` | Compose Accessibility | Semantic Node Test | 7 | 7 | 0 |
 | **TOTAL** | — | — | **96** | **96** | **0** |
 
 *Execution Note: Ran with `--dependency-verification=off` per instruction.*
@@ -86,10 +86,10 @@ The `:androidApp` module defines 8 instrumented tests across 2 files. Because SD
 - `testInitialUiState`: Checks `SessionViewModel` initial unauthenticated state, empty items, filter ALL.
 - `testFilterSelectionAction`: Checks `SessionViewModel` filter mutation between `ACTIVE` and `COMPLETED`.
 - `testEditorOpenAndCancel`: Checks `TodoAction.OpenCreate` and `CancelEditor` dispatching.
-- `testAccountRuntimeCreationAndStoreAccess`: Exercises `DoggoApplication.getOrCreateAccountRuntime`, verifying database creation, todo item insertion, and round-trip retrieval via `RoomAccountStore`.
+- `testAccountRuntimeCreationAndStoreAccess`: Exercises `TabbyRushApplication.getOrCreateAccountRuntime`, verifying database creation, todo item insertion, and round-trip retrieval via `RoomAccountStore`.
 
 ### 3.2 `background-isolation-test.kt` (4 Tests Inspected)
-- `testWorkerFailsClosedOnPendingWipe`: Exercises `DoggoSyncWorker.doWork()` failure return when `wipe.marker` exists.
+- `testWorkerFailsClosedOnPendingWipe`: Exercises `TabbyRushSyncWorker.doWork()` failure return when `wipe.marker` exists.
 - `testWorkerFailsOnGenerationMismatch`: Exercises worker failure return when input generation is stale (4 vs 5).
 - `testStartupWipeRecoveryCleansPendingWipe`: Exercises `completePendingWipesOnStartup()` clearing wipe markers.
 - `testSchedulerCancelAndAwaitQuiescesWork`: Exercises `AndroidSyncScheduler.cancelAndAwait` invocation.
@@ -124,13 +124,13 @@ The `:androidApp` module defines 8 instrumented tests across 2 files. Because SD
   - Source manifest exports only `MainActivity` (`android:exported="true"`) with launcher intent filter.
   - Final merged manifest components cannot be inspected until Android SDK build completes.
 - **Release Signing Guard:**
-  - `androidApp/build.gradle.kts` task graph listener throws a build failure if release tasks are executed without `DOGGO_KEYSTORE`, `DOGGO_KEY_ALIAS`, `DOGGO_STORE_PASSWORD`, and `DOGGO_KEY_PASSWORD`.
+  - `androidApp/build.gradle.kts` task graph listener throws a build failure if release tasks are executed without `TABBYRUSH_KEYSTORE`, `TABBYRUSH_KEY_ALIAS`, `TABBYRUSH_STORE_PASSWORD`, and `TABBYRUSH_KEY_PASSWORD`.
 
 ---
 
 ## 6. Implementation Findings (Six Findings of Mixed Severity)
 
-### Finding 1: Unsafe Async Ordering in Startup Wipe Recovery (`doggo-application.kt:74–77`)
+### Finding 1: Unsafe Async Ordering in Startup Wipe Recovery (`tabbyrush-application.kt:74–77`)
 - **Severity:** High
 - **Code Reference:**
   ```kotlin
@@ -142,13 +142,13 @@ The `:androidApp` module defines 8 instrumented tests across 2 files. Because SD
 - **Analysis:** `vault.clear(key)` is dispatched asynchronously onto `applicationScope`, while `clearWipeMarker(key)` runs immediately on the calling thread. If a crash or exception occurs before the vault coroutine executes, the wipe marker is destroyed while credentials remain in Keystore. Furthermore, `checkAndRestoreEstablishedSession()` is launched concurrently from `onCreate()` on line 61 without gating on wipe completion, risking session resurrection while wiping.
 - **Remediation:** Implement an awaited coroutine startup barrier: await scheduler cancellation/quiescence, file deletion, and vault credential clearing before removing `wipe.marker`. Gate session restoration and account runtime access until the barrier finishes.
 
-### Finding 2: Incomplete Account Isolation & Generation Fencing (`doggo-application.kt`, `DoggoSyncWorker`, `AndroidSyncScheduler`)
+### Finding 2: Incomplete Account Isolation & Generation Fencing (`tabbyrush-application.kt`, `TabbyRushSyncWorker`, `AndroidSyncScheduler`)
 - **Severity:** High
 - **Code Reference:**
-  - `doggo-application.kt:98`: `if (existing != null && existing.accountKey == accountKey) return existing` returns `existing` before checking `hasPendingWipe(accountKey)` and without revalidating `generation`.
-  - `doggo-sync-worker.kt:41`: checks only `authSession.state.value == AuthState.AUTHENTICATED`, failing to assert `authSession.currentAccountKey.value == accountKey`.
+  - `tabbyrush-application.kt:98`: `if (existing != null && existing.accountKey == accountKey) return existing` returns `existing` before checking `hasPendingWipe(accountKey)` and without revalidating `generation`.
+  - `tabbyrush-sync-worker.kt:41`: checks only `authSession.state.value == AuthState.AUTHENTICATED`, failing to assert `authSession.currentAccountKey.value == accountKey`.
   - `android-sync-scheduler.kt:42`: `runtime?.generation` is taken without asserting `runtime?.accountKey == accountKey`.
-  - `android-sync-scheduler.kt:69`: periodic work request omits `generation`, causing `DoggoSyncWorker` to evaluate `expectedGeneration == -1L` and bypass generation fencing.
+  - `android-sync-scheduler.kt:69`: periodic work request omits `generation`, causing `TabbyRushSyncWorker` to evaluate `expectedGeneration == -1L` and bypass generation fencing.
 - **Analysis:** A race condition exists where active runtime can be returned after wipe marker creation or across generation bumps. Background workers for one account can run while another account is authenticated. Periodic work lacks immutable generation fencing and `ExistingPeriodicWorkPolicy.KEEP` can preserve an obsolete worker across generation bumps.
 - **Remediation:** Enforce authentication, generation, and wipe checks under the lock in `getOrCreateAccountRuntime`; assert `authSession.currentAccountKey.value == accountKey` in worker; attach generation to periodic work and replace obsolete periodic tasks when generation changes.
 
@@ -160,9 +160,9 @@ The `:androidApp` module defines 8 instrumented tests across 2 files. Because SD
 - **Analysis:** An asynchronous setup or sync progress update initiated prior to logout can complete after logout or switch of accounts, repopulating UI state.
 - **Remediation:** Track the full account-scoped coroutine session Job and cancel it cleanly upon `AuthState.UNAUTHENTICATED`. Fence UI updates against the active account key and generation.
 
-### Finding 4: Hardcoded Cleartext Hub Endpoint in Main Source (`doggo-application.kt:48`)
+### Finding 4: Hardcoded Cleartext Hub Endpoint in Main Source (`tabbyrush-application.kt:48`)
 - **Severity:** Medium
-- **Code Reference:** `val hubConfig by lazy { HubConfig(origin = "http://10.0.2.2:3000", appId = "doggo") }`
+- **Code Reference:** `val hubConfig by lazy { HubConfig(origin = "http://10.0.2.2:3000", appId = "tabby-rush") }`
 - **Analysis:** Hardcoded `http://10.0.2.2:3000` cleartext in main application source will fail release builds at runtime due to `android:usesCleartextTraffic="false"`. Physical test devices connected via USB `adb reverse` also require loopback `http://127.0.0.1:3000`.
 - **Remediation:** Parameterize origin via `BuildConfig.HUB_ORIGIN` or build variants, defaulting to HTTPS in release and configurable local loopback in debug.
 
@@ -202,9 +202,9 @@ The `:androidApp` module defines 8 instrumented tests across 2 files. Because SD
 
 ## 10. Recommendations
 
-1. Implement an awaited startup wipe barrier in `DoggoApplication` that ensures cancellation, file deletion, and vault clearing complete before marker removal.
-2. Under the `runtimeMutex` in `DoggoApplication`, re-validate account key, generation, and wipe marker before returning `existing` or creating new `AccountRuntime`.
-3. Add strict `authSession.currentAccountKey.value == accountKey` check in `DoggoSyncWorker`.
+1. Implement an awaited startup wipe barrier in `TabbyRushApplication` that ensures cancellation, file deletion, and vault clearing complete before marker removal.
+2. Under the `runtimeMutex` in `TabbyRushApplication`, re-validate account key, generation, and wipe marker before returning `existing` or creating new `AccountRuntime`.
+3. Add strict `authSession.currentAccountKey.value == accountKey` check in `TabbyRushSyncWorker`.
 4. Cancel all account-scoped coroutine jobs in `SessionViewModel` upon `AuthState.UNAUTHENTICATED`.
 5. Provision Android SDK 35 (`cmdline-tools`, `platform-tools`, emulator) to enable automated Android test runs.
 

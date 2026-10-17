@@ -11,19 +11,19 @@
 
 ### 1.1 Scope
 - **Files reviewed (13):**
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/account-store.kt`
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-contracts.kt`
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-projector.kt`
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt`
-  - `androidApp/src/main/kotlin/dev/doggo/android/task-surface-host.kt`
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/sticky-task-model.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-store.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-contracts.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt`
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt`
+  - `androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-host.kt`
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-model.kt`
   - `gradle/libs.versions.toml`
   - `androidApp/build.gradle.kts`
   - `androidApp/gradle.lockfile`
-  - `shared/src/commonTest/kotlin/dev/doggo/shared/contract/task-surface-projector-test.kt`
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-store-sqlite-test.kt`
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt`
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt`
+  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-surface-projector-test.kt`
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt`
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt`
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt`
 - **Lines of code analyzed:** ~1,550 LOC
 - **Review focus:** Concurrency & non-reentrant mutex hygiene, outbox invariants, single-point-of-truth projections, test boundary validity, and dependency provenance.
 - **Updated plans:** `plans/261016-1409-sticky-task-surfaces/phase-01-shared-foundation.md`, `plans/261016-1409-sticky-task-surfaces/plan.md`.
@@ -70,7 +70,7 @@ However, terminal handoff is **conditional**: dependency verification was run wi
 ## 4. Warnings & Observations
 
 ### Warning 1: Deprecated `Iterable.minWith` used alongside `minWithOrNull`
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-projector.kt:40,43`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt:40,43`
 - **Requirement:** Idiomatic, warning-free Kotlin 2.1 code standards.
 - **Concrete Evidence:**
   ```kotlin
@@ -82,7 +82,7 @@ However, terminal handoff is **conditional**: dependency verification was run wi
 - **Recommendation:** Replace `minWith` on line 40 with `minWithOrNull`.
 
 ### Warning 2: Redundant filtering in `selectNextDeadline`
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-projector.kt:42`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt:42`
 - **Requirement:** Token & runtime efficiency; KISS.
 - **Concrete Evidence:**
   ```kotlin
@@ -94,7 +94,7 @@ However, terminal handoff is **conditional**: dependency verification was run wi
 - **Recommendation:** If `overdue.isEmpty()`, use `eligible.minWithOrNull(...)` directly without allocating `upcoming`.
 
 ### Warning 3: Spurious internal invalidation on `Unchanged` / `Missing` completion
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt:70,78,420,422`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt:70,78,420,422`
 - **Requirement:** Authoritative completion idempotency and coalescing.
 - **Concrete Evidence:**
   `withMutationLock` calls `notifyInvalidated()` unconditionally upon block return. When `setCompletedLocally` returns early with `CompletionChange.Unchanged` or `CompletionChange.Missing`, `notifyInvalidated()` is still triggered.
@@ -102,7 +102,7 @@ However, terminal handoff is **conditional**: dependency verification was run wi
 - **Recommendation:** Document this behavior or consider supporting conditional mutation invalidation when no write occurred.
 
 ### Warning 4: Observer tests assert fixed event count instead of state convergence
-- **Location:** `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-store-sqlite-test.kt:275`, `shared/src/jvmTest/kotlin/dev/doggo/shared/data/task-surface-sync-sqlite-test.kt:90,122,190`
+- **Location:** `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt:275`, `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt:90,122,190`
 - **Requirement:** Observer resiliency under burst mutations and conflation.
 - **Concrete Evidence:**
   Tests collect Flow emissions and cancel immediately at `emissions.size >= 2`, asserting `assertEquals(2, emissions.size)`.
@@ -114,7 +114,7 @@ However, terminal handoff is **conditional**: dependency verification was run wi
 ## 5. Suggestions & Performance Optimizations
 
 ### Suggestion 1: Single-pass partitioning in `partitionSurfaceTodos`
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-projector.kt:20-25`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt:20-25`
 - **Observation:** `todos.filter { !it.isDeleted }` followed by two separate filters for `completed` and `!completed` executes 3 passes and 3 list allocations.
 - **Improvement:**
   ```kotlin
@@ -131,11 +131,11 @@ However, terminal handoff is **conditional**: dependency verification was run wi
   ```
 
 ### Suggestion 2: Zero-allocation `selectNextDeadline`
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/contract/task-surface-projector.kt:34-52`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt:34-52`
 - **Observation:** Can be evaluated in a single loop comparing candidates on the fly, eliminating all intermediate lists and dynamic `compareBy` comparator allocations.
 
 ### Suggestion 3: Static allocation for pending outbox states
-- **Location:** `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt:145`
+- **Location:** `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt:145`
 - **Observation:** `setOf(OutboxEntity.STATE_PENDING, OutboxEntity.STATE_DISPATCHING, OutboxEntity.STATE_UNCERTAIN)` allocates a new `Set` on every projected task. Extract to a top-level or companion `private val PENDING_STATES = setOf(...)`.
 
 ---

@@ -1,4 +1,4 @@
-# Doggo Linux Desktop Guide & Runbook
+# TabbyRush Linux Desktop Guide & Runbook
 
 **Document Version**: 1.0.0
 **Target Operating System**: Linux (Fedora 40+, RHEL 9+, openSUSE, Ubuntu 22.04+)
@@ -9,11 +9,11 @@
 
 ## 1. Overview
 
-The Doggo Linux desktop application is built with Compose Multiplatform 1.7.3 and targets the Java 21 LTS runtime. It brings the full offline-first personal task management experience and strict-v1 Glean Hub synchronization to Linux workstations.
+The TabbyRush Linux desktop application is built with Compose Multiplatform 1.7.3 and targets the Java 21 LTS runtime. It brings the full offline-first personal task management experience and strict-v1 Glean Hub synchronization to Linux workstations.
 
 ### Key Architectural Invariants
 1. **Hardware/OS-Backed Credential Custody**: Tokens are stored exclusively in the Freedesktop Secret Service (via `secret-tool` / D-Bus). Plaintext fallback to files or preferences is strictly prohibited.
-2. **Single Instance Guard**: A file-channel lock on `~/.local/share/doggo/accounts/doggo.lock` prevents multiple running processes from racing token refresh or corrupting local SQLite databases.
+2. **Single Instance Guard**: A file-channel lock on `~/.local/share/tabbyrush/accounts/tabbyrush.lock` prevents multiple running processes from racing token refresh or corrupting local SQLite databases.
 3. **Fail-Closed Session Lifecycle**: Account logout synchronously wipes the local database, outbox, and vault tokens before removing fail-closed wipe markers.
 4. **Foreground Sync Scheduling**: Sync intervals run in the application scope and quiesce prior to any account leave or database teardown.
 5. **No Windows Leakage**: Packaging and dependency resolution strictly isolate Linux artifacts. Zero Windows DLLs or DPAPI classes are included in the Linux distribution.
@@ -48,7 +48,7 @@ export DBUS_SESSION_BUS_ADDRESS
 
 ---
 
-## 3. Building Doggo Desktop
+## 3. Building TabbyRush Desktop
 
 ### Build Commands
 Execute using JDK 21 LTS:
@@ -82,17 +82,17 @@ Debug launcher permits connecting to local development Hub instances (`http://12
 ### Production Release Mode (Bundled Distributable)
 Run the self-contained distributable without requiring a system JDK:
 ```bash
-./desktopApp/build/compose/binaries/main/app/Doggo/bin/Doggo
+./desktopApp/build/compose/binaries/main/app/TabbyRush/bin/TabbyRush
 ```
 
 ### Installed RPM Package
 After installing the RPM:
 ```bash
 # Install package
-sudo dnf install -y desktopApp/build/compose/binaries/main/rpm/doggo-1.0.0.rpm
+sudo dnf install -y desktopApp/build/compose/binaries/main/rpm/tabbyrush-1.0.0.rpm
 
 # Launch application
-doggo
+tabbyrush
 ```
 
 ---
@@ -105,10 +105,10 @@ Run the package smoke runner to audit RPM metadata, permissions, and dependencie
 bash scripts/linux-package-smoke.sh --diagnose
 
 # Unpacked distributable audit
-bash scripts/linux-package-smoke.sh --dist desktopApp/build/compose/binaries/main/app/Doggo
+bash scripts/linux-package-smoke.sh --dist desktopApp/build/compose/binaries/main/app/TabbyRush
 
 # Built RPM package audit
-bash scripts/linux-package-smoke.sh --rpm desktopApp/build/compose/binaries/main/rpm/doggo-1.0.0.rpm
+bash scripts/linux-package-smoke.sh --rpm desktopApp/build/compose/binaries/main/rpm/tabbyrush-1.0.0.rpm
 ```
 
 ---
@@ -116,18 +116,18 @@ bash scripts/linux-package-smoke.sh --rpm desktopApp/build/compose/binaries/main
 ## 6. Uninstalling
 To cleanly uninstall the RPM package and clean up user data:
 ```bash
-# 1. Ensure all Doggo processes have cleanly exited to avoid inode lock races
-pkill -f 'dev.doggo.desktop.MainKt' || true
+# 1. Ensure all TabbyRush processes have cleanly exited to avoid inode lock races
+pkill -f 'dev.tabbyrush.desktop.MainKt' || true
 
 # 2. Remove RPM package
-sudo dnf remove -y doggo
+sudo dnf remove -y tabbyrush
 
 # 3. Query existing Secret Service credentials securely without printing token secrets
-secret-tool search --all service doggo
+secret-tool search --all service tabbyrush
 
 # 4. Clear credentials from Secret Service daemon
-secret-tool clear service doggo account <account_key>
+secret-tool clear service tabbyrush account <account_key>
 
 # 5. Remove local account data and database files after application quiescence
-rm -rf ~/.local/share/doggo
+rm -rf ~/.local/share/tabbyrush
 ```

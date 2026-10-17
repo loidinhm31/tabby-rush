@@ -12,21 +12,21 @@
 
 ### Scope
 - **Files Reviewed (15 files)**:
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/data/room-account-store.kt` (authoritative snapshot projection hierarchy, `isAccountV2`, schedule-token semantic rotation)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-ui-state.kt` (`EditorState`, `ReminderSettingsState`, `TodoUiState`)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-action.kt` (`UpdateEditorState`, settings actions, `ClockTick`)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/deadline-calculator-helpers.kt` (`validateAndComputeDeadline`, `formatOffset`)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/deadline-editor-section.kt` (Compose deadline/reminder controls, DST gap/overlap UX)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/todo-editor.kt` (submit validation, strict-v2 requirement guard)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/todo-list.kt` (non-color overdue text, deadline badges, `nowEpochMs` clock ticks)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/reminder-settings.kt` (`ReminderSettingsDialog`, platform capabilities card)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/doggo-app.kt` (settings overlay, compact/expanded navigation buttons, clock pass-through)
-  - `shared/src/commonMain/kotlin/dev/doggo/shared/ui/conflict-review.kt` (detailed deadline/reminder comparison, schedule-token preview)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt` (authoritative snapshot projection hierarchy, `isAccountV2`, schedule-token semantic rotation)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-ui-state.kt` (`EditorState`, `ReminderSettingsState`, `TodoUiState`)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-action.kt` (`UpdateEditorState`, settings actions, `ClockTick`)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/deadline-calculator-helpers.kt` (`validateAndComputeDeadline`, `formatOffset`)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/deadline-editor-section.kt` (Compose deadline/reminder controls, DST gap/overlap UX)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/todo-editor.kt` (submit validation, strict-v2 requirement guard)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/todo-list.kt` (non-color overdue text, deadline badges, `nowEpochMs` clock ticks)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/reminder-settings.kt` (`ReminderSettingsDialog`, platform capabilities card)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/tabbyrush-app.kt` (settings overlay, compact/expanded navigation buttons, clock pass-through)
+  - `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/conflict-review.kt` (detailed deadline/reminder comparison, schedule-token preview)
   - `shared/src/commonMain/composeResources/values/strings.xml` (deadline & settings localized strings)
-  - `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt` (Android controller, notification dispatch, settings, clock ticker)
-  - `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt` (Desktop controller, settings, clock ticker, submit validation)
-  - `shared/src/commonTest/kotlin/dev/doggo/shared/ui/todo-semantics-test.kt` (semantic tests for deadline, DST gap/overlap, impossible dates, overdue, settings)
-  - `shared/src/jvmTest/kotlin/dev/doggo/shared/data/room-account-store-test.kt` (`testClearingDeadlineToServerBaseDoesNotResurrect`)
+  - `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt` (Android controller, notification dispatch, settings, clock ticker)
+  - `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt` (Desktop controller, settings, clock ticker, submit validation)
+  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/todo-semantics-test.kt` (semantic tests for deadline, DST gap/overlap, impossible dates, overdue, settings)
+  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt` (`testClearingDeadlineToServerBaseDoesNotResurrect`)
 - **Lines of Code Analyzed**: ~1,850 lines of new and modified code.
 - **Review Focus**: Security, Performance, Architecture (DRY, KISS, YAGNI), WCAG 2.1 AA Accessibility, Room outbox/projection consistency, and Task Completeness.
 - **Updated Plans**: `plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-10-compose-deadline-editor-list-and-settings.md`.
@@ -41,13 +41,13 @@ Phase 10 delivers high-fidelity Compose multiplatform UI for task deadlines, rem
 ### Critical Issues (Remediated)
 
 1. **[CRITICAL / DATA LOSS] Android Notification Selection Bypassed Deadline Hydration**
-   - **File**: `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt:469`
+   - **File**: `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt:469`
    - **Root Cause**: `dispatchTaskSelection(accountKey, taskId)` directly constructed an unhydrated `EditorState(id = task.id, rawTitle = task.title)`. All deadline and reminder fields defaulted to `hasDeadline = false` and `reminderRule = DISABLED`. If user opened a task via notification and saved changes (e.g., editing task description), `submitEditor()` saved `deadline = null`, permanently wiping all scheduled alarms and deadlines from the task.
    - **Impact**: Silent data loss and desynchronization of scheduled alarms upon user interaction with OS notifications.
    - **Remediation Applied**: Changed `dispatchTaskSelection` to suspend function and routed through `openEdit(task)`, which fully populates `hasDeadline`, `deadlineDate`, `reminderRule`, `originalScheduleToken`, and time parameters from the stored snapshot.
 
 2. **[HIGH / RUNTIME CRASH] Uncaught Exception on Impossible Calendar Dates Crashed Compose Recomposition**
-   - **File**: `shared/src/commonMain/kotlin/dev/doggo/shared/ui/deadline-calculator-helpers.kt:76,143`
+   - **File**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/deadline-calculator-helpers.kt:76,143`
    - **Root Cause**: While `DATE_REGEX` checked `YYYY-MM-DD` and bounds `month in 1..12, day in 1..31`, impossible calendar days (e.g. Feb 30, Feb 31, non-leap Feb 29 2025, April 31) passed initial checks and reached `resolver.resolveOffset(...)` and `computeNextCalendarDayStartEpochMs(...)`. `LocalDate.parse()` threw `IllegalArgumentException`, which was uncaught. Because `validateAndComputeDeadline` was called inside `remember` during composition in `TodoEditor`, typing an invalid day-of-month triggered an unhandled exception crashing the Compose composition / Activity.
    - **Impact**: UI crash when typing day-of-month > 28 in February or 31 in 30-day months.
    - **Remediation Applied**: Wrapped resolver date/time operations in try-catch in `DeadlineCalculatorHelpers.kt`, returning `DeadlineValidationResult.Invalid("Invalid calendar date or timezone configuration")`. Added regression test `testDeadlineValidationImpossibleCalendarDates` covering Feb 30/31, April 31, and non-leap Feb 29.
@@ -64,12 +64,12 @@ Phase 10 delivers high-fidelity Compose multiplatform UI for task deadlines, rem
 ### Medium Priority Improvements
 
 1. **Controller Logic Duplication (DRY Violation)**
-   - **Files**: `androidApp/src/main/kotlin/dev/doggo/android/session-view-model.kt` (472 LOC) vs `desktopApp/src/main/kotlin/dev/doggo/desktop/main.kt` (818 LOC)
+   - **Files**: `androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt` (472 LOC) vs `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt` (818 LOC)
    - **Issue**: `inspectAndShowConflict()`, `openCreate()`, `openEdit()`, and `submitEditor()` share ~180 lines of identical parsing reconstructing `TaskDeadline` and `ReminderRule` from `ServerBaseEntity` and `OutboxEntity`.
-   - **Recommendation**: Extract domain entity projection helpers (`toTaskDeadline`, `toReminderRule`) from `RoomAccountStore` private scope to shared `dev.doggo.shared.contract.TaskDeadlineMapper` or shared controller delegate classes (`ReminderSettingsController`, `TaskEditorController`) before Phase 12.
+   - **Recommendation**: Extract domain entity projection helpers (`toTaskDeadline`, `toReminderRule`) from `RoomAccountStore` private scope to shared `dev.tabbyrush.shared.contract.TaskDeadlineMapper` or shared controller delegate classes (`ReminderSettingsController`, `TaskEditorController`) before Phase 12.
 
 2. **Schedule Preview Epoch Timestamp Display in UI**
-   - **File**: `shared/src/commonMain/kotlin/dev/doggo/shared/ui/deadline-editor-section.kt:323`
+   - **File**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/deadline-editor-section.kt:323`
    - **Issue**: Preview displays `"Reminder #${i + 1}: index ${occ.index} at instant ${occ.dueEpochMs}"`. Raw epoch milliseconds are readable for developers, but end users benefit from human-readable local date/time strings or relative countdowns ("in 2 hours").
    - **Recommendation**: Format `dueEpochMs` into local time string matching user's selected zone for preview display in Phase 12 UX refinement.
 
@@ -78,12 +78,12 @@ Phase 10 delivers high-fidelity Compose multiplatform UI for task deadlines, rem
 ### Low Priority Suggestions
 
 1. **FilterChip Minimum Touch Target Consistency**
-   - **File**: `shared/src/commonMain/kotlin/dev/doggo/shared/ui/deadline-editor-section.kt:200-213`
-   - **Issue**: Overlap disambiguation `FilterChip` components rely on standard Material3 32dp visual height with system interactive enforcement. Other Doggo interactive elements explicitly declare `defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)`.
-   - **Recommendation**: Add explicit `Modifier.defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)` for consistency with project-wide >= 48dp conventions.
+   - **File**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/deadline-editor-section.kt:200-213`
+   - **Issue**: Overlap disambiguation `FilterChip` components rely on standard Material3 32dp visual height with system interactive enforcement. Other TabbyRush interactive elements explicitly declare `defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)`.
+   - **Recommendation**: Add explicit `Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)` for consistency with project-wide >= 48dp conventions.
 
 2. **KMP Time Utility Portability**
-   - **File**: `shared/src/commonMain/kotlin/dev/doggo/shared/ui/todo-list.kt:175`
+   - **File**: `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/todo-list.kt:175`
    - **Issue**: `val currentClockMs = if (nowEpochMs > 0L) nowEpochMs else System.currentTimeMillis()` references `java.lang.System` in `commonMain`. While JVM and Android compile, standard KMP convention prefers `kotlinx.datetime.Clock.System.now().toEpochMilliseconds()`.
 
 ---

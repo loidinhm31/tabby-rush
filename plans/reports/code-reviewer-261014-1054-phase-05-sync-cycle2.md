@@ -1,6 +1,6 @@
 # Code Review Cycle 2 — Phase 05 Durable Local State & Strict Per-Record Sync
 
-Date 2026-10-14 · Reviewer: EvcCodeReviewerPhase05Cycle2 · Plan: `plans/261013-1540-doggo-glean-hub-reuse/phase-05-local-sync-state.md`
+Date 2026-10-14 · Reviewer: EvcCodeReviewerPhase05Cycle2 · Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-05-local-sync-state.md`
 
 ## Score: **5/10** — NOT accepted. 3 new criticals (N1-N3); C2 + C7 only partially closed.
 
@@ -10,7 +10,7 @@ C1, C3, C4, C5, C6, C8 genuinely fixed. C2 fix (re-freeze at dispatch) correct f
 
 | # | Status | Evidence |
 |---|---|---|
-| C1 transactions | **Resolved (mostly)** | `@Transaction` DAO methods `saveTodoAtomic/deleteTodoAtomic/cancelUnsentCreateAtomic/reconcileAcceptedAtomic/promoteStagingAtomic/replaceOutboxAtomic/discardConflictAtomic` (`doggo-dao.kt:140-212`); store + scan use them. Residual: freeze (`outbox-reconciliation.kt:118`), `markBatchUncertain`, `copyAsNew` (`coordinator:358-364`), `wipeLocalData` still multi-step; no rollback test. |
+| C1 transactions | **Resolved (mostly)** | `@Transaction` DAO methods `saveTodoAtomic/deleteTodoAtomic/cancelUnsentCreateAtomic/reconcileAcceptedAtomic/promoteStagingAtomic/replaceOutboxAtomic/discardConflictAtomic` (`tabbyrush-dao.kt:140-212`); store + scan use them. Residual: freeze (`outbox-reconciliation.kt:118`), `markBatchUncertain`, `copyAsNew` (`coordinator:358-364`), `wipeLocalData` still multi-step; no rollback test. |
 | C2 freeze at dispatch | **Partial / regressed** | PENDING successor now `update/expected=base` at dispatch (`outbox-reconciliation.kt:68-123`). But same path re-freezes UNCERTAIN (see N1). |
 | C3 FIFO head gating | **Resolved** | per-row `minByOrNull{localRevision}` over ALL states; CONFLICT/UNKNOWN_SUPERSEDED/DISPATCHING head blocks (`:35-61`). Test exists. |
 | C4 DISPATCHING recovery | **Resolved** | `recoverInterruptedDispatches()` at every round start (`coordinator:102`), `markBatchUncertain` in `NonCancellable` on cancel/exception (`:158-171`). Real-Room test. |
@@ -65,7 +65,7 @@ Fix: either clear marker (+ roll back generation) on any pre-delete abort, or ke
 - Exact CAS ack matching unchanged and correct.
 
 ## Reviewed files
-`shared/src/commonMain/.../data/{room-account-store,doggo-dao,outbox-entity,server-base-entity}.kt`; `.../sync/{outbox-reconciliation,account-sync-coordinator,account-leave-protocol,staged-full-scan}.kt`; `jvmMain/.../jvm-account-files.kt`; `jvmTest/.../room-account-store-test.kt` (head); `commonTest/.../account-leave-protocol-test.kt` (gate-failure + wipe tests); plan phase-05 + contracts §6-10; prior review + QA cycle-2 report. ~2.2k LOC inspected.
+`shared/src/commonMain/.../data/{room-account-store,tabbyrush-dao,outbox-entity,server-base-entity}.kt`; `.../sync/{outbox-reconciliation,account-sync-coordinator,account-leave-protocol,staged-full-scan}.kt`; `jvmMain/.../jvm-account-files.kt`; `jvmTest/.../room-account-store-test.kt` (head); `commonTest/.../account-leave-protocol-test.kt` (gate-failure + wipe tests); plan phase-05 + contracts §6-10; prior review + QA cycle-2 report. ~2.2k LOC inspected.
 
 ## Validation
 | Command | Result |

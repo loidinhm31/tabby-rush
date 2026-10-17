@@ -10,8 +10,8 @@
 
 All assigned production, resource, and test artifacts were created strictly within the Phase 02 boundary:
 
-1. **`androidApp/src/main/kotlin/dev/doggo/android/task-widget.kt`**:
-   - `DoggoTaskWidget : GlanceAppWidget()`:
+1. **`androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget.kt`**:
+   - `TabbyRushTaskWidget : GlanceAppWidget()`:
      - `SizeMode.Responsive` configured with 4 standard launcher grid sizes: `120x120dp` (2x2), `240x120dp` (3x2), `240x240dp` (3x3), `320x360dp` (4x4+).
      - Single scrollable `LazyColumn` partitioned into Incomplete and Completed sections using `partitionSurfaceTodos`.
      - `items` utilizes `itemId = { it.id.hashCode().toLong() }` for stable Glance item identities.
@@ -21,14 +21,14 @@ All assigned production, resource, and test artifacts were created strictly with
      - Zero task titles leaked during unauthenticated, locked, loading, or unavailable states.
      - Initial hydration routed strictly through `TaskWidgetUpdater.refreshAll(context, host)` to maintain publication fencing.
 
-2. **`androidApp/src/main/kotlin/dev/doggo/android/task-widget-receiver.kt`**:
-   - `DoggoTaskWidgetReceiver : GlanceAppWidgetReceiver()`:
-     - Hosts `DoggoTaskWidget()`.
+2. **`androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-receiver.kt`**:
+   - `TabbyRushTaskWidgetReceiver : GlanceAppWidgetReceiver()`:
+     - Hosts `TabbyRushTaskWidget()`.
      - Resolves `TaskSurfaceHostOwner` from `applicationContext`.
      - Uses `goAsync()` to protect asynchronous broadcast execution lifetime across Android process suspension.
      - Imports `androidx.glance.appwidget.updateAll` and delegates updates directly to `TaskWidgetUpdater.refreshAll(context, host)`.
 
-3. **`androidApp/src/main/kotlin/dev/doggo/android/task-widget-actions.kt`**:
+3. **`androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-actions.kt`**:
    - `ToggleTaskActionCallback : ActionCallback`:
      - Deserializes immutable desired-state parameters: `accountKey`, `generation`, `taskId`, `desiredCompleted`.
      - Dispatches `host.access.setCompleted(token, taskId, desiredCompleted, nowEpochMs)` directly against the atomic mutation lock.
@@ -38,14 +38,14 @@ All assigned production, resource, and test artifacts were created strictly with
      - Distinct request codes computed deterministically from `(accountKey, generation, taskId, op)`.
      - Distinct data URIs ensuring intent identity separation in Android OS cache.
 
-4. **`androidApp/src/main/kotlin/dev/doggo/android/task-widget-updater.kt`**:
+4. **`androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-updater.kt`**:
    - `TaskWidgetUpdater`:
      - Monotonically increasing epoch tickets and `isClearing` barrier serializing refresh operations against teardown.
      - Bounded 4s timeouts on `host.access.awaitReadiness` and Glance update handoffs.
      - Active coroutine `Job` tracking in `activeJobs` registered during refresh and cancelled during teardown.
      - `try ... finally { isClearing.set(false) }` to guarantee updates are never permanently blocked on error or cancellation.
      - Direct `RemoteViews` blanking to immediately replace launcher views with the initial non-sensitive layout.
-     - Glance update session closure via `DoggoTaskWidget().getSessionManager(context)`.
+     - Glance update session closure via `TabbyRushTaskWidget().getSessionManager(context)`.
      - `suspend fun awaitQuiescence(timeoutMs: Long)` joins active jobs.
      - `suspend fun clearAll(context: Context)` / `clearAllInstances(context: Context)` guarantees zero sensitive content restored after account logout.
 
@@ -55,18 +55,18 @@ All assigned production, resource, and test artifacts were created strictly with
    - `androidApp/src/main/res/values/task-widget-strings.xml`: Localized and accessible string resources for widget UI and accessibility descriptions.
 
 6. **Test Suites**:
-   - `androidApp/src/test/kotlin/dev/doggo/android/task-widget-model-test.kt`: Pure unit tests verifying partition order, state projection non-leakage, action parameter roundtrip, deterministic request code distribution, display state transitions, and concurrency fencing (clear-during-read neutralization).
-   - `androidApp/src/androidTest/kotlin/dev/doggo/android/task-widget-device-test.kt`: Instrumented Android device tests verifying responsive size configuration, receiver delegation, PendingIntent creation, resource string resolution, mock host lifecycle refresh, and fail-closed callback handling.
+   - `androidApp/src/test/kotlin/dev/tabbyrush/android/task-widget-model-test.kt`: Pure unit tests verifying partition order, state projection non-leakage, action parameter roundtrip, deterministic request code distribution, display state transitions, and concurrency fencing (clear-during-read neutralization).
+   - `androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-widget-device-test.kt`: Instrumented Android device tests verifying responsive size configuration, receiver delegation, PendingIntent creation, resource string resolution, mock host lifecycle refresh, and fail-closed callback handling.
 
 ---
 
 ## 2. Integration Handoff & Technical Requirements for Phase 05
 
 1. **`AndroidManifest.xml` Component Registration**:
-   - Register `DoggoTaskWidgetReceiver`:
+   - Register `TabbyRushTaskWidgetReceiver`:
      ```xml
      <receiver
-         android:name="dev.doggo.android.DoggoTaskWidgetReceiver"
+         android:name="dev.tabbyrush.android.TabbyRushTaskWidgetReceiver"
          android:exported="true">
          <intent-filter>
              <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -81,10 +81,10 @@ All assigned production, resource, and test artifacts were created strictly with
 2. **AAPT2 Resource Naming Coordinated**:
    - Replaced kebab-case with underscore format (`task_widget_info.xml`, `task_widget_initial.xml`) in coordination with Phase 05 peer.
 
-3. **`DoggoApplication` Host Wiring**:
-   - Phase 05 implements `TaskSurfaceHostOwner` on `DoggoApplication.kt`:
+3. **`TabbyRushApplication` Host Wiring**:
+   - Phase 05 implements `TaskSurfaceHostOwner` on `TabbyRushApplication.kt`:
      ```kotlin
-     class DoggoApplication : Application(), TaskSurfaceHostOwner {
+     class TabbyRushApplication : Application(), TaskSurfaceHostOwner {
          override val taskSurfaces: AndroidTaskSurfaceHost get() = ...
      }
      ```

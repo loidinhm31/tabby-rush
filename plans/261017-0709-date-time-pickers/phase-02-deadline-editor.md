@@ -8,12 +8,12 @@
 
 ## Exclusive ownership
 Modify only:
-- `shared/src/commonMain/kotlin/dev/doggo/shared/ui/deadline-editor-section.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/deadline-editor-section.kt`
 Read-only:
-- `shared/src/commonMain/kotlin/dev/doggo/shared/ui/date-time-pickers.kt`
-- `shared/src/commonMain/kotlin/dev/doggo/shared/ui/deadline-calculator-helpers.kt`
-- `shared/src/commonMain/kotlin/dev/doggo/shared/ui/todo-editor.kt`
-- `shared/src/commonMain/kotlin/dev/doggo/shared/contract/todo-ui-state.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/date-time-pickers.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/deadline-calculator-helpers.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/todo-editor.kt`
+- `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-ui-state.kt`
 No created/deleted files. Do not edit shared components, settings, tests, build files, docs, or plan status.
 
 ## Key insights and invariants
@@ -25,9 +25,9 @@ No created/deleted files. Do not edit shared components, settings, tests, build 
 ## UI and action contract
 | Existing value | Trigger label | Dialog/title | Confirm result |
 |---|---|---|---|
-| `editor.deadlineDate` | `Deadline date` | `DoggoDatePickerDialog`, same title | Copy date, clear chosen offset |
-| `editor.deadlineTime` when `hasTime` | `Deadline time` | `DoggoTimePickerDialog`, same title; fallback `17:00` | Copy time, clear chosen offset |
-| `editor.reminderAnchorTime` otherwise | `Date-only reminder anchor time` | `DoggoTimePickerDialog`, same title; fallback `09:00` | Copy anchor, clear chosen offset |
+| `editor.deadlineDate` | `Deadline date` | `TabbyRushDatePickerDialog`, same title | Copy date, clear chosen offset |
+| `editor.deadlineTime` when `hasTime` | `Deadline time` | `TabbyRushTimePickerDialog`, same title; fallback `17:00` | Copy time, clear chosen offset |
+| `editor.reminderAnchorTime` otherwise | `Date-only reminder anchor time` | `TabbyRushTimePickerDialog`, same title; fallback `09:00` | Copy anchor, clear chosen offset |
 - Use Phase 01 `DateTimePickerButton`; show saved canonical value or explicit chooser prompt. Preserve date-only supporting text about reminder anchor and next-day overdue boundary.
 - Trigger exposes click/button semantics and value, never an editable-text action or a typing hint.
 - Confirm closes picker; emit exactly one update only when selected canonical value differs from current field. Use latest editor snapshot at callback time, preserving unrelated state.

@@ -38,18 +38,17 @@ val configuredOrigin = (project.findProperty("hubOrigin")?.toString()?.takeIf { 
     ?: dotEnv["APPROVED_HUB_ORIGIN"]?.takeIf { it.isNotBlank() }
 
 val configuredApiKey = (project.findProperty("hubApiKey")?.toString()?.takeIf { it.isNotBlank() })
-    ?: System.getenv("DOGGO_API_KEY")?.takeIf { it.isNotBlank() }
-    ?: dotEnv["DOGGO_API_KEY"]?.takeIf { it.isNotBlank() }
-
+    ?: System.getenv("TABBYRUSH_API_KEY")?.takeIf { it.isNotBlank() }
+    ?: dotEnv["TABBYRUSH_API_KEY"]?.takeIf { it.isNotBlank() }
 fun escapeBuildConfig(str: String): String =
     "\"" + str.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 android {
-    namespace = "dev.doggo.android"
+    namespace = "dev.tabbyrush.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.doggo.android"
+        applicationId = "dev.tabbyrush.android"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -68,10 +67,10 @@ android {
 
     signingConfigs {
         create("release") {
-            val storeFilePath = System.getenv("DOGGO_KEYSTORE")
-            val keyAliasName = System.getenv("DOGGO_KEY_ALIAS")
-            val storePass = System.getenv("DOGGO_STORE_PASSWORD")
-            val keyPass = System.getenv("DOGGO_KEY_PASSWORD")
+            val storeFilePath = System.getenv("TABBYRUSH_KEYSTORE")
+            val keyAliasName = System.getenv("TABBYRUSH_KEY_ALIAS")
+            val storePass = System.getenv("TABBYRUSH_STORE_PASSWORD")
+            val keyPass = System.getenv("TABBYRUSH_KEY_PASSWORD")
 
             if (!storeFilePath.isNullOrBlank() &&
                 !keyAliasName.isNullOrBlank() &&
@@ -137,7 +136,7 @@ gradle.taskGraph.whenReady {
             signing.keyAlias.isNullOrBlank() ||
             signing.keyPassword.isNullOrBlank()
         ) {
-            throw GradleException("Release build requires DOGGO_KEYSTORE, DOGGO_KEY_ALIAS, DOGGO_STORE_PASSWORD, and DOGGO_KEY_PASSWORD environment variables with a valid keystore file.")
+            throw GradleException("Release build requires TABBYRUSH_KEYSTORE, TABBYRUSH_KEY_ALIAS, TABBYRUSH_STORE_PASSWORD, and TABBYRUSH_KEY_PASSWORD environment variables with a valid keystore file.")
         }
         if (configuredOrigin.isNullOrBlank()) {
             throw GradleException("Release build requires an approved HTTPS origin. Set APPROVED_HUB_ORIGIN in environment or .env, or project property hubOrigin.")
@@ -150,7 +149,7 @@ gradle.taskGraph.whenReady {
             throw GradleException("Release build requires a valid canonical HTTPS origin without subpath, query, or credentials. Got: '$configuredOrigin'")
         }
         if (configuredApiKey.isNullOrBlank()) {
-            throw GradleException("Release build requires a provisioned API key. Set DOGGO_API_KEY in environment or .env, or project property hubApiKey.")
+            throw GradleException("Release build requires a provisioned API key. Set TABBYRUSH_API_KEY in environment or .env, or project property hubApiKey.")
         }
     }
 }

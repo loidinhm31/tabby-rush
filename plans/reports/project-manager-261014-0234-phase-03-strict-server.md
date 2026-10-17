@@ -1,16 +1,16 @@
-# Project Manager Status Report: Phase 03 Doggo-only Strict Server & Legacy Isolation
+# Project Manager Status Report: Phase 03 TabbyRush-only Strict Server & Legacy Isolation
 
 **Date:** 2026-10-14
 **Agent:** Phase03PM
-**Target Plan:** `plans/261013-1540-doggo-glean-hub-reuse/plan.md`
-**Phase File:** `plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md`
+**Target Plan:** `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md`
+**Phase File:** `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-03-hub-schema-compatibility.md`
 **Roadmap:** `docs/project-roadmap.md`
 
 ---
 
 ## 1. Executive Summary & Achievements
 
-Phase 03 (Doggo-only Strict Server and Legacy Isolation) delivers the backend foundation for isolated strict synchronization in Glean Hub Sync, ensuring complete isolation from legacy clients and unmigrated apps.
+Phase 03 (TabbyRush-only Strict Server and Legacy Isolation) delivers the backend foundation for isolated strict synchronization in Glean Hub Sync, ensuring complete isolation from legacy clients and unmigrated apps.
 
 ### Key Achievements Delivered (26 Files)
 1. **Strict Models & Serialization (`models/strong_sync.rs`, `models/app.rs`, `models/api.rs`, `models/mod.rs`)**:
@@ -29,13 +29,13 @@ Phase 03 (Doggo-only Strict Server and Legacy Isolation) delivers the backend fo
    - `legacy_sync_mode_guard` intercepting legacy routes and rejecting strict-mode applications with non-401 status.
    - Admin registration and schema read-back endpoints supporting mode and epoch discovery.
 
-4. **Admission Binary & Operational Tooling (`bin/strong_sync_admission.rs`, `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, `integration/glean-hub/doggo-schema.json`)**:
+4. **Admission Binary & Operational Tooling (`bin/strong_sync_admission.rs`, `scripts/hub-schema-provision.mjs`, `scripts/hub-compatibility-smoke.mjs`, `integration/glean-hub/tabbyrush-schema.json`)**:
    - Standalone preflight admission CLI binary executing identical validation logic as the live service.
    - Automated schema provision script with 0600 key custody and read-back verification.
    - Automated regression smoke test runner for dual-auth and mode guard verification.
 
 5. **Documentation & Runbooks**:
-   - `docs/hub-schema-integration.md`, `docs/hub-compatibility-acceptance.md`, `docs/evidence/hub-compatibility-summary.md`, and Glean Hub runbook `docs/doggo-strict-sync.md`.
+   - `docs/hub-schema-integration.md`, `docs/hub-compatibility-acceptance.md`, `docs/evidence/hub-compatibility-summary.md`, and Glean Hub runbook `docs/tabbyrush-strict-sync.md`.
 
 ---
 
@@ -53,8 +53,8 @@ Phase 03 (Doggo-only Strict Server and Legacy Isolation) delivers the backend fo
 
 | File | Previous Status | Updated Status | Details |
 |---|---|---|---|
-| `plans/261013-1540-doggo-glean-hub-reuse/plan.md` | Phase 03 `pending0%` | Phase 03 `completed / 100% (2026-10-14)` | Updated parent execution summary and phase table |
-| `plans/261013-1540-doggo-glean-hub-reuse/phase-03-hub-schema-compatibility.md` | `Implementation status: code landed...` | `Implementation status: completed (100% - 2026-10-14)` | Checked todo items; recorded cycle 4 approval and Phase 07 gate deferral |
+| `plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md` | Phase 03 `pending0%` | Phase 03 `completed / 100% (2026-10-14)` | Updated parent execution summary and phase table |
+| `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-03-hub-schema-compatibility.md` | `Implementation status: code landed...` | `Implementation status: completed (100% - 2026-10-14)` | Checked todo items; recorded cycle 4 approval and Phase 07 gate deferral |
 | `docs/project-roadmap.md` | Phase 03 `Pending` (0%) | Phase 03 **`DONE`** (100% - 2026-10-14) | Updated overall completion to 39% (58h/148h); updated Milestone 2; added `[0.3.0-alpha.1]` changelog |
 
 ---

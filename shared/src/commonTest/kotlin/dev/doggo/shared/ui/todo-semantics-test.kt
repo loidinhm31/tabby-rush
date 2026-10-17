@@ -602,6 +602,76 @@ class TodoSemanticsTest {
         assertEquals(2L, conflictState.localTodo?.reminderRule?.count)
     }
 
+    @Test
+    fun testDeadlinePickerCanonicalFormatsAndOffsetClearing() {
+        val dateMillis = 1793491200000L // 2026-11-01 (America/New_York fall back overlap day)
+        val canonicalDate = DateTimePickerFormats.utcMillisToDate(dateMillis)
+        assertEquals("2026-11-01", canonicalDate)
+
+        val initialEditor = EditorState(
+            id = "t-picker",
+            rawTitle = "Picker task",
+            hasDeadline = true,
+            deadlineDate = canonicalDate,
+            hasTime = true,
+            deadlineTime = "01:30",
+            deadlineZone = "America/New_York",
+            chosenOffsetSeconds = -14400L // EDT
+        )
+        // Changing time via picker produces canonical HH:mm and clears chosen offset
+        val newTime = DateTimePickerFormats.formatTime(1, 35)
+        val updatedEditor = initialEditor.copy(deadlineTime = newTime, chosenOffsetSeconds = null)
+        assertEquals("01:35", updatedEditor.deadlineTime)
+        assertNull(updatedEditor.chosenOffsetSeconds)
+
+        val result = DeadlineCalculatorHelpers.validateAndComputeDeadline(updatedEditor)
+        assertTrue(result is DeadlineValidationResult.Invalid, "America/New_York 01:35 during fall-back overlap requires explicit offset")
+        assertNotNull(result.overlap)
+    }
+
+    @Test
+    fun testDeadlinePickerDstGapRejection() {
+        val time = DateTimePickerFormats.formatTime(2, 30)
+        val editor = EditorState(
+            id = "t-gap",
+            rawTitle = "Gap task",
+            hasDeadline = true,
+            deadlineDate = "2026-03-08",
+            hasTime = true,
+            deadlineTime = time,
+            deadlineZone = "America/New_York"
+        )
+        val result = DeadlineCalculatorHelpers.validateAndComputeDeadline(editor)
+        assertTrue(result is DeadlineValidationResult.Invalid, "DST gap time must be rejected as invalid")
+        assertTrue(result.isGap, "Result must flag gap transition")
+    }
+
+    @Test
+    fun testSettingsAnchorTimePickerFlow() {
+        val anchor = DateTimePickerFormats.formatTime(8, 30)
+        assertEquals("08:30", anchor)
+        val settings = ReminderSettingsState(
+            notificationsEnabled = true,
+            defaultReminderEnabled = true,
+            defaultDateOnlyAnchorTime = anchor
+        )
+        assertEquals("08:30", settings.defaultDateOnlyAnchorTime)
+
+        val editor = EditorState(
+            id = "t-date-only",
+            rawTitle = "Date only task",
+            hasDeadline = true,
+            deadlineDate = "2026-10-20",
+            hasTime = false,
+            reminderAnchorTime = settings.defaultDateOnlyAnchorTime,
+            deadlineZone = "UTC"
+        )
+        val result = DeadlineCalculatorHelpers.validateAndComputeDeadline(editor)
+        assertTrue(result is DeadlineValidationResult.Valid, "Date-only deadline with settings anchor must be valid")
+        assertNull(result.deadline.time, "Timed deadline must be null for date-only")
+        assertEquals("08:30", result.deadline.reminderAnchorTime)
+    }
+
     private fun calculateContrastRatio(foreground: Color, background: Color): Double {
         val l1 = relativeLuminance(foreground)
         val l2 = relativeLuminance(background)

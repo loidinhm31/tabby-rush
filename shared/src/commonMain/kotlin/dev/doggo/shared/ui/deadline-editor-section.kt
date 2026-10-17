@@ -22,6 +22,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -39,6 +43,8 @@ fun DeadlineEditorSection(
     onAction: (TodoAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var activePicker by remember(editor.id, editor.hasDeadline, editor.hasTime) { mutableStateOf<ActivePicker?>(null) }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(DoggoThemeTokens.SpacingSmall)
@@ -96,15 +102,11 @@ fun DeadlineEditorSection(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(DoggoThemeTokens.SpacingSmall)
             ) {
-                OutlinedTextField(
+                DateTimePickerButton(
+                    label = "Deadline date",
                     value = editor.deadlineDate,
-                    onValueChange = {
-                        onAction(TodoAction.UpdateEditorState(editor.copy(deadlineDate = it, chosenOffsetSeconds = null)))
-                    },
-                    label = { Text("Date (YYYY-MM-DD)") },
-                    placeholder = { Text("2026-10-20") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)
+                    onClick = { activePicker = ActivePicker.Date },
+                    modifier = Modifier.weight(1f)
                 )
 
                 OutlinedTextField(
@@ -151,33 +153,19 @@ fun DeadlineEditorSection(
             }
 
             if (editor.hasTime) {
-                OutlinedTextField(
+                DateTimePickerButton(
+                    label = "Deadline time",
                     value = editor.deadlineTime,
-                    onValueChange = {
-                        onAction(TodoAction.UpdateEditorState(editor.copy(deadlineTime = it, chosenOffsetSeconds = null)))
-                    },
-                    label = { Text("Time (HH:mm)") },
-                    placeholder = { Text("17:00") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)
+                    onClick = { activePicker = ActivePicker.DeadlineTime },
+                    modifier = Modifier.fillMaxWidth()
                 )
             } else {
-                OutlinedTextField(
+                DateTimePickerButton(
+                    label = "Date-only reminder anchor time",
                     value = editor.reminderAnchorTime,
-                    onValueChange = {
-                        onAction(TodoAction.UpdateEditorState(editor.copy(reminderAnchorTime = it, chosenOffsetSeconds = null)))
-                    },
-                    label = { Text("Anchor time (HH:mm, default 09:00)") },
-                    placeholder = { Text("09:00") },
-                    supportingText = {
-                        Text(
-                            text = "Date-only reminders trigger at this time; task becomes overdue at next day start.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = DoggoThemeTokens.customColors.muted
-                        )
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)
+                    onClick = { activePicker = ActivePicker.AnchorTime },
+                    supportingText = "Date-only reminders trigger at this time; task becomes overdue at next day start.",
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
@@ -335,6 +323,75 @@ fun DeadlineEditorSection(
                     }
                 }
             }
+
+            when (activePicker) {
+                ActivePicker.Date -> {
+                    DoggoDatePickerDialog(
+                        initialDate = editor.deadlineDate,
+                        title = "Deadline date",
+                        onConfirm = { newDate ->
+                            if (activePicker == ActivePicker.Date && editor.hasDeadline) {
+                                if (newDate != editor.deadlineDate) {
+                                    onAction(TodoAction.UpdateEditorState(editor.copy(deadlineDate = newDate, chosenOffsetSeconds = null)))
+                                }
+                                activePicker = null
+                            }
+                        },
+                        onDismiss = {
+                            if (activePicker == ActivePicker.Date) {
+                                activePicker = null
+                            }
+                        }
+                    )
+                }
+                ActivePicker.DeadlineTime -> {
+                    DoggoTimePickerDialog(
+                        initialTime = editor.deadlineTime,
+                        title = "Deadline time",
+                        onConfirm = { newTime ->
+                            if (activePicker == ActivePicker.DeadlineTime && editor.hasDeadline && editor.hasTime) {
+                                if (newTime != editor.deadlineTime) {
+                                    onAction(TodoAction.UpdateEditorState(editor.copy(deadlineTime = newTime, chosenOffsetSeconds = null)))
+                                }
+                                activePicker = null
+                            }
+                        },
+                        onDismiss = {
+                            if (activePicker == ActivePicker.DeadlineTime) {
+                                activePicker = null
+                            }
+                        },
+                        fallbackTime = "17:00"
+                    )
+                }
+                ActivePicker.AnchorTime -> {
+                    DoggoTimePickerDialog(
+                        initialTime = editor.reminderAnchorTime,
+                        title = "Date-only reminder anchor time",
+                        onConfirm = { newAnchor ->
+                            if (activePicker == ActivePicker.AnchorTime && editor.hasDeadline && !editor.hasTime) {
+                                if (newAnchor != editor.reminderAnchorTime) {
+                                    onAction(TodoAction.UpdateEditorState(editor.copy(reminderAnchorTime = newAnchor, chosenOffsetSeconds = null)))
+                                }
+                                activePicker = null
+                            }
+                        },
+                        onDismiss = {
+                            if (activePicker == ActivePicker.AnchorTime) {
+                                activePicker = null
+                            }
+                        },
+                        fallbackTime = "09:00"
+                    )
+                }
+                null -> Unit
+            }
         }
     }
+}
+
+private enum class ActivePicker {
+    Date,
+    DeadlineTime,
+    AnchorTime
 }

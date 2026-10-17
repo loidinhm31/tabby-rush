@@ -1,14 +1,11 @@
 package dev.doggo.shared.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +49,7 @@ fun ReminderSettingsDialog(
     var defaultIntervalMinutes by remember { mutableStateOf(settings.defaultReminderIntervalMinutes ?: 15L) }
     var defaultCount by remember { mutableStateOf(settings.defaultReminderCount) }
     var defaultAnchorTime by remember { mutableStateOf(settings.defaultDateOnlyAnchorTime) }
+    var showAnchorTimePicker by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier
@@ -245,20 +243,12 @@ fun ReminderSettingsDialog(
             }
 
             // Date-only default anchor time
-            OutlinedTextField(
+            DateTimePickerButton(
+                label = "Default date-only anchor time",
                 value = defaultAnchorTime,
-                onValueChange = { defaultAnchorTime = it },
-                label = { Text("Default date-only anchor time (HH:mm)") },
-                placeholder = { Text("09:00") },
-                supportingText = {
-                    Text(
-                        text = "Used for date-only task reminders (initial default 09:00).",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = DoggoThemeTokens.customColors.muted
-                    )
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = DoggoThemeTokens.MinTouchTargetSize)
+                onClick = { showAnchorTimePicker = true },
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = "Used for date-only task reminders (initial default 09:00)."
             )
 
             // Dialog action buttons
@@ -302,5 +292,18 @@ fun ReminderSettingsDialog(
                 }
             }
         }
+    }
+
+    if (showAnchorTimePicker) {
+        DoggoTimePickerDialog(
+            initialTime = defaultAnchorTime,
+            title = "Default date-only anchor time",
+            fallbackTime = "09:00",
+            onConfirm = { selected ->
+                defaultAnchorTime = selected
+                showAnchorTimePicker = false
+            },
+            onDismiss = { showAnchorTimePicker = false }
+        )
     }
 }

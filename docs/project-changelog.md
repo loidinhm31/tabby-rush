@@ -3,6 +3,18 @@
 All notable changes to the Doggo project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Date & Time Picker Migration] - 2026-10-17: Calendar and Clock Pickers (Delivered; Technical Acceptance Conditional)
+
+### Delivered
+- Replaced manual date/time typing for task deadline date, deadline time, date-only reminder anchor, and settings default anchor with shared Material 3 calendar and clock controls.
+- Added shared `DateTimePickerButton`, `DoggoDatePickerDialog`, `DoggoTimePickerDialog`, and `DateTimePickerFormats`; DatePicker mode toggle is disabled, and the clock dial has no text-input mode. Date/time fields have no typing path.
+- DatePicker values normalize through UTC midnight; DatePicker is configured for years `0..9999`, and output remains canonical `YYYY-MM-DD` and `HH:mm`. Existing timezone/DST resolver behavior remains intact.
+
+### Reported Verification & Acceptance
+- Automated unit test suites pass (372/372 tests, with `:shared:jvmTest` freshly executed and passing 239/239 post-`yearRange = 0..9999` change; `:desktopApp:test` and `:androidApp:testDebugUnitTest` passing; Android `assembleDebug` passing; 32/32 Node security/smoke checks passing).
+- This documentation pass did not rerun those checks. Rendered Compose interaction tests and physical device/accessibility acceptance remain pending, so technical acceptance is conditional and the relevant gate stays open.
+
+---
 ## [Sticky Task Surfaces / Phase 07] - 2026-10-17: Android/Windows Acceptance & Shared Documentation (Delivered; Native Gate G2 Conditionally Held)
 
 ### Delivered

@@ -1,7 +1,7 @@
 # Codebase Summary
 
 Generated on: 2026-10-17
-Based on Repomix compaction snapshot: `repomix-output.xml` (2026-10-17; 235 source/config files included, 1 security-scanner exclusion, 343,808 tokens, 1,663,246 chars; compressed allowlist, not a full-repository snapshot)
+Based on Repomix compaction snapshot: `repomix-output.xml` (2026-10-17; 518 files included, 6 security-scanner exclusions; 1,189,124 tokens, 5,277,366 chars; compressed allowlist, not a full-repository snapshot)
 ---
 
 ## 1. Repository Overview
@@ -190,6 +190,7 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 │       │       ├── todo-list.kt # Lazy task list and deadline/overdue badges
 │       │       ├── todo-editor.kt # Task editor and strict-v2 upgrade validation
 │       │       ├── deadline-editor-section.kt # Deadline/reminder controls and DST offsets
+│       │       ├── date-time-pickers.kt # Material 3 date/clock dialogs, button triggers, UTC-safe date formats
 │       │       ├── deadline-calculator-helpers.kt # Deadline validation and calendar boundaries
 │       │       ├── reminder-settings.kt # Reminder settings and platform capabilities
 │       │       ├── sync-feedback.kt # Sync progress and status
@@ -226,7 +227,8 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 │       │   │   ├── account-sync-coordinator-test.kt # Sync rounds, conflicts, and cancellation
 │       │   │   └── account-leave-protocol-test.kt # Teardown order and wipe recovery
 │       │   └── ui/
-│       │       └── todo-semantics-test.kt # Accessibility, deadline validation, and UI semantics
+│       │       ├── date-time-pickers-test.kt # UTC date conversion and canonical 24-hour time helper tests
+│       │       └── todo-semantics-test.kt # Accessibility, deadline validation, and picker/domain semantics
 │       ├── jvmTest/kotlin/dev/doggo/shared/data/
 │       │   ├── room-migration-v1-to-v2-test.kt # Explicit SQLite migration verification
 │       │   ├── room-account-store-test.kt # Room projections and deadline clearing behavior

@@ -116,6 +116,14 @@ Doggo implements a single unified Compose tree with responsive breakpoint adapta
    - Transient password strings are dereferenced from UI component state upon form submission, mode toggling, or composable disposal. Note that because JVM strings are immutable, in-memory erasure cannot be cryptographically guaranteed.
    - `AuthSubmitAction.toString()` masks passwords with `[REDACTED]` to prevent accidental logging.
 
+### 5.1 Deadline and Reminder Date/Time Pickers
+
+- Use labeled `DateTimePickerButton` triggers for the four temporal controls; each is a >=48dp button with a visible label/value, never editable text.
+- Select dates with Material 3 `DatePicker`, `showModeToggle = false`, and `yearRange = 0..9999`. Normalize initial and selected milliseconds through UTC midnight and retain canonical `YYYY-MM-DD` dates.
+- Select times with the Material 3 clock dial only (`TimePicker` without `TimeInput`) in 24-hour mode; retain canonical `HH:mm` values. Picker confirmation updates the editor/settings draft; settings defaults persist only on outer Save, and Cancel/dismissal does not commit a tentative selection.
+- Keep timezone and numeric reminder parameters as their existing input controls. Deadline date/time/anchor changes continue through `DeadlineCalculatorHelpers` and `StrictTimeZoneResolver`, preserving DST gap rejection and explicit overlap-offset disambiguation.
+- Pure conversion/formatting and model tests do not establish rendered picker interaction coverage. Keep technical acceptance conditional until rendered Compose semantics/interactions and device keyboard, focus, screen-reader, and scaling behavior are verified.
+
 ---
 
 ## 6. Phase 02 Frozen Contract Gaps & Downstream Deferrals
@@ -155,3 +163,13 @@ Per project dependency architecture, Phase 02 contracts (`shared/src/commonMain/
 
 ### 7.4 Acceptance Evidence Boundary
 The sticky-surface PNGs in `docs/evidence/` are visual design baselines only, not native application captures or proof of launcher, notification-shade, window-stacking, tray, screen-reader, or multi-monitor behavior. See the [Android acceptance evidence](./evidence/sticky-surfaces-android-summary.md) and [Windows acceptance evidence](./evidence/sticky-surfaces-windows-summary.md) for the recorded automated scope and Gate G2 holds.
+
+---
+
+## 8. Date & Time Picker Controls (Date & Time Picker Migration)
+
+The date and time selection surfaces replace manual text entry with Material 3 calendar and clock dialogs:
+- **Trigger Component (`DateTimePickerButton`):** Stacked label and formatted value; full-width clickable container enforcing `>= 48.dp` minimum touch target (`DoggoThemeTokens.MinTouchTargetSize`). Semantics declare `Role.Button` and `stateDescription`.
+- **Calendar Modal (`DoggoDatePickerDialog`):** Compose Material 3 DatePicker with input-mode toggle disabled (`showModeToggle = false`), enforcing calendar-only selection. Normalized to UTC midnight and configured for years `0..9999`.
+- **Clock Modal (`DoggoTimePickerDialog`):** Compose Material 3 TimePicker dial in 24-hour format (`is24Hour = true`), wrapped in a scrollable dialog container to accommodate compact displays without obstructing action buttons.
+- **Verification Boundary:** Palette contrast and UTC date/time helper conversions are verified by automated unit tests. Rendered Compose interaction tests and on-device TalkBack/Narrator screen-reader verification remain platform acceptance tasks.

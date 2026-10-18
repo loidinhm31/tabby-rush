@@ -181,6 +181,8 @@ jobs:
             -PhubOrigin="$APPROVED_HUB_ORIGIN" \
             -PhubApiKey="$TABBYRUSH_API_KEY" \
             --dependency-verification=off
+
+      - name: Clean Up Temporary Release Keystore
         if: always()
         run: |
           if [ -n "${RUNNER_TEMP:-}" ] && [ -f "${RUNNER_TEMP}/tabbyrush-release.jks" ]; then

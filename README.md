@@ -105,6 +105,19 @@ Execute the standalone Node.js smoke runner and golden vector assertions:
 node scripts/admin-announcements-smoke.mjs --self-test
 ```
 
+### 7. GitHub Flow CI & Multiplatform Releases
+- **Pull Request CI (`.github/workflows/pr-test.yml`)**: Runs shared, Android, and Desktop unit tests only (fast verification without packaging overhead).
+- **End-User Releases (`.github/workflows/release.yml`)**: Triggered by pushing a version tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) after bumping `appVersion` in `gradle.properties`. Builds and publishes all installable end-user packages (Android APK, Linux RPM + tarball, Windows MSI + ZIP) to GitHub Releases.
+See [Deployment Guide](docs/deployment-guide.md#12-github-flow-cicd-pipeline--multiplatform-releases) for version bump instructions and artifact details.
+
+### 8. Bump Application Version
+Bump version and Android versionCode centrally via JavaScript runner or Just task:
+```bash
+just bump patch       # Increment patch: 1.0.0 -> 1.0.1 (versionCode: 2)
+just bump minor       # Increment minor: 1.0.0 -> 1.1.0 (versionCode: 2)
+just bump-tag patch   # Bump and create git tag v1.0.1
+# Or directly: node scripts/bump-version.mjs patch [--git-tag] [--dry-run]
+```
 ---
 
 ## Documentation Index

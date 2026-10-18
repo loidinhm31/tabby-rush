@@ -1,4 +1,4 @@
-.PHONY: help run-desktop run-desktop-debug run-android install-android build-desktop build-android test clean
+.PHONY: help run-desktop run-desktop-debug run-android install-android build-desktop build-android test clean bump bump-tag
 
 # Detect OS
 ifeq ($(OS),Windows_NT)
@@ -57,3 +57,9 @@ test:
 
 clean:
 	$(GRADLEW) clean $(GRADLE_OPTS)
+
+bump:
+	node scripts/bump-version.mjs $(or $(VERSION),patch)
+
+bump-tag:
+	node scripts/bump-version.mjs $(or $(VERSION),patch) --git-tag

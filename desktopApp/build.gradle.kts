@@ -60,6 +60,8 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }
+val configuredVersion = project.findProperty("appVersion")?.toString()?.takeIf { it.isNotBlank() }
+    ?: throw GradleException("appVersion property is missing or blank in gradle.properties")
 
 compose.desktop {
     application {
@@ -67,14 +69,14 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Rpm, TargetFormat.Msi)
             packageName = if (desktopTarget == "linux") "tabbyrush" else "TabbyRush"
-            packageVersion = "1.0.0"
+            packageVersion = configuredVersion
             description = "TabbyRush personal task management with strict-v1 Glean Hub synchronization"
             vendor = "TabbyRush Team"
             copyright = "Copyright 2026 TabbyRush"
 
             linux {
                 packageName = "tabbyrush"
-                rpmPackageVersion = "1.0.0"
+                rpmPackageVersion = configuredVersion
                 menuGroup = "Office"
                 shortcut = true
                 iconFile.set(project.file("src/main/resources/tabbyrush-icon.png"))

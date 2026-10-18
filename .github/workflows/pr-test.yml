@@ -1,0 +1,150 @@
+name: PR Verification (Tests Only)
+
+"on":
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: pr-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-shared:
+    name: Shared KMP Tests (JVM & Room SQLite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Android SDK (Required for multi-project Gradle evaluation)
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant Execute Permissions to Gradle Wrapper
+        run: chmod +x gradlew
+
+      - name: Run Shared JVM & SQLite Integration Tests
+        id: shared_tests
+        run: ./gradlew :shared:jvmTest --dependency-verification=off
+
+      - name: Generate Shared Test Summary
+        if: always()
+        run: |
+          echo "### 🧪 Shared Multiplatform Tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: ${{ steps.shared_tests.outcome == 'success' && '✅ Passed' || '❌ Failed' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Scope**: Core domain contracts, Room SQLite migrations, sync coordinator, and reminder lifecycle." >> "$GITHUB_STEP_SUMMARY"
+
+  test-android:
+    name: Android Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android Platform 35 and Build Tools
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant Execute Permissions to Gradle Wrapper
+        run: chmod +x gradlew
+
+      - name: Run Android Unit Tests
+        id: android_tests
+        run: ./gradlew :androidApp:testDebugUnitTest --dependency-verification=off
+
+      - name: Generate Android Test Summary
+        if: always()
+        run: |
+          echo "### 🤖 Android Unit Tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: ${{ steps.android_tests.outcome == 'success' && '✅ Passed' || '❌ Failed' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Scope**: Android application container, view models, Glance widget, and receivers." >> "$GITHUB_STEP_SUMMARY"
+
+  test-desktop-linux:
+    name: Desktop Linux Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Android SDK (Required for multi-project Gradle evaluation)
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant Execute Permissions to Gradle Wrapper
+        run: chmod +x gradlew
+
+      - name: Run Linux Desktop Unit Tests
+        id: linux_tests
+        run: ./gradlew -PdesktopTarget=linux :desktopApp:test --dependency-verification=off
+
+      - name: Generate Linux Desktop Test Summary
+        if: always()
+        run: |
+          echo "### 🐧 Desktop Linux Unit Tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: ${{ steps.linux_tests.outcome == 'success' && '✅ Passed' || '❌ Failed' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Scope**: Desktop app lifecycle, Secret Service provider resolution, and tray controller." >> "$GITHUB_STEP_SUMMARY"
+
+  test-desktop-windows:
+    name: Desktop Windows Tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run Windows Desktop Unit Tests
+        id: windows_tests
+        run: .\gradlew.bat -PdesktopTarget=windows :desktopApp:test --dependency-verification=off
+
+      - name: Generate Windows Desktop Test Summary
+        if: always()
+        shell: pwsh
+        run: |
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### 🪟 Desktop Windows Unit Tests"
+          $testStatus = if ("${{ steps.windows_tests.outcome }}" -eq "success") { "✅ Passed" } else { "❌ Failed" }
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Status**: $testStatus"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- **Scope**: Desktop app lifecycle, Windows DPAPI vault provider, and tray controller."

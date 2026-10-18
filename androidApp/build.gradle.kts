@@ -90,6 +90,13 @@ if (!configuredFirebaseConfigPath.isNullOrBlank()) {
 fun escapeBuildConfig(str: String): String =
     "\"" + str.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
+val configuredVersion = project.findProperty("appVersion")?.toString()?.takeIf { it.isNotBlank() }
+    ?: throw GradleException("appVersion property is missing or blank in gradle.properties")
+val configuredVersionCodeRaw = project.findProperty("appVersionCode")?.toString()?.takeIf { it.isNotBlank() }
+    ?: throw GradleException("appVersionCode property is missing or blank in gradle.properties")
+val configuredVersionCode = configuredVersionCodeRaw.toIntOrNull()?.takeIf { it > 0 }
+    ?: throw GradleException("appVersionCode must be a positive integer, got '$configuredVersionCodeRaw'")
+
 android {
     namespace = "dev.tabbyrush.android"
     compileSdk = 35
@@ -98,9 +105,8 @@ android {
         applicationId = "dev.tabbyrush.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
-
+        versionCode = configuredVersionCode
+        versionName = configuredVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val debugOrigin = configuredOrigin ?: "http://10.0.2.2:3000"

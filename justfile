@@ -52,3 +52,11 @@ test verification=gradle_verification:
 # Clean build artifacts
 clean verification=gradle_verification:
     {{ gradlew }} clean --dependency-verification={{ verification }}
+
+# Bump application version in gradle.properties (e.g. `just bump patch`, `just bump minor`, `just bump 1.1.0 --dry-run`)
+bump type_or_version="patch" *args="":
+    node scripts/bump-version.mjs {{ type_or_version }} {{ args }}
+
+# Bump application version and create git release tag (e.g. `just bump-tag patch`)
+bump-tag type_or_version="patch" *args="":
+    node scripts/bump-version.mjs {{ type_or_version }} --git-tag {{ args }}

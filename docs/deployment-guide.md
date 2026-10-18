@@ -399,3 +399,77 @@ If an issue is detected during pilot or full rollout:
 2. **Worker Quiescence**: Set `ANNOUNCEMENT_FCM_ENABLED=false` to pause new device claims. In-flight leases expire after 60s without data loss.
 3. **Preserve Read Availability**: Existing accepted messages remain queryable via `/inbox` and `/unread` through their 90-day lifecycle.
 4. **Zero Collection Deletions**: Never drop `admin_announcements`, `admin_announcement_inbox`, or `notification_install_bindings` collections.
+
+---
+
+## 12. GitHub Flow CI/CD Pipeline & Multiplatform Releases
+
+TabbyRush implements an automated GitHub Flow workflow structure:
+- **Pull Request CI (`.github/workflows/pr-test.yml`)**: Strictly executes tests only (no packaging overhead), providing rapid feedback on PRs.
+- **End-User Release Automation (`.github/workflows/release.yml`)**: Builds installable end-user packages and publishes a GitHub Release when a version tag (`v*`) is pushed.
+
+### 12.1 PR Verification (`pr-test.yml`)
+- **Trigger**: `pull_request` against `main`.
+- **Concurrency**: `cancel-in-progress: true` automatically cancels stale runs when new commits arrive.
+- **Scope (Tests Only)**:
+  - `test-shared`: Shared KMP JVM & SQLite tests (`:shared:jvmTest`).
+  - `test-android`: Android unit tests (`:androidApp:testDebugUnitTest`).
+  - `test-desktop-linux`: Linux Compose Desktop unit tests (`:desktopApp:test`).
+  - `test-desktop-windows`: Windows Compose Desktop unit tests (`:desktopApp:test`).
+
+### 12.2 End-User Releases & Version Bumping (`release.yml`)
+- **Triggers**:
+  - `push` with tag matching `v*` (e.g. `v1.0.0`, `v1.0.1`, `v1.1.0`).
+- **Single Source of Truth**: Application version (`appVersion`) and Android version code (`appVersionCode`) are configured centrally in `gradle.properties` (initial version: `1.0.0` / code `1`).
+- **Tag & Commit Validation**: The workflow validates semantic versioning format and asserts that the git tag strictly matches the committed `appVersion` in `gradle.properties`.
+- **End-User Artifact Matrix**:
+
+| Platform | Built File | Generated Release Asset | Description |
+|---|---|---|---|
+| **Android** | `:androidApp:assembleRelease` | `tabbyrush-<version>.apk` | Signed production Android application package |
+| **Linux Desktop** | `:desktopApp:packageRpm` | `tabbyrush-<version>.rpm` | Native RPM installer (Fedora / RHEL / openSUSE) |
+| **Linux Desktop** | `:desktopApp:createDistributable` | `tabbyrush-<version>-linux-x64.tar.gz` | Portable standalone executable tarball |
+| **Windows Desktop** | `:desktopApp:packageMsi` | `TabbyRush-<version>.msi` | Native per-user MSI installer |
+| **Windows Desktop** | `:desktopApp:createDistributable` | `TabbyRush-<version>-windows-x64.zip` | Portable standalone executable ZIP bundle |
+
+- **Release Publication**: The `publish-release` job aggregates all 5 binaries, computes SHA-256 checksums, and publishes a GitHub Release with attached assets using `softprops/action-gh-release@v2` (`permissions: contents: write`).
+
+### 12.3 Version Bump Utility & Release Procedure
+TabbyRush provides an automated JavaScript bump-version runner at `scripts/bump-version.mjs` with task runner bindings in `justfile` and `Makefile`.
+
+**Command Shortcuts:**
+```bash
+# Preview version bump without modifying files
+just bump patch --dry-run
+node scripts/bump-version.mjs patch --dry-run
+
+# Bump patch version (e.g. 1.0.0 -> 1.0.1, versionCode 1 -> 2)
+just bump patch
+# or: node scripts/bump-version.mjs patch
+
+# Bump minor version (e.g. 1.0.0 -> 1.1.0)
+just bump minor
+
+# Bump and create git release tag automatically
+just bump-tag patch
+# or: node scripts/bump-version.mjs patch --git-tag
+```
+
+**End-User Release Steps:**
+1. Bump version and create tag:
+   ```bash
+   just bump patch
+   git add gradle.properties
+   git commit -m "chore(release): bump version to 1.0.1"
+   git tag v1.0.1
+   ```
+2. Push to GitHub:
+   ```bash
+   git push origin main v1.0.1
+   ```
+3. The `release.yml` GitHub Actions workflow triggers automatically on the tag push, validates version synchronization, builds the 5 multiplatform packages, and attaches them to a new GitHub Release.
+
+### 12.4 Packaging & Verification Caveats
+- **Dependency Verification Notice**: CI builds currently execute with `--dependency-verification=off` to accommodate the 149-hash buildscript verification baseline hold documented in Section 7.2.
+- **Windows Packaging**: The MSI installer produced by the workflow is an unsigned development installer; public distribution requires Authenticode signing on an authorized build workstation.
+- **Platform Acceptance Status**: Packaging verification in CI confirms installer and binary assembly, not installed-runtime or physical device acceptance (Gates G2/G6 remain held).

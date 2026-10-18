@@ -27,7 +27,8 @@
 param(
     [switch]$Diagnose,
     [string]$DistDir = "",
-    [string]$MsiPath = ""
+    [string]$MsiPath = "",
+    [string]$ExpectedVersion = ""
 )
 
 Set-StrictMode -Version Latest
@@ -295,8 +296,21 @@ function Test-MsiPackage {
             Write-Error "[FAIL] ProductName mismatch: expected 'TabbyRush', got '$($extractedProps['ProductName'])'"
             return $false
         }
-        if ($extractedProps["ProductVersion"] -ne "1.0.0") {
-            Write-Error "[FAIL] ProductVersion mismatch: expected '1.0.0', got '$($extractedProps['ProductVersion'])'"
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedVersion)) {
+            $expectedProductVersion = $ExpectedVersion
+        } else {
+            $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+            $gradleProps = Join-Path $repoRoot "gradle.properties"
+            if (Test-Path $gradleProps) {
+                $propMatch = Get-Content -Path $gradleProps | Select-String "^appVersion=\s*(.+)$"
+                if ($propMatch) { $expectedProductVersion = $propMatch.Matches[0].Groups[1].Value.Trim() }
+                else { $expectedProductVersion = "1.0.0" }
+            } else {
+                $expectedProductVersion = "1.0.0"
+            }
+        }
+        if ($extractedProps["ProductVersion"] -ne $expectedProductVersion) {
+            Write-Error "[FAIL] ProductVersion mismatch: expected '$expectedProductVersion', got '$($extractedProps['ProductVersion'])'"
             return $false
         }
         if ($extractedProps["Manufacturer"] -ne "TabbyRush Team") {

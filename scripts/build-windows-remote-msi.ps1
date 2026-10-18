@@ -161,10 +161,10 @@ if ($LASTEXITCODE -ne 0) { throw "WiX heat harvesting failed" }
 & candle -arch x64 "-dSourceDir=$distDir" "-dProductVersion=$appVer" -out "$wixWorkDir\" "$installerWxs" "$harvestedWxs"
 if ($LASTEXITCODE -ne 0) { throw "WiX candle compilation failed" }
 
-# WiX Light: link MSI
+# WiX Light: link MSI (suppress ICE validation with -sval for per-user harvested files)
 $installerWixObj = Join-Path $wixWorkDir "installer.wixobj"
 $appFilesWixObj = Join-Path $wixWorkDir "application-files.wixobj"
-& light -ext WixUIExtension -out "$outputMsi" "$installerWixObj" "$appFilesWixObj"
+& light -ext WixUIExtension -sval -out "$outputMsi" "$installerWixObj" "$appFilesWixObj"
 if ($LASTEXITCODE -ne 0) { throw "WiX light linking failed" }
 
 if (-not (Test-Path $outputMsi)) {
@@ -180,7 +180,7 @@ Write-Host "SHA-256: $msiHash" -ForegroundColor Green
 $smokeScript = Join-Path $repoRoot "scripts\windows-package-smoke.ps1"
 if (Test-Path $smokeScript) {
     Write-Host "`n5. Executing package smoke test..." -ForegroundColor Cyan
-    & $smokeScript -DistDir $distDir -MsiPath $outputMsi
+    & $smokeScript -DistDir $distDir -MsiPath $outputMsi -ExpectedVersion $appVer
     if ($LASTEXITCODE -ne 0) { throw "windows-package-smoke.ps1 audit failed" }
 }
 

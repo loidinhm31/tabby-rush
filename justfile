@@ -7,7 +7,10 @@ set windows-shell := ["cmd.exe", "/c"]
 # Target OS detection (supported desktop targets: windows, linux)
 desktop_target := if os() == "windows" { "windows" } else if os() == "linux" { "linux" } else { error("Unsupported desktop OS: " + os()) }
 gradlew := if os() == "windows" { ".\\gradlew.bat" } else { "./gradlew" }
-adb := env("ADB", if os() == "windows" { env_var_or_default("LOCALAPPDATA", "") / "Android" / "Sdk" / "platform-tools" / "adb.exe" } else { "adb" })
+android_sdk := env_var_or_default("ANDROID_HOME", if os() == "windows" { env_var_or_default("LOCALAPPDATA", "") / "Android" / "Sdk" } else { "" })
+adb := env("ADB", if os() == "windows" { android_sdk / "platform-tools" / "adb.exe" } else { "adb" })
+emulator := env("EMULATOR", if os() == "windows" { android_sdk / "emulator" / "emulator.exe" } else if android_sdk != "" { android_sdk / "emulator" / "emulator" } else { "emulator" })
+default_avd := env("AVD_NAME", "tabbyrush_android")
 
 # Application configuration (refactored namespace)
 package_name := "dev.tabbyrush.android"
@@ -36,6 +39,19 @@ install-android verification=gradle_verification:
 run-android verification=gradle_verification:
     {{ gradlew }} :androidApp:installDebug --dependency-verification={{ verification }}
     "{{ adb }}" shell am start -n {{ package_name }}/{{ main_activity }}
+
+# List available Android emulators (AVDs)
+list-emulators:
+    "{{ emulator }}" -list-avds
+
+alias emulators := list-emulators
+alias list-avds := list-emulators
+
+# Start Android emulator (e.g. `just start-emulator`, `just start-emulator Pixel_6`)
+start-emulator avd=default_avd *args="":
+    "{{ emulator }}" -avd {{ avd }} {{ args }}
+
+alias run-emulator := start-emulator
 
 # Build desktop standalone distributable
 build-desktop verification=gradle_verification:

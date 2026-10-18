@@ -290,7 +290,7 @@ function Test-MsiPackage {
                 $extractedProps[$prop] = $val
             }
         }
-
+        try { $view.GetType().InvokeMember("Close", [System.Reflection.BindingFlags]::InvokeMethod, $null, $view, $null) } catch {}
         # Validate mandatory properties and expected values
         if ($extractedProps["ProductName"] -ne "TabbyRush") {
             Write-Error "[FAIL] ProductName mismatch: expected 'TabbyRush', got '$($extractedProps['ProductName'])'"
@@ -330,13 +330,23 @@ function Test-MsiPackage {
         # 5. Verify AUMID in MsiShortcutProperty table
         $shortcutView = $null
         try {
-            $shortcutView = $database.GetType().InvokeMember(
-                "OpenView",
-                [System.Reflection.BindingFlags]::InvokeMethod,
-                $null,
-                $database,
-                @("SELECT PropertyKey, PropVariant_ FROM MsiShortcutProperty")
-            )
+            try {
+                $shortcutView = $database.GetType().InvokeMember(
+                    "OpenView",
+                    [System.Reflection.BindingFlags]::InvokeMethod,
+                    $null,
+                    $database,
+                    @("SELECT PropertyKey, PropVariantValue FROM MsiShortcutProperty")
+                )
+            } catch {
+                $shortcutView = $database.GetType().InvokeMember(
+                    "OpenView",
+                    [System.Reflection.BindingFlags]::InvokeMethod,
+                    $null,
+                    $database,
+                    @("SELECT PropertyKey, PropVariant_ FROM MsiShortcutProperty")
+                )
+            }
             $shortcutView.GetType().InvokeMember("Execute", [System.Reflection.BindingFlags]::InvokeMethod, $null, $shortcutView, $null)
             $foundAumid = $false
             while ($true) {

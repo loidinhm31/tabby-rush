@@ -116,7 +116,7 @@ $gradlew = Join-Path $repoRoot "gradlew.bat"
 $propMatch = Get-Content (Join-Path $repoRoot "gradle.properties") | Select-String "^appVersion\s*=\s*(.*)$"
 $appVer = if ($Version) { $Version } elseif ($propMatch) { $propMatch.Matches.Groups[1].Value.Trim() } else { "1.0.0" }
 Write-Host "Target package version: $appVer" -ForegroundColor Cyan
-& $gradlew :desktopApp:createDistributable -PdesktopTarget=windows -PappVersion=$appVer --dependency-verification=$Verification
+& $gradlew :desktopApp:createDistributable "-PdesktopTarget=windows" "-PappVersion=$appVer" "--dependency-verification=$Verification"
 if ($LASTEXITCODE -ne 0) { throw "Gradle :desktopApp:createDistributable failed" }
 
 $distDir = Join-Path $repoRoot "desktopApp\build\compose\binaries\main\app\TabbyRush"
@@ -158,7 +158,7 @@ $outputMsi = Join-Path $outputMsiDir "TabbyRush-$appVer.msi"
 if ($LASTEXITCODE -ne 0) { throw "WiX heat harvesting failed" }
 
 # WiX Candle: compile WXS sources
-& candle -arch x64 -dSourceDir=$distDir -out "$wixWorkDir\" $installerWxs $harvestedWxs
+& candle -arch x64 -dSourceDir=$distDir -dProductVersion=$appVer -out "$wixWorkDir\" $installerWxs $harvestedWxs
 if ($LASTEXITCODE -ne 0) { throw "WiX candle compilation failed" }
 
 # WiX Light: link MSI

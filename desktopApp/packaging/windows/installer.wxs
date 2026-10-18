@@ -4,7 +4,7 @@
         Id="*"
         Name="TabbyRush"
         Language="1033"
-        Version="1.0.0"
+        Version="$(var.ProductVersion)"
         Manufacturer="TabbyRush Team"
         UpgradeCode="{a6c507c8-88fe-4e49-8f43-a6125039281a}">
 

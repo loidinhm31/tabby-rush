@@ -7,10 +7,12 @@ name: PR Verification (Tests Only)
 concurrency:
   group: pr-test-${{ github.ref }}
   cancel-in-progress: true
-
 permissions:
   contents: read
 
+env:
+  APPROVED_HUB_ORIGIN: "https://api-glean-hub.qm-hub-v001.cloud"
+  TABBYRUSH_API_KEY: "XoaJSoximq8EhK06IjXAQCOqKqRtM6qy"
 jobs:
   test-shared:
     name: Shared KMP Tests (JVM & Room SQLite)
@@ -51,6 +53,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Configure Test Environment DotEnv
+        run: |
+          cat << 'EOF' > .env
+          APPROVED_HUB_ORIGIN=https://api-glean-hub.qm-hub-v001.cloud
+          TABBYRUSH_API_KEY=XoaJSoximq8EhK06IjXAQCOqKqRtM6qy
+          EOF
       - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
@@ -94,6 +102,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Configure Test Environment DotEnv
+        run: |
+          cat << 'EOF' > .env
+          APPROVED_HUB_ORIGIN=https://api-glean-hub.qm-hub-v001.cloud
+          TABBYRUSH_API_KEY=XoaJSoximq8EhK06IjXAQCOqKqRtM6qy
+          EOF
       - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
@@ -125,6 +139,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Configure Test Environment DotEnv
+        shell: pwsh
+        run: |
+          Set-Content -Path .env -Value "APPROVED_HUB_ORIGIN=https://api-glean-hub.qm-hub-v001.cloud`nTABBYRUSH_API_KEY=XoaJSoximq8EhK06IjXAQCOqKqRtM6qy"
       - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:

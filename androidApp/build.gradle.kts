@@ -109,9 +109,12 @@ android {
         versionName = configuredVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val debugOrigin = configuredOrigin ?: "http://10.0.2.2:3000"
-        val releaseOrigin = configuredOrigin ?: ""
-        val apiKey = configuredApiKey ?: ""
+        val defaultCloudOrigin = "https://api-glean-hub.qm-hub-v001.cloud"
+        val defaultCloudApiKey = "XoaJSoximq8EhK06IjXAQCOqKqRtM6qy"
+
+        val debugOrigin = configuredOrigin ?: defaultCloudOrigin
+        val releaseOrigin = configuredOrigin ?: defaultCloudOrigin
+        val apiKey = configuredApiKey ?: defaultCloudApiKey
 
         buildConfigField("String", "HUB_API_KEY", escapeBuildConfig(apiKey))
         buildConfigField("String", "HUB_ORIGIN_DEBUG", escapeBuildConfig(debugOrigin))

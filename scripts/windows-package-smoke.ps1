@@ -133,6 +133,24 @@ function Test-DistributableBundle {
         Write-Error "[FAIL] Native C++/WinRT toast DLL (tabbyrush-toast.dll) NOT found in $Path"
         return $false
     }
+    # 2.5 Verify launcher config has app.runtime for bundled JVM
+    $cfgCandidates = @(
+        (Join-Path $Path "app\TabbyRush.cfg"),
+        (Join-Path $Path "TabbyRush.cfg")
+    )
+    $cfgFile = $cfgCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($cfgFile) {
+        $cfgContent = Get-Content -Path $cfgFile
+        if ($cfgContent -match "^app\.runtime=") {
+            Write-Host "[PASS] Launcher configuration correctly defines app.runtime: $cfgFile" -ForegroundColor Green
+        } else {
+            Write-Error "[FAIL] Launcher configuration file ($cfgFile) is missing app.runtime. The app will fail with 'No JVM' on systems without external Java!"
+            return $false
+        }
+    } else {
+        Write-Error "[FAIL] Launcher configuration file (TabbyRush.cfg) NOT found in $Path"
+        return $false
+    }
 
     # 3. Verify packaged application JARs and inspect classes
     $appDir = Join-Path $Path "app"

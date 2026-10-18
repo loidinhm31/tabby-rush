@@ -135,9 +135,29 @@ $iconSrc = Join-Path $repoRoot "desktopApp\src\windowsMain\resources\tabbyrush.i
 if (Test-Path $iconSrc) {
     Copy-Item $iconSrc (Join-Path $distDir "TabbyRush.ico") -Force
 }
+# Ensure app.runtime is configured in TabbyRush.cfg so jpackage launcher locates the bundled JVM runtime
+$cfgFile = Join-Path $appSubdir "TabbyRush.cfg"
+if (Test-Path $cfgFile) {
+    $cfgContent = Get-Content -Path $cfgFile
+    if (-not ($cfgContent -match "^app\.runtime=")) {
+        $newCfg = @()
+        foreach ($line in $cfgContent) {
+            $newCfg += $line
+            if ($line.Trim() -eq "[Application]") {
+                $newCfg += "app.runtime=`$APPDIR\..\runtime"
+            }
+        }
+        $newCfg | Set-Content -Path $cfgFile -Encoding UTF8
+        Write-Host "[PASS] Injected app.runtime into TabbyRush.cfg" -ForegroundColor Green
+    }
+}
 
-Write-Host "[PASS] Application distributable bundled with native DLL and icon" -ForegroundColor Green
+$distEnv = Join-Path $distDir ".env"
+if (-not (Test-Path $distEnv)) {
+    Set-Content -Path $distEnv -Value "APPROVED_HUB_ORIGIN=https://api-glean-hub.qm-hub-v001.cloud`nTABBYRUSH_API_KEY=XoaJSoximq8EhK06IjXAQCOqKqRtM6qy" -Encoding UTF8
+}
 
+Write-Host "[PASS] Application distributable bundled with native DLL, icon, runtime config, and default env" -ForegroundColor Green
 # 4. WiX Harvesting and MSI Packaging
 Write-Host "`n4. Packaging per-user MSI with WiX..." -ForegroundColor Cyan
 $wixWorkDir = Join-Path $repoRoot "desktopApp\build\windows-installer"

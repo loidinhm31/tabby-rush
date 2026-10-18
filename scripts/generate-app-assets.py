@@ -160,13 +160,13 @@ def generate_all():
         f.write(svg_content.strip() + "\n")
 
     # 5. Android Adaptive Foreground PNG (432x432, verified strictly within 66dp safe circle)
-    target_w = 200
+    target_w = 211
     target_h = int(ch * target_w / cw)
     android_scaled = cutout_cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
     fg_img = Image.new("RGBA", (432, 432), (0, 0, 0, 0))
-    pos_x = (432 - target_w) // 2 - 5
-    pos_y = (432 - target_h) // 2 - 5
+    pos_x = (432 - target_w) // 2
+    pos_y = (432 - target_h) // 2
     fg_img.paste(android_scaled, (pos_x, pos_y), android_scaled)
 
     # Assert 100% within 66dp safe zone (radius 132 px from (216, 216))
@@ -179,7 +179,40 @@ def generate_all():
 
     os.makedirs("androidApp/src/main/res/drawable", exist_ok=True)
     fg_img.save("androidApp/src/main/res/drawable/ic_launcher_foreground.png", format="PNG")
-    print("All TabbyRush assets generated successfully!")
 
+    # 6. Android Legacy & Fallback Mipmap PNGs (for package installer & legacy launchers)
+    android_densities = {
+        "mipmap-mdpi": 48,
+        "mipmap-hdpi": 72,
+        "mipmap-xhdpi": 96,
+        "mipmap-xxhdpi": 144,
+        "mipmap-xxxhdpi": 192,
+    }
+    for folder, d_size in android_densities.items():
+        d_dir = os.path.join("androidApp/src/main/res", folder)
+        os.makedirs(d_dir, exist_ok=True)
+
+        # Standard squircle launcher icon
+        comp = build_desktop_composite(d_size)
+        comp.save(os.path.join(d_dir, "ic_launcher.png"), format="PNG")
+
+        # Round launcher icon
+        round_comp = Image.new("RGBA", (d_size, d_size), (0, 0, 0, 0))
+        r_draw = ImageDraw.Draw(round_comp)
+        r_draw.ellipse([0, 0, d_size - 1, d_size - 1], fill="#FFFFFF", outline="#D9E3E4", width=max(1, int(d_size / 64)))
+
+        r_scale = (d_size * 0.78) / max(cw, ch)
+        r_w, r_h = int(cw * r_scale), int(ch * r_scale)
+        r_scaled = cutout_cropped.resize((r_w, r_h), Image.Resampling.LANCZOS)
+        round_comp.alpha_composite(r_scaled, ((d_size - r_w) // 2, (d_size - r_h) // 2))
+
+        # Circular mask
+        circle_mask = Image.new("L", (d_size, d_size), 0)
+        ImageDraw.Draw(circle_mask).ellipse([0, 0, d_size - 1, d_size - 1], fill=255)
+        final_round = Image.new("RGBA", (d_size, d_size), (0, 0, 0, 0))
+        final_round.paste(round_comp, (0, 0), circle_mask)
+        final_round.save(os.path.join(d_dir, "ic_launcher_round.png"), format="PNG")
+
+    print("All TabbyRush assets generated successfully!")
 if __name__ == "__main__":
     generate_all()

@@ -51,7 +51,7 @@ std::wstring to_wstring(const std::string& utf8) {
 }
 
 winrt::hstring to_hstring(const std::string& utf8) {
-    return winrt::to_hstring(to_wstring(utf8));
+    return winrt::hstring(to_wstring(utf8));
 }
 #endif
 

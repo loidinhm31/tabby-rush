@@ -258,6 +258,49 @@ describe('Release Security Check: Exported Components Auditor', () => {
     const issues = validateExportedComponents(manifest);
     assert.deepEqual(issues, []);
   });
+  it('rejects TabbyRushTaskWidgetReceiver with invalid resource format (e.g. bare hex without @ref/)', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".TabbyRushTaskWidgetReceiver" android:exported="true">
+            <intent-filter>
+              <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="0x7f100003" />
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /missing required @xml\/task-widget-info provider meta-data/);
+  });
+
+  it('rejects TabbyRushTaskWidgetReceiver with invalid resource format (e.g. @task_widget_info missing xml/)', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".TabbyRushTaskWidgetReceiver" android:exported="true">
+            <intent-filter>
+              <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@task_widget_info" />
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /missing required @xml\/task-widget-info provider meta-data/);
+  });
 
   it('ignores unexported private receivers with intent filters', () => {
     const manifest = `

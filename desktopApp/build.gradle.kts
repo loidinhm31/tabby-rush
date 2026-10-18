@@ -27,16 +27,15 @@ val desktopTarget = requestedTarget
 
 sourceSets {
     main {
-        kotlin.srcDirs("src/${desktopTarget}Main/kotlin")
+        kotlin.srcDirs("src/main/kotlin", "src/${desktopTarget}Main/kotlin")
+        resources.srcDirs("src/main/resources", "src/${desktopTarget}Main/resources")
         if (desktopTarget == "windows") {
-            resources.setSrcDirs(listOf("src/windowsMain/resources", "build/native/windows/Release"))
-        } else {
-            resources.setSrcDirs(listOf("src/${desktopTarget}Main/resources"))
+            resources.srcDirs("build/native/windows/Release")
         }
     }
     test {
-        kotlin.srcDirs("src/${desktopTarget}Test/kotlin")
-        resources.setSrcDirs(listOf("src/${desktopTarget}Test/resources"))
+        kotlin.srcDirs("src/test/kotlin", "src/${desktopTarget}Test/kotlin")
+        resources.srcDirs("src/test/resources", "src/${desktopTarget}Test/resources")
     }
 }
 

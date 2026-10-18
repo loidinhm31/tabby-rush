@@ -89,4 +89,71 @@ class DotEnvLoaderTest {
         assertEquals("\"", result["LONE_DOUBLE"])
         assertEquals("valid_value", result["SUBSEQUENT_KEY"])
     }
+
+    @Test
+    fun testParseFileWithLeadingUtf8Bom() {
+        val tempFile = File.createTempFile("bom-direct-env", ".env")
+        tempFile.deleteOnExit()
+        val bomPrefix = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
+        val content = """
+            APPROVED_HUB_ORIGIN=https://api-glean-hub.qm-hub-v001.cloud
+            TABBYRUSH_API_KEY="test-api-key-abc"
+        """.trimIndent().toByteArray(Charsets.UTF_8)
+        tempFile.writeBytes(bomPrefix + content)
+
+        val result = DotEnvLoader.parse(tempFile)
+        assertEquals("https://api-glean-hub.qm-hub-v001.cloud", result["APPROVED_HUB_ORIGIN"])
+        assertEquals("test-api-key-abc", result["TABBYRUSH_API_KEY"])
+        assertEquals(2, result.size)
+    }
+
+    @Test
+    fun testParseFileWithLeadingUtf8BomAndComments() {
+        val tempFile = File.createTempFile("bom-comment-env", ".env")
+        tempFile.deleteOnExit()
+        val bomPrefix = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
+        val content = """
+               # Leading comment preceded by BOM and spaces
+               APPROVED_HUB_ORIGIN=https://api-glean-hub.qm-hub-v001.cloud
+            TABBYRUSH_API_KEY="test-api-key-abc"
+        """.trimIndent().toByteArray(Charsets.UTF_8)
+
+        tempFile.writeBytes(bomPrefix + content)
+
+        val result = DotEnvLoader.parse(tempFile)
+        assertEquals("https://api-glean-hub.qm-hub-v001.cloud", result["APPROVED_HUB_ORIGIN"])
+        assertEquals("test-api-key-abc", result["TABBYRUSH_API_KEY"])
+        assertEquals(2, result.size)
+    }
+
+    @Test
+    fun testParsePreservesLiteralBomInsideValue() {
+        val tempFile = File.createTempFile("inner-bom-env", ".env")
+        tempFile.deleteOnExit()
+        val bomPrefix = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
+        val innerBomChar = '\uFEFF'
+        val text = "KEY_WITH_INNER_BOM=\"prefix${innerBomChar}suffix\"\nPLAIN_KEY=hello\n"
+        tempFile.writeBytes(bomPrefix + text.toByteArray(Charsets.UTF_8))
+
+        val result = DotEnvLoader.parse(tempFile)
+        assertEquals("prefix\uFEFFsuffix", result["KEY_WITH_INNER_BOM"])
+        assertEquals("hello", result["PLAIN_KEY"])
+    }
+
+    @Test
+    fun testParsePreservesUnicodeInValuesWithoutModifyingInnerCharacters() {
+        val tempFile = File.createTempFile("unicode-val-env", ".env")
+        tempFile.deleteOnExit()
+        val innerBomChar = '\uFEFF'
+        tempFile.writeText(
+            "GREETING=\"Xin chào thế giới\"\n" +
+            "EMOJI_KEY=\"🚀 Task Manager\"\n" +
+            "RAW_UNICODE_BOM=\"val${innerBomChar}here\"\n"
+        )
+
+        val result = DotEnvLoader.parse(tempFile)
+        assertEquals("Xin chào thế giới", result["GREETING"])
+        assertEquals("🚀 Task Manager", result["EMOJI_KEY"])
+        assertEquals("val\uFEFFhere", result["RAW_UNICODE_BOM"])
+    }
 }

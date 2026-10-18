@@ -135,26 +135,47 @@ $iconSrc = Join-Path $repoRoot "desktopApp\src\windowsMain\resources\tabbyrush.i
 if (Test-Path $iconSrc) {
     Copy-Item $iconSrc (Join-Path $distDir "TabbyRush.ico") -Force
 }
-# Ensure app.runtime is configured in TabbyRush.cfg so jpackage launcher locates the bundled JVM runtime
+# Ensure app.runtime is configured in TabbyRush.cfg so jpackage launcher locates the bundled JVM runtime,
+# and ensure both TabbyRush.cfg and .env are strictly BOM-free UTF-8 for jpackage launcher compatibility.
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $cfgFile = Join-Path $appSubdir "TabbyRush.cfg"
 if (Test-Path $cfgFile) {
-    $cfgContent = Get-Content -Path $cfgFile
-    if (-not ($cfgContent -match "^app\.runtime=")) {
+    $rawCfgBytes = [System.IO.File]::ReadAllBytes($cfgFile)
+    $hasCfgBom = ($rawCfgBytes.Length -ge 3 -and $rawCfgBytes[0] -eq 0xEF -and $rawCfgBytes[1] -eq 0xBB -and $rawCfgBytes[2] -eq 0xBF)
+    if ($hasCfgBom) {
+        $cfgText = $utf8NoBom.GetString($rawCfgBytes, 3, $rawCfgBytes.Length - 3)
+    } else {
+        $cfgText = $utf8NoBom.GetString($rawCfgBytes, 0, $rawCfgBytes.Length)
+    }
+    $cfgLines = $cfgText -split "\r?\n"
+    $needsRuntime = -not ($cfgLines -match "^app\.runtime=")
+    if ($needsRuntime -or $hasCfgBom) {
         $newCfg = @()
-        foreach ($line in $cfgContent) {
+        foreach ($line in $cfgLines) {
             $newCfg += $line
-            if ($line.Trim() -eq "[Application]") {
+            if ($needsRuntime -and $line.Trim() -eq "[Application]") {
                 $newCfg += "app.runtime=`$APPDIR\..\runtime"
             }
         }
-        $newCfg | Set-Content -Path $cfgFile -Encoding UTF8
-        Write-Host "[PASS] Injected app.runtime into TabbyRush.cfg" -ForegroundColor Green
+        [System.IO.File]::WriteAllLines($cfgFile, $newCfg, $utf8NoBom)
+        Write-Host "[PASS] Normalized TabbyRush.cfg (BOM-free UTF-8, app.runtime verified)" -ForegroundColor Green
+    } else {
+        Write-Host "[PASS] TabbyRush.cfg already contains app.runtime and is BOM-free" -ForegroundColor Green
     }
 }
 
 $distEnv = Join-Path $distDir ".env"
 if (-not (Test-Path $distEnv)) {
-    Set-Content -Path $distEnv -Value "APPROVED_HUB_ORIGIN=https://api-glean-hub.qm-hub-v001.cloud`nTABBYRUSH_API_KEY=XoaJSoximq8EhK06IjXAQCOqKqRtM6qy" -Encoding UTF8
+    $defaultEnv = "APPROVED_HUB_ORIGIN=https://api-glean-hub.qm-hub-v001.cloud`nTABBYRUSH_API_KEY=XoaJSoximq8EhK06IjXAQCOqKqRtM6qy`n"
+    [System.IO.File]::WriteAllText($distEnv, $defaultEnv, $utf8NoBom)
+    Write-Host "[PASS] Generated default .env (BOM-free UTF-8)" -ForegroundColor Green
+} else {
+    $rawEnvBytes = [System.IO.File]::ReadAllBytes($distEnv)
+    if ($rawEnvBytes.Length -ge 3 -and $rawEnvBytes[0] -eq 0xEF -and $rawEnvBytes[1] -eq 0xBB -and $rawEnvBytes[2] -eq 0xBF) {
+        $cleanEnvText = $utf8NoBom.GetString($rawEnvBytes, 3, $rawEnvBytes.Length - 3)
+        [System.IO.File]::WriteAllText($distEnv, $cleanEnvText, $utf8NoBom)
+        Write-Host "[PASS] Normalized existing .env (BOM stripped, custom values preserved)" -ForegroundColor Green
+    }
 }
 
 Write-Host "[PASS] Application distributable bundled with native DLL, icon, runtime config, and default env" -ForegroundColor Green

@@ -47,8 +47,14 @@ object DotEnvLoader {
         if (!file.exists() || !file.isFile) return emptyMap()
         val result = mutableMapOf<String, String>()
         try {
+            var isFirstLine = true
             file.forEachLine(Charsets.UTF_8) { rawLine ->
-                val line = rawLine.trim()
+                val line = if (isFirstLine) {
+                    isFirstLine = false
+                    rawLine.removePrefix("\uFEFF").trim()
+                } else {
+                    rawLine.trim()
+                }
                 if (line.isNotEmpty() && !line.startsWith("#")) {
                     val idx = line.indexOf('=')
                     if (idx > 0) {

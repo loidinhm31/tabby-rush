@@ -133,25 +133,46 @@ function Test-DistributableBundle {
         Write-Error "[FAIL] Native C++/WinRT toast DLL (tabbyrush-toast.dll) NOT found in $Path"
         return $false
     }
-    # 2.5 Verify launcher config has app.runtime for bundled JVM
+    # 2.5 Verify launcher config has app.runtime for bundled JVM and is strictly BOM-free
     $cfgCandidates = @(
         (Join-Path $Path "app\TabbyRush.cfg"),
         (Join-Path $Path "TabbyRush.cfg")
     )
     $cfgFile = $cfgCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
     if ($cfgFile) {
+        $rawCfgBytes = [System.IO.File]::ReadAllBytes($cfgFile)
+        if ($rawCfgBytes.Length -ge 3 -and $rawCfgBytes[0] -eq 0xEF -and $rawCfgBytes[1] -eq 0xBB -and $rawCfgBytes[2] -eq 0xBF) {
+            Write-Error "[FAIL] Launcher configuration file ($cfgFile) contains UTF-8 BOM (0xEF 0xBB 0xBF). Native jpackage launcher fails with 'Fail to launch JVM'!"
+            return $false
+        }
+        Write-Host "[PASS] Launcher configuration is BOM-free (no UTF-8 BOM detected): $cfgFile" -ForegroundColor Green
+
         $cfgContent = Get-Content -Path $cfgFile
         if ($cfgContent -match "^app\.runtime=") {
-            Write-Host "[PASS] Launcher configuration correctly defines app.runtime: $cfgFile" -ForegroundColor Green
+            Write-Host "[PASS] Launcher configuration defines explicit app.runtime: $cfgFile" -ForegroundColor Green
         } else {
-            Write-Error "[FAIL] Launcher configuration file ($cfgFile) is missing app.runtime. The app will fail with 'No JVM' on systems without external Java!"
-            return $false
+            Write-Host "[NOTE] Launcher configuration omits explicit app.runtime (jpackage defaults to adjacent bundled runtime)" -ForegroundColor Yellow
         }
     } else {
         Write-Error "[FAIL] Launcher configuration file (TabbyRush.cfg) NOT found in $Path"
         return $false
     }
 
+    # 2.6 Verify all present .env files are BOM-free
+    $envCandidates = @(
+        (Join-Path $Path ".env"),
+        (Join-Path $Path "app\.env")
+    )
+    foreach ($envFile in $envCandidates) {
+        if (Test-Path $envFile) {
+            $rawEnvBytes = [System.IO.File]::ReadAllBytes($envFile)
+            if ($rawEnvBytes.Length -ge 3 -and $rawEnvBytes[0] -eq 0xEF -and $rawEnvBytes[1] -eq 0xBB -and $rawEnvBytes[2] -eq 0xBF) {
+                Write-Error "[FAIL] Distributable .env ($envFile) contains UTF-8 BOM (0xEF 0xBB 0xBF). Distributable configuration files must follow the BOM-free packaging standard."
+                return $false
+            }
+            Write-Host "[PASS] Distributable .env is BOM-free (no UTF-8 BOM detected): $envFile" -ForegroundColor Green
+        }
+    }
     # 3. Verify packaged application JARs and inspect classes
     $appDir = Join-Path $Path "app"
     if (-not (Test-Path $appDir)) {

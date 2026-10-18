@@ -55,6 +55,9 @@ object TabbyRushThemeTokens {
     val ControlCornerRadius: Dp = 12.dp
     val CardCornerRadius: Dp = 20.dp
     val MinTouchTargetSize: Dp = 48.dp
+    val CompactLogoSize: Dp = 36.dp
+    val CompactLogoCornerRadius: Dp = 8.dp
+    val CompactAccountLabelMaxWidth: Dp = 56.dp
 
     val customColors: TabbyRushCustomColors
         @Composable

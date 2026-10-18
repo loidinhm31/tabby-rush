@@ -92,7 +92,7 @@ These mathematical token calculations are verified by automated unit assertions 
 TabbyRush implements a single unified Compose tree with responsive breakpoint adaptation:
 1. **Compact Layout (< 840dp):**
    - Vertical layout with scrolling list container.
-   - Warm cream top header showing account info, action buttons ("Add", "Notices", "Leave"), and sync feedback. The top bar is in non-scrolling `Scaffold.topBar`; viewport constraints at 200% font scale or landscape remain unverified.
+   - Warm cream top header showing compact 36×36dp TabbyRush logo badge (`Res.drawable.tabbyrush_logo`) with TalkBack heading semantics, compact user account label, and optimized action buttons ("Add", "Inbox"/"Tasks" with unread badge, "Settings", "Notices", "Leave") enforcing Material 3 / Android >=48dp touch target guidelines (`TabbyRushThemeTokens.MinTouchTargetSize`) with horizontal scroll overflow fallback. On-device rendered verification across narrow viewports and 200% font scale remains pending per section 6.
    - Horizontal scrolling filter chips (`All`, `Active`, `Completed`).
    - Todo items list with unconstrained title wrapping.
 2. **Expanded Desktop Layout (>= 840dp):**

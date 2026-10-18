@@ -1,11 +1,14 @@
 package dev.tabbyrush.shared.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -14,9 +17,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -34,8 +39,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -48,6 +56,9 @@ import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.TodoUiState
 import dev.tabbyrush.shared.theme.TabbyRushTheme
 import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
+import dev.tabbyrush.shared.resources.Res
+import dev.tabbyrush.shared.resources.tabbyrush_logo
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * Root Composable for the TabbyRush application.
@@ -438,22 +449,33 @@ private fun AuthenticatedWorkspace(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text(
-                                    text = "TabbyRush",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = TabbyRushThemeTokens.customColors.primaryDeep,
-                                    modifier = Modifier.semantics { heading() }
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(end = TabbyRushThemeTokens.SpacingSmall)
+                            ) {
+                                Image(
+                                    painter = painterResource(Res.drawable.tabbyrush_logo),
+                                    contentDescription = "TabbyRush",
+                                    modifier = Modifier
+                                        .size(TabbyRushThemeTokens.CompactLogoSize)
+                                        .clip(RoundedCornerShape(TabbyRushThemeTokens.CompactLogoCornerRadius))
+                                        .semantics { heading() }
                                 )
                                 val userLabel = state.identity?.username ?: state.identity?.email ?: "Offline"
                                 Text(
                                     text = userLabel,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TabbyRushThemeTokens.customColors.muted
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TabbyRushThemeTokens.customColors.muted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = TabbyRushThemeTokens.CompactAccountLabelMaxWidth)
                                 )
                             }
 
                             Row(
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .horizontalScroll(rememberScrollState()),
                                 horizontalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingXSmall),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -464,6 +486,7 @@ private fun AuthenticatedWorkspace(
                                         containerColor = MaterialTheme.colorScheme.primary,
                                         contentColor = MaterialTheme.colorScheme.onPrimary
                                     ),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                     modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                                 ) {
                                     Text("Add", style = MaterialTheme.typography.labelLarge)
@@ -473,6 +496,7 @@ private fun AuthenticatedWorkspace(
                                     onClick = {
                                         navState = if (navState.currentRoute is RemoteInboxRoute.Tasks) navState.navigateToList() else navState.navigateToTasks()
                                     },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                                     modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                                 ) {
                                     Row(
@@ -493,7 +517,11 @@ private fun AuthenticatedWorkspace(
                                                     text = "${remoteInboxState.unreadCount}",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onError,
-                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    modifier = Modifier
+                                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        .semantics {
+                                                            contentDescription = "${remoteInboxState.unreadCount} unread announcements"
+                                                        }
                                                 )
                                             }
                                         }
@@ -502,6 +530,7 @@ private fun AuthenticatedWorkspace(
 
                                 TextButton(
                                     onClick = { onAction(TodoAction.OpenSettings) },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                                     modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                                 ) {
                                     Text(
@@ -513,6 +542,7 @@ private fun AuthenticatedWorkspace(
 
                                 TextButton(
                                     onClick = { showNotices = true },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                                     modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                                 ) {
                                     Text(
@@ -524,6 +554,7 @@ private fun AuthenticatedWorkspace(
 
                                 TextButton(
                                     onClick = { onAction(TodoAction.RequestLeave) },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                                     modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                                 ) {
                                     Text(

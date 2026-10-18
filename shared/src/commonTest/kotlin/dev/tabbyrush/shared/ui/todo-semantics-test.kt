@@ -1,6 +1,8 @@
 package dev.tabbyrush.shared.ui
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
 import dev.tabbyrush.shared.contract.AccessRequestInfo
 import dev.tabbyrush.shared.contract.AuthState
 import dev.tabbyrush.shared.contract.ConflictState
@@ -670,6 +672,30 @@ class TodoSemanticsTest {
         assertTrue(result is DeadlineValidationResult.Valid, "Date-only deadline with settings anchor must be valid")
         assertNull(result.deadline.time, "Timed deadline must be null for date-only")
         assertEquals("08:30", result.deadline.reminderAnchorTime)
+    }
+
+    @Test
+    fun testCompactHeaderLayoutTokenInvariants() {
+        // Enforce Android / Material 3 minimum touch target guideline token
+        assertEquals(48.dp, TabbyRushThemeTokens.MinTouchTargetSize)
+        assertTrue(TabbyRushThemeTokens.MinTouchTargetSize >= 48.dp, "Minimum touch target token must be >= 48dp per Material guidelines")
+
+        // Compact brand logo geometry invariants
+        assertEquals(36.dp, TabbyRushThemeTokens.CompactLogoSize)
+        assertEquals(8.dp, TabbyRushThemeTokens.CompactLogoCornerRadius)
+        assertEquals(56.dp, TabbyRushThemeTokens.CompactAccountLabelMaxWidth)
+        assertTrue(TabbyRushThemeTokens.CompactLogoSize < 48.dp, "Logo icon must be compact (<48dp) to preserve button space")
+        assertTrue(TabbyRushThemeTokens.CompactLogoCornerRadius > 0.dp, "Logo badge must maintain rounded corners")
+
+        // Viewport width budget calculation on standard 360dp mobile screen:
+        // Available width = 360dp - 2 * 12dp (padding) = 336dp
+        // Left branding column with max constrained label: 56dp + 8dp spacing = 64dp
+        // Remaining width available for top buttons = 272dp (standard buttons fit within budget)
+        val screenWidth360 = 360.dp
+        val horizontalPadding = TabbyRushThemeTokens.SpacingMedium * 2
+        val brandingColumnWidth = TabbyRushThemeTokens.CompactAccountLabelMaxWidth + TabbyRushThemeTokens.SpacingSmall
+        val availableButtonWidth360 = screenWidth360 - horizontalPadding - brandingColumnWidth
+        assertTrue(availableButtonWidth360 >= 270.dp, "Available width for top buttons on 360dp screen must be >= 270dp (was $availableButtonWidth360)")
     }
 
     private fun calculateContrastRatio(foreground: Color, background: Color): Double {

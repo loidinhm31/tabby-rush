@@ -238,6 +238,26 @@ describe('Release Security Check: Exported Components Auditor', () => {
     assert.equal(issues.length, 1);
     assert.match(issues[0], /missing required @xml\/task-widget-info provider meta-data/);
   });
+  it('accepts TabbyRushTaskWidgetReceiver with compiled @ref/0x... provider meta-data from apkanalyzer', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name=".MainActivity" android:exported="true" />
+          <receiver android:name=".TabbyRushTaskWidgetReceiver" android:exported="true">
+            <intent-filter>
+              <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@ref/0x7f100003" />
+          </receiver>
+        </application>
+      </manifest>
+    `;
+
+    const issues = validateExportedComponents(manifest);
+    assert.deepEqual(issues, []);
+  });
 
   it('ignores unexported private receivers with intent filters', () => {
     const manifest = `

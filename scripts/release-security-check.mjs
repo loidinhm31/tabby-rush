@@ -229,8 +229,8 @@ export function validateExportedComponents(manifestXml) {
             }
           }
 
-          const hasProviderMetadata = /<meta-data\s+[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*android:resource\s*=\s*"(@xml\/task[_-]widget[_-]info|@0x[0-9a-fA-F]+|@xml\/0x[0-9a-fA-F]+)"[^>]*\/?>/i.test(innerContent) ||
-            /<meta-data\s+[^>]*android:resource\s*=\s*"(@xml\/task[_-]widget[_-]info|@0x[0-9a-fA-F]+|@xml\/0x[0-9a-fA-F]+)"[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*\/?>/i.test(innerContent);
+          const hasProviderMetadata = /<meta-data\s+[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*android:resource\s*=\s*"(@(?:xml\/|ref\/)?task[_-]widget[_-]info|@?(?:ref\/|xml\/)?0x[0-9a-fA-F]+)"[^>]*\/?>/i.test(innerContent) ||
+            /<meta-data\s+[^>]*android:resource\s*=\s*"(@(?:xml\/|ref\/)?task[_-]widget[_-]info|@?(?:ref\/|xml\/)?0x[0-9a-fA-F]+)"[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*\/?>/i.test(innerContent);
           if (!hasProviderMetadata) {
             issues.push(`TabbyRushTaskWidgetReceiver is missing required @xml/task-widget-info provider meta-data`);
           }

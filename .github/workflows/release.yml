@@ -99,9 +99,6 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Android Platform 35 and Build Tools
         run: |
           yes | sdkmanager --licenses || true
@@ -229,9 +226,6 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Set up Android SDK (Required for multi-project Gradle evaluation)
-        uses: android-actions/setup-android@v3
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
@@ -313,11 +307,15 @@ jobs:
         shell: pwsh
         run: |
           $wixCandidate = "C:\Program Files (x86)\WiX Toolset v3.11\bin"
+          if (-not (Test-Path "$wixCandidate\candle.exe")) {
+            Write-Host "Installing WiX Toolset v3.11 via Chocolatey..."
+            choco install wixtoolset -y --no-progress
+          }
           if (Test-Path "$wixCandidate\candle.exe") {
             Write-Host "Found WiX Toolset v3.11 at $wixCandidate; adding to PATH."
             $wixCandidate | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           } else {
-            throw "WiX Toolset v3.11 (candle.exe) not found at expected runner path '$wixCandidate'. Desktop MSI packaging requires WiX v3.11."
+            throw "WiX Toolset v3.11 (candle.exe) not found at expected runner path '$wixCandidate'."
           }
 
       - name: Assemble Windows Distributable and MSI Package

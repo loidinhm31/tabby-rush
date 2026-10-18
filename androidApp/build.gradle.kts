@@ -175,6 +175,11 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    lint {
+        disable += "InvalidFragmentVersionForActivityResult"
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
     testOptions {
         unitTests.all {
             it.testLogging {

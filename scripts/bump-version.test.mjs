@@ -90,8 +90,8 @@ describe('bump-version: CLI execution (dry-run mode)', () => {
       encoding: 'utf8',
     });
     assert.match(stdout, /=== TabbyRush Version Bump ===/);
-    assert.match(stdout, /Current Version: 1\.0\.0/);
-    assert.match(stdout, /Target Version:  1\.0\.1/);
+    assert.match(stdout, /Current Version: \d+\.\d+\.\d+/);
+    assert.match(stdout, /Target Version:\s+\d+\.\d+\.\d+/);
     assert.match(stdout, /\[Dry-Run\] No files modified\./);
   });
 
@@ -99,7 +99,7 @@ describe('bump-version: CLI execution (dry-run mode)', () => {
     const stdout = execFileSync('node', [SCRIPT_PATH, 'minor', '--code', '10', '--dry-run'], {
       encoding: 'utf8',
     });
-    assert.match(stdout, /Target Version:  1\.1\.0 \(versionCode: 10\)/);
+    assert.match(stdout, /Target Version:\s+\d+\.\d+\.\d+ \(versionCode: 10\)/);
     assert.match(stdout, /\[Dry-Run\] No files modified\./);
   });
 

@@ -154,17 +154,17 @@ if (-not (Test-Path $outputMsiDir)) {
 $outputMsi = Join-Path $outputMsiDir "TabbyRush-$appVer.msi"
 
 # WiX Heat: harvest distributable folder
-& heat dir $distDir -cg AppFiles -dr INSTALLDIR -scom -sreg -srd -var var.SourceDir -gg -out $harvestedWxs
+& heat dir "$distDir" -cg AppFiles -dr INSTALLDIR -scom -sreg -srd -var var.SourceDir -gg -out "$harvestedWxs"
 if ($LASTEXITCODE -ne 0) { throw "WiX heat harvesting failed" }
 
 # WiX Candle: compile WXS sources
-& candle -arch x64 -dSourceDir=$distDir -dProductVersion=$appVer -out "$wixWorkDir\" $installerWxs $harvestedWxs
+& candle -arch x64 "-dSourceDir=$distDir" "-dProductVersion=$appVer" -out "$wixWorkDir\" "$installerWxs" "$harvestedWxs"
 if ($LASTEXITCODE -ne 0) { throw "WiX candle compilation failed" }
 
 # WiX Light: link MSI
 $installerWixObj = Join-Path $wixWorkDir "installer.wixobj"
 $appFilesWixObj = Join-Path $wixWorkDir "application-files.wixobj"
-& light -ext WixUIExtension -out $outputMsi $installerWixObj $appFilesWixObj
+& light -ext WixUIExtension -out "$outputMsi" "$installerWixObj" "$appFilesWixObj"
 if ($LASTEXITCODE -ne 0) { throw "WiX light linking failed" }
 
 if (-not (Test-Path $outputMsi)) {

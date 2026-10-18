@@ -19,7 +19,9 @@
 [CmdletBinding()]
 param(
     [switch]$SkipNativeBuild,
-    [switch]$RunNativeTests
+    [switch]$RunNativeTests,
+    [string]$Verification = "off",
+    [string]$Version = ""
 )
 
 Set-StrictMode -Version Latest
@@ -42,9 +44,26 @@ $candleCmd = Get-Command candle -ErrorAction SilentlyContinue
 $lightCmd = Get-Command light -ErrorAction SilentlyContinue
 $heatCmd = Get-Command heat -ErrorAction SilentlyContinue
 if (-not ($candleCmd -and $lightCmd -and $heatCmd)) {
-    throw "WiX Toolset v3 (heat.exe, candle.exe, light.exe) not found in PATH. Install WiX Toolset 3.11+."
+    $wixCandidates = @(
+        "C:\Program Files (x86)\WiX Toolset v3.14\bin",
+        "C:\Program Files (x86)\WiX Toolset v3.11\bin",
+        "C:\ProgramData\chocolatey\bin",
+        "C:\ProgramData\chocolatey\lib\wixtoolset\tools"
+    )
+    foreach ($cand in $wixCandidates) {
+        if (Test-Path "$cand\candle.exe") {
+            $env:PATH = "$cand;$env:PATH"
+            $candleCmd = Get-Command candle -ErrorAction SilentlyContinue
+            $lightCmd = Get-Command light -ErrorAction SilentlyContinue
+            $heatCmd = Get-Command heat -ErrorAction SilentlyContinue
+            if ($candleCmd -and $lightCmd -and $heatCmd) { break }
+        }
+    }
 }
-Write-Host "[PASS] WiX Toolset found (candle, light, heat)" -ForegroundColor Green
+if (-not ($candleCmd -and $lightCmd -and $heatCmd)) {
+    throw "WiX Toolset v3 (heat.exe, candle.exe, light.exe) not found in PATH or standard candidate directories. Install WiX Toolset 3.11+."
+}
+Write-Host "[PASS] WiX Toolset found: $($candleCmd.Source)" -ForegroundColor Green
 
 $javaCmd = Get-Command java -ErrorAction SilentlyContinue
 if (-not $javaCmd) {
@@ -94,7 +113,10 @@ Write-Host "[PASS] tabbyrush-toast.dll staged into resources: $resourceTargetDir
 # 3. Build Compose Desktop Distributable
 Write-Host "`n3. Building Compose Desktop application distributable..." -ForegroundColor Cyan
 $gradlew = Join-Path $repoRoot "gradlew.bat"
-& $gradlew :desktopApp:createDistributable -PdesktopTarget=windows --dependency-verification=strict
+$propMatch = Get-Content (Join-Path $repoRoot "gradle.properties") | Select-String "^appVersion\s*=\s*(.*)$"
+$appVer = if ($Version) { $Version } elseif ($propMatch) { $propMatch.Matches.Groups[1].Value.Trim() } else { "1.0.0" }
+Write-Host "Target package version: $appVer" -ForegroundColor Cyan
+& $gradlew :desktopApp:createDistributable -PdesktopTarget=windows -PappVersion=$appVer --dependency-verification=$Verification
 if ($LASTEXITCODE -ne 0) { throw "Gradle :desktopApp:createDistributable failed" }
 
 $distDir = Join-Path $repoRoot "desktopApp\build\compose\binaries\main\app\TabbyRush"
@@ -129,7 +151,7 @@ $outputMsiDir = Join-Path $repoRoot "desktopApp\build\compose\binaries\main\msi"
 if (-not (Test-Path $outputMsiDir)) {
     New-Item -ItemType Directory -Path $outputMsiDir -Force | Out-Null
 }
-$outputMsi = Join-Path $outputMsiDir "TabbyRush-1.0.0.msi"
+$outputMsi = Join-Path $outputMsiDir "TabbyRush-$appVer.msi"
 
 # WiX Heat: harvest distributable folder
 & heat dir $distDir -cg AppFiles -dr INSTALLDIR -scom -sreg -srd -var var.SourceDir -gg -out $harvestedWxs

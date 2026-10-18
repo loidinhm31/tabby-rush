@@ -347,10 +347,7 @@ jobs:
         env:
           VERSION: ${{ needs.validate-tag.outputs.version }}
         run: |
-          .\gradlew.bat -PdesktopTarget=windows :desktopApp:createDistributable :desktopApp:packageMsi `
-            -PappVersion="$env:VERSION" `
-            --dependency-verification=off
-
+          powershell.exe -ExecutionPolicy Bypass -File scripts/build-windows-remote-msi.ps1 -Verification off -Version $env:VERSION
       - name: Stage and Require Windows Desktop Artifacts
         shell: pwsh
         env:

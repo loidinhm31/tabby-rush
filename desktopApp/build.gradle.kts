@@ -28,15 +28,20 @@ val desktopTarget = requestedTarget
 sourceSets {
     main {
         kotlin.srcDirs("src/${desktopTarget}Main/kotlin")
-        resources.srcDirs("src/${desktopTarget}Main/resources")
         if (desktopTarget == "windows") {
-            resources.srcDirs("src/windowsMain/resources", "build/native/windows/Release")
+            resources.setSrcDirs(listOf("src/windowsMain/resources", "build/native/windows/Release"))
+        } else {
+            resources.setSrcDirs(listOf("src/${desktopTarget}Main/resources"))
         }
     }
     test {
         kotlin.srcDirs("src/${desktopTarget}Test/kotlin")
-        resources.srcDirs("src/${desktopTarget}Test/resources")
+        resources.setSrcDirs(listOf("src/${desktopTarget}Test/resources"))
     }
+}
+
+tasks.named<ProcessResources>("processResources") {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 dependencies {
     implementation(project(":shared"))
@@ -100,6 +105,7 @@ compose.desktop {
 
 dependencyLocking {
     lockFile.set(file("gradle-$desktopTarget.lockfile"))
+    lockMode.set(LockMode.LENIENT)
     lockAllConfigurations()
 }
 
@@ -120,10 +126,12 @@ tasks.withType<Test> {
 if (desktopTarget == "windows") {
     tasks.matching { it.name == "packageMsi" }.configureEach {
         doFirst {
-            throw GradleException(
-                "Direct execution of 'packageMsi' is disabled to prevent shipping shortcuts without System.AppUserModel.ID. " +
-                "Use ':desktopApp:packageRemoteMsi' or 'scripts/build-windows-remote-msi.ps1' instead."
-            )
+            if (!project.hasProperty("allowBarePackageMsi")) {
+                throw GradleException(
+                    "Direct execution of 'packageMsi' is disabled to prevent shipping shortcuts without System.AppUserModel.ID. " +
+                    "Use ':desktopApp:packageRemoteMsi', 'scripts/build-windows-remote-msi.ps1', or pass -PallowBarePackageMsi."
+                )
+            }
         }
     }
 }
@@ -136,7 +144,12 @@ tasks.register("packageRemoteMsi") {
             throw GradleException("packageRemoteMsi requires Windows x64 environment with MSVC, Windows SDK, and WiX Toolset. Current target: $desktopTarget")
         }
         val script = rootProject.file("scripts/build-windows-remote-msi.ps1")
-        val process = ProcessBuilder("powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script.absolutePath)
+        val verification = project.findProperty("gradle_verification")?.toString() ?: "off"
+        val appVer = project.findProperty("appVersion")?.toString() ?: configuredVersion
+        val process = ProcessBuilder(
+            "powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script.absolutePath,
+            "-Verification", verification, "-Version", appVer
+        )
             .inheritIO()
             .start()
         val exitCode = process.waitFor()

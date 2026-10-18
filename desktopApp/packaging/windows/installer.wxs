@@ -9,7 +9,7 @@
         UpgradeCode="{a6c507c8-88fe-4e49-8f43-a6125039281a}">
 
         <Package
-            InstallerVersion="200"
+            InstallerVersion="500"
             Compressed="yes"
             InstallScope="perUser"
             Description="TabbyRush personal task management with strict-v1 Glean Hub synchronization"

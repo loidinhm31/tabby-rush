@@ -130,8 +130,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.TABBYRUSH_KEY_ALIAS }}
           STORE_PASSWORD: ${{ secrets.TABBYRUSH_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.TABBYRUSH_KEY_PASSWORD }}
-          APPROVED_HUB_ORIGIN: ${{ secrets.APPROVED_HUB_ORIGIN }}
-          TABBYRUSH_API_KEY: ${{ secrets.TABBYRUSH_API_KEY }}
+          APPROVED_HUB_ORIGIN: ${{ secrets.APPROVED_HUB_ORIGIN || vars.APPROVED_HUB_ORIGIN }}
+          TABBYRUSH_API_KEY: ${{ secrets.TABBYRUSH_API_KEY || vars.TABBYRUSH_API_KEY }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEY_ALIAS" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ] && [ -n "$APPROVED_HUB_ORIGIN" ] && [ -n "$TABBYRUSH_API_KEY" ]; then
             echo "has_release_signing=true" >> "$GITHUB_OUTPUT"
@@ -150,8 +150,8 @@ jobs:
           TABBYRUSH_KEY_ALIAS: ${{ secrets.TABBYRUSH_KEY_ALIAS }}
           TABBYRUSH_STORE_PASSWORD: ${{ secrets.TABBYRUSH_STORE_PASSWORD }}
           TABBYRUSH_KEY_PASSWORD: ${{ secrets.TABBYRUSH_KEY_PASSWORD }}
-          APPROVED_HUB_ORIGIN: ${{ secrets.APPROVED_HUB_ORIGIN }}
-          TABBYRUSH_API_KEY: ${{ secrets.TABBYRUSH_API_KEY }}
+          APPROVED_HUB_ORIGIN: ${{ secrets.APPROVED_HUB_ORIGIN || vars.APPROVED_HUB_ORIGIN }}
+          TABBYRUSH_API_KEY: ${{ secrets.TABBYRUSH_API_KEY || vars.TABBYRUSH_API_KEY }}
         run: |
           KEYSTORE_PATH="${RUNNER_TEMP}/tabbyrush-release.jks"
           echo "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
@@ -172,14 +172,15 @@ jobs:
         env:
           VERSION: ${{ needs.validate-tag.outputs.version }}
           VERSION_CODE: ${{ needs.validate-tag.outputs.version_code }}
+          APPROVED_HUB_ORIGIN: ${{ secrets.APPROVED_HUB_ORIGIN || vars.APPROVED_HUB_ORIGIN || 'https://api-glean-hub.qm-hub-v001.cloud' }}
+          TABBYRUSH_API_KEY: ${{ secrets.TABBYRUSH_API_KEY || vars.TABBYRUSH_API_KEY || 'XoaJSoximq8EhK06IjXAQCOqKqRtM6qy' }}
         run: |
           ./gradlew :androidApp:assembleDebug \
             -PappVersion="$VERSION" \
             -PappVersionCode="$VERSION_CODE" \
-            -PhubOrigin="https://api-glean-hub.qm-hub-v001.cloud" \
-            -PhubApiKey="XoaJSoximq8EhK06IjXAQCOqKqRtM6qy" \
+            -PhubOrigin="$APPROVED_HUB_ORIGIN" \
+            -PhubApiKey="$TABBYRUSH_API_KEY" \
             --dependency-verification=off
-      - name: Clean Up Temporary Release Keystore
         if: always()
         run: |
           if [ -n "${RUNNER_TEMP:-}" ] && [ -f "${RUNNER_TEMP}/tabbyrush-release.jks" ]; then

@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 env:
-  APPROVED_HUB_ORIGIN: "https://api-glean-hub.qm-hub-v001.cloud"
-  TABBYRUSH_API_KEY: "XoaJSoximq8EhK06IjXAQCOqKqRtM6qy"
+  APPROVED_HUB_ORIGIN: ${{ secrets.APPROVED_HUB_ORIGIN || vars.APPROVED_HUB_ORIGIN || 'https://api-glean-hub.qm-hub-v001.cloud' }}
+  TABBYRUSH_API_KEY: ${{ secrets.TABBYRUSH_API_KEY || vars.TABBYRUSH_API_KEY || 'XoaJSoximq8EhK06IjXAQCOqKqRtM6qy' }}
 jobs:
   test-shared:
     name: Shared KMP Tests (JVM & Room SQLite)

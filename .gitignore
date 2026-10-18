@@ -25,7 +25,8 @@ captures/
 *.p12
 *.pem
 *.key
-
+*keystore*.txt
+keystore_base64.txt
 # OS Artifacts
 .DS_Store
 Thumbs.db

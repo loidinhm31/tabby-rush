@@ -25,12 +25,13 @@ All notable changes to the TabbyRush project are documented in this file, organi
 - Refactored application branding from "TabbyRush" to "TabbyRush" across Android launcher labels (`android:label="TabbyRush"`), Compose string resources (`app_name="TabbyRush"`), Glance widget titles (`TabbyRush Tasks`), notification channels (`TabbyRush Task Reminders`), desktop window titles (`TabbyRush` / `TabbyRush - Tasks`), tray tooltips (`TabbyRush`), and desktop packaging metadata (`TabbyRush` on Windows / `tabbyrush` on Linux).
 - Refactored environment configuration to `TABBYRUSH_API_KEY` across Android Gradle build config, Desktop launcher, and tooling scripts, removing legacy `TABBYRUSH_API_KEY`.
 - Refactored target application ID to `tabby-rush` (`appId = "tabby-rush"`, CLI `--app-id tabby-rush`, `TABBYRUSH_APP_ID`), and documented MongoDB target collection as `appTabbyRush`.
-- Generated official TabbyRush app icon across all platforms using user-provided illustration (`docs/assets/tabbyrush-source.png`):
-  - Android Adaptive Icon: 432×432 px transparent foreground (`ic_launcher_foreground.png`) with mascot and milestone trail centered strictly within the 66dp safe circle (radius 124.08 px / 31.02 dp from center, 0 pixels clipped), paired with solid `#FFFFFF` vector background (`ic_launcher_background.xml`).
-  - Desktop Runtime Icon: 256×256 px PNG (`tabbyrush-icon.png`) on white rounded squircle with subtle drop shadow and border.
+- Generated official TabbyRush app icon across all platforms using user-provided vector SVG and preview PNG (`docs/assets/tabbyrush-source.png` and `docs/assets/tabbyrush-vector.svg`):
+  - Android Adaptive Icon: 432×432 px transparent foreground (`ic_launcher_foreground.png`) with enlarged leaping mascot and milestone roadmap (238×166 px) centered strictly within the 66dp safe circle (radius 128.95 px / 32.24 dp from center, 0 pixels clipped, 3.05 px / 0.76 dp safety margin), paired with solid `#FFFFFF` vector background (`ic_launcher_background.xml`).
+  - Desktop Runtime Icon: 256×256 px PNG (`tabbyrush-icon.png`) on white rounded squircle with `#004646` primary teal border, 18px margin (on 512×512), enlarged mascot (92% inner width), and drop shadow.
   - Windows Multi-Resolution ICO: 7 embedded 32-bit RGBA frames (16, 24, 32, 48, 64, 128, 256 px) in `tabbyrush.ico`.
-  - System Tray: 32×32 px high-contrast mascot silhouette (`task-surface-tray.png`) for Linux and Windows taskbars.
-  - Master SVG: 512×512 SVG with semantic layers (`background-desktop`, `mascot-tabbyrush`) in `docs/assets/tabbyrush-app-icon.svg`.
+  - System Tray: 32×32 px high-contrast leaping mascot and roadmap artwork (`task-surface-tray.png`) for Linux and Windows taskbars.
+  - Master SVG: 512×512 pure vector SVG with semantic layers (`background-desktop`, `mascot-tabbyrush` with 12 vector paths) in `docs/assets/tabbyrush-app-icon.svg`.
+  - Android Legacy Mipmaps: squircle and circular branded icons (`ic_launcher.png`, `ic_launcher_round.png`) across mdpi..xxxhdpi with `#004646` borders and margins.
 - Updated deterministic asset generation script: `scripts/generate-app-assets.py`.
 
 ### Verification

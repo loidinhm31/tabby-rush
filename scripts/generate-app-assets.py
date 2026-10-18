@@ -1,218 +1,149 @@
 #!/usr/bin/env python3
 """
 scripts/generate-app-assets.py
-
-Deterministic generator for all TabbyRush application icon assets across platforms:
-- Desktop runtime 256x256 PNG: desktopApp/src/main/resources/tabbyrush-icon.png
-- Desktop packaging ICO (16, 24, 32, 48, 64, 128, 256): desktopApp/src/windowsMain/resources/tabbyrush.ico
-- Desktop system tray 32x32 PNG (Linux & Windows): desktopApp/src/*/resources/task-surface-tray.png
-- Master SVG: docs/assets/tabbyrush-app-icon.svg
-- Android Adaptive Foreground PNG (432x432, strictly within 66dp safe circle):
-  androidApp/src/main/res/drawable/ic_launcher_foreground.png
-
-Source: docs/assets/tabbyrush-source.png (high-resolution illustration of TabbyRush cat mascot with task checkpoint trail and finish flag).
+Deterministic generator for TabbyRush icon assets across Desktop and Android.
+Sources: docs/assets/tabbyrush-source.png, docs/assets/tabbyrush-vector.svg
 """
 
 import os
-import collections
-import base64
-from io import BytesIO
+import re
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-SOURCE_PATH = "docs/assets/tabbyrush-source.png"
+SOURCE_PNG = "docs/assets/tabbyrush-source.png"
+SOURCE_SVG = "docs/assets/tabbyrush-vector.svg"
+BRAND_PRIMARY = "#004646"
+WHITE = "#FFFFFF"
 
-def generate_all():
-    assert os.path.exists(SOURCE_PATH), f"Missing source illustration at {SOURCE_PATH}"
-    img = Image.open(SOURCE_PATH).convert("RGBA")
-    w, h = img.size
-    arr = np.array(img)
-
-    # 1. Extract illustration via exterior flood-fill BFS
-    # Preserves all internal white/cream pixels (chest, belly, checkmarks, flag highlights)
-    bg_mask = np.all(arr[:, :, :3] >= 245, axis=-1)
-    visited = np.zeros((h, w), dtype=bool)
-    q = collections.deque()
-
-    for x in range(w):
-        if bg_mask[0, x]:
-            visited[0, x] = True
-            q.append((0, x))
-        if bg_mask[h-1, x]:
-            visited[h-1, x] = True
-            q.append((h-1, x))
-    for y in range(h):
-        if bg_mask[y, 0]:
-            visited[y, 0] = True
-            q.append((y, 0))
-        if bg_mask[y, w-1]:
-            visited[y, w-1] = True
-            q.append((y, w-1))
-
-    while q:
-        cy, cx = q.popleft()
-        for dy, dx in ((-1,0), (1,0), (0,-1), (0,1)):
-            ny, nx = cy + dy, cx + dx
-            if 0 <= ny < h and 0 <= nx < w:
-                if not visited[ny, nx] and bg_mask[ny, nx]:
-                    visited[ny, nx] = True
-                    q.append((ny, nx))
-
-    # Anti-alias boundary alpha
-    alpha_img = Image.fromarray(((~visited).astype(np.uint8) * 255), mode="L")
-    alpha_smooth = alpha_img.filter(ImageFilter.GaussianBlur(radius=0.8))
-
-    cutout = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    cutout.paste(img, (0, 0), alpha_smooth)
-
-    # Crop to content bounding box
-    y_idx, x_idx = np.where(np.array(alpha_smooth) > 10)
-    crop_box = (x_idx.min(), y_idx.min(), x_idx.max() + 1, y_idx.max() + 1)
-    cutout_cropped = cutout.crop(crop_box)
-    cw, ch = cutout_cropped.size
-
-    # 2. Desktop 512x512 Master Composite & 256x256 Runtime PNG
-    def build_desktop_composite(size):
-        scale = size / 512.0
-        img_comp = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        r = int(116 * scale)
-
-        # Soft drop shadow behind rounded container
+def build_desktop_composite(size, cropped, margin_512=18, border_color=BRAND_PRIMARY, border_w_512=3.5, inner_scale=0.92):
+    scale = size / 512.0
+    img_comp = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    margin = int(margin_512 * scale)
+    r = int(512 * 0.22 * scale)
+    
+    if size >= 32:
         shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         s_draw = ImageDraw.Draw(shadow)
         s_draw.rounded_rectangle(
-            [int(16*scale), int(20*scale), int(496*scale), int(500*scale)],
-            radius=r,
-            fill=(0, 0, 0, 40)
+            [margin, margin + int(3 * scale), size - margin, size - margin + int(3 * scale)],
+            radius=r, fill=(0, 0, 0, 40)
         )
-        shadow = shadow.filter(ImageFilter.GaussianBlur(radius=4*scale))
+        shadow = shadow.filter(ImageFilter.GaussianBlur(radius=max(1.0, 3 * scale)))
         img_comp.alpha_composite(shadow)
+    
+    draw = ImageDraw.Draw(img_comp)
+    draw.rounded_rectangle(
+        [margin, margin, size - 1 - margin, size - 1 - margin],
+        radius=r, fill=WHITE, outline=border_color, width=max(1, int(border_w_512 * scale))
+    )
+    inner_w = size - 2 * margin
+    mw = int(inner_w * inner_scale)
+    mh = int(cropped.size[1] * mw / cropped.size[0])
+    scaled = cropped.resize((mw, mh), Image.Resampling.LANCZOS)
+    img_comp.alpha_composite(scaled, ((size - mw) // 2, (size - mh) // 2))
+    return img_comp
 
-        # White squircle with subtle border
-        draw = ImageDraw.Draw(img_comp)
-        draw.rounded_rectangle(
-            [int(16*scale), int(16*scale), int(496*scale), int(496*scale)],
-            radius=r,
-            fill="#FFFFFF",
-            outline="#D9E3E4",
-            width=max(1, int(2*scale))
-        )
+def build_round_launcher(d_size, cropped, border_color=BRAND_PRIMARY):
+    img = Image.new("RGBA", (d_size, d_size), (0, 0, 0, 0))
+    margin = max(1, int(d_size * 0.03))
+    inner_d = d_size - 2 * margin
+    border_w = max(1, int(d_size * 0.025))
+    
+    draw = ImageDraw.Draw(img)
+    draw.ellipse(
+        [margin, margin, d_size - 1 - margin, d_size - 1 - margin],
+        fill=WHITE, outline=border_color, width=border_w
+    )
+    mw = int(inner_d * 0.86)
+    mh = int(cropped.size[1] * mw / cropped.size[0])
+    scaled = cropped.resize((mw, mh), Image.Resampling.LANCZOS)
+    img.alpha_composite(scaled, ((d_size - mw) // 2, (d_size - mh) // 2))
+    return img
 
-        tw = int(430 * scale)
-        th = int(ch * tw / cw)
-        scaled = cutout_cropped.resize((tw, th), Image.Resampling.LANCZOS)
-        px = (size - tw) // 2
-        py = (size - th) // 2 - int(4 * scale)
-        img_comp.alpha_composite(scaled, (px, py))
-        return img_comp
-
-    # Save desktop runtime icon
-    img_256 = build_desktop_composite(256)
+def generate_all():
+    assert os.path.exists(SOURCE_PNG), f"Missing source PNG at {SOURCE_PNG}"
+    assert os.path.exists(SOURCE_SVG), f"Missing source SVG at {SOURCE_SVG}"
+    
+    img = Image.open(SOURCE_PNG).convert("RGBA")
+    arr = np.array(img)
+    y_idx, x_idx = np.where(arr[:, :, 3] > 0)
+    cropped = img.crop((x_idx.min(), y_idx.min(), x_idx.max() + 1, y_idx.max() + 1))
+    cw, ch = cropped.size
+    
+    # 1. Desktop runtime 256x256 PNG
+    img_256 = build_desktop_composite(256, cropped)
     os.makedirs("desktopApp/src/main/resources", exist_ok=True)
     img_256.save("desktopApp/src/main/resources/tabbyrush-icon.png", format="PNG")
-
-    # Save Windows multi-size ICO
-    img_512 = build_desktop_composite(512)
+    
+    # 2. Windows multi-size packaging ICO (16, 24, 32, 48, 64, 128, 256)
+    img_512 = build_desktop_composite(512, cropped)
     ico_sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
     os.makedirs("desktopApp/src/windowsMain/resources", exist_ok=True)
-    img_512.save("desktopApp/src/windowsMain/resources/tabbyrush.ico", format="ICO", sizes=ico_sizes)
-
     # 3. System Tray 32x32 Icons (Linux & Windows)
-    cat_crop = cutout.crop((200, 350, 1850, 1850))
-    cat_w, cat_h = cat_crop.size
-    tray_scale = 26.0 / max(cat_w, cat_h)
-    tray_w, tray_h = int(cat_w * tray_scale), int(cat_h * tray_scale)
-    cat_tray = cat_crop.resize((tray_w, tray_h), Image.Resampling.LANCZOS)
-
-    tray32 = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
-    t_x = (32 - tray_w) // 2
-    t_y = (32 - tray_h) // 2
-    tray32.alpha_composite(cat_tray, (t_x, t_y))
-
+    tray_w, tray_h = 30, round(ch * 30 / cw)
+    tray_scaled = cropped.resize((tray_w, tray_h), Image.Resampling.LANCZOS)
+    tray_32 = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    tray_32.alpha_composite(tray_scaled, ((32 - tray_w) // 2, (32 - tray_h) // 2))
     os.makedirs("desktopApp/src/linuxMain/resources", exist_ok=True)
-    tray32.save("desktopApp/src/linuxMain/resources/task-surface-tray.png", format="PNG")
-    tray32.save("desktopApp/src/windowsMain/resources/task-surface-tray.png", format="PNG")
-
-    # 4. Master SVG with Embedded High-Res Lossless PNG
-    cat_for_svg = cutout_cropped.resize((430, int(ch * 430 / cw)), Image.Resampling.LANCZOS)
-    buf = BytesIO()
-    cat_for_svg.save(buf, format="PNG")
-    cat_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
-
+    tray_32.save("desktopApp/src/linuxMain/resources/task-surface-tray.png", format="PNG")
+    tray_32.save("desktopApp/src/windowsMain/resources/task-surface-tray.png", format="PNG")
+    
+    # 4. Master SVG with Vector Paths
+    with open(SOURCE_SVG, "r", encoding="utf-8") as f:
+        path_matches = re.findall(r'<path[^>]*/>', f.read())
+    assert len(path_matches) > 0, "No path elements found in vector source SVG"
+    
+    squircle_margin = 18
+    inner_w, r, border_w = 512 - 2 * squircle_margin, int(512 * 0.22), 3.5
+    orig_bw, orig_bh = 1266.4, 882.75
+    mw = inner_w * 0.92
+    scale_factor = mw / orig_bw
+    cx_orig, cy_orig = (66.6 + 1333.0) / 2.0, (162.33 + 1045.08) / 2.0
+    tx, ty = (256.0) - cx_orig * scale_factor, (256.0) - cy_orig * scale_factor
+    paths_str = "\n    ".join(path_matches)
     svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
   <defs>
     <filter id="squircle-shadow" x="-10%" y="-10%" width="125%" height="125%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.2"/>
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.25"/>
     </filter>
   </defs>
-  <!-- Background Squircle Layer -->
   <g id="background-desktop">
-    <rect x="16" y="16" width="480" height="480" rx="116" ry="116" fill="#FFFFFF" filter="url(#squircle-shadow)"/>
-    <rect x="16" y="16" width="480" height="480" rx="116" ry="116" fill="none" stroke="#D9E3E4" stroke-width="2"/>
+    <rect x="{squircle_margin}" y="{squircle_margin}" width="{inner_w}" height="{inner_w}" rx="{r}" ry="{r}" fill="{WHITE}" filter="url(#squircle-shadow)"/>
+    <rect x="{squircle_margin}" y="{squircle_margin}" width="{inner_w}" height="{inner_w}" rx="{r}" ry="{r}" fill="none" stroke="{BRAND_PRIMARY}" stroke-width="{border_w}"/>
   </g>
-  <!-- TabbyRush Mascot Layer -->
-  <g id="mascot-tabbyrush">
-    <image href="data:image/png;base64,{cat_b64}" x="41" y="70" width="430" height="{int(ch * 430 / cw)}" />
+  <g id="mascot-tabbyrush" transform="translate({tx:.3f}, {ty:.3f}) scale({scale_factor:.6f})">
+    {paths_str}
   </g>
-</svg>"""
-    os.makedirs("docs/assets", exist_ok=True)
+</svg>
+"""
     with open("docs/assets/tabbyrush-app-icon.svg", "w", encoding="utf-8") as f:
-        f.write(svg_content.strip() + "\n")
-
-    # 5. Android Adaptive Foreground PNG (432x432, verified strictly within 66dp safe circle)
-    target_w = 211
-    target_h = int(ch * target_w / cw)
-    android_scaled = cutout_cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
-
+        f.write(svg_content)
+    
+    # 5. Android Adaptive Foreground PNG (432x432, strictly within 66dp safe circle)
+    target_w, target_h = 238, int(ch * 238 / cw)
+    android_scaled = cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
     fg_img = Image.new("RGBA", (432, 432), (0, 0, 0, 0))
-    pos_x = (432 - target_w) // 2
-    pos_y = (432 - target_h) // 2
-    fg_img.paste(android_scaled, (pos_x, pos_y), android_scaled)
-
-    # Assert 100% within 66dp safe zone (radius 132 px from (216, 216))
+    fg_img.alpha_composite(android_scaled, ((432 - target_w) // 2, (432 - target_h) // 2 + 1))
+    
     arr_fg = np.array(fg_img)
     y_pts, x_pts = np.where(arr_fg[:, :, 3] > 0)
     dists = np.sqrt((x_pts - 216.0)**2 + (y_pts - 216.0)**2)
     max_dist = dists.max()
     outside_66dp = np.sum(dists > 132.0)
-    assert outside_66dp == 0, f"Foreground clipped: {outside_66dp} pixels outside 66dp radius! Max dist: {max_dist}"
-
+    safety_margin = 132.0 - max_dist
+    assert outside_66dp == 0, f"Foreground clipped: {outside_66dp} pixels outside 66dp radius!"
     os.makedirs("androidApp/src/main/res/drawable", exist_ok=True)
     fg_img.save("androidApp/src/main/res/drawable/ic_launcher_foreground.png", format="PNG")
-
-    # 6. Android Legacy & Fallback Mipmap PNGs (for package installer & legacy launchers)
-    android_densities = {
-        "mipmap-mdpi": 48,
-        "mipmap-hdpi": 72,
-        "mipmap-xhdpi": 96,
-        "mipmap-xxhdpi": 144,
-        "mipmap-xxxhdpi": 192,
-    }
-    for folder, d_size in android_densities.items():
+    print(f"Adaptive FG verified: max_dist={max_dist:.2f}px ({max_dist/4:.2f}dp), margin={safety_margin:.2f}px ({safety_margin/4:.2f}dp)")
+    
+    # 6. Android Legacy & Fallback Mipmaps
+    densities = {"mipmap-mdpi": 48, "mipmap-hdpi": 72, "mipmap-xhdpi": 96, "mipmap-xxhdpi": 144, "mipmap-xxxhdpi": 192}
+    for folder, d_size in densities.items():
         d_dir = os.path.join("androidApp/src/main/res", folder)
         os.makedirs(d_dir, exist_ok=True)
-
-        # Standard squircle launcher icon
-        comp = build_desktop_composite(d_size)
-        comp.save(os.path.join(d_dir, "ic_launcher.png"), format="PNG")
-
-        # Round launcher icon
-        round_comp = Image.new("RGBA", (d_size, d_size), (0, 0, 0, 0))
-        r_draw = ImageDraw.Draw(round_comp)
-        r_draw.ellipse([0, 0, d_size - 1, d_size - 1], fill="#FFFFFF", outline="#D9E3E4", width=max(1, int(d_size / 64)))
-
-        r_scale = (d_size * 0.78) / max(cw, ch)
-        r_w, r_h = int(cw * r_scale), int(ch * r_scale)
-        r_scaled = cutout_cropped.resize((r_w, r_h), Image.Resampling.LANCZOS)
-        round_comp.alpha_composite(r_scaled, ((d_size - r_w) // 2, (d_size - r_h) // 2))
-
-        # Circular mask
-        circle_mask = Image.new("L", (d_size, d_size), 0)
-        ImageDraw.Draw(circle_mask).ellipse([0, 0, d_size - 1, d_size - 1], fill=255)
-        final_round = Image.new("RGBA", (d_size, d_size), (0, 0, 0, 0))
-        final_round.paste(round_comp, (0, 0), circle_mask)
-        final_round.save(os.path.join(d_dir, "ic_launcher_round.png"), format="PNG")
-
+        build_desktop_composite(d_size, cropped).save(os.path.join(d_dir, "ic_launcher.png"), format="PNG")
+        build_round_launcher(d_size, cropped).save(os.path.join(d_dir, "ic_launcher_round.png"), format="PNG")
     print("All TabbyRush assets generated successfully!")
+
 if __name__ == "__main__":
     generate_all()

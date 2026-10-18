@@ -178,28 +178,26 @@ The date and time selection surfaces replace manual text entry with Material 3 c
 
 ## 9. TabbyRush App Icon & Visual Identity
 
-### 9.1 Concept: "TabbyRush: The Sprinting Mascot & Milestone Trail"
+### 9.1 Concept: "TabbyRush: The Leaping Mascot & Roadmap Sprint"
 The official visual identity of TabbyRush embodies focus, speed, and playful task completion:
-- **Mascot Character & Stance:** A chubby brown domestic tabby cat poised in a low runner's preparation crouch—strong planted front paws, muscular hind legs, soft primordial belly pouch, alert ears, and focused, earnest green eyes fixed forward.
-- **Milestone Trail & Finish Flag:** Curving behind the mascot is a dynamic dotted progress trail featuring mint-cyan circular task checkpoint badges and paw prints, culminating in a triumphant orange finish flag at top-right, grounded by energetic speed streaks.
-- **Desktop & Master Art:** Master composite features the mascot illustration centered on a crisp, rounded squircle canvas (`#FFFFFF` with `#D9E3E4` border and soft ambient drop shadow) to ensure maximum contrast and legibility across dark and light OS desktop taskbars and wallpapers.
+- **Mascot Character & Stance:** A happy brown striped domestic tabby cat leaping dynamically in mid-air toward a milestone finish flag, with energetic speed streaks trailing behind.
+- **Milestone Roadmap & Finish Flag:** A multi-stage curved progress roadmap beneath the mascot featuring blue, green, and yellow task intervals with circular checkpoint nodes, culminating in a red finish flag at right.
+- **Desktop & Master Art:** Master composite features the mascot and roadmap enlarged to 92% inner width, centered on a crisp rounded squircle canvas (`#FFFFFF` with `#004646` brand primary teal border and soft drop shadow) with an 18px canvas margin on 512×512 to ensure crisp distinction across light and dark wallpapers and taskbars.
 
 ### 9.2 Android Adaptive Icon Geometry (minSdk 26)
 - **Canvas Viewport:** 108×108 dp canvas (rendered at 432×432 px at xxxhdpi).
 - **Background Layer (`ic_launcher_background.xml`):** Solid `#FFFFFF` vector path covering the full 108×108 dp.
-- **Foreground Layer (`ic_launcher_foreground.png`):** Transparent 32-bit RGBA bitmap featuring the TabbyRush mascot and milestone trail centered strictly within the inner **66 dp-diameter guaranteed safe circle** (radius 33.0 dp / 132 px from center `(216, 216)`). The artwork's maximum measured pixel radius from center across all non-transparent pixels is **31.02 dp (124.08 px)**, providing an explicit **1.98 dp (7.92 px) margin of safety**. Exactly zero pixels sit outside the 66 dp boundary, preventing clipping under circular, squircle, pebble, or rounded-rectangle OEM launcher masks.
-- **Adaptive Mipmaps:** Referenced via `@mipmap/ic_launcher` and `@mipmap/ic_launcher_round` in `androidApp/src/main/AndroidManifest.xml`.
-
+- **Foreground Layer (`ic_launcher_foreground.png`):** Transparent 32-bit RGBA bitmap featuring the enlarged TabbyRush mascot and roadmap (238×166 px) centered strictly within the inner **66 dp-diameter guaranteed safe circle** (radius 33.0 dp / 132 px from center `(216, 216)`). The artwork's maximum measured pixel radius from center across all non-transparent pixels (`alpha > 0`) is **32.24 dp (128.95 px)**, providing an explicit **0.76 dp (3.05 px) margin of safety**. Exactly zero pixels sit outside the 66 dp boundary, preventing clipping under circular, squircle, pebble, or rounded-rectangle OEM launcher masks.
+- **Adaptive Launcher Layers:** In minSdk 26+ adaptive mode, the host OEM launcher applies its own system mask (circle, squircle, pebble, or rounded rect) to the full-bleed background and transparent foreground layers; zero borders or masks are baked into the adaptive layers.
+- **Legacy & Fallback Mipmaps:** Referenced via `@mipmap/ic_launcher` and `@mipmap/ic_launcher_round` in `androidApp/src/main/AndroidManifest.xml` for legacy launcher environments; these supply explicit squircle and circular branded borders (`#004646`) with margin across mdpi..xxxhdpi densities.
 ### 9.3 Desktop Runtime & Packaging Icons
 - **Desktop Window & Taskbar Icon:** `desktopApp/src/main/resources/tabbyrush-icon.png` (256×256 RGBA PNG). Configured on both `MainWindow` and `StickyWindow` via `painterResource("tabbyrush-icon.png")`.
-- **Desktop System Tray:** `desktopApp/src/linuxMain/resources/task-surface-tray.png` and `desktopApp/src/windowsMain/resources/task-surface-tray.png` (32×32 RGBA PNG). Features high-contrast optical artwork utilizing rows 4–26 and columns 3–28 for crisp legibility on dark and light system taskbars.
+- **Desktop System Tray:** `desktopApp/src/linuxMain/resources/task-surface-tray.png` and `desktopApp/src/windowsMain/resources/task-surface-tray.png` (32×32 RGBA PNG). Features high-contrast leaping mascot and roadmap artwork utilizing 30×21 px for crisp legibility on dark and light system taskbars.
 - **Windows Packaging ICO:** `desktopApp/src/windowsMain/resources/tabbyrush.ico` (multi-resolution ICO embedding 16×16, 24×24, 32×32, 48×48, 64×64, 128×128, and 256×256 32-bit RGBA frames). Configured in `desktopApp/build.gradle.kts` under `compose.desktop.application.nativeDistributions.windows.iconFile`.
 - **Linux Packaging PNG:** `desktopApp/src/main/resources/tabbyrush-icon.png` configured under `nativeDistributions.linux.iconFile`.
 
 ### 9.4 Canonical Master Vector
-- **Master SVG Source:** `docs/assets/tabbyrush-app-icon.svg` (512×512 SVG with semantic group layers for desktop background squircle and TabbyRush mascot).
-
----
+- **Master SVG Source:** `docs/assets/tabbyrush-app-icon.svg` (512×512 SVG with semantic group layers for desktop background squircle and TabbyRush mascot, 100% pure vector paths).
 
 ## 10. Server Admin Announcements UI & Accessibility Standards (Phase 12)
 

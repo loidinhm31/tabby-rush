@@ -7,6 +7,7 @@ import org.freedesktop.dbus.types.Variant
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class LinuxNotificationAdapterTest {
@@ -118,5 +119,43 @@ class LinuxNotificationAdapterTest {
             capStatus is LinuxNotificationStatus.Success || capStatus is LinuxNotificationStatus.Unavailable,
             "Live host probe must produce Success or Unavailable status, got: $capStatus"
         )
+    }
+
+    @Test
+    fun testSignalDeclarationsConstructible() {
+        val actionSignal = FreedesktopNotifications.ActionInvoked(
+            "/org/freedesktop/Notifications",
+            UInt32(42L),
+            "default"
+        )
+        assertEquals(UInt32(42L), actionSignal.id)
+        assertEquals("default", actionSignal.action)
+
+        val closedSignal = FreedesktopNotifications.NotificationClosed(
+            "/org/freedesktop/Notifications",
+            UInt32(42L),
+            UInt32(2L)
+        )
+        assertEquals(UInt32(42L), closedSignal.id)
+        assertEquals(UInt32(2L), closedSignal.reason)
+    }
+
+    @Test
+    fun testPersistentTransportHostEnvironmentSafeExecution() {
+        val transport = DbusPersistentNotificationTransport()
+        try {
+            val connected = transport.connect()
+            if (connected) {
+                assertTrue(transport.isConnected())
+                val owner = transport.getDaemonOwner()
+                // If connected, owner is either a valid bus name or null if no daemon
+                assertTrue(owner == null || owner.startsWith(":"))
+            } else {
+                assertFalse(transport.isConnected())
+            }
+        } finally {
+            transport.close()
+            assertFalse(transport.isConnected())
+        }
     }
 }

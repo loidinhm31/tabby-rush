@@ -1,66 +1,68 @@
 package dev.tabbyrush.desktop.windows
 
+import com.sun.jna.Pointer
+import com.sun.jna.ptr.IntByReference
+import com.sun.jna.ptr.LongByReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlin.test.assertNotNull
-
 
 class WindowsNotificationAdapterTest {
 
     @Test
-    fun testXmlEscaping() {
-        val input = "Buy milk & eggs <bread> \"butter\" 'cheese'"
-        val escaped = WindowsNotificationAdapter.escapeXml(input)
-        assertEquals("Buy milk &amp; eggs &lt;bread&gt; &quot;butter&quot; &apos;cheese&apos;", escaped)
-    }
-
-    @Test
-    fun testToastXmlStructure() {
-        val xml = WindowsNotificationAdapter.buildToastXml("Title & Co", "Body <alert>")
-        assertTrue(xml.startsWith("<toast><visual>"))
-        assertTrue(xml.contains("<text>Title &amp; Co</text>"))
-        assertTrue(xml.contains("<text>Body &lt;alert&gt;</text>"))
-        assertTrue(xml.contains("<audio src=\"ms-winsoundevent:Notification.Default\"/>"))
-        assertTrue(xml.endsWith("</toast>"))
-    }
-
-    @Test
-    fun testToastXmlParsesAsValidXmlDocument() {
-        val xml = WindowsNotificationAdapter.buildToastXml("Title & Co", "Body <alert>")
-        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
-        val builder = factory.newDocumentBuilder()
-        val doc = builder.parse(org.xml.sax.InputSource(java.io.StringReader(xml)))
-        assertNotNull(doc)
-        assertEquals("toast", doc.documentElement.tagName)
-        val audioNodes = doc.getElementsByTagName("audio")
-        assertEquals(1, audioNodes.length)
-        val audioElement = audioNodes.item(0) as org.w3c.dom.Element
-        assertEquals("ms-winsoundevent:Notification.Default", audioElement.getAttribute("src"))
-    }
-
-    @Test
-    fun testPostAndCancelNotification() {
+    fun testPostLocalNotificationDispatchesToBridge() {
         val fakeBridge = FakeWindowsToastBridge()
         val adapter = WindowsNotificationAdapter(fakeBridge)
 
-        val postStatus = adapter.postNotification(
-            tag = "task-123",
-            title = "Deadline",
-            message = "Prepare slides"
+        val status = adapter.postNotification(
+            tag = "task_1",
+            title = "Task Reminder",
+            message = "Your scheduled task is due now",
+            group = "reminders"
         )
-        assertTrue(postStatus is WindowsNotificationStatus.Success)
-        assertEquals("task-123", postStatus.tag)
-        assertEquals(WindowsNotificationAdapter.DEFAULT_GROUP, postStatus.group)
-        assertEquals(1, fakeBridge.dispatched.size)
-        assertEquals(WindowsNotificationAdapter.AUMID, fakeBridge.dispatched[0].first)
-        assertEquals("task-123", fakeBridge.dispatched[0].second)
 
-        val cancelStatus = adapter.cancelNotification("task-123")
+        assertTrue(status is WindowsNotificationStatus.Success)
+        assertEquals("task_1", status.tag)
+        assertEquals("reminders", status.group)
+
+        assertEquals(1, fakeBridge.localDispatched.size)
+        val record = fakeBridge.localDispatched.first()
+        assertEquals("Task Reminder", record.title)
+        assertEquals("Your scheduled task is due now", record.body)
+        assertEquals("task_1", record.tag)
+        assertEquals("reminders", record.group)
+    }
+
+    @Test
+    fun testCancelNotificationAndGroup() {
+        val fakeBridge = FakeWindowsToastBridge()
+        val adapter = WindowsNotificationAdapter(fakeBridge)
+
+        val cancelStatus = adapter.cancelNotification("task_1", "reminders")
         assertTrue(cancelStatus is WindowsNotificationStatus.Cleared)
-        assertEquals(1, fakeBridge.cleared.size)
-        assertEquals("task-123", fakeBridge.cleared[0].first)
+        assertEquals(listOf(Pair("task_1", "reminders")), fakeBridge.cleared)
+
+        val groupStatus = adapter.cancelGroup("reminders")
+        assertTrue(groupStatus is WindowsNotificationStatus.Cleared)
+        assertEquals(listOf("reminders"), fakeBridge.clearedGroups)
+    }
+
+    @Test
+    fun testLocalNotificationRejectsTrRemoteGroup() {
+        val fakeBridge = FakeWindowsToastBridge()
+        val adapter = WindowsNotificationAdapter(fakeBridge)
+
+        val status = adapter.postNotification(
+            tag = "local_tag",
+            title = "Local Task",
+            message = "Body",
+            group = "tr-remote"
+        )
+
+        assertTrue(status is WindowsNotificationStatus.Error)
+        assertTrue(status.message.contains("tr-remote"))
+        assertEquals(0, fakeBridge.localDispatched.size)
     }
 
     @Test
@@ -69,102 +71,172 @@ class WindowsNotificationAdapterTest {
         val adapter = WindowsNotificationAdapter(fakeBridge)
 
         assertFalse(adapter.isAvailable())
-        val status = adapter.postNotification("task-1", "T", "M")
+        val status = adapter.postNotification("tag_1", "Title", "Message")
         assertTrue(status is WindowsNotificationStatus.Unavailable)
     }
 
     @Test
     fun testErrorBridgeHandling() {
-        val fakeBridge = FakeWindowsToastBridge(available = true, shouldFail = true)
+        val fakeBridge = FakeWindowsToastBridge(shouldFail = true)
         val adapter = WindowsNotificationAdapter(fakeBridge)
 
-        val status = adapter.postNotification("task-1", "T", "M")
+        assertTrue(adapter.isAvailable())
+        val status = adapter.postNotification("tag_1", "Title", "Message")
         assertTrue(status is WindowsNotificationStatus.Error)
     }
 
     @Test
-    fun testPowerShellBridgeWithMockExecutor() {
-        val mockExecutor: (String, Long) -> Pair<Int, String> = { script, _ ->
-            when {
-                script.contains("History.Remove") -> 0 to ""
-                script.contains("CreateToastNotifier") && script.contains("Setting") -> 0 to "Enabled"
-                script.contains("Show") -> 0 to ""
-                else -> 0 to ""
+    fun testJnaBridgeWithMockLibrary() {
+        val mockLib = object : TabbyRushToastLibrary {
+            var createCalled = false
+            var showLocalCalled = false
+            var lastTitle = ""
+            var lastBody = ""
+
+            override fun tr_toast_abi_version(): Int = 1
+
+            override fun tr_toast_create(
+                aumid: String,
+                activated: TabbyRushToastLibrary.ToastActivatedCallback?,
+                user: Pointer?,
+                outHandle: LongByReference
+            ): Int {
+                createCalled = true
+                outHandle.value = 1001L
+                return 0
             }
+
+            override fun tr_toast_setting(handle: Long, outSetting: IntByReference): Int {
+                outSetting.value = 0 // ENABLED
+                return 0
+            }
+
+            override fun tr_toast_show(
+                handle: Long,
+                messageId: String,
+                generation: Long,
+                tag: String,
+                group: String
+            ): Int = 0
+
+            override fun tr_toast_show_local(
+                handle: Long,
+                title: String,
+                body: String,
+                tag: String,
+                group: String
+            ): Int {
+                showLocalCalled = true
+                lastTitle = title
+                lastBody = body
+                return 0
+            }
+
+            override fun tr_toast_remove(handle: Long, tag: String, group: String): Int = 0
+            override fun tr_toast_clear_group(handle: Long, group: String): Int = 0
+            override fun tr_toast_destroy(handle: Long): Int = 0
         }
-        val bridge = PowerShellWindowsToastBridge(processExecutor = mockExecutor)
+
+        val bridge = JnaWindowsToastBridge(
+            aumid = "dev.tabbyrush.desktop",
+            libraryOverride = mockLib
+        )
+
         assertTrue(bridge.isAvailable())
-        assertEquals(WindowsNotificationSetting.ENABLED, bridge.querySetting("dev.tabbyrush.desktop"))
-        val xml = WindowsNotificationAdapter.buildToastXml("Test", "Body")
-        val postStatus = bridge.showToast("dev.tabbyrush.desktop", xml, "t1", "g1")
-        assertTrue(postStatus is WindowsNotificationStatus.Success)
-        val clearStatus = bridge.clearToast("dev.tabbyrush.desktop", "t1", "g1")
-        assertTrue(clearStatus is WindowsNotificationStatus.Cleared)
+        assertTrue(mockLib.createCalled)
+        assertEquals(WindowsNotificationSetting.ENABLED, bridge.querySetting())
+
+        val status = bridge.showLocal("Title 1", "Body 1", "t1", "g1")
+        assertTrue(status is WindowsNotificationStatus.Success)
+        assertTrue(mockLib.showLocalCalled)
+        assertEquals("Title 1", mockLib.lastTitle)
+        assertEquals("Body 1", mockLib.lastBody)
+
+        assertTrue(bridge.destroy())
+        assertFalse(bridge.isAvailable())
     }
 
     @Test
-    fun testPowerShellBridgeSimulatedError() {
-        val errorExecutor: (String, Long) -> Pair<Int, String> = { script, _ ->
-            if (script.contains("XmlDocument") && !script.contains("Show")) {
-                0 to ""
-            } else {
-                1 to "Simulated PowerShell failure"
+    fun testAbiValidationRejectsMismatchedVersion() {
+        val invalidLib = object : TabbyRushToastLibrary {
+            var createCalled = false
+
+            override fun tr_toast_abi_version(): Int = 2 // Mismatched ABI version
+
+            override fun tr_toast_create(
+                aumid: String,
+                activated: TabbyRushToastLibrary.ToastActivatedCallback?,
+                user: Pointer?,
+                outHandle: LongByReference
+            ): Int {
+                createCalled = true
+                outHandle.value = 9999L
+                return 0
+            }
+
+            override fun tr_toast_setting(handle: Long, outSetting: IntByReference): Int = 0
+            override fun tr_toast_show(handle: Long, messageId: String, generation: Long, tag: String, group: String): Int = 0
+            override fun tr_toast_show_local(handle: Long, title: String, body: String, tag: String, group: String): Int = 0
+            override fun tr_toast_remove(handle: Long, tag: String, group: String): Int = 0
+            override fun tr_toast_clear_group(handle: Long, group: String): Int = 0
+            override fun tr_toast_destroy(handle: Long): Int = 0
+        }
+
+        // Loader ABI validation directly fails
+        assertFalse(TabbyRushToastLoader.validateAbiVersion(invalidLib))
+
+        // Bridge constructed with invalid ABI library does not call create and remains unavailable
+        val bridge = JnaWindowsToastBridge(
+            aumid = "dev.tabbyrush.desktop",
+            libraryOverride = invalidLib
+        )
+
+        assertFalse(bridge.isAvailable(), "Bridge must be unavailable when ABI version != 1")
+        assertFalse(invalidLib.createCalled, "tr_toast_create must NEVER be invoked on ABI mismatch")
+    }
+
+    @Test
+    fun testJnaBridgeHandlesDestroyTimeoutSafely() {
+        val initialRetained = JnaWindowsToastBridge.getRetainedFailedStateCount()
+
+        val mockLib = object : TabbyRushToastLibrary {
+            override fun tr_toast_abi_version(): Int = 1
+
+            override fun tr_toast_create(
+                aumid: String,
+                activated: TabbyRushToastLibrary.ToastActivatedCallback?,
+                user: Pointer?,
+                outHandle: LongByReference
+            ): Int {
+                outHandle.value = 2002L
+                return 0
+            }
+
+            override fun tr_toast_setting(handle: Long, outSetting: IntByReference): Int = 0
+            override fun tr_toast_show(handle: Long, messageId: String, generation: Long, tag: String, group: String): Int = 0
+            override fun tr_toast_show_local(handle: Long, title: String, body: String, tag: String, group: String): Int = 0
+            override fun tr_toast_remove(handle: Long, tag: String, group: String): Int = 0
+            override fun tr_toast_clear_group(handle: Long, group: String): Int = 0
+
+            override fun tr_toast_destroy(handle: Long): Int {
+                // Return E_TIMEOUT (0x800705B4)
+                return -2147023436
             }
         }
-        val bridge = PowerShellWindowsToastBridge(processExecutor = errorExecutor)
-        val xml = WindowsNotificationAdapter.buildToastXml("Test", "Body")
-        val status = bridge.showToast("dev.tabbyrush.desktop", xml, "t1", "g1")
-        assertTrue(status is WindowsNotificationStatus.Error)
-        assertTrue((status as WindowsNotificationStatus.Error).message.contains("Simulated PowerShell failure"))
-    }
 
-    @Test
-    fun testPowerShellBridgeSettingParsingWithProgressOrMultiLine() {
-        val dirtyExecutor: (String, Long) -> Pair<Int, String> = { script, _ ->
-            when {
-                script.contains("CreateToastNotifier('app.enabled')") -> 0 to "#< CLIXML\nEnabled\n<Objs..."
-                script.contains("CreateToastNotifier('app.disabled')") -> 0 to "DisabledForApplication"
-                else -> 0 to ""
-            }
-        }
-        val bridge = PowerShellWindowsToastBridge(processExecutor = dirtyExecutor)
-        assertEquals(WindowsNotificationSetting.ENABLED, bridge.querySetting("app.enabled"))
-        assertEquals(WindowsNotificationSetting.DISABLED_FOR_APPLICATION, bridge.querySetting("app.disabled"))
-    }
+        val bridge = JnaWindowsToastBridge(
+            aumid = "dev.tabbyrush.desktop",
+            libraryOverride = mockLib
+        )
 
-    @Test
-    fun testPowerShellBridgeCacheIsolationByAumid() {
-        var queryCount = 0
-        val countingExecutor: (String, Long) -> Pair<Int, String> = { script, _ ->
-            if (script.contains("CreateToastNotifier")) {
-                queryCount++
-                if (script.contains("app.a")) 0 to "Enabled" else 0 to "DisabledForApplication"
-            } else {
-                0 to ""
-            }
-        }
-        val bridge = PowerShellWindowsToastBridge(processExecutor = countingExecutor)
-        val settingA = bridge.querySetting("app.a")
-        val settingB = bridge.querySetting("app.b")
-        assertEquals(WindowsNotificationSetting.ENABLED, settingA)
-        assertEquals(WindowsNotificationSetting.DISABLED_FOR_APPLICATION, settingB)
-        // Cache hit for app.a within TTL
-        val cachedA = bridge.querySetting("app.a")
-        assertEquals(WindowsNotificationSetting.ENABLED, cachedA)
-        assertEquals(2, queryCount) // 1 for app.a, 1 for app.b, cachedA did not re-query
-    }
+        assertTrue(bridge.isAvailable())
+        // Destroy returns false on timeout, and retains state strongly
+        val destroyResult = bridge.destroy()
+        assertFalse(destroyResult, "destroy() should return false when native destroy times out")
+        assertFalse(bridge.isAvailable(), "bridge should be marked unavailable after destroy attempt")
 
-    @Test
-    fun testLiveWindowsToastWhenEnabled() {
-        if (System.getProperty("tabbyrush.test.liveToasts") != "true") return
-        val bridge = PowerShellWindowsToastBridge()
-        if (!bridge.isAvailable()) return
-        val xml = WindowsNotificationAdapter.buildToastXml("Test Live", "Body")
-        val status = bridge.showToast("dev.tabbyrush.desktop", xml, "test-live-tag", "test-live-group")
-        try {
-            assertTrue(status is WindowsNotificationStatus.Success)
-        } finally {
-            bridge.clearToast("dev.tabbyrush.desktop", "test-live-tag", "test-live-group")
-        }
+        // Retained failed states list must have captured the handle, library, and callback trampoline
+        val currentRetained = JnaWindowsToastBridge.getRetainedFailedStateCount()
+        assertTrue(currentRetained > initialRetained, "State must be strongly retained to prevent GC on timeout")
     }
 }

@@ -15,8 +15,9 @@ The application reuses the **Glean Hub** backend infrastructure with an opt-in, 
 - **Account Lifecycle**: Account leave coordinates local database/credential cleanup with sync, reminder, and task-surface cancellation. Android OS-retained widget and notification content is cleared on a best-effort basis; see [Security & Recovery](docs/security-and-recovery.md) for the lifecycle caveats.
 - **Accessible Light UI**: Clean, high-contrast light theme conforming to WCAG 2.1 AA contrast requirements and ForumFlash design guidelines.
 - **Sticky Task Surfaces**: Android provides a native Glance task widget and an opt-in, quiet deadline notification; Desktop provides a compact Compose Multiplatform sticky window with tray controls when the host session supports a usable tray.
+- **Server Admin Announcements**: Secure, unidirectional administrator broadcasts via Glean Hub. Features 90-day retention backed by MongoDB BSON DateTime TTL indexes, FCM HTTP v1 generic notifications for Android with channel `tabbyrush.remote.announcements` and tag `remote:<messageId>`, streaming SSE broker with `streamEpoch`, monotonic `acceptanceOrdinal`, and ready baseline, in-memory 200-item sliding cache, no persistent offline content or read outbox, Keystore-backed install proof fencing, and restricted pilot staged rollout (Android & Linux verified; Windows desktop runtime held at Gate G5).
 
-Sticky Task Surfaces Phase 07 is delivered: documentation and automated verification are evidenced, with 6h of 12h credited (118h / 132h overall, 89.4%). The recorded suites report 364 Gradle tests and 12 Node security tests passing; build/test runs used `--dependency-verification=off`. Native Android and Windows hardware acceptance remains conditionally held at Gate G2, and Linux session acceptance remains pending Phase 08. The 149-checksum verification baseline, separate Glance provenance hold, and release holds G3/G6/G7 remain open.
+Server Admin Announcements delivery is recorded with 566 passing verifications in QA regression testing (`qa-261018-1548-c1-c6-regression-verification.md`); standalone smoke verification records 21/21 mock assertions and 13 golden vectors passing (`node scripts/admin-announcements-smoke.mjs --self-test`). Restricted pilot is approved as recorded in acceptance evidence for Android, Linux, and Web Admin; Windows desktop runtime remains held at Gate G5, and inherited release holds G2/G3/G6/G7 and checksum verification baseline remain open.
 
 ---
 
@@ -39,9 +40,12 @@ Sticky Task Surfaces Phase 07 is delivered: documentation and automated verifica
 │   ├── release-security-check.mjs      # Release APK security and manifest auditor
 │   ├── hub-strict-recovery.js          # Maintenance-only fresh-epoch recovery script (strict-v1 only)
 │   ├── hub-schema-provision.mjs        # Schema registration and admission runner
+│   ├── admin-announcements-smoke.mjs   # Announcements smoke runner and vector test
+│   ├── build-windows-remote-msi.ps1    # Windows remote MSI packaging script
 │   └── android-smoke.sh                # Device smoke runner with reverse port-forwarding
-├── integration/         # Canonical strict-v1/strict-v2 schema specifications and vectors
-│   └── glean-hub/        # Active schema, versioned schemas, and strict-v2 vectors
+├── integration/         # Canonical schemas, wire vectors, and contract specifications
+│   ├── glean-hub/        # Active schema, versioned schemas, and strict-v2 vectors
+│   └── announcements/    # Server Admin Announcements contract-v1.json and vectors-v1.json
 └── docs/                # Architecture specifications, operational runbooks, and test evidence
 ```
 
@@ -95,6 +99,12 @@ Run the automated in-process mock self-test verifying CLI upgrade workflows, sam
 node scripts/strict-v2-cutover-rehearsal.mjs --self-test
 ```
 
+### 6. Run Server Admin Announcements Smoke & Vector Verification
+Execute the standalone Node.js smoke runner and golden vector assertions:
+```bash
+node scripts/admin-announcements-smoke.mjs --self-test
+```
+
 ---
 
 ## Documentation Index
@@ -119,3 +129,8 @@ node scripts/strict-v2-cutover-rehearsal.mjs --self-test
 - [Project Changelog](docs/project-changelog.md)
 - [Android Sticky-Surface Evidence](docs/evidence/sticky-surfaces-android-summary.md)
 - [Windows Sticky-Surface Evidence](docs/evidence/sticky-surfaces-windows-summary.md)
+- [Announcement Contract](docs/announcement-contract.md)
+- [Remote Notification Setup](docs/remote-notification-setup.md)
+- [Admin Announcements Acceptance Evidence](docs/evidence/admin-announcements-acceptance.md)
+- [Linux Desktop Guide](docs/linux-desktop-guide.md)
+- [Linux Acceptance](docs/linux-acceptance.md)

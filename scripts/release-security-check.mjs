@@ -88,9 +88,10 @@ function scanForSecrets(repoRoot) {
     { name: 'Generic API Secret', regex: /api[_-]?secret\s*[:=]\s*['"][a-zA-Z0-9]{16,}['"]/i },
     { name: 'Hardcoded JWT Secret', regex: /jwt[_-]?secret\s*[:=]\s*['"][^'"]{8,}['"]/i },
     { name: 'MongoDB URI with Credentials', regex: /mongodb(?:\+srv)?:\/\/[^:]+:[^@]+@/i },
-    { name: 'Database Password', regex: /password\s*[:=]\s*['"][^'"]{6,}['"]/i }
+    { name: 'Database Password', regex: /password\s*[:=]\s*['"][^'"]{6,}['"]/i },
+    { name: 'Google Service Account Credentials', regex: /"type"\s*:\s*"service_account"/i },
+    { name: 'Google Cloud Private Key', regex: /"private_key"\s*:\s*"-----BEGIN PRIVATE KEY/i }
   ];
-
   const violations = [];
 
   function walk(current) {
@@ -140,19 +141,38 @@ function scanForSecrets(repoRoot) {
 /**
  * Validates exported components against strict release security policy:
  * - Only MainActivity (.MainActivity, MainActivity, dev.tabbyrush.android.MainActivity) is permitted as an exported activity.
- * - Services and content providers must NEVER be exported.
- * - Only TabbyRushTaskWidgetReceiver (.TabbyRushTaskWidgetReceiver, TabbyRushTaskWidgetReceiver, dev.tabbyrush.android.TabbyRushTaskWidgetReceiver)
- *   is permitted as an exported receiver, and ONLY with:
- *     * An explicit <intent-filter> containing exact action: android.appwidget.action.APPWIDGET_UPDATE
- *     * No unauthorized extra actions, categories, or data tags inside the widget receiver.
- *     * Exact meta-data: android:name="android.appwidget.provider" referencing @xml/task-widget-info or @xml/task_widget_info.
+ * - Services, content providers, and activity-aliases must NEVER be exported.
+ * - Only TabbyRushTaskWidgetReceiver and com.google.firebase.iid.FirebaseInstanceIdReceiver
+ *   are permitted as exported receivers, with strictly validated intent filters, permissions, and metadata.
+ * - FirebaseInitProvider must be explicitly non-exported with authority dev.tabbyrush.android.firebaseinitprovider.
  */
 export function validateExportedComponents(manifestXml) {
   const issues = [];
-  const componentTags = ['activity', 'service', 'receiver', 'provider'];
+
+  // Validate FirebaseInitProvider explicitly (even when non-exported)
+  const providerRegex = /<provider\b([\s\S]*?)(?:\/>|>([\s\S]*?)<\/provider>)/gi;
+  let pMatch;
+  while ((pMatch = providerRegex.exec(manifestXml)) !== null) {
+    const pAttrs = pMatch[1] || '';
+    const nameMatch = pAttrs.match(/android:name\s*=\s*"([^"]+)"/i);
+    const pName = nameMatch ? nameMatch[1].trim() : '';
+    if (pName === 'com.google.firebase.provider.FirebaseInitProvider') {
+      const isExp = /android:exported\s*=\s*"true"/i.test(pAttrs);
+      if (isExp) {
+        issues.push(`FirebaseInitProvider must not be exported (found android:exported="true")`);
+      }
+      const authMatch = pAttrs.match(/android:authorities\s*=\s*"([^"]+)"/i);
+      const auth = authMatch ? authMatch[1].trim() : '';
+      if (auth !== 'dev.tabbyrush.android.firebaseinitprovider') {
+        issues.push(`FirebaseInitProvider must have exact authority 'dev.tabbyrush.android.firebaseinitprovider' (found '${auth}')`);
+      }
+    }
+  }
+
+  const componentTags = ['activity', 'activity-alias', 'service', 'receiver', 'provider'];
 
   for (const tag of componentTags) {
-    const fullBlockRegex = new RegExp(`<${tag}\\b([\\s\\S]*?)(?:\\/>|>([\\s\\S]*?)<\\/${tag}>)`, 'gi');
+    const fullBlockRegex = new RegExp(`<${tag}(?:\\s|\\/|>)([\\s\\S]*?)(?:\\/>|>([\\s\\S]*?)<\\/${tag}>)`, 'gi');
     let match;
     while ((match = fullBlockRegex.exec(manifestXml)) !== null) {
       const openTagAttrs = match[1] || '';
@@ -172,50 +192,90 @@ export function validateExportedComponents(manifestXml) {
         if (!isMain) {
           issues.push(`Exported activity is not MainActivity: ${componentName}`);
         }
+      } else if (tag === 'activity-alias') {
+        issues.push(`Exported activity-alias is prohibited: ${componentName}`);
       } else if (tag === 'receiver') {
         const isWidget = componentName === '.TabbyRushTaskWidgetReceiver' ||
                          componentName === 'TabbyRushTaskWidgetReceiver' ||
                          componentName === 'dev.tabbyrush.android.TabbyRushTaskWidgetReceiver';
-        if (!isWidget) {
-          issues.push(`Exported receiver is not TabbyRushTaskWidgetReceiver: ${componentName}`);
-        } else {
-          // Narrow verification for TabbyRushTaskWidgetReceiver:
-          // 1. Must contain an explicit intent-filter
-          const intentFilterMatch = innerContent.match(/<intent-filter\b[^>]*>([\s\S]*?)<\/intent-filter>/i);
-          if (!intentFilterMatch) {
+        const isFirebaseReceiver = componentName === 'com.google.firebase.iid.FirebaseInstanceIdReceiver';
+
+        if (isWidget) {
+          const intentFilters = [...innerContent.matchAll(/<intent-filter\b[^>]*>([\s\S]*?)<\/intent-filter>/gi)];
+          if (intentFilters.length === 0) {
             issues.push(`TabbyRushTaskWidgetReceiver is exported but missing <intent-filter>`);
           } else {
-            const filterContent = intentFilterMatch[1];
-            // Must contain exact APPWIDGET_UPDATE action
-            const hasAppWidgetUpdate = /<action\s+[^>]*android:name\s*=\s*"android\.appwidget\.action\.APPWIDGET_UPDATE"[^>]*\/?>/i.test(filterContent);
-            if (!hasAppWidgetUpdate) {
-              issues.push(`TabbyRushTaskWidgetReceiver is exported but missing android.appwidget.action.APPWIDGET_UPDATE intent filter`);
-            }
-
-            // Must not contain any other action
-            const actionMatches = filterContent.matchAll(/<action\s+[^>]*android:name\s*=\s*"([^"]+)"[^>]*\/?>/gi);
-            for (const actionMatch of actionMatches) {
-              const actionName = actionMatch[1];
-              if (actionName !== 'android.appwidget.action.APPWIDGET_UPDATE') {
-                issues.push(`TabbyRushTaskWidgetReceiver contains unauthorized exported action: ${actionName}`);
+            for (const filterMatch of intentFilters) {
+              const filterContent = filterMatch[1];
+              const hasAppWidgetUpdate = /<action\s+[^>]*android:name\s*=\s*"android\.appwidget\.action\.APPWIDGET_UPDATE"[^>]*\/?>/i.test(filterContent);
+              if (!hasAppWidgetUpdate) {
+                issues.push(`TabbyRushTaskWidgetReceiver is exported but missing android.appwidget.action.APPWIDGET_UPDATE intent filter`);
               }
-            }
 
-            // Must not contain categories or data in widget update filter
-            if (/<category\b/i.test(filterContent)) {
-              issues.push(`TabbyRushTaskWidgetReceiver contains unauthorized <category> in intent filter`);
-            }
-            if (/<data\b/i.test(filterContent)) {
-              issues.push(`TabbyRushTaskWidgetReceiver contains unauthorized <data> in intent filter`);
+              const actionMatches = filterContent.matchAll(/<action\s+[^>]*android:name\s*=\s*"([^"]+)"[^>]*\/?>/gi);
+              for (const actionMatch of actionMatches) {
+                const actionName = actionMatch[1];
+                if (actionName !== 'android.appwidget.action.APPWIDGET_UPDATE') {
+                  issues.push(`TabbyRushTaskWidgetReceiver contains unauthorized exported action: ${actionName}`);
+                }
+              }
+
+              if (/<category\b/i.test(filterContent)) {
+                issues.push(`TabbyRushTaskWidgetReceiver contains unauthorized <category> in intent filter`);
+              }
+              if (/<data\b/i.test(filterContent)) {
+                issues.push(`TabbyRushTaskWidgetReceiver contains unauthorized <data> in intent filter`);
+              }
             }
           }
 
-          // 2. Must contain exact provider meta-data
           const hasProviderMetadata = /<meta-data\s+[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*android:resource\s*=\s*"@xml\/task[_-]widget[_-]info"[^>]*\/?>/i.test(innerContent) ||
             /<meta-data\s+[^>]*android:resource\s*=\s*"@xml\/task[_-]widget[_-]info"[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*\/?>/i.test(innerContent);
           if (!hasProviderMetadata) {
             issues.push(`TabbyRushTaskWidgetReceiver is missing required @xml/task-widget-info provider meta-data`);
           }
+        } else if (isFirebaseReceiver) {
+          // Narrow verification for com.google.firebase.iid.FirebaseInstanceIdReceiver:
+          const permMatch = openTagAttrs.match(/android:permission\s*=\s*"([^"]+)"/i);
+          const permission = permMatch ? permMatch[1].trim() : '';
+          if (permission !== 'com.google.android.c2dm.permission.SEND') {
+            issues.push(`FirebaseInstanceIdReceiver is exported without required com.google.android.c2dm.permission.SEND permission (found '${permission}')`);
+          }
+
+          const intentFilters = [...innerContent.matchAll(/<intent-filter\b[^>]*>([\s\S]*?)<\/intent-filter>/gi)];
+          if (intentFilters.length === 0) {
+            issues.push(`FirebaseInstanceIdReceiver is exported but missing <intent-filter>`);
+          } else {
+            for (const filterMatch of intentFilters) {
+              const filterContent = filterMatch[1];
+              const hasReceive = /<action\s+[^>]*android:name\s*=\s*"com\.google\.android\.c2dm\.intent\.RECEIVE"[^>]*\/?>/i.test(filterContent);
+              if (!hasReceive) {
+                issues.push(`FirebaseInstanceIdReceiver is exported but missing com.google.android.c2dm.intent.RECEIVE intent filter`);
+              }
+
+              const actionMatches = filterContent.matchAll(/<action\s+[^>]*android:name\s*=\s*"([^"]+)"[^>]*\/?>/gi);
+              for (const actionMatch of actionMatches) {
+                const actionName = actionMatch[1];
+                if (actionName !== 'com.google.android.c2dm.intent.RECEIVE') {
+                  issues.push(`FirebaseInstanceIdReceiver contains unauthorized exported action: ${actionName}`);
+                }
+              }
+
+              const catMatches = filterContent.matchAll(/<category\s+[^>]*android:name\s*=\s*"([^"]+)"[^>]*\/?>/gi);
+              for (const catMatch of catMatches) {
+                const catName = catMatch[1];
+                if (catName !== 'dev.tabbyrush.android') {
+                  issues.push(`FirebaseInstanceIdReceiver contains unauthorized <category>: ${catName}`);
+                }
+              }
+
+              if (/<data\b/i.test(filterContent)) {
+                issues.push(`FirebaseInstanceIdReceiver contains unauthorized <data> in intent filter`);
+              }
+            }
+          }
+        } else {
+          issues.push(`Exported receiver is not TabbyRushTaskWidgetReceiver: ${componentName}`);
         }
       } else {
         issues.push(`Non-main ${tag} is exported: ${componentName}`);

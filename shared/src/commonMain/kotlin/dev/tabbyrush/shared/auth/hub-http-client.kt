@@ -7,11 +7,15 @@ import dev.tabbyrush.shared.contract.SafeError
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.HttpStatement
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -55,14 +59,37 @@ class HubHttpClient(
         encodeDefaults = true
     }
 
+    private fun extractErrorCode(rawBody: String): String? {
+        if (rawBody.isBlank()) return null
+        return try {
+            val element = json.parseToJsonElement(rawBody)
+            if (element is JsonObject) {
+                val errorObj = element["error"]
+                if (errorObj is JsonObject) {
+                    errorObj["code"]?.jsonPrimitive?.contentOrNull
+                } else {
+                    element["code"]?.jsonPrimitive?.contentOrNull
+                }
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun extractErrorMessage(rawBody: String): String? {
         if (rawBody.isBlank()) return null
         return try {
             val element = json.parseToJsonElement(rawBody)
             if (element is JsonObject) {
-                element["error"]?.jsonPrimitive?.contentOrNull
-                    ?: element["message"]?.jsonPrimitive?.contentOrNull
-                    ?: element["detail"]?.jsonPrimitive?.contentOrNull
+                val errorObj = element["error"]
+                if (errorObj is JsonObject) {
+                    errorObj["message"]?.jsonPrimitive?.contentOrNull
+                } else if (errorObj != null) {
+                    errorObj.jsonPrimitive.contentOrNull
+                } else {
+                    element["message"]?.jsonPrimitive?.contentOrNull
+                        ?: element["detail"]?.jsonPrimitive?.contentOrNull
+                }
             } else null
         } catch (_: Exception) {
             null
@@ -83,9 +110,47 @@ class HubHttpClient(
         }
     }
 
+    companion object {
+        private val CANONICAL_UUID_REGEX = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+        fun isValidCanonicalUuid(value: String): Boolean = CANONICAL_UUID_REGEX.matches(value)
+
+        private fun validateInboxQuery(queryString: String): Boolean {
+            if (queryString.isEmpty()) return true
+            val params = queryString.split("&")
+            for (param in params) {
+                val parts = param.split("=")
+                val key = parts[0]
+                val value = if (parts.size > 1) parts[1] else ""
+                when (key) {
+                    "limit" -> {
+                        val intVal = value.toIntOrNull() ?: return false
+                        if (intVal !in 1..50) return false
+                    }
+                    "cursor" -> {
+                        if (value.isBlank()) return false
+                    }
+                    else -> return false
+                }
+            }
+            return true
+        }
+    }
+
     fun classifyRoute(path: String): RouteClassification? {
         val normalizedPath = if (path.startsWith("/")) path else "/$path"
-        return when (normalizedPath) {
+        val pathWithoutQuery = normalizedPath.substringBefore('?')
+        val queryString = if (normalizedPath.contains('?')) normalizedPath.substringAfter('?') else ""
+
+        if (queryString.isNotEmpty()) {
+            if (pathWithoutQuery == "/api/v1/apps/${config.appId}/announcements/inbox") {
+                if (!validateInboxQuery(queryString)) return null
+            } else {
+                return null
+            }
+        }
+
+        return when (pathWithoutQuery) {
             "/api/v1/auth/register",
             "/api/v1/auth/login",
             "/api/v1/auth/refresh" -> RouteClassification.AUTH_PUBLIC
@@ -99,7 +164,33 @@ class HubHttpClient(
             "/api/v1/sync/${config.appId}/strong/pull",
             "/api/v1/sync/${config.appId}/strong/legacy-receipts" -> RouteClassification.DUAL_AUTH_STRICT
 
-            else -> null
+            "/api/v1/apps/${config.appId}/announcements/inbox",
+            "/api/v1/apps/${config.appId}/announcements/unread",
+            "/api/v1/apps/${config.appId}/announcements/stream" -> RouteClassification.BEARER_ONLY
+
+            else -> {
+                val inboxPrefix = "/api/v1/apps/${config.appId}/announcements/inbox/"
+                if (pathWithoutQuery.startsWith(inboxPrefix)) {
+                    val sub = pathWithoutQuery.removePrefix(inboxPrefix)
+                    val segments = sub.split("/")
+                    if (segments.size == 1 && isValidCanonicalUuid(segments[0])) {
+                        RouteClassification.BEARER_ONLY
+                    } else if (segments.size == 2 && isValidCanonicalUuid(segments[0]) && segments[1] == "read") {
+                        RouteClassification.BEARER_ONLY
+                    } else null
+                } else {
+                    val installPrefix = "/api/v1/apps/${config.appId}/notification-installs/"
+                    if (pathWithoutQuery.startsWith(installPrefix)) {
+                        val sub = pathWithoutQuery.removePrefix(installPrefix)
+                        val segments = sub.split("/")
+                        if (segments.size == 2 && isValidCanonicalUuid(segments[0]) &&
+                            (segments[1] == "binding" || segments[1] == "unbind")
+                        ) {
+                            RouteClassification.BEARER_ONLY
+                        } else null
+                    } else null
+                }
+            }
         }
     }
 
@@ -107,7 +198,8 @@ class HubHttpClient(
         method: HttpMethod,
         path: String,
         accessToken: String? = null,
-        bodyJson: String? = null
+        bodyJson: String? = null,
+        installProof: String? = null
     ): ApiResult<HttpResponse> {
         val classification = classifyRoute(path)
             ?: return ApiResult.Failure(
@@ -116,9 +208,21 @@ class HubHttpClient(
                     message = "Path '$path' is not in the TabbyRush strict endpoint allowlist"
                 )
             )
+        if (installProof != null) {
+            val normalizedPath = if (path.startsWith("/")) path else "/$path"
+            val pathWithoutQuery = normalizedPath.substringBefore('?')
+            val installPrefix = "/api/v1/apps/${config.appId}/notification-installs/"
+            if (!pathWithoutQuery.startsWith(installPrefix)) {
+                return ApiResult.Failure(
+                    SafeError.ProtocolIncompatible(
+                        code = "DISALLOWED_HEADER",
+                        message = "Install proof header is only permitted on notification-installs routes"
+                    )
+                )
+            }
+        }
 
         val fullUrl = "$validatedOrigin${if (path.startsWith("/")) path else "/$path"}"
-
         return try {
             val response: HttpResponse = ktorClient.request(fullUrl) {
                 this.method = method
@@ -126,7 +230,9 @@ class HubHttpClient(
                     contentType(ContentType.Application.Json)
                     setBody(bodyJson)
                 }
-
+                if (installProof != null) {
+                    header("X-Tabby-Install-Proof", installProof)
+                }
                 when (classification) {
                     RouteClassification.AUTH_PUBLIC -> {
                         // Public auth routes: NO Authorization, NO X-API-Key, NO X-App-Id
@@ -182,16 +288,33 @@ class HubHttpClient(
                     )
                 }
             }
-            HttpStatusCode.Forbidden -> SafeError.Unauthorized(
-                code = "FORBIDDEN",
-                message = "Access forbidden (HTTP 403)"
-            )
+            HttpStatusCode.Forbidden -> {
+                val serverCode = extractErrorCode(rawBody)
+                val serverMsg = extractErrorMessage(rawBody)
+                if (serverCode == "appAccessRevoked") {
+                    SafeError.AccessPending(
+                        code = "appAccessRevoked",
+                        message = serverMsg ?: "Application access revoked (HTTP 403)"
+                    )
+                } else {
+                    SafeError.Unauthorized(
+                        code = serverCode ?: "FORBIDDEN",
+                        message = serverMsg ?: "Access forbidden (HTTP 403)"
+                    )
+                }
+            }
             HttpStatusCode.Conflict -> {
                 val serverMsg = extractErrorMessage(rawBody)
+                val serverCode = extractErrorCode(rawBody)
                 if (path.contains("/auth/")) {
                     SafeError.Validation(
-                        code = "CONFLICT",
+                        code = serverCode ?: "CONFLICT",
                         message = serverMsg ?: "Email or username already in use (HTTP 409)"
+                    )
+                } else if (path.contains("/announcements/") || path.contains("/notification-installs/")) {
+                    SafeError.Validation(
+                        code = serverCode ?: "CONFLICT",
+                        message = serverMsg ?: "Operation conflict (HTTP 409)"
                     )
                 } else {
                     SafeError.ResetRequired(
@@ -204,18 +327,50 @@ class HubHttpClient(
                 code = "PROTOCOL_INCOMPATIBLE",
                 message = "Server rejected protocol version (HTTP 426)"
             )
-            HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed -> {
+            HttpStatusCode.NotFound -> {
+                val serverMsg = extractErrorMessage(rawBody)
+                val serverCode = extractErrorCode(rawBody)
                 if (path.contains("/strong/")) {
                     SafeError.ProtocolIncompatible(
                         code = "STRICT_ROUTE_UNAVAILABLE",
-                        message = "Strict strong sync route unavailable on server (HTTP ${status.value})"
+                        message = "Strict strong sync route unavailable on server (HTTP 404)"
                     )
                 } else {
                     SafeError.Validation(
-                        code = "NOT_FOUND",
-                        message = "Endpoint not found (HTTP ${status.value})"
+                        code = serverCode ?: "NOT_FOUND",
+                        message = serverMsg ?: "Endpoint not found (HTTP 404)"
                     )
                 }
+            }
+            HttpStatusCode.MethodNotAllowed -> {
+                SafeError.Validation(
+                    code = "METHOD_NOT_ALLOWED",
+                    message = "Method not allowed (HTTP 405)"
+                )
+            }
+            HttpStatusCode.Gone -> {
+                val serverMsg = extractErrorMessage(rawBody)
+                val serverCode = extractErrorCode(rawBody)
+                SafeError.Validation(
+                    code = serverCode ?: "GONE",
+                    message = serverMsg ?: "Resource expired (HTTP 410)"
+                )
+            }
+            HttpStatusCode.PayloadTooLarge -> {
+                val serverMsg = extractErrorMessage(rawBody)
+                val serverCode = extractErrorCode(rawBody)
+                SafeError.Validation(
+                    code = serverCode ?: "REQUEST_TOO_LARGE",
+                    message = serverMsg ?: "Request payload too large (HTTP 413)"
+                )
+            }
+            HttpStatusCode.UnprocessableEntity -> {
+                val serverMsg = extractErrorMessage(rawBody)
+                val serverCode = extractErrorCode(rawBody)
+                SafeError.Validation(
+                    code = serverCode ?: "UNPROCESSABLE_ENTITY",
+                    message = serverMsg ?: "Unprocessable entity (HTTP 422)"
+                )
             }
             HttpStatusCode.ServiceUnavailable -> SafeError.Network(
                 code = "SERVICE_UNAVAILABLE",
@@ -223,8 +378,9 @@ class HubHttpClient(
             )
             HttpStatusCode.BadRequest -> {
                 val serverMsg = extractErrorMessage(rawBody)
+                val serverCode = extractErrorCode(rawBody)
                 SafeError.Validation(
-                    code = "BAD_REQUEST",
+                    code = serverCode ?: "BAD_REQUEST",
                     message = serverMsg ?: "Invalid request format or parameters (HTTP 400)"
                 )
             }
@@ -262,5 +418,32 @@ class HubHttpClient(
 
     fun close() {
         ktorClient.close()
+    }
+
+    suspend fun prepareStream(
+        path: String,
+        accessToken: String? = null,
+        lastEventId: String? = null
+    ): HttpStatement {
+        val classification = classifyRoute(path)
+            ?: throw IllegalArgumentException("Path '$path' is not in the TabbyRush strict endpoint allowlist")
+        if (classification != RouteClassification.BEARER_ONLY) {
+            throw IllegalArgumentException("Stream route must be BEARER_ONLY")
+        }
+        val fullUrl = "$validatedOrigin${if (path.startsWith("/")) path else "/$path"}"
+        return ktorClient.prepareGet(fullUrl) {
+            if (accessToken != null) {
+                header(HttpHeaders.Authorization, "Bearer $accessToken")
+            }
+            if (lastEventId != null) {
+                header("Last-Event-ID", lastEventId)
+            }
+            header(HttpHeaders.Accept, "text/event-stream")
+            timeout {
+                connectTimeoutMillis = 10_000L
+                requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
+                socketTimeoutMillis = 45_000L
+            }
+        }
     }
 }

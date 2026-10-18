@@ -40,6 +40,53 @@ val configuredOrigin = (project.findProperty("hubOrigin")?.toString()?.takeIf { 
 val configuredApiKey = (project.findProperty("hubApiKey")?.toString()?.takeIf { it.isNotBlank() })
     ?: System.getenv("TABBYRUSH_API_KEY")?.takeIf { it.isNotBlank() }
     ?: dotEnv["TABBYRUSH_API_KEY"]?.takeIf { it.isNotBlank() }
+val configuredFirebaseConfigPath = (project.findProperty("firebaseConfigPath")?.toString()?.takeIf { it.isNotBlank() })
+    ?: System.getenv("TABBYRUSH_FIREBASE_CONFIG_PATH")?.takeIf { it.isNotBlank() }
+    ?: dotEnv["TABBYRUSH_FIREBASE_CONFIG_PATH"]?.takeIf { it.isNotBlank() }
+
+var firebaseConfigured = false
+var firebaseProjectId = ""
+var firebaseApplicationId = ""
+var firebaseApiKey = ""
+var firebaseGcmSenderId = ""
+
+if (!configuredFirebaseConfigPath.isNullOrBlank()) {
+    val configFile = file(configuredFirebaseConfigPath)
+    if (configFile.exists() && configFile.isFile) {
+        val content = configFile.readText(Charsets.UTF_8)
+        // Security gate: Reject service-account / private-key files immediately
+        val privateKeyMarker = "-----" + "BEGIN " + "PRIVATE KEY-----"
+        if ((content.contains("\"type\"") && content.contains("\"service_account\"")) ||
+            content.contains(privateKeyMarker) ||
+            content.contains("\"private_key\"")
+        ) {
+            throw GradleException("TABBYRUSH_FIREBASE_CONFIG_PATH must contain public client configuration only. Detected private server service-account credentials!")
+        }
+
+        val jsonSlurper = groovy.json.JsonSlurper()
+        val parsed = jsonSlurper.parseText(content) as? Map<*, *>
+        if (parsed != null) {
+            val projId = parsed["project_id"]?.toString()?.trim() ?: ""
+            val appId = (parsed["application_id"] ?: parsed["app_id"] ?: parsed["mobilesdk_app_id"])?.toString()?.trim() ?: ""
+            val apiKey = (parsed["api_key"] ?: parsed["current_key"])?.toString()?.trim() ?: ""
+            val senderId = (parsed["gcm_sender_id"] ?: parsed["project_number"])?.toString()?.trim() ?: ""
+            val pkgName = (parsed["package_name"] ?: parsed["client_package_name"])?.toString()?.trim()
+
+            if (pkgName != null && pkgName.isNotBlank() && pkgName != "dev.tabbyrush.android") {
+                throw GradleException("TABBYRUSH_FIREBASE_CONFIG_PATH package_name must equal 'dev.tabbyrush.android'. Found: '$pkgName'")
+            }
+
+            if (projId.isNotBlank() && appId.isNotBlank() && apiKey.isNotBlank() && senderId.isNotBlank()) {
+                firebaseConfigured = true
+                firebaseProjectId = projId
+                firebaseApplicationId = appId
+                firebaseApiKey = apiKey
+                firebaseGcmSenderId = senderId
+            }
+        }
+    }
+}
+
 fun escapeBuildConfig(str: String): String =
     "\"" + str.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
@@ -63,6 +110,11 @@ android {
         buildConfigField("String", "HUB_API_KEY", escapeBuildConfig(apiKey))
         buildConfigField("String", "HUB_ORIGIN_DEBUG", escapeBuildConfig(debugOrigin))
         buildConfigField("String", "HUB_ORIGIN_RELEASE", escapeBuildConfig(releaseOrigin))
+        buildConfigField("boolean", "FIREBASE_CONFIGURED", firebaseConfigured.toString())
+        buildConfigField("String", "FIREBASE_PROJECT_ID", escapeBuildConfig(firebaseProjectId))
+        buildConfigField("String", "FIREBASE_APPLICATION_ID", escapeBuildConfig(firebaseApplicationId))
+        buildConfigField("String", "FIREBASE_API_KEY", escapeBuildConfig(firebaseApiKey))
+        buildConfigField("String", "FIREBASE_GCM_SENDER_ID", escapeBuildConfig(firebaseGcmSenderId))
     }
 
     signingConfigs {
@@ -174,6 +226,10 @@ dependencies {
     implementation(libs.androidx.glance)
     implementation(libs.androidx.glance.appwidget)
     implementation(libs.androidx.glance.material3)
+    // Firebase BoM and Messaging
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)

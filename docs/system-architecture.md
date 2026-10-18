@@ -723,3 +723,28 @@ The separate Sticky Task Surfaces plan delivered its shared contracts and Androi
 - *Glance Process Death & Provenance Holds*: Launcher session survival across OS process death and Glance artifact provenance remain physical execution holds.
 - Phase 07 results are report-attributed; the recorded Gradle build/test commands used `--dependency-verification=off`, so they do not close the 149-checksum verification baseline or separate Glance provenance hold.
 - Existing release holds G2/G3/G6/G7 remain unchanged. The Android and Windows PNGs are design baselines, not runtime captures; native hardware acceptance remains conditionally held at G2. Linux acceptance requires a real Linux session in Phase 08.
+
+## 8. Admin Announcements — Implemented Cross-System Architecture (Phase 12 Acceptance)
+
+Implementation Date: 2026-10-18. Status: **Implemented; Staged Pilot Ready (Android/Linux); Windows Desktop Runtime Held at Gate G5**.
+Contract Authority: [announcement-contract.md](announcement-contract.md), `contract-v1.json`, and [evidence/admin-announcements-acceptance.md](evidence/admin-announcements-acceptance.md).
+
+### Authority, storage and transport boundaries
+- Glean Hub admin console (`AnnouncementComposer`, `AnnouncementHistory`) composes plain text announcements; resolves `selected` (1..500 IDs), `all`, or `admins` intersecting current `tabby-rush` grant. Explicit preview confirmation binds an immutable SHA-256 digest (`sha256:{hex}`); changed recipient membership returns 409 `audienceChanged`.
+- Canonical Mongo collections (`admin_announcements`, `admin_announcement_inbox`, `admin_announcement_dispatches`, `admin_announcement_target_batches`, `notification_install_bindings`) are strictly isolated from strict task-sync collections.
+- Bounded intake: $\le 500$ recipients in every mode, title 1..200 scalars / 800 UTF-8 bytes, body 1..4000 scalars / 16KiB, request $\le 64\text{KiB}$, serialized parent $\le 1\text{MiB}$. Journaled parent insert (`w:1, j:true`) occurs before HTTP 202 Acceptance acknowledgement.
+- 90-day retention calculated monotonically from creation (`createdAt + 90 days`); reading never extends expiry. Asynchronous Mongo TTL index cleans expired records; orphan sweep purges derived rows while active parents survive.
+- Dispatch leasing (60s lease, 15s renewal, CAS fencing) reclaims processing jobs and prevents stale lease commits. FCM HTTP v1 transport records provider acceptance, not device receipt; ambiguous attempts are retryable without claiming exactly-once semantics.
+
+### Client, account and native boundaries
+- TabbyRush core uses an isolated **in-memory** cache (max 200 items, dedup capacity 2048) managed by `RemoteInboxController`. Zero Room schema changes or offline outboxes; offline state safely indicates stale content without exposing cached details.
+- Authenticated inbox routes (`/inbox`, `/unread`, `/inbox/{id}/read`) and SSE stream (`/stream`) enforce current DB grant. Monotonic `readAt` timestamp is set journaled on first read and preserved on replay.
+- SSE stream provides `event: ready` baseline ordinal framing. Hints arriving after baseline hydration trigger authenticated detail fetching. Android suppresses SSE OS notifications; Desktop displays at most one generic alert per active connection.
+- Android integration: FCM background auto-render and foreground local notification post use fixed generic copy ("You have a new announcement"), tag `remote:<messageId>`, channel `tabbyrush.remote.announcements`, and priority `high`. Taps reauthorize message ID against current account session.
+- Android install fencing: `X-Tabby-Install-Proof` header (SHA-256 validated), numeric generation CAS on stored bindings, and idempotent replay protect against stale unbinds or stolen install UUIDs.
+- Desktop Linux runtime: Connects to session D-Bus `org.freedesktop.Notifications`, checks `actions` capability, maps `ActionInvoked` to UI dispatcher, handles tray lifecycle, and catches up silently on reopen.
+- Desktop Windows runtime: C ABI v1 `tabbyrush-toast.dll` and WiX3 MSI packaging (`dev.tabbyrush.desktop` AUMID). Implemented in source, but execution is held at Gate G5 on Linux build hosts per staged pilot gate.
+
+### Isolation, pilot gate, and release holds
+- Staged pilot allows production trial on Android and Linux without Windows acceptance; general multi-platform release requires full Gate G5 Windows proof.
+- Inherited release holds (G2/G3/G6/G7, 149-checksum baseline, Glance provenance) remain open until separate verification. Existing reminder IDs, sticky surfaces, and email notification preferences (`notificationsAllowed`) remain completely unmodified.

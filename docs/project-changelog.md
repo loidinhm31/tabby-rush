@@ -3,6 +3,22 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Server Admin Announcements / Phases 01–12] - 2026-10-18: Cross-System Delivery & Acceptance
+
+### Delivered
+- **Backend & Storage**: Canonical MongoDB collections (`admin_announcements`, `admin_announcement_inbox`, `admin_announcement_dispatches`, `notification_install_bindings`) separate from task sync. 90-day retention with BSON DateTime TTL indexes in MongoDB (`expiresAt = createdAt + 90 days`); MongoDB background TTL deletion is asynchronous, while application query and rendering filters strictly exclude records when `expiresAt <= serverNow` (only unexpired records are queryable or renderable); reading never extends expiry.
+- **Android Push Transport**: FCM HTTP v1 generic notifications for Android with channel `tabbyrush.remote.announcements` and system tag `remote:<messageId>`, maintaining announcement-content isolation from push providers (fixed generic copy "You have a new announcement" and opaque IDs). 32-byte install proof encrypted in app-private storage via Android Keystore-backed AES-256-GCM key (`tabbyrush_remote_install_v1`), SHA-256 hashed on Hub, with monotonic numeric generation CAS fencing.
+- **Desktop Streaming Broker**: Streaming SSE broker with `streamEpoch`, monotonic `acceptanceOrdinal`, and ready baseline (`event: ready`). Hints arriving after baseline hydration trigger authenticated detail fetching. Desktop displays at most one generic system alert per active connection and message hint; Android suppresses SSE alerts.
+- **Client In-Memory Isolation**: TabbyRush clients store announcements exclusively in memory (sliding window max 200 items, dedup capacity 2048) managed by `RemoteInboxController`. Zero Room database migrations, persistent offline content, or read outbox; process termination purges cached items.
+- **Admin Web Console**: React admin console (`AnnouncementComposer`, `AnnouncementHistory`) with scalar/byte counters, preview digest confirmation gating, audience mode selection (`selected` up to 500, `all`, `admins`), and idempotency replay protection.
+- **Acceptance & Tooling**: Standalone Node.js smoke runner `scripts/admin-announcements-smoke.mjs` verifying contract-v1.json, 13 golden vectors, idempotency, monotonic readAt timestamps, and install proof/fencing via in-process mock server (`--self-test`, 21/21 assertions PASS); Playwright browser suite `scripts/admin-announcements-browser.spec.ts`; cross-system acceptance matrix `docs/evidence/admin-announcements-acceptance.md`.
+
+### Verification & Acceptance Status
+- **Automated Verifications**: QA regression report (`qa-261018-1548-c1-c6-regression-verification.md`) records 566 verifications passing (548 test executions across 8 targets + 18 vector/static checks); Cycle 2 code review approved at Score 8/10 with 0 critical issues.
+- **Restricted Pilot Gate (Android/Linux/Web Admin)**: APPROVED as recorded in acceptance evidence. Common safety, server durability, Android FCM runtime, Linux D-Bus actions adapter, and Admin Web console verified for internal cohort pilot (selected mode <= 500 recipients).
+- **Full Rollout Gate (Windows Desktop Runtime)**: HELD at Gate G5 on Linux build host; Windows C ABI v1 `tabbyrush-toast.dll` and WiX3 MSI packaging implemented in source; full rollout requires clean-host Windows proof.
+- **Inherited Release Holds**: Release holds G2/G3/G6/G7, 149-checksum baseline, and Glance provenance remain open.
+---
 ## [TabbyRush Rebrand & Mascot App Icon] - 2026-10-17: TabbyRush Identity & Mascot App Icon
 
 ### Delivered
@@ -682,126 +698,63 @@ All notable changes to the TabbyRush project are documented in this file, organi
 ---
 
 ## [Phase 09] - 2026-10-14: Linux Desktop & Installed RPM Distribution
-
 ### Added
 - `:desktopApp` module configuration with Compose Multiplatform 1.7.3 on Kotlin JVM 2.1.10.
-- `desktopApp/build.gradle.kts`: Desktop build script supporting host OS detection, target isolation, target-specific sourceSets (`src/${desktopTarget}Main`), Compose desktop packaging (RPM and MSI targets), custom dependency locking, and `runDebug` task.
-- `desktopApp/gradle-linux.lockfile`: Custom dependency locking definition for Linux target (161 locked artifacts).
-- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/credential-vault-provider.kt`: Hardware/OS credential vault Service Provider Interface (SPI).
-- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/platform-vault-dispatcher.kt`: ServiceLoader-based vault dispatcher requiring exactly one target matching provider with fail-closed resolution.
-- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/single-instance-guard.kt`: Exclusive OS file-channel lock on `~/.local/share/tabbyrush/accounts/tabbyrush.lock` preventing concurrent app launches and token refresh races.
-- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-sync-scheduler.kt`: Foreground-only sync scheduler managing periodic (15-min) and immediate sync with `LeaveSchedulerCancelGate` quiescence.
-- `desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt`: Window scaffold hosting `TabbyRushApp`, `DesktopController`, `MainKt` (RELEASE mode, HTTPS only), and `DevelopmentLauncher` (DEBUG mode, HTTP loopback permitted).
-- `desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-secret-service-vault.kt`: Linux Secret Service credential vault storing access and refresh tokens as an atomic JSON bundle via `secret-tool` / D-Bus.
-- `desktopApp/src/linuxMain/resources/META-INF/services/dev.tabbyrush.desktop.CredentialVaultProvider`: ServiceLoader registration descriptor for `LinuxSecretServiceVaultProvider`.
-- `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/platform-vault-dispatcher-test.kt`: Unit tests for SPI provider discovery, zero/multiple/mismatch fail-closed behavior (5/5 PASS).
-- `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-lifecycle-test.kt`: Unit tests for single-instance guard, sync scheduler, and build mode origin policies (8/8 PASS).
-- `desktopApp/src/linuxTest/kotlin/dev/tabbyrush/desktop/linux/linux-secret-service-vault-test.kt`: Unit tests for Secret Service status transitions, atomic bundle storage, replacement, and deletion (6/6 PASS).
-- `scripts/linux-package-smoke.sh`: Packaging verification and diagnostics script supporting environment diagnostics (`--diagnose`), unpacked distributable validation (`--dist`), and RPM query/dependency audits (`--rpm`).
-- `docs/linux-desktop-guide.md`: Linux desktop operations and build guide covering prerequisites, commands, launch modes, and uninstallation.
-- `docs/linux-acceptance.md`: Acceptance specification matrix for Linux desktop and installed RPM package.
-- `docs/evidence/linux-test-summary.md`: Linux desktop test summary report detailing automated test execution and artifact evidence.
-- `docs/evidence/linux-*.png`: 7 high-fidelity visual design mockups for Linux desktop screen states.
-
-### Changed
-- `docs/project-overview-pdr.md`: Updated to Version 1.6.0 reflecting Phase 09 requirements, deliverables, constraints, and roadmap status.
-- `docs/codebase-summary.md`: Updated codebase inventory, Repomix metrics, directory structure, and architectural invariants for `:desktopApp`.
-- `docs/deployment-guide.md`: Updated to Version 1.2.0 adding Section 7 detailing Linux desktop distributable and RPM deployment procedures.
-- `docs/project-changelog.md`: Added Phase 09 changelog entry.
+- Target isolation and custom dependency locking (`gradle-linux.lockfile`, 161 locked artifacts).
+- `CredentialVaultProvider` SPI and `PlatformVaultDispatcher` for fail-closed ServiceLoader resolution.
+- `SingleInstanceGuard` exclusive file-channel lock (`~/.local/share/tabbyrush/accounts/tabbyrush.lock`).
+- `DesktopSyncScheduler` foreground-only sync scheduler with `LeaveSchedulerCancelGate` quiescence.
+- `LinuxSecretServiceVault` storing tokens via Freedesktop Secret Service (`secret-tool` / D-Bus).
+- Desktop test suites: `PlatformVaultDispatcherTest` (5/5 PASS), `DesktopLifecycleTest` (8/8 PASS), `LinuxSecretServiceVaultTest` (6/6 PASS).
+- Packaging diagnostics runner `scripts/linux-package-smoke.sh`, runbooks, and 7 visual design mockups.
 
 ---
-
-
 ## [Phase 08] - 2026-10-14: Authorized Hub Operations & Signed Android Release
-
 ### Added
-- `scripts/hub-live-smoke.mjs`: Live Hub strict-v1 verification harness covering health check, admission read-back, auth session, structured per-operation acknowledgements, base conflict rejection, stable cursor pagination, and revision-CAS empty tombstone persistence. Includes offline self-test mode (`--fixture-test`).
-- `scripts/release-security-check.mjs`: Android release security auditing tool enforcing fail-closed signature verification (`apksigner`), manifest security analysis (`apkanalyzer`), cleartext traffic exclusion, backup/extraction rules, approved HTTPS origin validation, and repository secret scanning.
-- `scripts/hub-strict-recovery.js`: Maintenance-only disaster recovery script for `mongosh` enforcing writer quiescence, allocating a fresh UUID v4 epoch, provisioning isolated namespaces, resetting active records to revision 1 with `lastOp = null`, maintaining permanent empty tombstones, and executing journaled registry Compare-And-Swap.
-- `docs/deployment-guide.md`: End-to-end operational guide for Glean Hub strict provisioning, release APK signing, security inspection, live smoke testing, and device installation.
-- `docs/security-and-recovery.md`: Comprehensive security architecture documentation and step-by-step disaster recovery runbook.
-- `docs/release-acceptance.md`: Release verification matrix distinguishing operational tooling preparation from live release acceptance gates.
-- `docs/evidence/android-release-summary.md`: Android release tooling summary report detailing implemented artifacts, test status, and prerequisites.
-- `docs/evidence/hub-recovery-summary.md`: Hub operational recovery summary detailing disaster recovery invariants and validation procedures.
-- `docs/evidence/android-release-*.png`: 7 pixel-precise (1080x2400) release visual design baseline mockups matching ForumFlash design specifications.
-- `README.md`: Root project overview, feature summary, directory structure, commands, and documentation links.
-
-### Changed
-- `docs/project-overview-pdr.md`: Updated to Version 1.5.0 reflecting completion of Phase 08 tooling and operational artifacts.
-- `docs/codebase-summary.md`: Updated directory inventory and artifact descriptions to incorporate Phase 08 scripts, documentation, and evidence.
-- `docs/development-roadmap.md`: Updated roadmap pointers and release operations milestone details.
-
+- Operational tooling: `scripts/hub-live-smoke.mjs` (fixture mode passing 18/18 checks), `scripts/release-security-check.mjs` (static diagnostic mode), and `scripts/hub-strict-recovery.js` (quarantined strict-v1 emergency cold restore).
+- Operational runbooks: `deployment-guide.md`, `security-and-recovery.md`, `release-acceptance.md`, and evidence summaries.
+- 7 pixel-precise release visual design baseline mockups (`docs/evidence/android-release-*.png`).
 ---
-
 ## [Phase 07] - 2026-10-14: Android Composition & Runtime Integration
-
 ### Added
-- `:androidApp` module configuration with AGP 8.7.3, minSdk 26, compileSdk 35.
-- `TabbyRushApplication` process container managing shared singletons, cold-start identity persistence, and fail-closed wipe recovery.
+- `:androidApp` module (AGP 8.7.3, minSdk 26, compileSdk 35) with `TabbyRushApplication` process container and fail-closed wipe recovery.
 - `SessionViewModel` with reactive `TodoUiState`, conflict review dialog, and zero credential retention.
-- `AndroidSyncScheduler` WorkManager integration with account-tagged cancellation.
-- `TabbyRushSyncWorker` background sync worker with generation, auth, and account fencing.
-- Android security configurations: `backup_rules.xml`, `data_extraction_rules.xml`, and debug loopback `network_security_config.xml`.
-- Authored instrumented device tests: `todo-device-test.kt` and `background-isolation-test.kt`.
-- `scripts/android-smoke.sh` device smoke runner and `scripts/debug-fault-proxy.mjs` fault-injection proxy.
-- 7 visual design mockups in `docs/evidence/android-debug-*.png`.
+- WorkManager `AndroidSyncScheduler` and `TabbyRushSyncWorker` with account-tagged cancellation.
+- Security rules (`backup_rules.xml`, `data_extraction_rules.xml`, loopback `network_security_config.xml`).
+- Instrumented device tests (`todo-device-test.kt`), smoke runners (`scripts/android-smoke.sh`), and mockups.
 
 ---
-
 ## [Phase 06] - 2026-10-14: Shared Compose UI & Accessible Light Theme
-
 ### Added
-- Shared Compose Multiplatform UI components in `shared/`: `TabbyRushApp`, `ResponsiveLayout`, `AccountForm`, `AccessRequestPanel`, `TodoList`, `TodoItemRow`, `TodoEditorDialog`, `SyncStatusBar`, `ConflictDialog`, `LeaveDialog`, and `LicenseNoticeDialog`.
+- Shared Compose UI components in `shared/`: `TabbyRushApp`, `ResponsiveLayout`, `TodoList`, `TodoItemRow`, `TodoEditorDialog`, `SyncStatusBar`, `ConflictDialog`, `LeaveDialog`.
 - Accessible light theme tokens conforming to WCAG 2.1 AA contrast requirements.
-- Typography scale, semantic colors, and light theme icon primitives.
-- Common UI unit and interaction test suites.
 
 ---
-
 ## [Phase 05] - 2026-10-14: Durable Local State & Strict Per-Record Sync
-
 ### Added
-- Room KMP persistence (`TabbyRushDatabase`, version 1) with `BundledSQLiteDriver`.
-- Local outbox mutation engine and staged full-scan reconciler.
-- Fail-closed account teardown protocol writing generation and wipe markers outside SQLite.
+- Room KMP persistence (`TabbyRushDatabase` v1) with `BundledSQLiteDriver`.
+- Local outbox mutation engine, staged full-scan reconciler, and fail-closed account teardown protocol.
 - 89 JVM common and Room integration tests.
 
 ---
-
 ## [Phase 04] - 2026-10-14: Hub Authentication & Protected Session
-
 ### Added
-- Hub authentication client with Ktor HTTP transport.
-- Single-flight token refresh coordinator.
-- `AndroidKeystoreVault` hardware-backed credential storage.
-- Session state machine: unauthenticated, pending approval, authenticated, and guarded logout.
+- Hub authentication client with Ktor HTTP transport and single-flight token refresh coordinator.
+- `AndroidKeystoreVault` hardware-backed credential storage and generation-fenced session state machine.
 
 ---
-
 ## [Phase 03] - 2026-10-14: Isolated Strict Server & Legacy Isolation
-
 ### Added
-- Glean Hub strict-v1 protocol extension in Rust (`glean-hub-sync`).
-- Dedicated strict routes (`/api/v1/sync/:app/strong/*`) and strict app registration.
-- Read-only `strong_sync_admission` operator preflight helper.
-- Legacy sync route isolation guards preventing strict apps from accessing legacy endpoints.
+- Glean Hub strict-v1 protocol extension in Rust (`glean-hub-sync`), dedicated strict routes, and legacy isolation guards.
 
 ---
-
 ## [Phase 02] - 2026-10-14: Frozen Foundation & Contracts
-
 ### Added
-- Root Gradle multiplatform build baseline with Gradle 8.11.1 wrapper.
-- Version catalog (`gradle/libs.versions.toml`) with pinned dependencies.
-- 16 core Kotlin domain and contract specifications in `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/`.
-- NIST cryptographic digest test vectors and validation test suites.
+- Root Gradle multiplatform build baseline with Gradle 8.11.1 wrapper and pinned version catalog.
+- 16 core Kotlin domain contracts, NIST digest test vectors, and validation test suites.
 
 ---
-
 ## [Phase 01] - 2026-10-13: Headless Tooling & Android Environment
-
 ### Added
-- Headless Xpra virtual display runner (`scripts/start-xpra.sh`).
-- Android SDK and JDK environment configuration script (`scripts/android-sdk-env.sh`).
-- Android emulator lifecycle runner (`scripts/start-android-emulator.sh`).
+- Headless Xpra virtual display runner (`scripts/start-xpra.sh`) and Android SDK/emulator lifecycle scripts.
 - Operational setup runbooks and host evidence records in `docs/`.

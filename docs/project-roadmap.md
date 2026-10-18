@@ -1,13 +1,14 @@
 # TabbyRush Project Roadmap
 
 **Current Status:** In Progress — foundational strict-v1 multiplatform delivered; Phase 01 DONE (Gate G1 passed); Phase 02 logic/contracts DELIVERED (Gate G2 BLOCKED); Phase 03 DELIVERED (Contracts/Logic/Tests; Gate G3 live cluster execution ON HOLD); Phase 04 DONE; Phase 05 DONE; Phase 06 DONE (Gate G4 passed); Phase 07 DONE (Gate G5 passed); Phase 08 DELIVERED / DONE (100% progress, 20h credited; 282 automated tests/checks pass; review 9.2/10 approved; note Gate G2 physical execution pending); Phase 09 DELIVERED / DONE (100% progress, 24h credited; 299 automated tests/checks pass; review 8.9/10 approved; note Gate G2 physical execution pending); Phase 10 DONE (100% progress, 20h credited; 308 automated tests/checks pass; review 9.2/10 approved); Phase 11 DELIVERED / DONE (100% progress, 20h credited; 394 reported passes across 395 targets; review 8.6/10 approved; Gate G6 deployment held); Phase 12 DELIVERED / DONE (100% progress, 12h credited; cutover runbook and rehearsal tooling delivered; Gate G7 live cutover held).
-**Last Updated:** 2026-10-17
-**Target Plan:** [plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/plan.md) (Task Deadlines, Reminders & Strict Upgrades)
+**Last Updated:** 2026-10-18
+**Target Plan:** [plans/261018-0707-server-admin-notifications/plan.md](../plans/261018-0707-server-admin-notifications/plan.md) (Server Admin Announcements — 100% Implementation Delivered / Restricted Pilot Ready)
 **Foundational Plan:** [plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md](../plans/261013-1540-tabbyrush-glean-hub-reuse/plan.md) (Strict-v1 Hub Reuse Baseline — 100% Implementation Delivered)
 **Historical Plan:** [plans/261013-0914-tabbyrush-compose-todos/plan.md](../plans/261013-0914-tabbyrush-compose-todos/plan.md) (Superseded)
 **Overall Progress:** Foundational baseline: 100% planned-effort implementation delivered (148h / 148h allocated; technical and operator acceptance gates remain open). Evolution plan (Deadlines & Reminders): 100% credited planned-effort delivery roll-up (236h / 236h: Phase 01 DONE, Phase 02 logic/contracts DELIVERED, Phase 03 Contracts/Logic/Tests DELIVERED, Phase 04 DONE, Phase 05 DONE, Phase 06 DONE, Phase 07 DONE, Phase 08 DELIVERED / DONE, Phase 09 DELIVERED / DONE, Phase 10 DONE, Phase 11 DELIVERED / DONE, Phase 12 DELIVERED / DONE; Gate G2 physical delivery BLOCKED on host prerequisites, Gate G3 live cluster execution ON HOLD, Gate G4 client round-trip PASSED, Gate G5 persisted scheduler and fences PASSED, Gate G6 automated subset PASSED / live sync held, Gate G7 runbook delivered / cutover blocked pending physical/staging gates).
 **Sticky Task Surfaces:** Phases 01–06 delivered; Phase 07 documentation and automated-verification evidence delivered (6h / 12h credited), while Android/Windows native hardware acceptance remains conditionally held under Gate G2. **118h / 132h credited (89.4%)**. Phase 08 remains pending an actual Linux target/session. Android drain-timeout and Glance cleanup findings, the 149-checksum root verification baseline, separate Glance artifact provenance, and existing G2/G3/G6/G7 release holds remain open.
 **Date & Time Picker Migration:** Implementation and regression-test status administratively recorded complete on 2026-10-17. Reported verification: 372/372 Gradle unit tests, 32/32 Node fixture/security/rehearsal checks (18 + 6 + 8), and Android debug assembly passed. No supplied Gradle rerun validates the latest source change setting DatePicker `yearRange = 0..9999`. Acceptance remains incomplete: rendered Compose interaction coverage (including boundary-year selection), Android connected/device and native accessibility checks, and Linux host acceptance remain open. See the [plan](../plans/261017-0709-date-time-pickers/plan.md) and [project manager report](../plans/reports/project-manager-261017-0750-date-time-pickers-completion.md).
+**Server Admin Announcements:** Implementation and tooling delivered across all 12 phases P01–P12 (262h / 276h credited planned-effort roll-up, 94.9%; P12 credits 14h for tooling/docs while 14h live cross-system acceptance remains pending). Automated verification: QA reports 548 passing test executions across Kotlin Multiplatform, Desktop, Node, Rust, and React, plus 18 vector/static checks (566 passing verifications; 0 failures, 1 ignored doc-test in qa-261018-1548 report). Code review Cycle 2 approved with score 8/10 (0 critical issues, 12 warnings tracked for operational disposition). User approved on 2026-10-18. Staged pilot acceptance and operator authorization pending (selected audience bound <= 500 recipients per announcement). Physical Windows native execution and MSI packaging held at announcement Gate G5 per restricted pilot staged rollout plan. Inherited release holds (G2 connected device, G3 live replica-set cluster, G6 live three-device sync, G7 live production cutover, 149-checksum root verification baseline, Glance 1.2.0 provenance, and browser/Linux session gates) remain open. See the [plan](../plans/261018-0707-server-admin-notifications/plan.md).
 
 
 ---
@@ -101,6 +102,41 @@ Phase 07 delivered Android/Windows acceptance documentation and automated-verifi
 
 The 149 unmatched root classpath checksums in the Gradle verification baseline and unverified Glance 1.2.0 artifact provenance are distinct, unwaived supply-chain holds. Cycle 2 records unresolved Android close-after-drain-timeout and Glance cleanup findings: `TabbyRushApplication.closeRuntimeInternal()` catches and logs the delivery-drain timeout, then returns; `closeActiveRuntime()` clears the active runtime reference while coroutine cleanup and Room closure are skipped. Wave E remains pending the actual Linux target/session. Existing release G2/G3/G6/G7 holds and native reminder/Windows toast gaps remain unchanged.
 
+### 2.4 Server Admin Announcements (Plan 261018-0707 — 276h)
+
+**Status:** Implementation Delivered / Pilot Acceptance Pending (262h / 276h credited planned-effort roll-up, 94.9%; 566 verifications passing; user approved).
+
+| Phase | Description | Effort | Status | Progress |
+|:---|:---|---:|:---|---:|
+| 01 | Contract freeze, pure interfaces, golden vectors and build gate | 12h | **DELIVERED** | 100% |
+| 02 | Backend canonical inbox, Mongo storage, leases and worker | 32h | **DELIVERED** | 100% |
+| 03 | FCM HTTP v1 push channel transport and legacy cutover | 16h | **DELIVERED** | 100% |
+| 04 | React admin composer, confirmation and sent history | 16h | **DELIVERED** | 100% |
+| 05 | Shared remote inbox core, SSE client and cache controller | 28h | **DELIVERED** | 100% |
+| 06 | Shared Compose multiplatform inbox UI and navigation | 16h | **DELIVERED** | 100% |
+| 07 | Linux desktop D-Bus persistent alert adapter | 20h | **DELIVERED** | 100% |
+| 08 | Windows native C ABI v1 DLL bridge, JNA and WiX3 MSI | 36h | **DELIVERED (Gate G5 held)** | 100% |
+| 09 | Android runtime FCM, Keystore store and inbox integration | 32h | **DELIVERED (Gate G2 held)** | 100% |
+| 10 | Desktop runtime SSE streaming, tray and activation | 24h | **DELIVERED (Gate G5 held)** | 100% |
+| 11 | Operations config, feature gates and deployment assets | 16h | **DELIVERED** | 100% |
+| 12 | Cross-system live acceptance tooling, evidence and docs | 28h | **DELIVERED (Tooling/Docs done; live gates held)** | 50% (14h / 28h) |
+| **Total** | | **276h** | **Implementation Delivered; Pilot Acceptance Pending** | **94.9% (262h credited)** |
+
+Phase 12 delivered the standalone Node.js acceptance runner (`scripts/admin-announcements-smoke.mjs`) passing 21/21 assertions and 13 golden vectors, the Playwright admin browser test suite (`scripts/admin-announcements-browser.spec.ts` & config), and the cross-system acceptance matrix (`docs/evidence/admin-announcements-acceptance.md`).
+
+- **Automated Verification**: QA reports 548 passing test executions plus 18 vector/static checks (566 passing verifications; 0 failures, 1 ignored doc-test across KMP JVM, Desktop, Node security/smoke/preflight, Rust notification & server, React admin):
+  - TabbyRush Shared JVM: 286/286 passed (`:shared:jvmTest` under strict dependency verification).
+  - TabbyRush Desktop: 31/31 passed (`DesktopRemoteRuntimeTest`, `LinuxNotificationAdapterTest`, `LinuxRemoteNotificationAdapterTest`).
+  - TabbyRush Release Security Audit: 21 unit tests passed; 5 static source security checks passed (CLEAN).
+  - TabbyRush Smoke Runner Self-Test: 13 golden vectors + 21 mock server tests passed (34 total).
+  - GleanHub Rust Notification: 35 passed, 0 failed, 1 doc-test ignored (`cargo test -p glean-hub-notification`).
+  - GleanHub Rust Server: 85 passed (44 integration tests across authorization, storage, and stream + 41 binary tests).
+  - GleanHub Web Admin: 48 passed across 14 suites (`pnpm test:unit`); TypeScript typecheck clean (0 errors).
+  - GleanHub Preflight Self-Test: 21 unit checks passed (`scripts/announcement-preflight.mjs --self-test`).
+- **Review & Approval**: Cycle 2 code review approved with score 8/10 (0 critical issues, 12 warnings tracked for operational disposition). User approved implementation on 2026-10-18.
+- **Pilot Gate**: Staged internal pilot approved for Android and Linux platforms; restricted to `selected` audience mode ($\le 500$ recipients per announcement). Pilot runtime acceptance and operator authorization remain pending.
+- **Full Delivery Gate**: Gate G5 (Windows Desktop Runtime C++/WinRT and WiX3 MSI) formally held on Linux build host environment; required for full release.
+- **Release Holds**: Inherited release holds (G2 connected device, G3 live cluster, G6 three-device sync, G7 production cutover, 149-checksum baseline, Glance provenance, and browser/Linux session gates) remain open.
 ---
 
 ## 3. Milestones & Timeline
@@ -313,10 +349,42 @@ All phase allocations are marked delivered (148h/148h planned-effort roll-up, no
     - CLI Upgrade Rehearsal Tooling: `scripts/strict-v2-cutover-rehearsal.mjs` verifying parameter validation, fail-fast token checking, sensitive token redaction across stdout/stderr, non-mutating preflight dry-run, interrupted POST recovery, status-only query, and final schema read-back assertion (7/7 checks PASS in `--self-test`).
     - Emergency Disaster Recovery Quarantine: Explicitly quarantined `scripts/hub-strict-recovery.js` as an emergency cold restore tool for `strict-v1` only, forbidding its use for v2 upgrades or rollbacks.
     - Reconciled Operational Documentation: Reconciled `docs/deployment-guide.md`, `docs/security-and-recovery.md`, `docs/release-acceptance.md`, `docs/hub-schema-integration.md`, `docs/sync-acceptance.md`, `docs/android-acceptance.md`, `docs/linux-acceptance.md`, `docs/windows-acceptance.md`, `docs/system-architecture.md`, `README.md`, and Glean Hub `docs/tabbyrush-strict-sync.md`.
-  - *Note on Technical Acceptance & Downstream Gates:* 401 automated checks pass across project suites (401 PASS, 0 failures, 1 ignored live Mongo gate; 4 packaging/lint targets verified). Code review reports 9.2/10 approved ([Code review](../plans/reports/code-review-261016-0050-phase-12-cutover-runbook.md)). Live production cutover (Gate G7) remains formally blocked pending physical hardware testbeds (Gate G2), multi-node replica set cluster migration and backend code remediations (Gate G3), three-device live sync proof (Gate G6), and formal operator authorization.
+- *Note on Technical Acceptance & Downstream Gates:* 401 automated checks pass across project suites (401 PASS, 0 failures, 1 ignored live Mongo gate; 4 packaging/lint targets verified). Code review reports 9.2/10 approved ([Code review](../plans/reports/code-review-261016-0050-phase-12-cutover-runbook.md)). Live production cutover (Gate G7) remains formally blocked pending physical hardware testbeds (Gate G2), multi-node replica set cluster migration and backend code remediations (Gate G3), three-device live sync proof (Gate G6), and formal operator authorization.
+
+### Milestone 6: Server Admin Announcements (Plan 261018-0707) — IMPLEMENTATION DELIVERED / PILOT ACCEPTANCE PENDING
+- **Overview (COMPLETED 2026-10-18):** Durable admin-confirmed announcements, cross-platform inboxes, FCM HTTP v1 push notifications, Linux D-Bus alerts, Windows C++/WinRT DLL bridge, and operational preflight (262h / 276h credited planned-effort roll-up, 94.9%; P12 credits 14h for tooling/docs while 14h live cross-system acceptance remains pending; 566 verifications passing; user approved).
+- **Key Deliverables:**
+  - *Contract & Pure Interfaces (P01):* Pure Kotlin/Rust wire schemas, DTOs, limit constants, 13 canonical golden vectors (`vectors-v1.json`), and build gate.
+  - *Backend Storage & Durable Worker (P02):* MongoDB 90-day retention with BSON DateTime TTL indexes, leased background worker for FCM dispatch and cleanup, immutable audience resolution ($\le 500$ selected recipients), and device binding routes.
+  - *FCM HTTP v1 Transport (P03):* Google service account OAuth2 token authentication, generic fixed-text notification payload (`tabbyrush.remote.announcements`, tag `remote:<messageId>`), and legacy push cutover.
+  - *React Admin Composer (P04):* Web Admin compose modal, live audience calculation, immutable confirmation step, and sent announcements history with HMAC cursor pagination.
+  - *Shared Remote Inbox Core (P05):* Multiplatform in-memory 200-item sliding cache, SSE streaming client with `streamEpoch` and monotonic `acceptanceOrdinal`, and authenticated HTTP client with token refresh coordination.
+  - *Shared Compose Inbox UI (P06):* Accessible inbox screen, announcement detail view, unread badge counters, deep-link navigation, and WCAG AA verified color contrast.
+  - *Linux D-Bus Adapter (P07):* Session bus notification adapter (`org.freedesktop.Notifications`), persistent action callbacks with generation validation, epoch invalidation on daemon restart, and 32-slot LRU tracking.
+  - *Windows C ABI DLL & Packaging (P08):* Native C ABI v1 DLL (`tabbyrush-toast.dll`), JNA bindings, WiX3 MSI packaging descriptors with stable upgrade GUID; stub tests pass; physical execution held at announcement Gate G5.
+  - *Android Runtime Integration (P09):* `FirebaseMessagingService` receiver, notification channel management, Keystore AES-GCM install identity storage in `noBackupFilesDir`, and cold-start deep linking.
+  - *Desktop Runtime & Tray (P10):* Single-instance desktop controller, background SSE runtime loop, tray icon integration, and clean process quiescence on full quit.
+  - *Operations & Deployment (P11):* Standalone preflight runner (`announcement-preflight.mjs`), feature flags, and single-replica Kubernetes descriptor with rolling deployment safeguards.
+  - *Acceptance Tooling & Permanent Docs (P12):* Standalone Node.js smoke runner (`admin-announcements-smoke.mjs`), Playwright browser test suite, cross-system acceptance matrix (`docs/evidence/admin-announcements-acceptance.md`), and system documentation updates.
+- *Verification Summary:* QA reports 548 passing test executions plus 18 vector/static checks (566 passing verifications; 0 failures, 1 ignored doc-test across KMP JVM, Desktop, Node security/smoke/preflight, Rust notification & server, React admin in qa-261018-1548 report). Cycle 2 code review approved with score 8/10 (0 critical issues, 12 warnings tracked for operational disposition). User approved implementation on 2026-10-18.
+- *Held Gates & Release Boundaries:* Implementation and tooling delivered; staged pilot acceptance and operator authorization pending for Android, Linux, and Web Admin ($\le 500$ selected recipients per announcement). Physical Windows native execution and MSI packaging held at announcement Gate G5. Inherited release holds (G2 connected device, G3 live replica set, G6 three-device sync, G7 production cutover, 149-checksum baseline, Glance provenance, and browser/Linux session gates) remain open.
 ---
 
 ## 4. Changelog
+### [Server Admin Announcements] — 2026-10-18: Durable Server Admin Announcements, Push Notifications & Inboxes (Plan 261018-0707)
+#### Completed
+- **Phases P01–P12 Server Admin Announcements (Implementation Delivered & Verified)**:
+  - Implemented end-to-end durable server announcements across backend (Rust Axum/MongoDB), web administration (React/TypeScript), Android client (Compose/FCM), and Desktop client (Compose/Linux D-Bus/Windows DLL).
+  - Delivered backend storage with 90-day retention and BSON DateTime TTL indexes, leased background worker for FCM dispatch and retention cleanup, HMAC-signed cursor pagination, device registration routes, and in-memory SSE broker with `streamEpoch` and monotonic `acceptanceOrdinal`.
+  - Delivered Android FCM HTTP v1 push transport with generic alert payloads, `tabbyrush.remote.announcements` notification channel, Keystore AES-GCM install store in `noBackupFilesDir`, and deep-link click routing to inbox.
+  - Delivered Desktop session D-Bus adapter with generation-validated action callbacks on Linux; native C ABI v1 DLL and WiX3 MSI identity descriptors on Windows (physical Windows execution held at Gate G5); clean process quiescence on full quit.
+  - Delivered Shared Compose inbox UI with unread counters, announcement detail viewer, 200-item in-memory sliding cache, no offline content or read outbox storage.
+  - Delivered Web Admin composer modal, live audience resolution ($\le 500$ selected recipients), irreversible confirmation prompt, and sent announcement history.
+  - Automated verification: QA reports 548 passing test executions across Kotlin Multiplatform JVM (286), Desktop (31), Node security unit (21) and source check (5), smoke runner mock server (21) and golden vectors (13), Rust notification (35), Rust server (85), React web admin (48), and preflight (21), totaling 566 passing verifications (0 failures, 1 ignored doc-test in qa-261018-1548 report).
+  - Code review Cycle 2 approved with score 8/10 (0 critical issues, 12 warnings tracked for operational disposition).
+  - User approved implementation on 2026-10-18.
+  - Rollout boundaries: Implementation and tooling delivered; staged pilot acceptance and operator authorization pending; Windows native execution held at announcement Gate G5; inherited release holds (G2/G3/G6/G7, 149-checksum baseline, Glance provenance, and browser/Linux session gates) remain open.
+
 ### [Phase 12] — 2026-10-16: Coordinated Cutover Runbook, Rehearsal Tooling & Release Documentation (Plan 261015-0752)
 #### Completed
 - **Phase 12 Coordinated Cutover Runbook & Rehearsal Tooling (Deliverables Complete & Verified)**:

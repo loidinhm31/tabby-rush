@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +41,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.tabbyrush.shared.contract.AuthState
 import dev.tabbyrush.shared.contract.SafeError
+import dev.tabbyrush.shared.contract.RemoteInboxAction
+import dev.tabbyrush.shared.contract.RemoteInboxAvailability
+import dev.tabbyrush.shared.contract.RemoteInboxState
 import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.TodoUiState
 import dev.tabbyrush.shared.theme.TabbyRushTheme
@@ -47,14 +51,16 @@ import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
 
 /**
  * Root Composable for the TabbyRush application.
- * Consumes immutable [TodoUiState] and emits user actions via [onAction] and [onAuthSubmit].
+ * Consumes immutable [TodoUiState] and [RemoteInboxState] and emits user actions.
  *
  * Automatically adapts between a compact mobile stack and an expanded (>=840dp) sidebar layout.
  */
 @Composable
 fun TabbyRushApp(
     state: TodoUiState,
+    remoteInboxState: RemoteInboxState,
     onAction: (TodoAction) -> Unit,
+    onRemoteAction: (RemoteInboxAction) -> Unit,
     onAuthSubmit: (AuthSubmitAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -115,7 +121,9 @@ fun TabbyRushApp(
                 AuthState.AUTHENTICATED -> {
                     AuthenticatedWorkspace(
                         state = state,
-                        onAction = onAction
+                        remoteInboxState = remoteInboxState,
+                        onAction = onAction,
+                        onRemoteAction = onRemoteAction
                     )
                 }
             }
@@ -174,9 +182,23 @@ fun TabbyRushApp(
 @Composable
 private fun AuthenticatedWorkspace(
     state: TodoUiState,
-    onAction: (TodoAction) -> Unit
+    remoteInboxState: RemoteInboxState,
+    onAction: (TodoAction) -> Unit,
+    onRemoteAction: (RemoteInboxAction) -> Unit
 ) {
     var showNotices by remember { mutableStateOf(false) }
+    var navState by remember { mutableStateOf(RemoteInboxNavState()) }
+
+    LaunchedEffect(state.identity?.userId) {
+        navState = navState.onGenerationChanged(0L)
+    }
+
+    LaunchedEffect(remoteInboxState.detail?.id) {
+        val detailId = remoteInboxState.detail?.id
+        if (detailId != null && navState.currentRoute !is RemoteInboxRoute.Detail) {
+            navState = navState.navigateToDetail(detailId)
+        }
+    }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isExpanded = maxWidth >= 840.dp
@@ -229,6 +251,47 @@ private fun AuthenticatedWorkspace(
                         verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall)
                     ) {
                         TextButton(
+                            onClick = { navState = navState.navigateToTasks() },
+                            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                        ) {
+                            Text(
+                                text = "My Tasks",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (navState.currentRoute is RemoteInboxRoute.Tasks) MaterialTheme.colorScheme.onPrimary else TabbyRushThemeTokens.customColors.mintSurface
+                            )
+                        }
+
+                        TextButton(
+                            onClick = { navState = navState.navigateToList() },
+                            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Announcements",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (navState.currentRoute !is RemoteInboxRoute.Tasks) MaterialTheme.colorScheme.onPrimary else TabbyRushThemeTokens.customColors.mintSurface
+                                )
+                                if (remoteInboxState.unreadCount > 0) {
+                                    Surface(
+                                        shape = MaterialTheme.shapes.small,
+                                        color = TabbyRushThemeTokens.customColors.coral
+                                    ) {
+                                        Text(
+                                            text = "${remoteInboxState.unreadCount}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onError,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        TextButton(
                             onClick = { onAction(TodoAction.OpenSettings) },
                             modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                         ) {
@@ -273,63 +336,90 @@ private fun AuthenticatedWorkspace(
                         .background(MaterialTheme.colorScheme.background),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Top action header
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = TabbyRushThemeTokens.SpacingXLarge, vertical = TabbyRushThemeTokens.SpacingLarge),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "My Tasks",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.semantics { heading() }
-                        )
-
-                        Button(
-                            onClick = { onAction(TodoAction.OpenCreate()) },
-                            shape = MaterialTheme.shapes.small,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
-                        ) {
-                            Text("Add Task", style = MaterialTheme.typography.labelLarge)
+                    when (val route = navState.currentRoute) {
+                        is RemoteInboxRoute.Detail -> {
+                            val isAvailable = remoteInboxState.availability == RemoteInboxAvailability.Online
+                            val detailToShow = if (isAvailable && remoteInboxState.detail?.id == route.messageId) remoteInboxState.detail else null
+                            RemoteInboxDetailView(
+                                detail = detailToShow,
+                                availability = remoteInboxState.availability,
+                                loading = remoteInboxState.loading && detailToShow == null,
+                                error = remoteInboxState.error,
+                                onRemoteAction = onRemoteAction,
+                                onBack = { navState = navState.popBack() }
+                            )
                         }
-                    }
+                        RemoteInboxRoute.List -> {
+                            RemoteInboxView(
+                                state = remoteInboxState,
+                                unavailableMessage = navState.unavailableMessage,
+                                onRemoteAction = onRemoteAction,
+                                onOpen = { messageId ->
+                                    navState = navState.navigateToDetail(messageId)
+                                    onRemoteAction(RemoteInboxAction.Open(messageId))
+                                },
+                                onBack = { navState = navState.popBack() }
+                            )
+                        }
+                        RemoteInboxRoute.Tasks -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = TabbyRushThemeTokens.SpacingXLarge, vertical = TabbyRushThemeTokens.SpacingLarge),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "My Tasks",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.semantics { heading() }
+                                )
 
-                    if (state.safeError != null) {
-                        SafeErrorBanner(
-                            error = state.safeError,
-                            onDismiss = { onAction(TodoAction.DismissError) },
-                            modifier = Modifier.padding(horizontal = TabbyRushThemeTokens.SpacingXLarge)
-                        )
-                    }
-                    if (isAdmin && !adminWarningDismissed) {
-                        AdminWarningBanner(
-                            onDismiss = { adminWarningDismissed = true },
-                            modifier = Modifier.padding(horizontal = TabbyRushThemeTokens.SpacingXLarge, vertical = TabbyRushThemeTokens.SpacingSmall)
-                        )
-                    }
+                                Button(
+                                    onClick = { onAction(TodoAction.OpenCreate()) },
+                                    shape = MaterialTheme.shapes.small,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                                ) {
+                                    Text("Add Task", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .widthIn(max = 760.dp),
-                        contentAlignment = Alignment.TopCenter
-                    ) {
-                        TodoList(
-                            items = state.items,
-                            counts = state.counts,
-                            filter = state.filter,
-                            deleteCandidate = state.deleteCandidate,
-                            onAction = onAction,
-                            nowEpochMs = state.nowEpochMs
-                        )
+                            if (state.safeError != null) {
+                                SafeErrorBanner(
+                                    error = state.safeError,
+                                    onDismiss = { onAction(TodoAction.DismissError) },
+                                    modifier = Modifier.padding(horizontal = TabbyRushThemeTokens.SpacingXLarge)
+                                )
+                            }
+                            if (isAdmin && !adminWarningDismissed) {
+                                AdminWarningBanner(
+                                    onDismiss = { adminWarningDismissed = true },
+                                    modifier = Modifier.padding(horizontal = TabbyRushThemeTokens.SpacingXLarge, vertical = TabbyRushThemeTokens.SpacingSmall)
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .widthIn(max = 760.dp),
+                                contentAlignment = Alignment.TopCenter
+                            ) {
+                                TodoList(
+                                    items = state.items,
+                                    counts = state.counts,
+                                    filter = state.filter,
+                                    deleteCandidate = state.deleteCandidate,
+                                    onAction = onAction,
+                                    nowEpochMs = state.nowEpochMs
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -377,6 +467,37 @@ private fun AuthenticatedWorkspace(
                                     modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                                 ) {
                                     Text("Add", style = MaterialTheme.typography.labelLarge)
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        navState = if (navState.currentRoute is RemoteInboxRoute.Tasks) navState.navigateToList() else navState.navigateToTasks()
+                                    },
+                                    modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = if (navState.currentRoute is RemoteInboxRoute.Tasks) "Inbox" else "Tasks",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = TabbyRushThemeTokens.customColors.primaryDeep
+                                        )
+                                        if (remoteInboxState.unreadCount > 0 && navState.currentRoute is RemoteInboxRoute.Tasks) {
+                                            Surface(
+                                                shape = MaterialTheme.shapes.small,
+                                                color = TabbyRushThemeTokens.customColors.coral
+                                            ) {
+                                                Text(
+                                                    text = "${remoteInboxState.unreadCount}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onError,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
 
                                 TextButton(
@@ -432,27 +553,53 @@ private fun AuthenticatedWorkspace(
                     }
                 }
             ) { innerPadding ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
-                    if (state.safeError != null) {
-                        SafeErrorBanner(
-                            error = state.safeError,
-                            onDismiss = { onAction(TodoAction.DismissError) },
-                            modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
-                        )
-                    }
+                Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                    when (val route = navState.currentRoute) {
+                        is RemoteInboxRoute.Detail -> {
+                            val isAvailable = remoteInboxState.availability == RemoteInboxAvailability.Online
+                            val detailToShow = if (isAvailable && remoteInboxState.detail?.id == route.messageId) remoteInboxState.detail else null
+                            RemoteInboxDetailView(
+                                detail = detailToShow,
+                                availability = remoteInboxState.availability,
+                                loading = remoteInboxState.loading && detailToShow == null,
+                                error = remoteInboxState.error,
+                                onRemoteAction = onRemoteAction,
+                                onBack = { navState = navState.popBack() }
+                            )
+                        }
+                        RemoteInboxRoute.List -> {
+                            RemoteInboxView(
+                                state = remoteInboxState,
+                                unavailableMessage = navState.unavailableMessage,
+                                onRemoteAction = onRemoteAction,
+                                onOpen = { messageId ->
+                                    navState = navState.navigateToDetail(messageId)
+                                    onRemoteAction(RemoteInboxAction.Open(messageId))
+                                },
+                                onBack = { navState = navState.popBack() }
+                            )
+                        }
+                        RemoteInboxRoute.Tasks -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                if (state.safeError != null) {
+                                    SafeErrorBanner(
+                                        error = state.safeError,
+                                        onDismiss = { onAction(TodoAction.DismissError) },
+                                        modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
+                                    )
+                                }
 
-                    TodoList(
-                        items = state.items,
-                        counts = state.counts,
-                        filter = state.filter,
-                        deleteCandidate = state.deleteCandidate,
-                        onAction = onAction,
-                        nowEpochMs = state.nowEpochMs
-                    )
+                                TodoList(
+                                    items = state.items,
+                                    counts = state.counts,
+                                    filter = state.filter,
+                                    deleteCandidate = state.deleteCandidate,
+                                    onAction = onAction,
+                                    nowEpochMs = state.nowEpochMs
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -3,9 +3,11 @@ package dev.tabbyrush.android
 import android.content.Context
 import android.util.Log
 import dev.tabbyrush.shared.auth.HubAuthSession
+import dev.tabbyrush.shared.auth.HubHttpClient
 import dev.tabbyrush.shared.contract.AccountIdentity
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.HubConfig
+import dev.tabbyrush.shared.remote.DefaultRemoteInboxController
 import dev.tabbyrush.shared.data.AndroidAccountFiles
 import dev.tabbyrush.shared.data.TabbyRushDatabase
 import dev.tabbyrush.shared.data.ReminderOccurrenceStore
@@ -93,6 +95,37 @@ object AccountRuntimeFactory {
             }
         }
 
+        val app = context.applicationContext as? TabbyRushApplication
+        val httpClient = HubHttpClient(hubConfig)
+        val remoteController = DefaultRemoteInboxController(
+            httpClient = httpClient,
+            authSession = authSession,
+            coroutineScope = scope,
+            adapter = app?.remoteNotificationAdapter,
+            isDesktop = false
+        )
+
+        val establishedIdentity = activeIdentity ?: authSession.currentIdentity.value
+        if (establishedIdentity != null) {
+            scope.launch {
+                try {
+                    remoteController.start(establishedIdentity, persistedGen)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to start remote inbox controller: ${e.message}")
+                }
+            }
+        }
+
+        app?.installCoordinator?.let { coordinator ->
+            scope.launch {
+                try {
+                    coordinator.onAccountStarted(accountKey.value, userId, persistedGen)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to start install coordinator for account: ${e.message}")
+                }
+            }
+        }
+
         val compositeCancelGate = CompositeLeaveSchedulerCancelGate(
             deliveryGate = deliveryGate,
             scheduleObserverJob = scheduleObserverJob,
@@ -100,7 +133,12 @@ object AccountRuntimeFactory {
             reminderCancelGate = reminderCoordinator,
             surfaceObserverJob = surfaceObserverJob,
             context = context.applicationContext,
-            host = hostOwner?.taskSurfaces
+            host = hostOwner?.taskSurfaces,
+            remoteController = remoteController,
+            remoteAdapter = app?.remoteNotificationAdapter,
+            installCoordinator = app?.installCoordinator,
+            userId = userId,
+            persistedGen = persistedGen
         )
 
         lateinit var leaveProto: AccountLeaveProtocol
@@ -122,7 +160,9 @@ object AccountRuntimeFactory {
             deliveryGate = deliveryGate,
             scheduleObserverJob = scheduleObserverJob,
             leaveProtocol = leaveProto,
-            surfaceObserverJob = surfaceObserverJob
+            surfaceObserverJob = surfaceObserverJob,
+            remoteController = remoteController,
+            installCoordinator = app?.installCoordinator
         )
     }
 

@@ -359,3 +359,43 @@ Phase 07 records implementation, automated tests, and build evidence. Native And
 - **Safe Fallback**: If the tray is unavailable or fails to initialize, the fallback logic restores a visible main window rather than allowing the process to become invisible. Automated coverage is recorded; native tray capability/init-failure behavior remains unobserved at Gate G2.
 - **Zero Auto-Start Registration**:
   - The desktop application does not register Windows Run registry keys, startup folder shortcuts, or Linux systemd autostart services. Launch is strictly user-invoked.
+
+---
+
+## 11. Server Admin Announcements Deployment & Operational Runbook
+
+### 11.1 Server Configuration & Environment Variables
+Deploying Server Admin Announcements requires configuring backend and transport variables in `glean-hub-server`:
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `ANNOUNCEMENTS_ENABLED` | boolean | `false` | Master switch gating intake routes. When `false`, intake returns 503 while read/replay routes remain functional. |
+| `ANNOUNCEMENT_FCM_ENABLED` | boolean | `false` | Enables FCM HTTP v1 background worker for Android push dispatch. |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | string | - | Absolute path to Google Service Account JSON file with `firebase.messaging` scope. |
+| `FCM_PROJECT_ID` | string | - | Google Cloud / Firebase project ID matching Android public client configuration. |
+| `ANNOUNCEMENT_RETENTION_DAYS` | integer | `90` | Announcement retention lifetime in days (enforced monotonically). |
+
+### 11.2 Preflight Verification
+Before enabling intake or worker dispatch in production or staging, operators must run the preflight verification script:
+```bash
+node scripts/announcement-preflight.mjs --config /etc/tabbyrush/operator-config.json
+```
+Preflight checks:
+1. **MongoDB Write Concern**: Asserts replica set or standalone node acknowledges `w:1, j:true` writes.
+2. **Required Indexes**: Verifies unique indexes on `(appId, senderId, idempotencyKey)`, TTL index on `expiresAt`, multikey index on `recipientIds`, and unique partial token index on `notification_install_bindings`.
+3. **Outbound TLS & FCM Scope**: Validates HTTPS connectivity to `https://fcm.googleapis.com` and validates Google OAuth2 bearer token acquisition via ADC or service-account JSON.
+
+### 11.3 Staged Rollout & Pilot Gate Policy
+- **Pilot Gate (Android & Linux)**:
+  - Approved for internal pilot once G1 (Vectors), G4 (Linux), G7 (Admin Web), and G8 (Security) pass.
+  - Operational restriction: Broadcasts must use `selected` audience mode ($\le 500$ users). Broadcast to `all` or `admins` is restricted to disposable staging fixtures during pilot.
+  - Disclose to pilot cohort that Windows desktop alerts are held at Gate G5.
+- **Full Delivery Gate (Windows Inclusive)**:
+  - Windows desktop native notifications and per-user MSI installation (Gate G5) must be verified on a clean Windows x64 host before enabling wide organization rollouts.
+
+### 11.4 Nondestructive Rollback Procedure
+If an issue is detected during pilot or full rollout:
+1. **Immediate Intake Halt**: Set `ANNOUNCEMENTS_ENABLED=false` on the server and trigger graceful configuration reload. New creation requests receive 503 `announcementsDisabled`.
+2. **Worker Quiescence**: Set `ANNOUNCEMENT_FCM_ENABLED=false` to pause new device claims. In-flight leases expire after 60s without data loss.
+3. **Preserve Read Availability**: Existing accepted messages remain queryable via `/inbox` and `/unread` through their 90-day lifecycle.
+4. **Zero Collection Deletions**: Never drop `admin_announcements`, `admin_announcement_inbox`, or `notification_install_bindings` collections.

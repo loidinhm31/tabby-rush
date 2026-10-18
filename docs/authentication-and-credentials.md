@@ -1,9 +1,9 @@
 # Authentication and Credentials Specification
 
-Date: 2026-10-14  
+Date: 2026-10-18  
 Status: Active  
-Phase: Phase 04 Auth & Protected Session  
-Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-04-auth-session.md`  
+Phase: Phase 12 Cross-System Acceptance & Remote Security  
+Plan: `plans/261018-0707-server-admin-notifications/phase-12-cross-system-acceptance-docs.md`  
 
 ---
 
@@ -47,6 +47,8 @@ All outbound traffic is bounded to the configured `canonicalOrigin` validated by
 | `POST /api/v1/sync/{appId}/strong/bootstrap` | `DUAL_AUTH_STRICT` | Bearer + X-API-Key + X-App-Id | Strict strong sync bootstrap |
 | `POST /api/v1/sync/{appId}/strong/push` | `DUAL_AUTH_STRICT` | Bearer + X-API-Key + X-App-Id | Strict mutation push batch |
 | `POST /api/v1/sync/{appId}/strong/pull` | `DUAL_AUTH_STRICT` | Bearer + X-API-Key + X-App-Id | Strict scan pull page |
+| `/api/v1/apps/tabby-rush/announcements/*` | `BEARER_ONLY` | Authorization: Bearer | User announcements & stream |
+| `/api/v1/apps/tabby-rush/notification-installs/*` | `BEARER_ONLY` | Bearer + X-Tabby-Install-Proof | FCM device install bindings |
 
 Any request to non-allowlisted paths or legacy endpoints (`/api/v1/sync/:app_id`) is rejected locally with `SafeError.ProtocolIncompatible`.
 
@@ -83,7 +85,6 @@ Any request to non-allowlisted paths or legacy endpoints (`/api/v1/sync/:app_id`
 - **Refresh Token**: Glean Hub cryptographically random 32-byte string, SHA-256 hashed on server, 30-day lifespan.
 - **Server Grant Enforcement**: Server JWT claims contain `apps` list at time of issuance. When an admin grants or revokes `tabbyrush` access, the change takes effect upon next token refresh or login. TabbyRush verifies `/me.apps` before every sync cycle.
 
-
 ---
 
 ## 6. Task Surface Generation Admission & Bounded Cold Restore (Phase 07)
@@ -103,3 +104,22 @@ On application startup or background worker invocation, surfaces must not execut
 - State publication to external OS surfaces (AppWidgetManager RemoteViews and NotificationManager notifications) is strictly serialized under a dedicated `publicationMutex`.
 - Before executing any publication payload, `publishIfCurrent(token)` re-verifies that `token == currentToken` while holding the mutex.
 - During account sign-out or leave, surfaces are marked non-Ready and admissions drained before the database is closed, preventing race conditions where departing account data could be published after account teardown.
+
+---
+
+## 7. Server Admin Announcements Authentication & Device Fencing (Phase 12)
+
+### 7.1 Bearer-Only Remote Allowlist
+- All remote announcement routes operate under `BEARER_ONLY` classification.
+- Token transmission via query parameters, cookies, or basic auth headers is strictly rejected.
+- Responses enforce `Cache-Control: no-store`.
+
+### 7.2 Install Proof Custody (`X-Tabby-Install-Proof`)
+- On initial installation, the client generates a 32-byte cryptographically secure random token, stored encrypted via platform vault in no-backup storage.
+- Sent via `X-Tabby-Install-Proof` header on all `/notification-installs` endpoints.
+- Server persists only SHA-256 hash (`secretHash`) in `notification_install_bindings` and performs constant-time comparison. Unmatched proofs return HTTP 403 `installProofRejected`.
+
+### 7.3 Generation Fencing & Stale Operation Safety
+- Binding and unbinding operations require a strictly increasing numeric generation string (`operationGeneration`).
+- Server evaluates generations numerically (`10 > 9`), applying atomic CAS. Stale generations return HTTP 409 `staleInstallOperation`.
+- Local account logout cancels active network calls and reserves a newer generation before scheduling unbind. Delayed in-flight requests from earlier sessions cannot corrupt or delete newer bindings.

@@ -23,6 +23,9 @@ import dev.tabbyrush.shared.contract.ReminderSettingsState
 import dev.tabbyrush.shared.contract.ReminderCapabilities
 import dev.tabbyrush.shared.ui.DeadlineCalculatorHelpers
 import dev.tabbyrush.shared.ui.DeadlineValidationResult
+import dev.tabbyrush.shared.contract.RemoteInboxAction
+import dev.tabbyrush.shared.contract.RemoteInboxAvailability
+import dev.tabbyrush.shared.contract.RemoteInboxState
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.ReminderRule
 import java.time.ZoneId
@@ -60,9 +63,12 @@ class SessionViewModel : ViewModel() {
     private val _surfaceAvailability = MutableStateFlow(TaskSurfaceAvailability.OptedOut)
     val surfaceAvailability: StateFlow<TaskSurfaceAvailability> = _surfaceAvailability.asStateFlow()
 
+    private val _remoteInboxState = MutableStateFlow(RemoteInboxState())
+    val remoteInboxState: StateFlow<RemoteInboxState> = _remoteInboxState.asStateFlow()
+
     private var pendingIntentAction: (() -> Unit)? = null
     private var allTodos: List<Todo> = emptyList()
-    private var isTodosLoaded = false; private var accountJob: Job? = null; private var syncJob: Job? = null; private var clockJob: Job? = null
+    private var isTodosLoaded = false; private var accountJob: Job? = null; private var syncJob: Job? = null; private var clockJob: Job? = null; private var remoteJob: Job? = null
     private var pendingTarget: Pair<String, String>? = null
     init {
         viewModelScope.launch {
@@ -96,6 +102,17 @@ class SessionViewModel : ViewModel() {
                         kotlinx.coroutines.delay(15_000L)
                     }
                 }
+                remoteJob?.cancel()
+                remoteJob = launch {
+                    val controller = runtime.remoteController
+                    if (controller != null) {
+                        controller.state.collect { rState ->
+                            _remoteInboxState.value = rState
+                        }
+                    } else {
+                        _remoteInboxState.value = RemoteInboxState(availability = RemoteInboxAvailability.Offline)
+                    }
+                }
                 reloadTodos(); app.syncScheduler.schedulePeriodic(accountKey); runtime.coordinator.triggerSync()
             } catch (ce: CancellationException) { throw ce }
             catch (_: Exception) { _uiState.value = _uiState.value.copy(safeError = SafeError.Internal("INTERNAL_ERROR", "Storage operation failed")) }
@@ -103,10 +120,11 @@ class SessionViewModel : ViewModel() {
     }
 
     private fun onUnauthenticated() {
-        accountJob?.cancel(); accountJob = null; syncJob?.cancel(); syncJob = null; clockJob?.cancel(); clockJob = null
+        accountJob?.cancel(); accountJob = null; syncJob?.cancel(); syncJob = null; clockJob?.cancel(); clockJob = null; remoteJob?.cancel(); remoteJob = null
         allTodos = emptyList(); isTodosLoaded = false; pendingIntentAction = null
         _surfaceCreateVisible.value = false; _surfaceSettingsVisible.value = false
         _uiState.value = TodoUiState()
+        _remoteInboxState.value = RemoteInboxState(availability = RemoteInboxAvailability.SignedOut)
     }
 
     private suspend fun reloadTodos() {
@@ -642,6 +660,38 @@ class SessionViewModel : ViewModel() {
     fun onActivityResume() = viewModelScope.launch {
         loadSurfaceSettingsState()
         app.taskSurfaces.refresh(SurfaceRefreshReason.Capability)
+        app.getActiveRuntime()?.remoteController?.onForeground()
+    }
+
+    fun onRemoteAction(action: RemoteInboxAction) {
+        val runtime = app.getActiveRuntime()
+        runtime?.remoteController?.dispatch(action)
+    }
+
+    fun selectAnnouncementFromIntent(messageId: String, generation: Long) = viewModelScope.launch {
+        if (app.authSession.state.value == AuthState.UNAUTHENTICATED) {
+            // Signed out: do not retain intent target to auto-open across unrelated login
+            return@launch
+        }
+
+        if (app.authSession.currentAccountKey.value == null || app.getActiveRuntime() == null) {
+            pendingIntentAction = {
+                viewModelScope.launch {
+                    dispatchAnnouncementSelection(messageId, generation)
+                }
+            }
+            return@launch
+        }
+        dispatchAnnouncementSelection(messageId, generation)
+    }
+
+    private fun dispatchAnnouncementSelection(messageId: String, generation: Long) {
+        val currentRuntime = app.getActiveRuntime() ?: return
+        if (generation >= 0L && currentRuntime.generation != generation) {
+            Log.w(TAG, "Rejecting announcement intent: mismatched generation ($generation vs ${currentRuntime.generation})")
+            return
+        }
+        currentRuntime.remoteController?.onNativeOpen(messageId, currentRuntime.generation)
     }
 
     fun createTaskFromSurface(rawTitle: String) = viewModelScope.launch {

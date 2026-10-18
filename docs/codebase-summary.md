@@ -1,7 +1,7 @@
 # Codebase Summary
 
-Generated on: 2026-10-17
-Based on Repomix compaction snapshot: `repomix-output.xml` (2026-10-17; 518 files included, 6 security-scanner exclusions; 1,189,124 tokens, 5,277,366 chars; compressed allowlist, not a full-repository snapshot)
+Generated on: 2026-10-18
+Based on Repomix compaction snapshot: `repomix-output.xml` (2026-10-18; 610 files included, 6 security-scanner exclusions; 1,647,198 tokens, 6,718,802 chars; default broad scan, not an allowlist)
 ---
 
 ## 1. Repository Overview
@@ -534,15 +534,42 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 |---|---|---|
 | `services/strict_upgrade_tests.rs` | 11 unit/contract tests: app-scoped admin middleware authorization, non-admin 401, ungranted app 403, path parameter extraction, schema validation, error HTTP mappings, request DTO parsing, and coordination document serialization. | **RECORDED PASSED** (Recorded in Phase 03 QA report; 11/11 tests pass in `cargo test --locked`) |
 
+### 2.14 Server Admin Announcements & Remote Subsystem Components (Phase 12)
+
+| Component File (Repo Relative) | Primary Types & Functions | Architectural Role |
+|---|---|---|
+| `shared/src/commonMain/.../remote-inbox-contracts.kt` | `RemoteInboxItem`, `RemoteInboxPage`, `RemoteInboxState`, `RemoteAction`, `RemoteInboxError`, wire DTOs | Pure Multiplatform contracts, limits validation, and wire serialization models. |
+| `shared/src/commonMain/.../remote-inbox-controller.kt` | `RemoteInboxController`, `RemoteInboxState` | Sliding window in-memory cache ($\le 200$ items, dedup 2048), monotonic expiry filtering, and zero Room persistence. |
+| `shared/src/commonMain/.../remote-inbox-client.kt` | `RemoteInboxClient`, HTTP fetchers | Bounded Ktor HTTP client for `/inbox`, `/unread`, `/inbox/{id}/read`, and `/notification-installs`. |
+| `shared/src/commonMain/.../remote-stream-client.kt` | `RemoteStreamClient`, `RemoteStreamEvent` | SSE stream consumer parsing `event: ready` baseline and `event: announcement` hints. |
+| `shared/src/commonMain/.../remote-inbox.kt` | `RemoteInboxScreen`, `RemoteDetailDialog` | Multiplatform Compose UI for in-app inbox, deep linking, and manual read dispatch. |
+| `androidApp/src/main/.../remote-install-coordinator.kt` | `RemoteInstallCoordinator`, `RemoteInstallStore` | Android install proof lifecycle, Keystore-backed AES-256-GCM encrypted persistence, and generation fencing. |
+| `androidApp/src/main/.../remote-firebase-messaging-service.kt` | `RemoteFirebaseMessagingService` | Private FCM receiver posting generic alerts on channel `tabbyrush.remote.announcements` with tag `remote:<messageId>`. |
+| `desktopApp/src/main/.../desktop-remote-runtime.kt` | `DesktopRemoteRuntime` | Desktop SSE lifecycle coordinator, background thread management, and leave cancel gate integration. |
+| `scripts/admin-announcements-smoke.mjs` | Node.js smoke runner & self-test | Automated verification of contract-v1.json, 13 golden vectors, idempotency, and in-process mock server (21/21 PASS). |
+
 ---
 
-## 3. Repomix Compaction Metrics (Generated: 2026-10-17)
-- **Compaction Artifact:** `repomix-output.xml` at the repository root; generated with `repomix --style xml --compress` and an explicit source/config allowlist.
-- **Included Files:** 235 files; one additional file was excluded by Repomix's security scanner.
-- **Packed Size:** 1,663,246 characters and 343,808 tokens.
-- **Scope:** README plus Kotlin/Java/XML/Gradle, Node, shell, PowerShell, TOML, and Gradle properties files; documentation files were not included other than README.
-- **Top 5 Files by Token Count:** `room-account-store-test.kt` (9,727), desktop `main.kt` (8,989), `staged-full-scan-test.kt` (7,911), `room-account-store.kt` (7,111), and Android `session-view-model.kt` (6,102).
-- **Security Boundary:** The scanner excluded `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/endpoint-policy-test.kt`; this snapshot is compressed and incomplete, not a security assessment or substitute for source review.
+## 3. Repomix Compaction Metrics (Generated: 2026-10-18)
+- **Compaction Artifact:** `repomix-output.xml` at repository root; generated with `repomix --style xml --compress` (default broad scan).
+- **Included Files:** 610 files; 6 security-scanner exclusions.
+- **Packed Size:** 6,718,802 characters and 1,647,198 tokens.
+- **Scope:** Default broad scan including source, tests, scripts, configuration, and documentation.
+- **Top 5 Files by Token Count:**
+  1. `docs/assets/tabbyrush-app-icon.svg` (200,502 tokens, 296,208 chars)
+  2. `shared/gradle.lockfile` (56,057 tokens, 314,065 chars)
+  3. `gradle/verification-metadata.xml` (45,214 tokens, 138,636 chars)
+  4. `docs/project-roadmap.md` (32,770 tokens, 141,655 chars)
+  5. `docs/system-architecture.md` (25,519 tokens, 114,482 chars)
+- **Security-Scanner Exclusions (6):**
+  1. `docs/security-and-recovery.md`
+  2. `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md`
+  3. `plans/reports/code-reviewer-261014-1638-phase-08-release-operations-cycle3.md`
+  4. `plans/reports/docs-manager-261014-1643-phase-08-docs-verification.md`
+  5. `plans/reports/docs-manager-261016-0050-phase-12-cutover-runbook.md`
+  6. `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/endpoint-policy-test.kt`
+- **Security Boundary:** Repomix security scanner output is an automated heuristic filter, not a formal security assessment or substitute for source review.
+
 ## 4. Current State & Invariants
 
 1. **Deliverable Scope & Verification**:
@@ -653,3 +680,17 @@ Following Phases 01–12, the repository contains the Android and shared Compose
     - **Reported verification**: 364 Gradle tests (231 shared JVM, 99 desktop, 34 Android unit), 12 Node security tests, 6 source diagnostics, 18 Hub fixture checks, 8 strict-v2 rehearsal checks, `:androidApp:assembleDebug`, and `:desktopApp:createDistributable` are recorded as passing. The build/test runs used `--dependency-verification=off`; these are not fresh results from this documentation update.
     - **Acceptance boundary**: Android launcher/shade and Windows sticky-window/tray/multi-monitor hardware acceptance remain conditionally held at Gate G2. Four PNGs are design baselines, not runtime captures. Linux requires an actual session in Phase 08. The 149-checksum root verification baseline and separate Glance artifact-provenance hold remain open; G3/G6/G7 are unchanged.
     - **Open Android safety findings**: A delivery-gate drain timeout is caught/logged by `closeRuntimeInternal()`, which returns before observer cancellation or Room closure; `closeActiveRuntime()` then clears the active runtime reference. Glance blanking/session-close errors are also caught and logged, so cleanup is not guaranteed.
+52. **Server Admin Announcements — Cross-System Implementation & Acceptance Tooling (Phase 12 Delivered)**: Delivered on 2026-10-18. Unidirectional administrative broadcast pipeline spanning Glean Hub and TabbyRush across Android, Linux, and Windows:
+    - `P01 Pure Contracts & Vectors`: Canonical `contract-v1.json`, 13 golden test vectors in `vectors-v1.json`, Kotlin multiplatform contracts (`remote-inbox-contracts.kt`), and Rust serde DTOs (`announcement_contract.rs`).
+    - `P02 Backend Mongo Storage & Routes`: Canonical MongoDB collections (`admin_announcements`, `admin_announcement_inbox`, `admin_announcement_dispatches`, `notification_install_bindings`) separate from task sync. Enforces `w:1, j:true` journaled parent writes, 90-day retention with BSON DateTime TTL indexes in MongoDB (`expiresAt = createdAt + 90 days`); MongoDB background TTL deletion is asynchronous, while application query and rendering filters strictly exclude records when `expiresAt <= serverNow` (only unexpired records are queryable or renderable); lease-based CAS dispatch workers, and monotonic `readAt` timestamps.
+    - `P03 FCM HTTP v1 Push Channel`: Google OAuth2 authenticated transport for Android alerts. FCM HTTP v1 generic notifications for Android with channel `tabbyrush.remote.announcements` and system tag `remote:<messageId>`, maintaining announcement-content isolation from push providers (fixed generic copy "You have a new announcement" and opaque IDs). Automatic token retirement upon `UNREGISTERED` responses.
+    - `P04 React Admin Console`: `AnnouncementComposer` with live scalar/byte counters, audience mode selection (`all`, `admins`, `selected` up to 500), preview digest confirmation gating, double-submit protection, and `AnnouncementHistory` with detail modals.
+    - `P05 Shared Remote Inbox Controller`: `RemoteInboxController` managing pure in-memory cache (sliding window max 200 items, dedup capacity 2048). Enforces monotonic elapsed expiry filters, safe offline presentation without exposing cached details, and zero Room database persistence or offline read outbox.
+    - `P06 Shared Compose UI`: Multiplatform `RemoteInboxScreen` supporting normal in-app entry, native deep linking, unread counter badges, and explicit manual read triggers.
+    - `P07 Linux Desktop Adapter`: Connects to session D-Bus `org.freedesktop.Notifications`, checks `actions` capability, maps `ActionInvoked` to UI dispatcher, and catches up silently on reopen.
+    - `P08 Windows C ABI v1 & MSI Packaging`: C ABI v1 `tabbyrush-toast.dll`, JNA bridge, and `scripts/build-windows-remote-msi.ps1` WiX3 MSI packaging with `dev.tabbyrush.desktop` AUMID injection.
+    - `P09 Android Runtime Integration`: `RemoteNotificationManager` and `RemoteInstallCoordinator` in `:androidApp`. Manifest audit enforces private `FirebaseMessagingService` and `FirebaseInitProvider` with zero analytics receivers. 32-byte install proof encrypted in app-private storage via Android Keystore-backed AES-256-GCM key (`tabbyrush_remote_install_v1`), SHA-256 hashed on Hub, with monotonic numeric generation CAS fencing.
+    - `P10 Desktop Runtime Integration`: Streaming SSE broker with `streamEpoch`, monotonic `acceptanceOrdinal`, and ready baseline (`event: ready`). Hints arriving after baseline hydration trigger authenticated detail fetching. Desktop displays at most one generic system alert per active connection and message hint; Android suppresses SSE alerts.
+    - `P11 Deployment Preflight & Staged Rollout`: Preflight verification script (`scripts/announcement-preflight.mjs`), non-destructive rollback runbook, and environment variable toggles.
+    - `P12 Acceptance Tooling & Evidence`: Standalone Node.js smoke runner (`scripts/admin-announcements-smoke.mjs`) passing 21/21 assertions and 13 golden vectors; Playwright browser suite (`scripts/admin-announcements-browser.spec.ts`); comprehensive acceptance matrix (`docs/evidence/admin-announcements-acceptance.md`).
+    - `Acceptance Status`: QA regression report (`qa-261018-1548-c1-c6-regression-verification.md`) records 566 verifications passing (548 test executions across 8 targets + 18 vector/static checks); Cycle 2 code review approved at Score 8/10 with 0 critical issues. Restricted pilot gate approved as recorded in acceptance evidence for internal Android & Linux trials; Gate G5 (Windows Desktop Runtime) formally held on Linux build host. Inherited release holds (G2/G3/G6/G7, 149-checksum baseline, Glance provenance) remain open.

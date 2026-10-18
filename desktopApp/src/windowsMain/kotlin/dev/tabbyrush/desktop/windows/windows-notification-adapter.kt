@@ -30,21 +30,6 @@ class WindowsNotificationAdapter(
     companion object {
         const val AUMID = "dev.tabbyrush.desktop"
         const val DEFAULT_GROUP = "tabbyrush_reminders"
-
-        fun escapeXml(text: String): String {
-            return text
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&apos;")
-        }
-
-        fun buildToastXml(title: String, message: String): String {
-            val safeTitle = escapeXml(title)
-            val safeMessage = escapeXml(message)
-            return """<toast><visual><binding template="ToastGeneric"><text>$safeTitle</text><text>$safeMessage</text></binding></visual><audio src="ms-winsoundevent:Notification.Default"/></toast>"""
-        }
     }
 
     fun isAvailable(): Boolean = bridge.isAvailable()
@@ -56,23 +41,18 @@ class WindowsNotificationAdapter(
         message: String,
         group: String = DEFAULT_GROUP
     ): WindowsNotificationStatus {
-        val xml = buildToastXml(title, message)
-        return bridge.showToast(AUMID, xml, tag, group)
+        return bridge.showLocal(title = title, body = message, tag = tag, group = group)
     }
 
     fun cancelNotification(
         tag: String,
         group: String = DEFAULT_GROUP
     ): WindowsNotificationStatus {
-        return bridge.clearToast(AUMID, tag, group)
+        return bridge.clearToast(tag = tag, group = group)
     }
 
     fun cancelGroup(group: String): WindowsNotificationStatus {
-        return bridge.clearGroup(AUMID, group)
-    }
-
-    fun cancelAllNotifications(): WindowsNotificationStatus {
-        return bridge.clearAllToasts(AUMID)
+        return bridge.clearGroup(group = group)
     }
 }
 

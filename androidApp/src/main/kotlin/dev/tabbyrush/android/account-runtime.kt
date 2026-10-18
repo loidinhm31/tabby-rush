@@ -1,6 +1,7 @@
 package dev.tabbyrush.android
 
 import dev.tabbyrush.shared.contract.AccountKey
+import dev.tabbyrush.shared.contract.RemoteInboxController
 import dev.tabbyrush.shared.data.TabbyRushDatabase
 import dev.tabbyrush.shared.data.RoomAccountStore
 import dev.tabbyrush.shared.sync.AccountLeaveProtocol
@@ -24,5 +25,7 @@ class AccountRuntime(
     val deliveryGate: ReminderDeliveryGate,
     val scheduleObserverJob: Job,
     val leaveProtocol: AccountLeaveProtocol,
-    val surfaceObserverJob: Job? = null
+    val surfaceObserverJob: Job? = null,
+    val remoteController: RemoteInboxController? = null,
+    val installCoordinator: RemoteInstallCoordinator? = null
 )

@@ -1,13 +1,17 @@
 package dev.tabbyrush.desktop.linux
 
 import org.freedesktop.dbus.annotations.DBusInterfaceName
+import org.freedesktop.dbus.connections.IDisconnectCallback
+import org.freedesktop.dbus.connections.impl.DBusConnection
 import org.freedesktop.dbus.connections.impl.DBusConnectionBuilder
 import org.freedesktop.dbus.exceptions.DBusException
 import org.freedesktop.dbus.exceptions.DBusExecutionException
+import org.freedesktop.dbus.interfaces.DBus
 import org.freedesktop.dbus.interfaces.DBusInterface
+import org.freedesktop.dbus.messages.DBusSignal
 import org.freedesktop.dbus.types.UInt32
 import org.freedesktop.dbus.types.Variant
-
+import java.io.IOException
 import dev.tabbyrush.desktop.DesktopReminderAdapter
 import dev.tabbyrush.desktop.DesktopReminderAdapterProvider
 import dev.tabbyrush.shared.contract.AccountKey
@@ -32,6 +36,18 @@ interface FreedesktopNotifications : DBusInterface {
         expireTimeout: Int
     ): UInt32
     fun CloseNotification(id: UInt32)
+
+    class ActionInvoked(
+        path: String,
+        val id: UInt32,
+        val action: String
+    ) : DBusSignal(path, id, action)
+
+    class NotificationClosed(
+        path: String,
+        val id: UInt32,
+        val reason: UInt32
+    ) : DBusSignal(path, id, reason)
 }
 
 sealed interface LinuxNotificationStatus {
@@ -47,7 +63,7 @@ interface NotificationTransport {
 
 class SessionBusNotificationTransport : NotificationTransport {
     override fun <T> withProxy(block: (FreedesktopNotifications) -> T): T {
-        val conn = DBusConnectionBuilder.forSessionBus().build()
+        val conn = DBusConnectionBuilder.forSessionBus().withShared(false).build()
         return try {
             val proxy = conn.getRemoteObject(
                 "org.freedesktop.Notifications",
@@ -60,6 +76,177 @@ class SessionBusNotificationTransport : NotificationTransport {
                 conn.disconnect()
             } catch (_: Exception) {}
         }
+    }
+}
+
+interface NotificationSignalListener {
+    fun onActionInvoked(id: Long, action: String, sender: String? = null)
+    fun onNotificationClosed(id: Long, reason: Long, sender: String? = null)
+    fun onNameOwnerChanged(name: String, oldOwner: String, newOwner: String)
+    fun onBusDisconnected(error: Throwable? = null)
+}
+
+interface PersistentNotificationTransport : AutoCloseable {
+    fun isConnected(): Boolean
+    fun getCapabilities(): Set<String>
+    fun getDaemonOwner(): String?
+    fun postNotification(
+        appName: String = "TabbyRush",
+        replacesId: Long = 0L,
+        appIcon: String = "tabbyrush",
+        title: String,
+        body: String,
+        actions: List<String> = emptyList(),
+        expireTimeoutMs: Int = -1
+    ): Long
+    fun closeNotification(id: Long)
+    fun setSignalListener(listener: NotificationSignalListener?)
+    fun connect(): Boolean
+    fun disconnect()
+    override fun close()
+}
+
+class DbusPersistentNotificationTransport(
+    private val busAddress: String? = null
+) : PersistentNotificationTransport {
+    private var connection: DBusConnection? = null
+    private var signalListener: NotificationSignalListener? = null
+    private val subscriptions = mutableListOf<AutoCloseable>()
+    private val lock = Any()
+
+    override fun isConnected(): Boolean = synchronized(lock) {
+        connection?.isConnected == true
+    }
+
+    override fun setSignalListener(listener: NotificationSignalListener?) {
+        synchronized(lock) {
+            signalListener = listener
+        }
+    }
+
+    override fun connect(): Boolean = synchronized(lock) {
+        if (connection?.isConnected == true) return true
+        disconnectLocked()
+
+        return try {
+            val builder = if (busAddress != null) {
+                DBusConnectionBuilder.forAddress(busAddress)
+            } else {
+                DBusConnectionBuilder.forSessionBus()
+            }
+            val conn = builder.withShared(false).build()
+
+            conn.setDisconnectCallback(object : IDisconnectCallback {
+                override fun disconnectOnError(e: IOException) {
+                    signalListener?.onBusDisconnected(e)
+                }
+                override fun clientDisconnect() {
+                    signalListener?.onBusDisconnected(null)
+                }
+            })
+
+            subscriptions.add(conn.addSigHandler(FreedesktopNotifications.ActionInvoked::class.java) { sig ->
+                signalListener?.onActionInvoked(sig.id.toLong(), sig.action, sig.source)
+            })
+            subscriptions.add(conn.addSigHandler(FreedesktopNotifications.NotificationClosed::class.java) { sig ->
+                signalListener?.onNotificationClosed(sig.id.toLong(), sig.reason.toLong(), sig.source)
+            })
+            subscriptions.add(conn.addSigHandler(DBus.NameOwnerChanged::class.java) { sig ->
+                if (sig.name == "org.freedesktop.Notifications") {
+                    signalListener?.onNameOwnerChanged(sig.name, sig.oldOwner, sig.newOwner)
+                }
+            })
+
+            connection = conn
+            true
+        } catch (_: Exception) {
+            disconnectLocked()
+            false
+        }
+    }
+
+    override fun getDaemonOwner(): String? = synchronized(lock) {
+        val conn = connection ?: return null
+        return try {
+            val dbus = conn.getRemoteObject("org.freedesktop.DBus", "/org/freedesktop/DBus", DBus::class.java)
+            val owner = dbus.GetNameOwner("org.freedesktop.Notifications")
+            owner.ifEmpty { null }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    override fun getCapabilities(): Set<String> = synchronized(lock) {
+        val conn = connection ?: throw IllegalStateException("Not connected to D-Bus")
+        val proxy = conn.getRemoteObject(
+            "org.freedesktop.Notifications",
+            "/org/freedesktop/Notifications",
+            FreedesktopNotifications::class.java
+        )
+        proxy.GetCapabilities().toSet()
+    }
+
+    override fun postNotification(
+        appName: String,
+        replacesId: Long,
+        appIcon: String,
+        title: String,
+        body: String,
+        actions: List<String>,
+        expireTimeoutMs: Int
+    ): Long = synchronized(lock) {
+        val conn = connection ?: throw IllegalStateException("Not connected to D-Bus")
+        val proxy = conn.getRemoteObject(
+            "org.freedesktop.Notifications",
+            "/org/freedesktop/Notifications",
+            FreedesktopNotifications::class.java
+        )
+        val id = proxy.Notify(
+            appName,
+            UInt32(replacesId),
+            appIcon,
+            title,
+            body,
+            actions,
+            emptyMap(),
+            expireTimeoutMs
+        )
+        id.toLong()
+    }
+
+    override fun closeNotification(id: Long): Unit = synchronized(lock) {
+        val conn = connection ?: return
+        try {
+            val proxy = conn.getRemoteObject(
+                "org.freedesktop.Notifications",
+                "/org/freedesktop/Notifications",
+                FreedesktopNotifications::class.java
+            )
+            proxy.CloseNotification(UInt32(id))
+        } catch (_: Exception) {
+            // Daemon may have dismissed or restarted
+        }
+    }
+
+    override fun disconnect() = synchronized(lock) {
+        disconnectLocked()
+    }
+
+    private fun disconnectLocked() {
+        for (sub in subscriptions) {
+            try {
+                sub.close()
+            } catch (_: Exception) {}
+        }
+        subscriptions.clear()
+        try {
+            connection?.disconnect()
+        } catch (_: Exception) {}
+        connection = null
+    }
+
+    override fun close() {
+        disconnect()
     }
 }
 

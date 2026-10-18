@@ -202,3 +202,44 @@ To prevent cross-platform ambiguity between Kotlin Multiplatform and backend Rus
       - `u8(completed ? 1 : 0)`
       - `u64_be(createdAt)`
     - If `delete`: zero additional payload bytes.
+
+---
+
+## 5. Server Admin Announcements API Contract
+
+Server Admin Announcements operate on distinct, unidirectional routes completely separated from strict task-sync endpoints:
+- **Protocol Separation**: Announcement endpoints do not require dual-auth or `X-App-Id` headers. They operate under `RouteClassification.BEARER_ONLY`.
+- **Canonical Reference**: The complete versioned wire contract and schemas are frozen in [`docs/announcement-contract.md`](announcement-contract.md) and [`integration/announcements/contract-v1.json`](../integration/announcements/contract-v1.json).
+
+### 5.1 Route Summary
+
+| Method & Route Path | Auth | Purpose & Success Code |
+|---|---|---|
+| `POST /api/v1/admin/apps/tabby-rush/announcements/audience-preview` | Admin | Preview audience and generate immutable digest (200 OK). |
+| `POST /api/v1/admin/apps/tabby-rush/announcements` | Admin | Create announcement with `Idempotency-Key` header (202 Accepted). |
+| `GET /api/v1/admin/apps/tabby-rush/announcements` | Admin | Query paginated sent announcement history (200 OK). |
+| `GET /api/v1/admin/apps/tabby-rush/announcements/by-idempotency/{key}` | Admin | Retrieve sender's announcement by idempotency key (200 OK or 404). |
+| `GET /api/v1/admin/apps/tabby-rush/announcements/{id}` | Admin | Query full sent announcement detail (200 OK). |
+| `GET /api/v1/apps/tabby-rush/announcements/inbox` | User | Retrieve current user's unexpired announcements (200 OK). |
+| `GET /api/v1/apps/tabby-rush/announcements/unread` | User | Query count of unread announcements for current user (200 OK). |
+| `GET /api/v1/apps/tabby-rush/announcements/inbox/{id}` | User | Retrieve single announcement detail for member (200 OK). |
+| `PUT /api/v1/apps/tabby-rush/announcements/inbox/{id}/read` | User | Mark announcement read; idempotent monotonic timestamp (200 OK). |
+| `GET /api/v1/apps/tabby-rush/announcements/stream` | User | Persistent SSE stream for live hints and `ready` handshake (200 OK). |
+| `PUT /api/v1/apps/tabby-rush/notification-installs/{id}/binding` | User + Proof | Register device FCM token with numeric generation CAS (200 OK). |
+| `POST /api/v1/apps/tabby-rush/notification-installs/{id}/unbind` | User + Proof | Unbind device token with expected generation check (200 OK). |
+| `GET /api/v1/apps/tabby-rush/notification-installs/{id}/binding` | User + Proof | Query binding status without disclosing tokens (200 OK). |
+
+### 5.2 Structured Announcement Error Format
+Errors on announcement endpoints use the standard nested error envelope:
+```json
+{
+  "error": {
+    "code": "audienceChanged",
+    "message": "Recipient eligibility changed; preview again.",
+    "retryable": false,
+    "requestId": "4a7b2c1d-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    "details": {}
+  }
+}
+```
+Key error codes: `invalidRequest` (400), `unauthenticated` (401), `adminRequired` (403), `appAccessRevoked` (403), `installProofRejected` (403), `notFound` (404), `previewNotFound` (404), `audienceChanged` (409), `idempotencyConflict` (409), `staleInstallOperation` (409), `previewExpired` (410), `audienceTooLarge` (413), `emptyAudience` (422), `announcementsDisabled` (503).

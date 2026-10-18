@@ -126,3 +126,23 @@ The Phase 10 visual baseline consists of seven high-fidelity 960x720 design rend
    - The current implementation fails closed on Windows when ACL support, owner resolution, or ACL assignment fails. The available ACL test checks the stored-file owner ALLOW entry, but does not exercise failure paths or establish owner-only access; unexpected or inherited grants remain unproven.
 5. **MSI source revision provenance (open evidence gap)**:
    - The evidence summary records the MSI SHA-256 but not the source revision associated with it; confirm the artifact includes the current ACL fix before release acceptance.
+
+---
+
+## 5. Server Admin Announcements Windows Desktop Acceptance (Phase 12)
+
+### 5.1 Native WinRT C ABI v1 Architecture
+- **Native DLL Bridge**: `:desktopApp` integrates `tabbyrush-toast.dll` implementing C ABI version 1 (`tr_toast_abi_version() == 1`).
+- **Exports & Callbacks**: Exposes `tr_toast_create`, `tr_toast_setting`, `tr_toast_show`, `tr_toast_show_local`, `tr_toast_remove`, `tr_toast_clear_group`, and `tr_toast_destroy`.
+- **Apartment Threading**: Dedicated native MTA thread initializes WinRT and serializes toast operations. Commands timeout after 2000ms if WinRT becomes unresponsive without leaking native references.
+- **Tagging & Groups**: Remote toasts use group `tr-remote` and tag derived from the first 16 hex characters of `sha256(messageId)`.
+- **Installed MSI AUMID**: Packaging script `scripts/build-windows-remote-msi.ps1` injects WiX3 `MsiShortcutProperty` setting `System.AppUserModel.ID` to `dev.tabbyrush.desktop`.
+
+### 5.2 Full-Quit, Crash & Restart Safety
+- **Normal Quit**: Invokes `tr_toast_clear_group("tr-remote")` followed by `tr_toast_destroy()`, removing pending remote notifications from Action Center and terminating the native MTA thread.
+- **Click After Quit**: No cold COM activator is registered. Clicking an un-cleared toast after process crash does not launch an unintended process or leak private announcement content.
+- **Silent Reopen Catch-up**: On restart, the app clears the `tr-remote` group before establishing the SSE connection. Active unexpired announcements are caught up silently via baseline hydration without re-toasting historical alerts.
+
+### 5.3 Gate G5 Held Status & Staged Pilot Policy
+- **Environment Hold**: Linux host environment cannot compile MSVC C++20 WinRT or execute MSI installations. Gate G5 (Windows Desktop Runtime) is formally HELD.
+- **Staged Rollout Policy**: In accordance with the execution plan (report04/report05), restricted internal pilot enablement on Android and Linux does NOT require clearing Gate G5. Full organization-wide delivery remains blocked until Gate G5 is executed and evidenced on an installed Windows x64 testbed.

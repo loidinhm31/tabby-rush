@@ -31,9 +31,9 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.androidx.room.runtime)
             implementation(libs.androidx.sqlite.bundled)
-            implementation(compose.runtime)
-            implementation(compose.foundation)
-            implementation(compose.material3)
+            api(compose.runtime)
+            api(compose.foundation)
+            api(compose.material3)
             implementation(compose.components.resources)
         }
 

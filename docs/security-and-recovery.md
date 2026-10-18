@@ -163,3 +163,26 @@ Consult the [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) for full
 - Glance dependency provenance remains unverified under the 149-checksum dependency-verification hold. Historical release holds G2/G3/G6/G7 remain unchanged.
 - Phase 07 Android/Windows integrated status is recorded with verified unit suites (364 tests), security tests, and visual baselines in `docs/evidence/`. Phase 08 Linux acceptance remains pending an actual Linux session; no Linux native surface acceptance is claimed.
 - Review findings and verification evidence are recorded in `plans/reports/code-review-261016-2157-sticky-task-surfaces-cycle-2.md`, `docs/evidence/sticky-surfaces-android-summary.md`, and `docs/evidence/sticky-surfaces-windows-summary.md`.
+
+---
+
+## 6. Server Admin Announcements Security, Install Fencing & Lifecycle
+
+### 6.1 Install Proof Custody and Device Identity Fencing
+- **Proof Generation & Storage**: On first launch, each installation generates a cryptographically random 128-bit UUID (`installId`) and a 32-byte random secret (`X-Tabby-Install-Proof`), stored encrypted in private no-backup app storage via Android Keystore.
+- **Server-Side Proof Verification**: The Hub server persists only the SHA-256 hash of the proof (`secretHash`) in `notification_install_bindings` and performs constant-time comparisons. Guessed or mismatched proofs return HTTP 403 `installProofRejected`.
+- **Generation CAS Fencing**: Device binding operations (`bind`, `unbind`) require a monotonically increasing numeric generation string (`operationGeneration`). The Hub evaluates generations numerically (e.g. "10" > "9", not lexicographically) using atomic Compare-And-Swap. Stale or delayed operations return HTTP 409 `staleInstallOperation`.
+- **Account Switch & Logout Fencing**: Local logout invalidates the in-memory runtime and generation immediately without waiting for network unbind completion. When a new account logs in, a strictly newer generation is reserved. Any delayed in-flight unbind from the previous account cannot delete the new binding.
+
+### 6.2 Late Generic Push & Privacy Boundaries
+- **Zero Private Content in Transit**: FCM HTTP v1 payloads contain exclusively fixed generic text ("You have a new announcement") and opaque metadata (`type: "admin_announcement"`, `appId: "tabby-rush"`, `messageId: "<UUID>"`). No title, body, user ID, or sensitive tokens are included.
+- **Late Generic Alert Handling**: If an FCM alert is delivered after account logout or switch, tapping the notification opens the app and reauthorizes the message ID against the currently active account session. If the current user lacks membership or grant, the app displays a safe empty/unauthorized notice without ever displaying old cached content.
+- **FCM Merged Manifest Policy**: `FirebaseMessagingService` is private (`android:exported="false"`) with action `com.google.firebase.MESSAGING_EVENT`. `FirebaseInitProvider` is private (`exported="false"`) with exact authority `dev.tabbyrush.android.firebaseinitprovider`. Exported `FirebaseInstanceIdReceiver` requires exact action `com.google.android.c2dm.intent.RECEIVE` and package category `dev.tabbyrush.android`. `AppMeasurementReceiver` is completely forbidden (no analytics).
+
+### 6.3 Zero Offline Content & In-Memory Isolation
+- **Client-Side In-Memory Cache**: On the client, received announcements and read statuses exist exclusively in process memory (sliding window of max 200 items, dedup capacity 2048), while server records in MongoDB are durably retained for 90 days. No Room database tables, offline outboxes, or durable disk queues exist for announcements.
+- **Process Teardown & Offline Protection**: Client process termination purges in-memory announcement state. When offline, detail views are unavailable and cannot be opened from stale memory without fresh server authentication. Offline read mutations are not queued.
+
+### 6.4 Nondestructive Rollback & 90-Day Retention
+- **Intake Disable Safety**: Setting `ANNOUNCEMENTS_ENABLED=false` rejects new intake requests with HTTP 503 `announcementsDisabled` but preserves canonical read routes (`/inbox`, `/unread`) and idempotent replay.
+- **Data Preservation**: Announcement collections (`admin_announcements`, `admin_announcement_inbox`, `notification_install_bindings`) are never dropped during operational rollback. Accepted records expire automatically after 90 days via MongoDB TTL indexes.

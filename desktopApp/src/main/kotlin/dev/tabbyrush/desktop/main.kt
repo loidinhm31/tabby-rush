@@ -24,6 +24,10 @@ import dev.tabbyrush.shared.contract.ConflictState
 import dev.tabbyrush.shared.contract.EditorState
 import dev.tabbyrush.shared.contract.HubConfig
 import dev.tabbyrush.shared.contract.LeaveGuardState
+import dev.tabbyrush.shared.contract.RemoteInboxAction
+import dev.tabbyrush.shared.contract.RemoteInboxAvailability
+import dev.tabbyrush.shared.contract.RemoteInboxState
+import dev.tabbyrush.shared.contract.RemoteNotificationAdapter
 import dev.tabbyrush.shared.contract.ReminderCapabilities
 import dev.tabbyrush.shared.contract.ReminderRule
 import dev.tabbyrush.shared.contract.ReminderSettingsState
@@ -88,7 +92,8 @@ class DesktopAccountRuntime(
     val reminderScheduler: DesktopReminderScheduler,
     val scheduleObserverJob: Job,
     val surfaceObserverJob: Job,
-    val leaveProtocol: AccountLeaveProtocol
+    val leaveProtocol: AccountLeaveProtocol,
+    val remoteRuntime: DesktopRemoteRuntime
 )
 
 class DesktopController(
@@ -98,7 +103,8 @@ class DesktopController(
     val accountFiles: JvmAccountFiles = JvmAccountFiles(),
     val preferences: StickyWindowPreferences = StickyWindowPreferences(File(accountFiles.baseDir, "sticky-window.properties")),
     val platform: DesktopSurfacePlatform = DesktopSurfacePlatformDispatcher.current(),
-    initialStickyPresentation: StickyWindowPresentation = preferences.load()
+    initialStickyPresentation: StickyWindowPresentation = preferences.load(),
+    remoteAdapterOverride: RemoteNotificationAdapter? = null
 ) {
     val dotEnv = DotEnvLoader.load(baseDir = accountFiles.baseDir)
     val origin = System.getenv("APPROVED_HUB_ORIGIN")?.takeIf { it.isNotBlank() }
@@ -121,6 +127,12 @@ class DesktopController(
     val vault = PlatformVaultDispatcher.createVault(accountFiles)
     val authSession = HubAuthSession(config = hubConfig, vault = vault)
     val reminderAdapter = PlatformReminderDispatcher.createAdapter()
+    val remoteAdapter: RemoteNotificationAdapter = remoteAdapterOverride ?: DesktopRemotePlatformDispatcher.createAdapter(
+        uiDispatcher = Dispatchers.Main,
+        onActivationRequest = {
+            showMainWindow()
+        }
+    )
     val syncScheduler = DesktopSyncScheduler(scope) { key ->
         activeRuntime?.takeIf { it.accountKey == key }?.coordinator?.triggerSync()
     }
@@ -151,6 +163,9 @@ class DesktopController(
     private val activeAccountFile = File(accountFiles.baseDir, "active_account.dat")
     private val _uiState = MutableStateFlow(TodoUiState())
     val uiState: StateFlow<TodoUiState> = _uiState.asStateFlow()
+    private val _remoteInboxState = MutableStateFlow(RemoteInboxState(availability = RemoteInboxAvailability.SignedOut))
+    val remoteInboxState: StateFlow<RemoteInboxState> = _remoteInboxState.asStateFlow()
+    private var remoteJob: Job? = null
     private var allTodos: List<Todo> = emptyList()
 
     init {
@@ -181,6 +196,10 @@ class DesktopController(
 
     fun showMainWindow() {
         isMainWindowVisible.value = true
+        activeRuntime?.remoteRuntime?.onForeground()
+        try {
+            DefaultSwingDesktopUiRestorer().restoreWindow()
+        } catch (_: Throwable) {}
     }
 
     fun hideMainWindow(): Boolean {
@@ -284,6 +303,9 @@ class DesktopController(
 
     fun clearActiveAccount() {
         try { activeAccountFile.delete() } catch (_: Exception) {}
+        remoteJob?.cancel()
+        remoteJob = null
+        _remoteInboxState.value = RemoteInboxState(availability = RemoteInboxAvailability.SignedOut)
     }
 
     suspend fun getOrCreateAccountRuntime(accountKey: AccountKey): DesktopAccountRuntime = runtimeMutex.withLock {
@@ -350,6 +372,18 @@ class DesktopController(
         taskSurfaceAccess.onAccountAuthenticated(token, store)
         val surfaceObserverJob = stickyController.startObserving(token, store)
 
+        val remoteRuntime = DesktopRemoteRuntime(
+            config = hubConfig,
+            authSession = authSession,
+            adapter = remoteAdapter,
+            scope = scope,
+            ioDispatcher = Dispatchers.IO,
+            uiDispatcher = Dispatchers.Main,
+            onRestoreWindow = { showMainWindow() }
+        )
+        val identity = authSession.currentIdentity.value ?: AccountIdentity(userId = "default", username = "user", email = "")
+        remoteRuntime.start(identity, gen)
+
         val compositeCancelGate = CompositeDesktopLeaveCancelGate(
             deliveryGate = deliveryGate,
             scheduleObserverJob = scheduleObserverJob,
@@ -357,7 +391,8 @@ class DesktopController(
             syncCancelGate = syncScheduler,
             reminderCancelGate = reminderCoord,
             surfaceObserverJob = surfaceObserverJob,
-            surfaceCancelGate = taskSurfaceAccess
+            surfaceCancelGate = taskSurfaceAccess,
+            remoteCancelGate = remoteRuntime
         )
 
         lateinit var leaveProto: AccountLeaveProtocol
@@ -386,7 +421,8 @@ class DesktopController(
             reminderScheduler = reminderSched,
             scheduleObserverJob = scheduleObserverJob,
             surfaceObserverJob = surfaceObserverJob,
-            leaveProtocol = leaveProto
+            leaveProtocol = leaveProto,
+            remoteRuntime = remoteRuntime
         ).also { activeRuntime = it }
     }
 
@@ -397,6 +433,7 @@ class DesktopController(
         try { r.scheduleObserverJob.cancelAndJoin() } catch (_: Exception) {}
         try { r.reminderScheduler.cancelAndAwait(r.accountKey) } catch (_: Exception) {}
         try { r.reminderCoordinator.cancelAndAwait(r.accountKey) } catch (_: Exception) {}
+        try { r.remoteRuntime.quiesce() } catch (_: Exception) {}
         try { r.store.isFrozen = true; r.database.close() } catch (_: Exception) {}
     }
 
@@ -431,6 +468,12 @@ class DesktopController(
                 reloadTodos()
                 syncScheduler.schedulePeriodic(key)
                 triggerSync()
+                remoteJob?.cancel()
+                remoteJob = launch {
+                    runtime.remoteRuntime.state.collect { remoteState ->
+                        _remoteInboxState.value = remoteState
+                    }
+                }
             } catch (ce: CancellationException) {
                 throw ce
             } catch (_: Exception) {
@@ -445,6 +488,9 @@ class DesktopController(
         clockJob?.cancel()
         clockJob = null
         stickyController.stopObserving()
+        remoteJob?.cancel()
+        remoteJob = null
+        _remoteInboxState.value = RemoteInboxState(availability = RemoteInboxAvailability.SignedOut)
         scope.launch { taskSurfaceAccess.onSignedOut() }
         activeRuntime?.let { closeRuntimeInternal(it) }
         activeRuntime = null
@@ -523,6 +569,10 @@ class DesktopController(
         } catch (_: Exception) {
             _uiState.value = _uiState.value.copy(safeError = SafeError.Internal("INTERNAL_ERROR", "Action execution failed"))
         }
+    }
+
+    fun onRemoteAction(action: RemoteInboxAction) {
+        activeRuntime?.remoteRuntime?.dispatch(action)
     }
 
     private fun openOsNotificationSettings() {
@@ -940,9 +990,10 @@ class DesktopController(
         try {
             withTimeoutOrNull(3000L) {
                 activeRuntime?.let { closeRuntimeInternalSuspend(it) }
+                remoteAdapter.close()
             }
         } catch (e: Exception) {
-            System.err.println("Error draining active runtime: ${e.message}")
+            System.err.println("Error draining active runtime and remote adapter: ${e.message}")
         }
         activeRuntime = null
 
@@ -981,6 +1032,8 @@ fun launchDesktop(
     platform: DesktopSurfacePlatform = DesktopSurfacePlatformDispatcher.current(),
     onAppStarted: ((DesktopController) -> Unit)? = null
 ) {
+    // Windows explicit AUMID setup before notifier/window initialization
+    setCurrentProcessExplicitAppUserModelID("dev.tabbyrush.desktop")
     val accountFiles = JvmAccountFiles()
     val lockFile = File(accountFiles.baseDir, "tabbyrush.lock")
     val instanceGuard = SingleInstanceGuard.tryAcquire(lockFile)
@@ -1050,10 +1103,13 @@ fun launchDesktop(
             state = mainWindowState
         ) {
             val state by controller.uiState.collectAsState()
+            val remoteInboxState by controller.remoteInboxState.collectAsState()
             TabbyRushTheme {
                 TabbyRushApp(
                     state = state,
+                    remoteInboxState = remoteInboxState,
                     onAction = { controller.onAction(it) },
+                    onRemoteAction = { controller.onRemoteAction(it) },
                     onAuthSubmit = { controller.onAuthSubmit(it) }
                 )
             }

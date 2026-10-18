@@ -1,9 +1,9 @@
 # TabbyRush Project Overview & Product Development Requirements (PDR)
 
-Last Updated: 2026-10-17
-Document Version: 1.10.0
+Last Updated: 2026-10-18
+Document Version: 1.11.0
 Status: Active
-Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
+Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Announcement Contract](./announcement-contract.md) · [Remote Notification Setup](./remote-notification-setup.md) · [Admin Announcements Acceptance](./evidence/admin-announcements-acceptance.md)
 
 ---
 
@@ -35,6 +35,7 @@ The primary task-management UI is shared Compose Multiplatform. Task surfaces ex
 | **FR-07** | Task Deadlines & Reminders | Users can assign optional date-only or timed deadlines to tasks, with captured IANA timezone, explicit DST offset, overdue boundaries, and configurable local reminder rules (lead minutes, count 1..10, interval >= 15m). |
 | **FR-08** | Strict-v2 Protocol & Atomic Schema Evolution | End-to-end data synchronization supports versioned `strict-v2` wire contracts with cryptographic preimages, checked 64-bit integer arithmetic, in-place app-scoped migration fencing, legacy receipt durability verification, and safe intent rebasing without data loss. |
 | **FR-09** | Sticky Task Surfaces | Share account- and generation-fenced task observation and completion actions across a native Android Glance widget, an opt-in quiet deadline notification, and a compact Compose Multiplatform desktop window with conditional tray controls. Presentation preferences remain local and are not synced as task data. |
+| **FR-10** | Server Admin Announcements | Unidirectional administrator broadcasts from Glean Hub with 90-day retention backed by MongoDB BSON DateTime TTL indexes, generic FCM HTTP v1 notifications for Android (channel `tabbyrush.remote.announcements`, tag `remote:<messageId>`), streaming SSE broker with `streamEpoch`, monotonic `acceptanceOrdinal`, and ready baseline, in-memory 200-item sliding cache, no persistent offline content or read outbox, and restricted pilot staged rollout (Android/Linux/Web Admin) with Windows MSI/WinRT held at Gate G5. |
 
 ### 2.2 Non-Functional Requirements (NFR)
 
@@ -375,3 +376,24 @@ The separate Sticky Task Surfaces initiative (`plans/261016-1409-sticky-task-sur
 - The Android and Windows PNGs are visual design baselines, not runtime OS captures. Interactive Android launcher/shade and Windows window/tray/multi-monitor acceptance remain held at G2.
 - The review's Android safety findings remain open: on delivery-gate drain timeout, `closeRuntimeInternal()` catches and logs the exception, then returns before canceling observer jobs or closing Room; `closeActiveRuntime()` still clears `activeRuntime`. Glance blanking/session-close failures are also caught and logged, so stale OS-retained content may remain.
 - The 149-checksum dependency-verification hold and separate Glance artifact-provenance hold remain open. Linux acceptance needs a real Linux session; historical release holds G3/G6/G7 are unchanged.
+
+---
+
+## 16. Server Admin Announcements — Delivered Architecture & Staged Pilot Status
+
+The Server Admin Announcements initiative (`plans/261018-0707-server-admin-notifications/`, Phases 01–12) delivers secure, unidirectional administrator announcements from Glean Hub to TabbyRush clients across Android, Linux, and Windows:
+
+### 16.1 Core Requirements and Implemented Architecture
+- **Intake & Confirmation**: Glean Hub admin console (`AnnouncementComposer`, `AnnouncementHistory`) supports `selected` (1..500 user IDs), `all`, and `admins` audience modes intersecting current `tabby-rush` grants. Confirmation binds an immutable SHA-256 digest (`sha256:{hex}`); changed eligibility returns 409 `audienceChanged`.
+- **Durable Storage & Retention**: Canonical MongoDB collections (`admin_announcements`, `admin_announcement_inbox`, `admin_announcement_dispatches`, `notification_install_bindings`) are isolated from strict task-sync data. Journaled parent inserts (`w:1, j:true`) precede HTTP 202 acknowledgement. 90-day retention with BSON DateTime TTL indexes in MongoDB (`expiresAt = createdAt + 90 days`); MongoDB background TTL deletion is asynchronous, while application-side query and rendering filters strictly exclude records when `expiresAt <= serverNow` (only unexpired records are queryable or renderable); reading never extends expiry.
+- **Client In-Memory Isolation**: TabbyRush clients store announcements exclusively in memory (sliding window max 200 items, dedup 2048) via `RemoteInboxController`. Offline UI indicates unavailable content without exposing cached details. Zero Room database migrations, persistent offline content, or read outbox; process termination purges in-memory items.
+- **Transport & Wire Delivery**:
+  - Android: FCM HTTP v1 generic notifications for Android with channel `tabbyrush.remote.announcements` and tag `remote:<messageId>`, ensuring announcement-content isolation from push providers with fixed generic copy ("You have a new announcement") and opaque metadata (`type: "admin_announcement"`, `appId: "tabby-rush"`, `messageId: "<UUID>"`). Cold/warm taps reauthorize against current active account session. Exported component policy strictly permits `FirebaseInstanceIdReceiver` protected by `com.google.android.c2dm.permission.SEND`.
+  - Desktop: Streaming SSE broker with `streamEpoch`, monotonic `acceptanceOrdinal`, and ready baseline (`event: ready`). Hints arriving after baseline hydration trigger authenticated detail fetching. Desktop displays at most one generic alert per active connection and message hint; Android suppresses SSE alerts.
+- **Install Proof & Fencing**: Android client encrypts 32-byte cryptographic install proof in app-private no-backup storage using an Android Keystore-backed AES-256-GCM key (`tabbyrush_remote_install_v1`), transmitted as `X-Tabby-Install-Proof` header and validated via SHA-256 hash on Glean Hub with numeric generation CAS fencing against delayed unbinds or stolen install UUIDs.
+
+### 16.2 Acceptance Matrix & Staged Pilot Gate
+- **Automated Tooling**: Standalone smoke runner `scripts/admin-announcements-smoke.mjs --self-test` passes 21 mock assertions and 13 golden vectors; QA regression report (`qa-261018-1548-c1-c6-regression-verification.md`) records 566 verifications passing (548 test executions across 8 targets + 18 vector/static checks). Cycle 2 code review approved at Score 8/10 with 0 critical issues.
+- **Restricted Pilot Gate (Android/Linux/Web Admin)**: Common safety, server durability semantics, Android runtime, Linux desktop adapter, and Admin Web console verified for internal restricted pilot ($\le 500$ users per send).
+- **Full Delivery Gate (Windows Inclusive)**: Windows C ABI v1 `tabbyrush-toast.dll` and WiX3 MSI packaging are implemented in source but held at Gate G5 on Linux build hosts. Full rollout requires clean-host Windows proof.
+- **Release Holds**: Inherited release holds (G2/G3/G6/G7, 149-checksum baseline, Glance provenance) remain open until separate resolution.

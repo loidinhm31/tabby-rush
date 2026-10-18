@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Remote admin announcement channel -->
+    <string name="remote_notification_channel_name">Admin Announcements</string>
+    <string name="remote_notification_channel_description">Notifications for server admin announcements</string>
+
+    <!-- Generic notification content (zero private content) -->
+    <string name="remote_notification_generic_title">TabbyRush</string>
+    <string name="remote_notification_generic_body">You have a new announcement.</string>
+
+    <!-- Permission and settings copy -->
+    <string name="remote_notification_permission_rationale">Notification permission is required to receive server announcements on Android 13+.</string>
+    <string name="remote_notification_channel_disabled">Announcement notifications are muted. Re-enable them in channel settings.</string>
+</resources>

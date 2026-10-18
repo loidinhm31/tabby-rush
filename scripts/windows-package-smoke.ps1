@@ -119,6 +119,20 @@ function Test-DistributableBundle {
         Write-Host "[WARN] Bundled runtime not found at standard path in $Path\runtime" -ForegroundColor Yellow
     }
 
+    # 2b. Verify native C++/WinRT toast DLL
+    $dllCandidates = @(
+        (Join-Path $Path "tabbyrush-toast.dll"),
+        (Join-Path $Path "app\tabbyrush-toast.dll")
+    )
+    $nativeDll = $dllCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($nativeDll) {
+        $dllInfo = Get-Item $nativeDll
+        Write-Host "[PASS] Native C++/WinRT toast DLL found: $($dllInfo.FullName) ($([math]::Round($dllInfo.Length / 1KB, 2)) KB)" -ForegroundColor Green
+    } else {
+        Write-Error "[FAIL] Native C++/WinRT toast DLL (tabbyrush-toast.dll) NOT found in $Path"
+        return $false
+    }
+
     # 3. Verify packaged application JARs and inspect classes
     $appDir = Join-Path $Path "app"
     if (-not (Test-Path $appDir)) {
@@ -298,6 +312,46 @@ function Test-MsiPackage {
             return $false
         }
         Write-Host "[PASS] All mandatory MSI metadata properties validated successfully" -ForegroundColor Green
+
+        # 5. Verify AUMID in MsiShortcutProperty table
+        $shortcutView = $null
+        try {
+            $shortcutView = $database.GetType().InvokeMember(
+                "OpenView",
+                [System.Reflection.BindingFlags]::InvokeMethod,
+                $null,
+                $database,
+                @("SELECT PropertyKey, PropVariant_ FROM MsiShortcutProperty")
+            )
+            $shortcutView.GetType().InvokeMember("Execute", [System.Reflection.BindingFlags]::InvokeMethod, $null, $shortcutView, $null)
+            $foundAumid = $false
+            while ($true) {
+                $rec = $shortcutView.GetType().InvokeMember("Fetch", [System.Reflection.BindingFlags]::InvokeMethod, $null, $shortcutView, $null)
+                if ($null -eq $rec) { break }
+                $key = $rec.GetType().InvokeMember("StringData", [System.Reflection.BindingFlags]::GetProperty, $null, $rec, @(1))
+                $val = $rec.GetType().InvokeMember("StringData", [System.Reflection.BindingFlags]::GetProperty, $null, $rec, @(2))
+                if ($key -eq "System.AppUserModel.ID") {
+                    if ($val -eq "dev.tabbyrush.desktop") {
+                        $foundAumid = $true
+                        Write-Host "[PASS] MsiShortcutProperty System.AppUserModel.ID is correctly set to 'dev.tabbyrush.desktop'" -ForegroundColor Green
+                    } else {
+                        Write-Error "[FAIL] MsiShortcutProperty System.AppUserModel.ID mismatch: expected 'dev.tabbyrush.desktop', got '$val'"
+                        return $false
+                    }
+                }
+            }
+            if (-not $foundAumid) {
+                Write-Error "[FAIL] MsiShortcutProperty System.AppUserModel.ID NOT found in MSI"
+                return $false
+            }
+        } catch {
+            Write-Error "[FAIL] MsiShortcutProperty table query failed: $($_.Exception.Message)"
+            return $false
+        } finally {
+            if ($null -ne $shortcutView) {
+                try { $shortcutView.GetType().InvokeMember("Close", [System.Reflection.BindingFlags]::InvokeMethod, $null, $shortcutView, $null) } catch {}
+            }
+        }
     } catch {
         Write-Error "[FAIL] MSI COM inspection failed: $($_.Exception.Message)"
         return $false

@@ -91,3 +91,17 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
    - For live GUI sessions, launch within an Xpra desktop session with GNOME Keyring enabled (`bash scripts/start-xpra.sh`).
 3. **UI Evidence Visuals**:
    - Visual mockups in `docs/evidence/linux-*.png` represent the high-fidelity design baseline conforming to WCAG AA and ForumFlash guidelines.
+
+---
+
+## 4. Server Admin Announcements Linux Acceptance (Phase 12)
+
+### 4.1 Native D-Bus Actions & Lifecycle Architecture
+- **Adapter Implementation**: `LinuxRemoteNotificationAdapter` in `:desktopApp` integrates with session D-Bus service `org.freedesktop.Notifications`.
+- **Actions Capability Detection**: Probes daemon capabilities on startup. When `actions` capability is present, posts notifications with `["default", "Open inbox"]` and tracks native notification IDs in an account-scoped map.
+- **Signal Handling & Dispatch**: Subscribes to `ActionInvoked` and `NotificationClosed`. When the user clicks the notification, the adapter extracts the message ID and generation, marshals to the Compose UI dispatcher, requests window focus/restoration, and opens the announcement detail view.
+- **Tray Integration & Full-Quit**: When minimized to tray, the SSE stream remains active. On explicit Quit (`quitSuspend()`), active remote notifications are closed, the SSE stream is terminated, and D-Bus signal subscriptions are unregistered. Reopening catches up silently via baseline hydration.
+
+### 4.2 Gate G4 Acceptance & Pilot Status
+- **Gate G4 Status**: **PASS**. Automated contract vectors, D-Bus session communication, and SSE handshake framing verified.
+- **Pilot Readiness**: Linux desktop runtime is approved for the restricted internal pilot along with Android. Historical reminder visual bubble hold (Gate G2) remains separately open for task reminders.

@@ -261,4 +261,180 @@ describe('Release Security Check: Exported Components Auditor', () => {
     const issues = validateExportedComponents(manifest);
     assert.deepEqual(issues, []);
   });
+
+  it('passes on merged manifest with verified FirebaseInstanceIdReceiver and FirebaseInitProvider', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="dev.tabbyrush.android.MainActivity" android:exported="true" />
+          <receiver
+            android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver"
+            android:exported="true"
+            android:permission="com.google.android.c2dm.permission.SEND">
+            <intent-filter>
+              <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+              <category android:name="dev.tabbyrush.android" />
+            </intent-filter>
+          </receiver>
+          <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:exported="false"
+            android:authorities="dev.tabbyrush.android.firebaseinitprovider" />
+        </application>
+      </manifest>
+    `;
+    const issues = validateExportedComponents(manifest);
+    assert.deepEqual(issues, []);
+  });
+
+  it('rejects FirebaseInstanceIdReceiver missing SEND permission', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="dev.tabbyrush.android.MainActivity" android:exported="true" />
+          <receiver
+            android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver"
+            android:exported="true">
+            <intent-filter>
+              <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+            </intent-filter>
+          </receiver>
+        </application>
+      </manifest>
+    `;
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /without required com.google.android.c2dm.permission.SEND permission/);
+  });
+
+  it('rejects FirebaseInstanceIdReceiver with unauthorized action', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="dev.tabbyrush.android.MainActivity" android:exported="true" />
+          <receiver
+            android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver"
+            android:exported="true"
+            android:permission="com.google.android.c2dm.permission.SEND">
+            <intent-filter>
+              <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+              <action android:name="com.google.android.c2dm.intent.REGISTRATION" />
+            </intent-filter>
+          </receiver>
+        </application>
+      </manifest>
+    `;
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /contains unauthorized exported action: com.google.android.c2dm.intent.REGISTRATION/);
+  });
+
+  it('rejects FirebaseInstanceIdReceiver with foreign category', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="dev.tabbyrush.android.MainActivity" android:exported="true" />
+          <receiver
+            android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver"
+            android:exported="true"
+            android:permission="com.google.android.c2dm.permission.SEND">
+            <intent-filter>
+              <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+              <category android:name="com.attacker.app" />
+            </intent-filter>
+          </receiver>
+        </application>
+      </manifest>
+    `;
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /contains unauthorized <category>: com.attacker.app/);
+  });
+
+  it('rejects FirebaseInstanceIdReceiver with data tag in intent-filter', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="dev.tabbyrush.android.MainActivity" android:exported="true" />
+          <receiver
+            android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver"
+            android:exported="true"
+            android:permission="com.google.android.c2dm.permission.SEND">
+            <intent-filter>
+              <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+              <data android:scheme="package" />
+            </intent-filter>
+          </receiver>
+        </application>
+      </manifest>
+    `;
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /contains unauthorized <data> in intent filter/);
+  });
+
+  it('rejects AppMeasurementReceiver when exported', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="dev.tabbyrush.android.MainActivity" android:exported="true" />
+          <receiver
+            android:name="com.google.android.gms.measurement.AppMeasurementReceiver"
+            android:exported="true" />
+        </application>
+      </manifest>
+    `;
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /Exported receiver is not TabbyRushTaskWidgetReceiver: com\.google\.android\.gms\.measurement\.AppMeasurementReceiver/);
+  });
+
+  it('rejects FirebaseInitProvider when exported', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="dev.tabbyrush.android.MainActivity" android:exported="true" />
+          <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:exported="true"
+            android:authorities="dev.tabbyrush.android.firebaseinitprovider" />
+        </application>
+      </manifest>
+    `;
+    const issues = validateExportedComponents(manifest);
+    assert.ok(issues.some(i => i.includes('FirebaseInitProvider must not be exported')));
+  });
+
+  it('rejects FirebaseInitProvider with incorrect authority', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="dev.tabbyrush.android.MainActivity" android:exported="true" />
+          <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:exported="false"
+            android:authorities="com.attacker.firebaseinitprovider" />
+        </application>
+      </manifest>
+    `;
+    const issues = validateExportedComponents(manifest);
+    assert.ok(issues.some(i => i.includes('FirebaseInitProvider must have exact authority')));
+  });
+
+  it('rejects exported activity-alias', () => {
+    const manifest = `
+      <manifest>
+        <application>
+          <activity android:name="dev.tabbyrush.android.MainActivity" android:exported="true" />
+          <activity-alias
+            android:name=".MainActivityAlias"
+            android:targetActivity=".MainActivity"
+            android:exported="true" />
+        </application>
+      </manifest>
+    `;
+    const issues = validateExportedComponents(manifest);
+    assert.equal(issues.length, 1);
+    assert.match(issues[0], /Exported activity-alias is prohibited/);
+  });
 });

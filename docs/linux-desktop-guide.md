@@ -131,3 +131,24 @@ secret-tool clear service tabbyrush account <account_key>
 # 5. Remove local account data and database files after application quiescence
 rm -rf ~/.local/share/tabbyrush
 ```
+
+---
+
+## 7. Server Admin Announcements & Linux Desktop Notifications
+
+### 7.1 Running-Process SSE Alerts
+Linux desktop clients receive live administrator announcements through a persistent authenticated Server-Sent Events (SSE) connection:
+- **Process Scope**: The SSE connection is active while TabbyRush is running (foreground window or minimized to system tray).
+- **Desktop Notification Bubble**: When an announcement is accepted, the server emits a hint. The desktop controller fetches announcement details and posts a native notification via D-Bus service `org.freedesktop.Notifications`.
+- **Single Alert Policy**: The client posts at most one native notification per announcement per active connection. Historical announcements fetched during initial baseline hydration are presented silently in the inbox.
+
+### 7.2 D-Bus Actions & Window Restoration
+- **Actions Capability Detection**: On connection, TabbyRush inspects the notification daemon capabilities (`GetCapabilities`).
+- **ActionInvoked Routing**: If `actions` capability is supported (e.g. GNOME Shell, Mako, Dunst), TabbyRush passes `["default", "Open inbox"]`. Clicking the alert invokes `ActionInvoked`, brings the TabbyRush window to focus (requesting Wayland/X11 focus restoration), and navigates directly to the announcement detail.
+- **Minimal Daemons Without Actions**: On minimal notification daemons lacking actions support, the alert is displayed as an informative banner, and the user accesses the announcement directly through the in-app inbox screen.
+
+### 7.3 Tray Lifecycle & Full-Quit Limits
+- **System Tray Support**: When a system tray is present, closing the window hides it while keeping background sync and announcement SSE alive.
+- **No-Tray Recovery**: If the system tray is unavailable or fails, closing the companion restores the main window rather than stranding the user.
+- **Full-Quit Safety**: Explicitly choosing Quit (`quitSuspend()`) closes the SSE stream, unregisters D-Bus signal listeners, cancels posted remote notification IDs, and exits the process. TabbyRush installs no background systemd user services or autostart entries.
+- **Silent Catch-up on Reopen**: Relaunching the application establishes a fresh baseline and fetches all active, unexpired announcements from the server without triggering duplicate historical notification bubbles.

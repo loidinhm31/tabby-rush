@@ -1,8 +1,8 @@
 # TabbyRush Code Standards & Implementation Guidelines
 
-Last Updated: 2026-10-17
-Phase: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
-Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md)
+Last Updated: 2026-10-18
+Phase: Server Admin Announcements Phase 12 delivered & verified (Score 8/10, 0 critical issues); staged pilot ready (Android/Linux/Web Admin); Windows desktop runtime held at Gate G5; inherited release holds (G2/G3/G6/G7) remain open
+Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Announcement Contract](./announcement-contract.md) · [Remote Notification Setup](./remote-notification-setup.md) · [Admin Announcements Acceptance](./evidence/admin-announcements-acceptance.md)
 
 ---
 
@@ -298,3 +298,51 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - If delivery gate drainage times out, teardown must log and fail closed rather than proceeding with uncoordinated database closure.
 
 Current implementation divergence: Android `closeRuntimeInternal()` catches and logs a drain-timeout exception, then returns before observer-job cancellation or Room closure; `closeActiveRuntime()` nevertheless clears `activeRuntime`. This remains an open safety finding, not acceptable teardown behavior.
+
+---
+
+## 11. Server Admin Announcements & Remote Security Standards (Phase 12)
+
+### 11.1 Route Structure & Bearer-Only Policy
+- **Exact Route Hierarchy**: Static routes (`audience-preview`, `by-idempotency`, `inbox`, `unread`, `stream`) must be registered before dynamic UUID parameters (`/{id}`, `/{installId}`).
+- **Bearer-Only Authorization**: Remote announcement endpoints operate under `BEARER_ONLY` policy (`RouteClassification.BEARER_ONLY`). Query-parameter access tokens, session cookies, and API key bypass are strictly prohibited.
+- **No Redirects**: All HTTP clients must reject 3xx redirects on authenticated announcement endpoints fail-closed.
+
+### 11.2 Bounded Intake & Digest Integrity
+- **Recipients Limit**: Maximum 500 recipients in all audience modes (`selected`, `all`, `admins`). Resolving >500 users rejects with HTTP 413 `audienceTooLarge`.
+- **Content Limits**: Title trimmed to 1..200 Unicode scalars and $\le 800$ UTF-8 bytes; body normalized (CRLF to LF) to 1..4,000 scalars and $\le 16,384$ bytes. Rejects NUL bytes and invalid UTF-8.
+- **Digest Binding**: Confirmation binds `sha256:{hex}` calculated over canonical JSON `{appId, audience, recipientIds}`. Changed audience membership between preview and create returns HTTP 409 `audienceChanged`.
+
+### 11.3 Protected Firebase Merged Manifest Policy
+- **Merged Manifest Audit**: Android security checks must audit the final merged `AndroidManifest.xml` (or parsed APK), not just source manifests, to detect transitive library exports:
+  - `FirebaseMessagingService` must be private (`android:exported="false"`) with action `com.google.firebase.MESSAGING_EVENT`.
+  - `FirebaseInitProvider` must be private (`android:exported="false"`) with authority `dev.tabbyrush.android.firebaseinitprovider`.
+  - `FirebaseInstanceIdReceiver` is permitted only with `permission="com.google.android.c2dm.permission.SEND"`, exact action `com.google.android.c2dm.intent.RECEIVE`, and package category `dev.tabbyrush.android`.
+  - Exported analytics receivers (`AppMeasurementReceiver`) are completely prohibited.
+
+### 11.4 In-Memory Cache & Zero Database Persistence
+- **In-Memory Sliding Window**: Client-side announcements are stored exclusively in process memory (sliding window max 200 items, dedup capacity 2048) managed by `RemoteInboxController`.
+- **Zero Offline Storage**: Storing announcement titles, bodies, or read queues in local Room SQLite databases or SharedPreferences is strictly prohibited.
+- **Zero Persisted Read Outbox**: Client read states are sent synchronously or dropped on network failure; there is no offline persistent read outbox.
+- **Process Teardown**: Exiting or killing the application purges all in-memory announcement data. Reopening silently hydrates active, unexpired items from the Hub.
+
+### 11.5 MongoDB Storage & TTL Indexing Standards
+- **90-Day Retention**: All parent announcements and derived inbox records enforce 90-day retention calculated monotonically from creation (`expiresAt = createdAt + 90 days`).
+- **BSON DateTime TTL Indexes**: Collections configure MongoDB TTL indexes on `expiresAt` with `expireAfterSeconds: 0`.
+- **Dual-Layer Boundary Enforcement**: Because MongoDB TTL background cleanup is asynchronous (typically executing on 60-second cycles), all client and server query, fetch, rendering, and dispatch paths must enforce strict application-side filtering to exclude records when `expiresAt <= serverNow` (only unexpired records are queryable or renderable). Reading an announcement never extends its expiry.
+
+### 11.6 FCM HTTP v1 Generic Notifications (Android)
+- **Announcement-Content Isolation**: Mobile alerts use FCM HTTP v1 generic notifications for Android with channel `tabbyrush.remote.announcements` (importance: Default) and system tag `remote:<messageId>`.
+- **Generic Copy Only**: Push payloads contain only generic copy ("You have a new announcement") and opaque metadata (`type: "admin_announcement"`, `appId: "tabby-rush"`, `messageId: "<UUID>"`). Announcement title and body are NEVER transmitted over FCM.
+- **Session Reauthorization**: Tapping a notification routes through deep links (`ACTION_VIEW_ANNOUNCEMENT`) and must reauthorize the message ID against the currently authenticated account session before displaying content.
+- **Install Proof & Fencing**: Android client encrypts 32-byte cryptographic install proof in app-private no-backup storage (`remote_install_v1.enc`) using an Android Keystore-backed AES-256-GCM key (`tabbyrush_remote_install_v1`), transmitted as `X-Tabby-Install-Proof` header, verified by SHA-256 hash on Glean Hub, and guarded by numeric generation CAS fencing.
+
+### 11.7 Streaming SSE Broker Invariants (Desktop)
+- **Broker Framing**: Desktop clients consume live announcements via a streaming SSE broker with `streamEpoch`, monotonic `acceptanceOrdinal`, and ready baseline (`event: ready`).
+- **Handshake Baseline**: The stream opens with `event: ready` delivering `streamEpoch`, `baselineAcceptanceOrdinal`, and `serverNow`.
+- **Announcement Hints**: Subsequent `event: announcement` events transmit lightweight hints without titles, bodies, or recipient identities.
+- **Alert Gating**: Desktop displays at most one generic system alert per active connection and message hint, gated on `acceptanceEpoch == streamEpoch`, `acceptanceOrdinal > baselineAcceptanceOrdinal`, and `liveEligible == true` (emitted within 120s of server acceptance). Android suppresses SSE alerts.
+
+### 11.8 Staged Pilot Boundaries & Platform Scopes
+- **Restricted Pilot Scope**: Restricted pilot encompasses Android mobile, Linux desktop, and Web Admin console for cohort sizes $\le 500$ recipients per send.
+- **Full Rollout Hold**: Full multiplatform rollout requires native Windows desktop acceptance; Windows MSI packaging and WinRT toast integration are held at Gate G5 on Linux build hosts pending verified clean-host Windows proof.

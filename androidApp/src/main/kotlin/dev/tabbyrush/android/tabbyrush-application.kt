@@ -6,6 +6,7 @@ import android.os.UserManager
 import android.util.Log
 import dev.tabbyrush.shared.auth.AndroidKeystoreVault
 import dev.tabbyrush.shared.auth.HubAuthSession
+import dev.tabbyrush.shared.auth.HubHttpClient
 import dev.tabbyrush.shared.contract.AccountIdentity
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.AuthState
@@ -43,19 +44,57 @@ class TabbyRushApplication : Application(), TaskSurfaceHostOwner {
     val accountFiles by lazy { AndroidAccountFiles(this) }
     val syncScheduler by lazy { AndroidSyncScheduler(this) }
     val authSession by lazy { HubAuthSession(config = hubConfig, vault = vault) }
-
     val taskSurfaceRuntimeCoordinator by lazy { TaskSurfaceRuntimeCoordinator(this) }
     override val taskSurfaces: AndroidTaskSurfaceHost
         get() = taskSurfaceRuntimeCoordinator
 
+    val remoteNotificationAdapter by lazy { AndroidRemoteNotificationAdapter(this) }
+    val installStore: RemoteInstallStore by lazy { EncryptedRemoteInstallStore(this) }
+    val remoteHttpClient by lazy { HubHttpClient(hubConfig) }
+    val remoteInboxClient by lazy { dev.tabbyrush.shared.remote.RemoteInboxClient(remoteHttpClient, authSession) }
+    val installCoordinator by lazy {
+        RemoteInstallCoordinator(
+            store = installStore,
+            clientProvider = { remoteInboxClient },
+            authSession = authSession,
+            appVersion = BuildConfig.VERSION_NAME,
+            scope = applicationScope
+        )
+    }
     private val runtimeMutex = Mutex()
     private var activeRuntime: AccountRuntime? = null
 
     override fun onCreate() {
         super.onCreate()
         instance = this
-
         completePendingWipesOnStartup()
+
+        if (BuildConfig.FIREBASE_CONFIGURED) {
+            try {
+                val options = com.google.firebase.FirebaseOptions.Builder()
+                    .setProjectId(BuildConfig.FIREBASE_PROJECT_ID)
+                    .setApplicationId(BuildConfig.FIREBASE_APPLICATION_ID)
+                    .setApiKey(BuildConfig.FIREBASE_API_KEY)
+                    .setGcmSenderId(BuildConfig.FIREBASE_GCM_SENDER_ID)
+                    .build()
+                if (com.google.firebase.FirebaseApp.getApps(this).isEmpty()) {
+                    com.google.firebase.FirebaseApp.initializeApp(this, options)
+                }
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                    .addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            val token = task.result
+                            if (!token.isNullOrBlank()) {
+                                applicationScope.launch {
+                                    installCoordinator.onNewToken(token)
+                                }
+                            }
+                        }
+                    }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to initialize FirebaseApp: ${e.message}")
+            }
+        }
 
         val userManager = getSystemService(Context.USER_SERVICE) as? UserManager
         if (userManager != null && !userManager.isUserUnlocked) {
@@ -188,25 +227,27 @@ class TabbyRushApplication : Application(), TaskSurfaceHostOwner {
     fun getActiveRuntime(): AccountRuntime? = activeRuntime
 
     suspend fun closeActiveRuntime() = runtimeMutex.withLock {
-        activeRuntime?.let { closeRuntimeInternal(it) }
+        val existing = activeRuntime ?: return@withLock
+        closeRuntimeInternal(existing)
         activeRuntime = null
     }
 
     private suspend fun closeRuntimeInternal(runtime: AccountRuntime) {
-        try {
-            taskSurfaceRuntimeCoordinator.transitionToNonReady(SurfaceReadiness.Restoring)
-            val drained = runtime.deliveryGate.closeAndDrain()
-            if (!drained) {
-                throw IllegalStateException("Delivery gate drain timed out for ${runtime.accountKey}; failing closed")
-            }
-            runtime.surfaceObserverJob?.cancelAndJoin()
-            runtime.scheduleObserverJob.cancelAndJoin()
-            runtime.store.isFrozen = true
-            runtime.database.close()
-        } catch (ce: CancellationException) {
-            throw ce
-        } catch (e: Exception) {
-            Log.e(TAG, "Error closing database for ${runtime.accountKey}: ${e.message}", e)
+        taskSurfaceRuntimeCoordinator.transitionToNonReady(SurfaceReadiness.Restoring)
+        val drained = runtime.deliveryGate.closeAndDrain()
+        if (!drained) {
+            throw IllegalStateException("Delivery gate drain timed out for ${runtime.accountKey}; failing closed")
         }
+        runtime.remoteController?.let { controller ->
+            val remoteQuiesce = controller.quiesce()
+            if (remoteQuiesce is dev.tabbyrush.shared.contract.RemoteQuiesceResult.TimedOut) {
+                throw IllegalStateException("Remote controller quiesce timed out for ${runtime.accountKey}; failing closed")
+            }
+            controller.close()
+        }
+        runtime.surfaceObserverJob?.cancelAndJoin()
+        runtime.scheduleObserverJob.cancelAndJoin()
+        runtime.store.isFrozen = true
+        runtime.database.close()
     }
 }

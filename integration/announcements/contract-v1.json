@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contractVersion": "v1",
+  "appId": "tabby-rush",
+  "platform": {
+    "androidPackage": "dev.tabbyrush.android",
+    "windowsAumid": "dev.tabbyrush.desktop",
+    "installProofHeader": "X-Tabby-Install-Proof",
+    "idempotencyHeader": "Idempotency-Key"
+  },
+  "namespaces": {
+    "inbox": "b29b36f3-1c6d-5a55-94c0-045e243c2e4d",
+    "dispatch": "0e9bf528-13dc-58b4-824e-fdd139f77d5c",
+    "targetBatch": "f37cd6fb-f90b-5e34-b065-c2be584e0c61"
+  },
+  "cursor": {
+    "hmacLabel": "tabbyrush-announcement-cursor-v1",
+    "format": "base64url(JSON) + '.' + base64url(HMAC-SHA256)",
+    "maxWireBytes": 1024,
+    "version": 1
+  },
+  "limits": {
+    "intakeMaxBytes": 65536,
+    "previewMaxBytes": 32768,
+    "bindingMaxBytes": 8192,
+    "readUnbindMaxBytes": 1024,
+    "titleMinScalars": 1,
+    "titleMaxScalars": 200,
+    "titleMaxUtf8Bytes": 800,
+    "bodyMinScalars": 1,
+    "bodyMaxScalars": 4000,
+    "bodyMaxUtf8Bytes": 16384,
+    "audienceMinRecipients": 1,
+    "audienceMaxRecipients": 500,
+    "audienceOverflowThreshold": 501,
+    "parentBsonMaxBytes": 1048576,
+    "retentionDays": 90,
+    "retentionSeconds": 7776000,
+    "previewTtlSeconds": 300,
+    "leaseDurationSeconds": 60,
+    "leaseRenewIntervalSeconds": 15,
+    "sseKeepaliveSeconds": 15,
+    "sseIdleTimeoutSeconds": 45,
+    "sseConnectTimeoutSeconds": 10,
+    "sseMaxFrameBytes": 16384,
+    "sseHintBufferSize": 256,
+    "sseDedupCapacity": 2048,
+    "inboxPageCacheCapacity": 200,
+    "liveEligibilityMaxAgeSeconds": 120,
+    "deviceDispatchMaxAttempts": 8,
+    "targetBatchMaxTuples": 50
+  },
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/apps/tabby-rush/announcements/audience-preview",
+      "authorization": "current DB admin",
+      "requestDto": "PreviewRequest",
+      "responseStatus": 200,
+      "responseDto": "AudiencePreview",
+      "maxBodyBytes": 32768
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/apps/tabby-rush/announcements",
+      "authorization": "current DB admin",
+      "headers": {
+        "Idempotency-Key": "UUIDv4"
+      },
+      "requestDto": "CreateAnnouncementRequest",
+      "responseStatus": 202,
+      "responseDto": "Acceptance",
+      "maxBodyBytes": 65536
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/apps/tabby-rush/announcements",
+      "authorization": "current DB admin",
+      "queryParams": {
+        "limit": "integer (1..50, default 25)",
+        "cursor": "optional opaque string"
+      },
+      "responseStatus": 200,
+      "responseDto": "SentPage"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/apps/tabby-rush/announcements/by-idempotency/{key}",
+      "authorization": "current DB admin (own senderId scope)",
+      "pathParams": {
+        "key": "UUIDv4"
+      },
+      "responseStatus": 200,
+      "responseDto": "Acceptance"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/apps/tabby-rush/announcements/{id}",
+      "authorization": "current DB admin",
+      "pathParams": {
+        "id": "UUIDv4"
+      },
+      "responseStatus": 200,
+      "responseDto": "SentDetail"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/apps/tabby-rush/announcements/inbox",
+      "authorization": "current user with tabby-rush grant",
+      "queryParams": {
+        "limit": "integer (1..50, default 25)",
+        "cursor": "optional opaque string"
+      },
+      "responseStatus": 200,
+      "responseDto": "InboxPage"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/apps/tabby-rush/announcements/unread",
+      "authorization": "current user with tabby-rush grant",
+      "responseStatus": 200,
+      "responseDto": "UnreadResponse"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/apps/tabby-rush/announcements/inbox/{id}",
+      "authorization": "current user with tabby-rush grant and membership",
+      "pathParams": {
+        "id": "UUIDv4"
+      },
+      "responseStatus": 200,
+      "responseDto": "InboxItem"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/apps/tabby-rush/announcements/inbox/{id}/read",
+      "authorization": "current user with tabby-rush grant and membership",
+      "pathParams": {
+        "id": "UUIDv4"
+      },
+      "requestBody": "{}",
+      "responseStatus": 200,
+      "responseDto": "ReadResult",
+      "maxBodyBytes": 1024
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/apps/tabby-rush/announcements/stream",
+      "authorization": "current user with tabby-rush grant",
+      "headers": {
+        "Last-Event-ID": "advisory only, ignored for replay"
+      },
+      "responseStatus": 200,
+      "contentType": "text/event-stream"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/apps/tabby-rush/notification-installs/{installId}/binding",
+      "authorization": "current user with tabby-rush grant + X-Tabby-Install-Proof",
+      "pathParams": {
+        "installId": "UUIDv4"
+      },
+      "requestDto": "BindRequest",
+      "responseStatus": 200,
+      "responseDto": "BindingResult",
+      "maxBodyBytes": 8192
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/apps/tabby-rush/notification-installs/{installId}/unbind",
+      "authorization": "authenticated current owner + X-Tabby-Install-Proof",
+      "pathParams": {
+        "installId": "UUIDv4"
+      },
+      "requestDto": "UnbindRequest",
+      "responseStatus": 200,
+      "responseDto": "BindingResult",
+      "maxBodyBytes": 1024
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/apps/tabby-rush/notification-installs/{installId}/binding",
+      "authorization": "authenticated user + X-Tabby-Install-Proof",
+      "pathParams": {
+        "installId": "UUIDv4"
+      },
+      "responseStatus": 200,
+      "responseDto": "BindingStatus"
+    }
+  ],
+  "errorFormat": {
+    "type": "object",
+    "required": ["error"],
+    "properties": {
+      "error": {
+        "type": "object",
+        "required": ["code", "message", "retryable", "requestId", "details"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "retryable": { "type": "boolean" },
+          "requestId": { "type": "string", "format": "uuid" },
+          "details": { "type": "object" }
+        }
+      }
+    }
+  },
+  "errorStatuses": {
+    "400": ["invalidRequest", "invalidCursor"],
+    "401": ["unauthenticated", "tokenExpired"],
+    "403": ["adminRequired", "appAccessRevoked", "installProofRejected"],
+    "404": ["notFound", "previewNotFound"],
+    "409": [
+      "audienceChanged",
+      "idempotencyConflict",
+      "staleInstallOperation",
+      "installOperationConflict",
+      "bindingChanged",
+      "tokenAlreadyBound"
+    ],
+    "410": ["previewExpired", "idempotencyExpired"],
+    "413": ["requestTooLarge", "audienceTooLarge"],
+    "422": ["emptyAudience", "invalidContent"],
+    "429": ["rateLimited"],
+    "503": [
+      "announcementsDisabled",
+      "durableStorageUnavailable",
+      "providerNotConfigured"
+    ]
+  },
+  "fcmHttpV1Payload": {
+    "message": {
+      "token": "REDACTED",
+      "notification": {
+        "title": "TabbyRush",
+        "body": "You have a new announcement."
+      },
+      "data": {
+        "type": "admin_announcement",
+        "appId": "tabby-rush",
+        "messageId": "{UUIDv4}"
+      },
+      "android": {
+        "priority": "high",
+        "ttl": "{remainingTtlSeconds}s",
+        "notification": {
+          "channel_id": "tabbyrush.remote.announcements",
+          "tag": "remote:{messageId}",
+          "icon": "remote_notification_icon"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product
+        Id="*"
+        Name="TabbyRush"
+        Language="1033"
+        Version="1.0.0"
+        Manufacturer="TabbyRush Team"
+        UpgradeCode="{a6c507c8-88fe-4e49-8f43-a6125039281a}">
+
+        <Package
+            InstallerVersion="200"
+            Compressed="yes"
+            InstallScope="perUser"
+            Description="TabbyRush personal task management with strict-v1 Glean Hub synchronization"
+            Comments="TabbyRush Windows Desktop Application with Native Toast Notifications" />
+
+        <MajorUpgrade
+            DowngradeErrorMessage="A newer version of [ProductName] is already installed."
+            AllowSameVersionUpgrades="yes" />
+
+        <MediaTemplate EmbedCab="yes" />
+
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="LocalAppDataFolder">
+                <Directory Id="INSTALLDIR" Name="TabbyRush" />
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="TabbyRush" />
+            </Directory>
+        </Directory>
+
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="ApplicationShortcut" Guid="{9D37B5BE-7294-46CE-A4A9-0BE1B637B31A}">
+                <Shortcut
+                    Id="ApplicationStartMenuShortcut"
+                    Name="TabbyRush"
+                    Description="TabbyRush personal task management with strict-v1 Glean Hub synchronization"
+                    Target="[INSTALLDIR]TabbyRush.exe"
+                    WorkingDirectory="INSTALLDIR"
+                    Icon="TabbyRushIcon.ico">
+                    <!-- Contract Requirement: System.AppUserModel.ID must match dev.tabbyrush.desktop for Windows Toast routing -->
+                    <ShortcutProperty Key="System.AppUserModel.ID" Value="dev.tabbyrush.desktop" />
+                </Shortcut>
+                <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
+                <RegistryValue
+                    Root="HKCU"
+                    Key="Software\TabbyRushTeam\TabbyRush"
+                    Name="installed"
+                    Type="integer"
+                    Value="1"
+                    KeyPath="yes" />
+            </Component>
+        </DirectoryRef>
+
+        <Icon Id="TabbyRushIcon.ico" SourceFile="$(var.SourceDir)\TabbyRush.ico" />
+
+        <Feature Id="ProductFeature" Title="TabbyRush" Level="1">
+            <ComponentGroupRef Id="AppFiles" />
+            <ComponentRef Id="ApplicationShortcut" />
+        </Feature>
+    </Product>
+</Wix>

@@ -15,7 +15,7 @@ import kotlinx.coroutines.cancelAndJoin
  * 5. [DesktopReminderScheduler] (cancels desktop wake loop and clears pending alarm handles)
  * 6. Sync scheduler cancel gate (cancels periodic/immediate sync rounds, awaits active sync jobs)
  * 7. Reminder coordinator cancel gate (cancels and clears native platform notifications)
- *
+ * 8. Remote runtime cancel gate (fences generation, cancels streams/timers, clears remote notifications)
  * Invariants:
  * If any cancellation or drain step fails or times out, throws an exception so
  * [dev.tabbyrush.shared.sync.AccountLeaveProtocol] remains fail-closed with wipe markers intact
@@ -29,6 +29,7 @@ class CompositeDesktopLeaveCancelGate(
     private val reminderCancelGate: LeaveSchedulerCancelGate,
     private val surfaceObserverJob: Job? = null,
     private val surfaceCancelGate: LeaveSchedulerCancelGate? = null,
+    private val remoteCancelGate: LeaveSchedulerCancelGate? = null,
     private val drainTimeoutMs: Long = 5000L
 ) : LeaveSchedulerCancelGate {
 
@@ -56,5 +57,8 @@ class CompositeDesktopLeaveCancelGate(
 
         // 7. Cancel and remove all platform notifications
         reminderCancelGate.cancelAndAwait(accountKey)
+
+        // 8. Drain remote runtime quiescence without blocking on network
+        remoteCancelGate?.cancelAndAwait(accountKey)
     }
 }

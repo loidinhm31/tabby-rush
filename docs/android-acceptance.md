@@ -236,3 +236,29 @@ The following are recorded Phase 07 results, not fresh runs performed for this d
 | **Contrast** | Light theme tokens exceed WCAG 2.1 AA (4.5:1 text, 3.0:1 controls). | Verified in Phase 06 design spec |
 | **Typography** | Delegates to platform `FontFamily.SansSerif` for system font scaling up to 200%. | Verified in `TabbyRushTypography` |
 | **Screen States** | 7 core UI states documented: Empty, Populated, Completed, Editor, Error, Conflict, Access-Pending. | Design mockups are in `docs/evidence/`; live device evidence remains pending Gate G2. |
+
+---
+
+## 6. Server Admin Announcements Android Acceptance (Phase 12)
+
+### 6.1 Architecture & Implementation Status
+- **Module Integration**: `:androidApp` implements `RemoteNotificationManager` and `RemoteInstallCoordinator` for Firebase Cloud Messaging (HTTP v1) and install lifecycle fencing.
+- **Generic Wire Payload**: The FCM payload contains only fixed generic copy (`title: "TabbyRush"`, `body: "You have a new announcement."`) and data keys (`type: "admin_announcement"`, `appId: "tabby-rush"`, `messageId: "<UUID>"`). Zero user IDs, private titles, bodies, or deep links enter the wire.
+- **Display Channel & Tagging**:
+  - Background: Auto-rendered by Firebase Messaging SDK.
+  - Foreground: Posted via local `NotificationManagerCompat` on channel `tabbyrush.remote.announcements` (default importance) with tag `remote:<messageId>` and notification ID 0.
+  - No collision with task deadline reminders (`tabbyrush_task_surfaces`).
+- **Tap Navigation & Authorization**:
+  - Cold start (`onCreate`) and warm start (`onNewIntent`) parse exact intent extras, consuming the message ID once.
+  - Intent routes to `RemoteInboxController.onNativeOpen(messageId, generation)`. The controller reauthorizes against current active user grant before opening detail view.
+  - If the user is signed out or switched to another account, the app shows safe login/inbox; old content is never displayed.
+- **Merged Manifest Security Audit**:
+  - `FirebaseMessagingService` is private (`android:exported="false"`) with action `com.google.firebase.MESSAGING_EVENT`.
+  - `FirebaseInitProvider` is private (`android:exported="false"`) with authority `dev.tabbyrush.android.firebaseinitprovider`.
+  - `FirebaseInstanceIdReceiver` requires `com.google.android.c2dm.permission.SEND` and action `com.google.android.c2dm.intent.RECEIVE`.
+  - `AppMeasurementReceiver` is forbidden (no Analytics).
+
+### 6.2 Acceptance & Pilot Gate Status
+- **Automated Checks**: Smoke runner self-test passes 21/21 assertions (`scripts/admin-announcements-smoke.mjs --self-test`).
+- **Hardware Hold**: Physical connected Android API 33+ device verification (actual notification shade capture and tap navigation) remains held at Gate G2.
+- **Pilot Readiness**: Software runtime and security manifest invariants are validated; restricted operator pilot approved for Android and Linux, while Windows desktop remains held at Gate G5.

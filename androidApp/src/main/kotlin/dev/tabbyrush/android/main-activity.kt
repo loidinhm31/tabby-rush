@@ -40,14 +40,15 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val uiState by viewModel.uiState.collectAsState()
+            val remoteInboxState by viewModel.remoteInboxState.collectAsState()
             val surfaceCreateVisible by viewModel.surfaceCreateVisible.collectAsState()
             val surfaceSettingsVisible by viewModel.surfaceSettingsVisible.collectAsState()
             val surfacePrefState by viewModel.surfacePreferenceState.collectAsState()
             val surfaceAvailability by viewModel.surfaceAvailability.collectAsState()
-
             Surface(modifier = Modifier.fillMaxSize()) {
                 TabbyRushApp(
                     state = uiState,
+                    remoteInboxState = remoteInboxState,
                     onAction = { action ->
                         when (action) {
                             is TodoAction.OpenNotificationSettings -> {
@@ -91,6 +92,7 @@ class MainActivity : ComponentActivity() {
                             else -> viewModel.onAction(action)
                         }
                     },
+                    onRemoteAction = viewModel::onRemoteAction,
                     onAuthSubmit = viewModel::onAuthSubmit
                 )
 
@@ -151,8 +153,15 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
-        val action = intent.action ?: return
 
+        // Safe consumed-once announcement push intent handling
+        val remoteTarget = RemoteNotificationIntents.parseAndConsume(intent)
+        if (remoteTarget != null) {
+            viewModel.selectAnnouncementFromIntent(remoteTarget.messageId, remoteTarget.generation)
+            return
+        }
+
+        val action = intent.action ?: return
         when (action) {
             TaskWidgetActionKeys.ACTION_WIDGET_VIEW_TASK,
             TaskSurfaceIntents.ACTION_VIEW_TASK,

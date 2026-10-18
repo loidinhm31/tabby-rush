@@ -178,3 +178,34 @@ Run the development desktop application on the Windows host:
 .\gradlew.bat -PdesktopTarget=windows :desktopApp:runDebug
 ```
 Use a controlled account/profile and follow [Windows Acceptance](./windows-acceptance.md) for real window, tray, close-to-hide, Quit, and monitor scenarios. A visual design baseline is not a substitute for a screenshot from the running application.
+
+---
+
+## 9. Server Admin Announcements & Native Windows Toast Packaging
+
+### 9.1 Native MSI Packaging with AUMID Injection
+To receive and activate Windows Action Center toasts, the packaged MSI must explicitly register the Application User Model ID (`dev.tabbyrush.desktop`) on its Start Menu shortcut.
+
+> **IMPORTANT**: Standard Gradle `:desktopApp:packageMsi` does **NOT** inject shortcut AUMID properties. Packaging an identity-correct Windows installer requires the dedicated build script:
+
+```powershell
+# Run on Windows x64 host with MSVC C++20 and WiX 3.11 installed
+.\scripts\build-windows-remote-msi.ps1
+```
+
+This script:
+1. Builds the native `tabbyrush-toast.dll` (C ABI v1) using CMake and MSVC.
+2. Assembles the Compose Desktop application image (`:desktopApp:createDistributable`).
+3. Stages the native DLL into the application runtime binary path.
+4. Invokes WiX `heat`, `candle`, and `light` with `MsiShortcutProperty` injecting `System.AppUserModel.ID = "dev.tabbyrush.desktop"`.
+5. Produces `TabbyRush-1.0.0-remote.msi`.
+
+### 9.2 Toast Lifetime, Full-Quit & Limitations
+- **Running Process Only**: Toast notifications are delivered via live SSE while TabbyRush is running (including when minimized to tray).
+- **Full-Quit Safety**: When the user explicitly quits TabbyRush (`Quit` via tray or header):
+  - The application calls `tr_toast_clear_group("tr-remote")` to remove remote toasts from Windows Action Center.
+  - Tears down the native MTA thread via `tr_toast_destroy()`.
+  - Shuts down SSE and process runtime.
+- **Click After Quit / Stale Toast Handling**: TabbyRush deliberately does NOT register a background COM server or cold protocol launcher. Clicking an orphaned toast after process termination cannot launch an unintended process or leak private announcement content.
+- **Silent Reopen Catch-up**: On relaunch, `RemoteInboxController` clears any stale `tr-remote` group before connecting to the SSE stream. New announcements are retrieved via baseline HTTP hydration without replaying historical toast banners.
+- **Gate G5 Status**: The Windows native toast pipeline is fully implemented in source but held at Gate G5 on Linux build hosts. Restricted internal pilot operates on Android and Linux.

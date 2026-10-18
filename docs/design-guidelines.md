@@ -198,3 +198,23 @@ The official visual identity of TabbyRush embodies focus, speed, and playful tas
 
 ### 9.4 Canonical Master Vector
 - **Master SVG Source:** `docs/assets/tabbyrush-app-icon.svg` (512×512 SVG with semantic group layers for desktop background squircle and TabbyRush mascot).
+
+---
+
+## 10. Server Admin Announcements UI & Accessibility Standards (Phase 12)
+
+### 10.1 In-App Inbox Access & Unread Badging
+- **Top Bar Entry**: Accessible via an announcement bell icon on the primary application bar.
+- **Touch Targets**: Minimum interactive bounds of $\ge 48\text{dp}$ (`TabbyRushThemeTokens.MinTouchTargetSize`).
+- **Unread Indicator**: Visual badge displays numeric unread count when $>0$. Semantics explicitly declare `contentDescription = "Announcements, %d unread"` for TalkBack/Orca accessibility.
+
+### 10.2 Inbox List & Detail Presentation
+- **Card Layout & Typography**: Announcements are presented in a vertical scrollable column in descending creation order (`createdAt DESC`).
+- **Non-Color State Indicators**: Unread items feature a primary dot indicator and an explicit text badge ("Unread"), ensuring status is legible without relying solely on color vision.
+- **Literal Plain-Text Rendering**: Announcement titles and bodies are rendered as literal plain text using `Text()` composables. HTML tags, Markdown formatting, and URL execution are disabled to eliminate injection vectors.
+- **Detail Navigation**: Tapping an item opens the full detail screen/dialog and triggers an idempotent `PUT /read` request. The dialog displays normalized title, body, author, creation timestamp, and 90-day expiration date in the local timezone.
+
+### 10.3 Offline, Revoked & Teardown UX
+- **Safe Offline State**: When network connectivity is lost, the inbox displays an informative banner ("Offline — announcements unavailable"). Opening detail views is disabled to prevent presenting stale or unverified content.
+- **Revocation / Signed-Out UX**: When an account grant is revoked (`appAccessRevoked`) or the user signs out, all in-memory announcement state is wiped immediately. The UI renders a clean signed-out placeholder with zero residual text.
+- **Native Tap Deep Linking**: Tapping an OS notification (Android notification shade or Linux desktop alert) opens TabbyRush, verifies current active account authorization, and opens the requested announcement directly.

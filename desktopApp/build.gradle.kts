@@ -29,6 +29,9 @@ sourceSets {
     main {
         kotlin.srcDirs("src/${desktopTarget}Main/kotlin")
         resources.srcDirs("src/${desktopTarget}Main/resources")
+        if (desktopTarget == "windows") {
+            resources.srcDirs("src/windowsMain/resources", "build/native/windows/Release")
+        }
     }
     test {
         kotlin.srcDirs("src/${desktopTarget}Test/kotlin")
@@ -108,5 +111,35 @@ tasks.register<JavaExec>("runDebug") {
 tasks.withType<Test> {
     testLogging {
         events("passed", "skipped", "failed")
+    }
+}
+
+// Guard against bare packageMsi producing shortcuts without System.AppUserModel.ID
+if (desktopTarget == "windows") {
+    tasks.matching { it.name == "packageMsi" }.configureEach {
+        doFirst {
+            throw GradleException(
+                "Direct execution of 'packageMsi' is disabled to prevent shipping shortcuts without System.AppUserModel.ID. " +
+                "Use ':desktopApp:packageRemoteMsi' or 'scripts/build-windows-remote-msi.ps1' instead."
+            )
+        }
+    }
+}
+
+tasks.register("packageRemoteMsi") {
+    group = "distribution"
+    description = "Packages Windows per-user MSI with native tabbyrush-toast.dll and AUMID shortcut properties using WiX"
+    doLast {
+        if (desktopTarget != "windows") {
+            throw GradleException("packageRemoteMsi requires Windows x64 environment with MSVC, Windows SDK, and WiX Toolset. Current target: $desktopTarget")
+        }
+        val script = rootProject.file("scripts/build-windows-remote-msi.ps1")
+        val process = ProcessBuilder("powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script.absolutePath)
+            .inheritIO()
+            .start()
+        val exitCode = process.waitFor()
+        if (exitCode != 0) {
+            throw GradleException("build-windows-remote-msi.ps1 failed with exit code $exitCode")
+        }
     }
 }

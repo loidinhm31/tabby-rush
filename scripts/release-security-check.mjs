@@ -229,8 +229,8 @@ export function validateExportedComponents(manifestXml) {
             }
           }
 
-          const hasProviderMetadata = /<meta-data\s+[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*android:resource\s*=\s*"@xml\/task[_-]widget[_-]info"[^>]*\/?>/i.test(innerContent) ||
-            /<meta-data\s+[^>]*android:resource\s*=\s*"@xml\/task[_-]widget[_-]info"[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*\/?>/i.test(innerContent);
+          const hasProviderMetadata = /<meta-data\s+[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*android:resource\s*=\s*"(@xml\/task[_-]widget[_-]info|@0x[0-9a-fA-F]+|@xml\/0x[0-9a-fA-F]+)"[^>]*\/?>/i.test(innerContent) ||
+            /<meta-data\s+[^>]*android:resource\s*=\s*"(@xml\/task[_-]widget[_-]info|@0x[0-9a-fA-F]+|@xml\/0x[0-9a-fA-F]+)"[^>]*android:name\s*=\s*"android\.appwidget\.provider"[^>]*\/?>/i.test(innerContent);
           if (!hasProviderMetadata) {
             issues.push(`TabbyRushTaskWidgetReceiver is missing required @xml/task-widget-info provider meta-data`);
           }
@@ -274,8 +274,20 @@ export function validateExportedComponents(manifestXml) {
               }
             }
           }
+        } else if (
+          (componentName === 'androidx.work.impl.diagnostics.DiagnosticsReceiver' && /android:permission\s*=\s*"android\.permission\.DUMP"/i.test(openTagAttrs)) ||
+          (componentName === 'androidx.profileinstaller.ProfileInstallReceiver' && /android:permission\s*=\s*"android\.permission\.DUMP"/i.test(openTagAttrs))
+        ) {
+          // Permitted AndroidX system receivers protected by DUMP permission
         } else {
           issues.push(`Exported receiver is not TabbyRushTaskWidgetReceiver: ${componentName}`);
+        }
+      } else if (tag === 'service') {
+        const isPermittedSystemService =
+          (componentName === 'androidx.glance.appwidget.GlanceRemoteViewsService' && /android:permission\s*=\s*"android\.permission\.BIND_REMOTEVIEWS"/i.test(openTagAttrs)) ||
+          (componentName === 'androidx.work.impl.background.systemjob.SystemJobService' && /android:permission\s*=\s*"android\.permission\.BIND_JOB_SERVICE"/i.test(openTagAttrs));
+        if (!isPermittedSystemService) {
+          issues.push(`Non-main service is exported: ${componentName}`);
         }
       } else {
         issues.push(`Non-main ${tag} is exported: ${componentName}`);

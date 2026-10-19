@@ -11,8 +11,24 @@ import kotlin.test.assertNotNull
 
 class DesktopControllerEnvTest {
 
+    private fun withMockEnv(origin: String, apiKey: String, block: () -> Unit) {
+        val testEnv = File.createTempFile("test-ctrl-env", ".env")
+        testEnv.deleteOnExit()
+        testEnv.writeText("APPROVED_HUB_ORIGIN=$origin\nTABBYRUSH_API_KEY=$apiKey\n")
+        val origProp = System.getProperty("tabbyrush.env.file")
+        System.setProperty("tabbyrush.env.file", testEnv.absolutePath)
+        try {
+            block()
+        } finally {
+            if (origProp != null) System.setProperty("tabbyrush.env.file", origProp) else System.clearProperty("tabbyrush.env.file")
+        }
+    }
+
     @Test
-    fun testDesktopControllerLoadsCredentialsFromDotEnv() {
+    fun testDesktopControllerLoadsCredentialsFromDotEnv() = withMockEnv(
+        origin = "https://api-glean-hub.qm-hub-v001.cloud",
+        apiKey = "XoaJSoximq8EhK06IjXAQCOqKqRtM6qy"
+    ) {
         val lockFile = File.createTempFile("tabbyrush_ctrl_test", ".lock")
         lockFile.deleteOnExit()
         val guard = SingleInstanceGuard.tryAcquire(lockFile)
@@ -31,7 +47,10 @@ class DesktopControllerEnvTest {
     }
 
     @Test
-    fun testDesktopControllerReleaseModeLoadsCredentialsFromDotEnv() {
+    fun testDesktopControllerReleaseModeLoadsCredentialsFromDotEnv() = withMockEnv(
+        origin = "https://api-glean-hub.qm-hub-v001.cloud",
+        apiKey = "XoaJSoximq8EhK06IjXAQCOqKqRtM6qy"
+    ) {
         val lockFile = File.createTempFile("tabbyrush_ctrl_rel_test", ".lock")
         lockFile.deleteOnExit()
         val guard = SingleInstanceGuard.tryAcquire(lockFile)

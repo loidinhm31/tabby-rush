@@ -157,9 +157,11 @@ Per project dependency architecture, Phase 02 contracts (`shared/src/commonMain/
 
 ### 7.3 Desktop Sticky Companion Window
 - **Always-On-Top Chrome**: Pinned companion window floating `alwaysOnTop = true` above ordinary desktop workspaces.
-- **Independent Quick-Add**: Inline text input validated against `TitlePolicy` (1–200 Unicode scalars), submitting on `Enter` or `Add` click without overwriting unsaved drafts in the main window.
+- **Whole Compact Groups**: Group roots and children display in shared stable order (`createdAt DESC, id DESC`). Mixed groups remain intact under the To Do section with both active and completed sibling children visible; fully completed groups move to Completed; child subtasks render with `TabbyRushThemeTokens.SpacingLarge` start indentation.
+- **Automatic Parent Progress & Touch Targets**: Roots with live children render read-only, disabled checkboxes with accessible state descriptions (`"Completed/Active (automatic: X/Y subtasks)"`) and visual subtask progress labels (`"Subtasks: X/Y completed"`). Standalone roots and leaf children provide interactive checkboxes with minimum 48dp touch target provisions (`TabbyRushThemeTokens.MinTouchTargetSize`). Title text supports 2-line clamping with ellipsis. Physical touch bounds, wrapping, and screen-reader audio traversal on native desktop environments remain subject to native platform verification.
+- **Absolute Own Deadlines & Overdue Status**: Rows display their own stored absolute date and captured IANA zone (`TaskDeadlinePresentation`); zero deadline inheritance. Overdue active rows render bold error-colored badge text on `TabbyRushCoralSurface` supplementing the date; completed tasks never render overdue; rows without deadlines omit deadline metadata. A 30s background ticker dispatches deadline refresh without database re-queries.
+- **Independent Quick-Add**: Inline text input validated against `TitlePolicy` (1–200 Unicode scalars), creating independent root tasks only on `Enter` or `Add` click without overwriting unsaved drafts in the main window.
 - **Permanent Top Recovery Controls**: Window header embeds explicit `Open App` and `Quit` buttons to ensure application control is retained even if OS window controls are obstructed.
-
 ### 7.4 Acceptance Evidence Boundary
 The sticky-surface PNGs in `docs/evidence/` are visual design baselines only, not native application captures or proof of launcher, notification-shade, window-stacking, tray, screen-reader, or multi-monitor behavior. See the [Android acceptance evidence](./evidence/sticky-surfaces-android-summary.md) and [Windows acceptance evidence](./evidence/sticky-surfaces-windows-summary.md) for the recorded automated scope and Gate G2 holds.
 

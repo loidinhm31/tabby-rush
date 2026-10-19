@@ -31,6 +31,10 @@ Date: 2026-10-20. Priority: P2. Implementation: pending. Review: pending. Provis
   - Accessibility: verify 200% font scaling, TalkBack aggregated descriptions (title + subtask progress + deadline), and >=48dp physical hit areas across checkbox and row actions.
   - Deadline text wrapping: verify long timed deadline labels (`Due YYYY-MM-DD HH:mm (zone) • Overdue`) wrap cleanly without truncating the absolute date.
   - Lifecycle & security refresh: verify widget state updates cleanly across child completion/reopen, app restart, remote sync, and account switch/sign-out without data leakage.
+
+- Tracked Phase 05 Desktop sticky acceptance & remediation gates:
+  - Native Windows/Linux physical display verification: interactive session verification on Linux (X11/Wayland) and native Windows host (DPAPI, WiX/MSI), high-DPI scaling (100%-200%), always-on-top window behavior, tray interaction/recovery, and Orca/Narrator accessibility tree traversal.
+  - Controller concurrency & interleaving remediation: release-blocking remediation of readiness conflation vs `startObserving` interleaving during rapid account switches. When StateFlow conflates Ready(A)→Ready(B) where `startObserving(B)` precedes delayed `Ready(B)` collection, the collector must not cancel the new observer job or blank valid account state. Serialize observer teardown and state resets synchronously in `startObserving(token)`, remove asynchronous job cancellation from the collector, and provide deterministic tests under multi-threaded dispatchers verifying that stale emissions and obsolete-account state/actions cannot leak through.
 ## Architecture
 Backend-first version-capable deployment → publish clients with local Room 3 but hierarchy creation gated → **staging environment:** staging dry-run/backup/permit checks → fenced v2→v3 staging migration → schema/fingerprint/epoch read-back → receipt reconciliation/base scan → `ready-v3` staging hierarchy unlock → cross-device acceptance on staging → **production environment:** separate operator-authorized procedure (pre-migration backup, permit checks, fenced cutover, read-back, unlock).
 
@@ -64,6 +68,8 @@ Prefix `S` = `/home/loidinh/WS/tabby-rush`.
 - [ ] Remediate Phase 03 W2: preservation-marker retention during edit coalescing and preservation bypass.
 - [ ] Deliver Phase 03 deferred recovery items: late-child sync cleanup, unresolved-section UI, and conflict-review copy.
 - [ ] Execute Phase 04 physical launcher acceptance: responsive sizes (120×120 to 320×360dp), 200% font scale, physical touch targets, deadline wrapping, and lifecycle refresh.
+- [ ] Remediate Phase 05 controller concurrency: serialize observer replacement in `startObserving`, remove async job cancellation from readiness collector, and add deterministic multi-threaded interleaving tests.
+- [ ] Execute Phase 05 native desktop sticky verification: physical Linux/Windows display, high-DPI scaling, always-on-top, and tray recovery.
 - [ ] Complete authorized rollout/read-back or report exact operational hold.
 - [ ] Reconcile docs/changelog/phase status with exercised evidence.
 

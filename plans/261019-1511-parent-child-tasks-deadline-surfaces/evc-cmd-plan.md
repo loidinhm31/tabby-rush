@@ -26,16 +26,16 @@ created: 2026-10-19
 - [Architecture baseline](../../docs/system-architecture.md#9-parentchild-tasks--compact-deadlines--strict-v3-architecture-phase-01-implemented).
 - [Hierarchy/storage/sync research](./research/hierarchy-sync.md).
 - [Main UI/widget/sticky research](./research/surface-ui.md).
-- This authorized revision aligns the existing hard-workflow plan in place. Planned effort totals 120h; Phase 01 (24h) and Phase 02 (24h) completed administrative delivery on 2026-10-19 with 48h credited (40.0% planned-effort roll-up); Phases 03–06 remain pending.
+- This authorized revision aligns the existing hard-workflow plan in place. Planned effort totals 120h; Phase 01 (24h), Phase 02 (24h), Phase 03 (24h), Phase 04 (12h), and Phase 05 (12h) completed administrative delivery with 96h credited (80.0% planned-effort roll-up); Phase 06 remains pending.
 
 ## Phases
 | # | Phase | Depends on | Status / progress |
 |---|---|---|---|
 | 1 | [Freeze v3 contract and implement Hub upgrade/receipts](./phase-01-contract-and-hub.md) | None | DONE (2026-10-19) / 100% (24h credited) |
 | 2 | [Migrate Room and integrate versioned sync](./phase-02-room-and-sync.md) | 1 contract freeze | DONE (2026-10-19) / 100% (24h credited) |
-| 3 | [Shared hierarchy semantics and main UI](./phase-03-hierarchy-and-main-ui.md) | 2 | Pending / 0% |
-| 4 | [Android grouped widget and deadline labels](./phase-04-android-widget.md) | 3 evaluator/admission/deadline/schedule contracts | Pending / 0% |
-| 5 | [Linux/Windows grouped sticky mode and deadlines](./phase-05-desktop-sticky.md) | 3 evaluator/admission/deadline/schedule contracts | Pending / 0% |
+| 3 | [Shared hierarchy semantics and main UI](./phase-03-hierarchy-and-main-ui.md) | 2 | DONE (2026-10-20) / 100% (24h credited) |
+| 4 | [Android grouped widget and deadline labels](./phase-04-android-widget.md) | 3 evaluator/admission/deadline/schedule contracts | DONE (2026-10-20) / 100% (12h credited) |
+| 5 | [Linux/Windows grouped sticky mode and deadlines](./phase-05-desktop-sticky.md) | 3 evaluator/admission/deadline/schedule contracts | DONE (2026-10-20) / 100% (12h credited) |
 | 6 | [Cross-device acceptance, rollout, and documentation](./phase-06-acceptance-and-rollout.md) | 1–5 | Pending / 0% |
 
 Phases 4 and 5 can run independently after shared interfaces settle. One integration owner owns shared contracts/store/sync; platform owners do not edit shared files concurrently.

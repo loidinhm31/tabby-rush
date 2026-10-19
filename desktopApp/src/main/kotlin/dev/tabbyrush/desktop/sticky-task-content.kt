@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -34,6 +36,8 @@ import dev.tabbyrush.shared.theme.TabbyRushWhite
 import dev.tabbyrush.shared.theme.TabbyRushPage
 import dev.tabbyrush.shared.theme.TabbyRushInk
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
@@ -42,6 +46,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -52,7 +57,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.tabbyrush.shared.contract.SurfaceAccountToken
 import dev.tabbyrush.shared.contract.SurfaceReadiness
-import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.theme.TabbyRushTheme
 import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
 
@@ -73,6 +77,12 @@ fun StickyTaskContent(
     onAction: (StickyTaskAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000L)
+            onAction(StickyTaskAction.RefreshDeadlines)
+        }
+    }
     TabbyRushTheme {
         Surface(
             modifier = modifier.fillMaxSize(),
@@ -299,9 +309,9 @@ private fun ReadyStickyContent(
 
         Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingMedium))
 
-        // Single scrollable column: Incomplete then Completed
-        val incomplete = state.sections.incomplete
-        val completed = state.sections.completed
+        // Single scrollable column: Incomplete then Completed whole compact groups
+        val incomplete = state.projectedSections.incomplete
+        val completed = state.projectedSections.completed
 
         if (incomplete.isEmpty() && completed.isEmpty()) {
             Box(
@@ -328,12 +338,12 @@ private fun ReadyStickyContent(
 
                     items(
                         items = incomplete,
-                        key = { "inc_${it.id}" }
-                    ) { todo ->
+                        key = { "inc_${it.todo.id}" }
+                    ) { item ->
                         CompactTaskRow(
-                            todo = todo,
+                            item = item,
                             onToggle = { desired ->
-                                onAction(StickyTaskAction.SetCompleted(token, todo.id, desired))
+                                onAction(StickyTaskAction.SetCompleted(token, item.todo.id, desired))
                             }
                         )
                     }
@@ -349,12 +359,12 @@ private fun ReadyStickyContent(
 
                     items(
                         items = completed,
-                        key = { "comp_${it.id}" }
-                    ) { todo ->
+                        key = { "comp_${it.todo.id}" }
+                    ) { item ->
                         CompactTaskRow(
-                            todo = todo,
+                            item = item,
                             onToggle = { desired ->
-                                onAction(StickyTaskAction.SetCompleted(token, todo.id, desired))
+                                onAction(StickyTaskAction.SetCompleted(token, item.todo.id, desired))
                             }
                         )
                     }
@@ -373,20 +383,25 @@ private fun SectionHeader(title: String, count: Int) {
         modifier = Modifier.padding(vertical = TabbyRushThemeTokens.SpacingXSmall)
     )
 }
-
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CompactTaskRow(
-    todo: Todo,
+    item: StickyTaskItem,
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val todo = item.todo
+    val isCompleted = item.effectiveCompleted
+    val startPadding = if (item.isChild) TabbyRushThemeTokens.SpacingLarge else 0.dp
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .padding(start = startPadding)
             .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
             .border(1.dp, TabbyRushThemeTokens.customColors.line, MaterialTheme.shapes.small),
         shape = MaterialTheme.shapes.small,
-        color = if (todo.completed) {
+        color = if (isCompleted) {
             TabbyRushThemeTokens.customColors.mintSurface.copy(alpha = 0.4f)
         } else {
             TabbyRushWhite
@@ -401,40 +416,119 @@ private fun CompactTaskRow(
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(
-                checked = todo.completed,
-                onCheckedChange = { checked -> onToggle(checked) },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = TabbyRushPrimary,
-                    uncheckedColor = TabbyRushThemeTokens.customColors.outline
-                ),
-                modifier = Modifier
-                    .size(TabbyRushThemeTokens.MinTouchTargetSize)
-                    .semantics {
-                        stateDescription = if (todo.completed) "Completed" else "Active"
-                        contentDescription = "Toggle completion for ${todo.title}"
-                    }
-            )
+            if (item.hasLiveChildren) {
+                Checkbox(
+                    checked = isCompleted,
+                    onCheckedChange = null,
+                    enabled = false,
+                    colors = CheckboxDefaults.colors(
+                        disabledColor = if (isCompleted) TabbyRushPrimary else TabbyRushThemeTokens.customColors.outline
+                    ),
+                    modifier = Modifier
+                        .size(TabbyRushThemeTokens.MinTouchTargetSize)
+                        .semantics {
+                            stateDescription = if (isCompleted) {
+                                "Completed (automatic: ${item.completedChildCount}/${item.childCount} subtasks)"
+                            } else {
+                                "Active (automatic: ${item.completedChildCount}/${item.childCount} subtasks)"
+                            }
+                            contentDescription = "Automatic subtask progress for ${todo.title}"
+                        }
+                )
+            } else {
+                Checkbox(
+                    checked = isCompleted,
+                    onCheckedChange = { checked -> onToggle(checked) },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = TabbyRushPrimary,
+                        uncheckedColor = TabbyRushThemeTokens.customColors.outline
+                    ),
+                    modifier = Modifier
+                        .size(TabbyRushThemeTokens.MinTouchTargetSize)
+                        .semantics {
+                            stateDescription = if (item.isChild) {
+                                if (isCompleted) "Completed subtask" else "Active subtask"
+                            } else {
+                                if (isCompleted) "Completed" else "Active"
+                            }
+                            contentDescription = if (item.isChild) {
+                                "Toggle subtask ${todo.title}"
+                            } else {
+                                "Toggle completion for ${todo.title}"
+                            }
+                        }
+                )
+            }
 
             Spacer(modifier = Modifier.width(TabbyRushThemeTokens.SpacingSmall))
 
-            Text(
-                text = todo.title,
-                style = MaterialTheme.typography.body1,
-                color = if (todo.completed) {
-                    TabbyRushThemeTokens.customColors.muted
-                } else {
-                    TabbyRushThemeTokens.customColors.primaryDeep
-                },
-                textDecoration = if (todo.completed) {
-                    TextDecoration.LineThrough
-                } else {
-                    TextDecoration.None
-                },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            Column(
                 modifier = Modifier.weight(1f)
-            )
+            ) {
+                Text(
+                    text = todo.title,
+                    style = MaterialTheme.typography.body1,
+                    color = if (isCompleted) {
+                        TabbyRushThemeTokens.customColors.muted
+                    } else {
+                        TabbyRushThemeTokens.customColors.primaryDeep
+                    },
+                    textDecoration = if (isCompleted) {
+                        TextDecoration.LineThrough
+                    } else {
+                        TextDecoration.None
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (item.hasLiveChildren) {
+                    Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
+                    Text(
+                        text = "Subtasks: ${item.completedChildCount}/${item.childCount} completed",
+                        style = MaterialTheme.typography.caption,
+                        color = TabbyRushThemeTokens.customColors.primaryDeep,
+                        modifier = Modifier.semantics {
+                            contentDescription = "Subtasks progress: ${item.completedChildCount} of ${item.childCount} completed"
+                        }
+                    )
+                }
+
+                val deadlinePres = item.deadlinePresentation
+                if (deadlinePres != null) {
+                    Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier.clearAndSetSemantics {
+                            contentDescription = deadlinePres.contentDescription
+                        }
+                    ) {
+                        Text(
+                            text = deadlinePres.label,
+                            style = MaterialTheme.typography.caption,
+                            color = TabbyRushThemeTokens.customColors.primaryDeep
+                        )
+
+                        if (deadlinePres.isOverdue) {
+                            Text(
+                                text = deadlinePres.overdueLabel ?: "Overdue",
+                                style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colors.error,
+                                modifier = Modifier
+                                    .background(
+                                        TabbyRushThemeTokens.customColors.coralSurface,
+                                        MaterialTheme.shapes.small
+                                    )
+                                    .padding(horizontal = TabbyRushThemeTokens.SpacingXSmall, vertical = 2.dp)
+                                    .semantics {
+                                        contentDescription = "Task is overdue"
+                                    }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

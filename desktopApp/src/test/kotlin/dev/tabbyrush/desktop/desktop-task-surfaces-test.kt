@@ -9,6 +9,8 @@ import dev.tabbyrush.shared.contract.SurfaceResult
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.TodoFilter
+import dev.tabbyrush.shared.contract.TaskDeadline
+import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.JvmAccountFiles
 import dev.tabbyrush.shared.data.RoomAccountStore
 import dev.tabbyrush.shared.data.createInMemoryJvmDatabaseBuilder
@@ -46,7 +48,13 @@ class DesktopTaskSurfacesTest {
     @BeforeTest
     fun setUp() {
         db = createInMemoryJvmDatabaseBuilder().build()
-        store = RoomAccountStore(accountKey1, "test-user", db, "tabbyrush-test")
+        store = RoomAccountStore(
+            accountKey = accountKey1,
+            userId = "test-user",
+            database = db,
+            appId = "tabbyrush-test",
+            defaultContractVersion = OutboxEntity.CONTRACT_VERSION_V3
+        )
     }
 
     @AfterTest
@@ -491,5 +499,416 @@ class DesktopTaskSurfacesTest {
         assertEquals(0, controller.stickyState.value.sections.completed.size)
         assertEquals("", controller.stickyState.value.quickAdd.rawTitle)
         assertNull(controller.stickyState.value.quickAdd.error)
+    }
+
+    @Test
+    fun testWholeCompactGroupsMixedGroupIntactInActive() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        access.onAccountAuthenticated(token1, store)
+
+        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L).copy(completed = false)
+        val child1 = createDefaultTodo(title = "Child 1 Active", nowEpochMs = 1100L).copy(
+            parentTaskId = root.id,
+            completed = false
+        )
+        val child2 = createDefaultTodo(title = "Child 2 Done", nowEpochMs = 1200L).copy(
+            parentTaskId = root.id,
+            completed = true
+        )
+        store.saveTodoLocally(root)
+        store.saveTodoLocally(child1)
+        store.saveTodoLocally(child2)
+
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = {}
+        )
+        controller.startObserving(token1, store)
+
+        withContext(Dispatchers.Default) {
+            withTimeout(5000L) {
+                while (controller.stickyState.value.projectedSections.incomplete.size < 3) {
+                    delay(20)
+                }
+            }
+        }
+
+        val projected = controller.stickyState.value.projectedSections
+        assertEquals(3, projected.incomplete.size)
+        assertEquals(0, projected.completed.size)
+
+        // Root checks
+        val rootItem = projected.incomplete[0]
+        assertEquals(root.id, rootItem.todo.id)
+        assertFalse(rootItem.isChild)
+        assertTrue(rootItem.hasLiveChildren)
+        assertFalse(rootItem.effectiveCompleted)
+        assertEquals(2, rootItem.childCount)
+        assertEquals(1, rootItem.completedChildCount)
+
+        // Child 1 checks
+        val child1Item = projected.incomplete.first { it.todo.id == child1.id }
+        assertEquals(child1.id, child1Item.todo.id)
+        assertTrue(child1Item.isChild)
+        assertFalse(child1Item.hasLiveChildren)
+        assertFalse(child1Item.effectiveCompleted)
+
+        // Child 2 checks (completed sibling remains in mixed group under Active)
+        val child2Item = projected.incomplete.first { it.todo.id == child2.id }
+        assertEquals(child2.id, child2Item.todo.id)
+        assertTrue(child2Item.isChild)
+        assertFalse(child2Item.hasLiveChildren)
+        assertTrue(child2Item.effectiveCompleted)
+    }
+
+    @Test
+    fun testFullyCompleteGroupMigratesToCompletedSection() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        access.onAccountAuthenticated(token1, store)
+
+        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L).copy(completed = false)
+        val child1 = createDefaultTodo(title = "Child 1", nowEpochMs = 1100L).copy(
+            parentTaskId = root.id,
+            completed = true
+        )
+        val child2 = createDefaultTodo(title = "Child 2", nowEpochMs = 1200L).copy(
+            parentTaskId = root.id,
+            completed = true
+        )
+        store.saveTodoLocally(root)
+        store.saveTodoLocally(child1)
+        store.saveTodoLocally(child2)
+
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = {}
+        )
+        controller.startObserving(token1, store)
+
+        withContext(Dispatchers.Default) {
+            withTimeout(5000L) {
+                while (controller.stickyState.value.projectedSections.completed.size < 3) {
+                    delay(20)
+                }
+            }
+        }
+
+        val projected = controller.stickyState.value.projectedSections
+        assertEquals(0, projected.incomplete.size)
+        assertEquals(3, projected.completed.size)
+
+        val rootItem = projected.completed[0]
+        assertEquals(root.id, rootItem.todo.id)
+        assertTrue(rootItem.effectiveCompleted)
+        assertTrue(rootItem.hasLiveChildren)
+        assertEquals(2, rootItem.childCount)
+        assertEquals(2, rootItem.completedChildCount)
+    }
+
+    @Test
+    fun testDirectParentCompletionRejectedNoMutationOrSync() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        access.onAccountAuthenticated(token1, store)
+
+        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L).copy(completed = false)
+        val child = createDefaultTodo(title = "Child Incomplete", nowEpochMs = 1100L).copy(
+            parentTaskId = root.id,
+            completed = false
+        )
+        store.saveTodoLocally(root)
+        store.saveTodoLocally(child)
+
+        var syncTriggered = false
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = { syncTriggered = true }
+        )
+        controller.startObserving(token1, store)
+
+        // Attempt direct parent completion
+        controller.onAction(StickyTaskAction.SetCompleted(token1, root.id, true))
+
+        withContext(Dispatchers.Default) {
+            delay(100)
+        }
+
+        // Must reject: root still incomplete, sync not triggered
+        val storedRoot = store.loadTodos().first { it.id == root.id }
+        assertFalse(storedRoot.completed)
+        assertFalse(syncTriggered)
+    }
+
+    @Test
+    fun testChildDesiredStateCompletionUpdatesParentAndTriggersSync() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        access.onAccountAuthenticated(token1, store)
+
+        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L).copy(completed = false)
+        val child = createDefaultTodo(title = "Only Child", nowEpochMs = 1100L).copy(
+            parentTaskId = root.id,
+            completed = false
+        )
+        store.saveTodoLocally(root)
+        store.saveTodoLocally(child)
+
+        var syncTriggered = false
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = { syncTriggered = true }
+        )
+        controller.startObserving(token1, store)
+
+        withContext(Dispatchers.Default) {
+            withTimeout(5000L) {
+                while (controller.stickyState.value.projectedSections.incomplete.size < 2) {
+                    delay(20)
+                }
+            }
+        }
+
+        // Complete child
+        controller.onAction(StickyTaskAction.SetCompleted(token1, child.id, true))
+
+        withContext(Dispatchers.Default) {
+            withTimeout(5000L) {
+                while (!syncTriggered || controller.stickyState.value.projectedSections.completed.size < 2) {
+                    delay(20)
+                }
+            }
+        }
+
+        assertTrue(syncTriggered)
+        val projected = controller.stickyState.value.projectedSections
+        assertEquals(2, projected.completed.size)
+        assertTrue(projected.completed[0].effectiveCompleted)
+    }
+
+    @Test
+    fun testIndependentOwnDeadlinesAndClockRefresh() = runTest {
+        val fixedNow = 1_700_000_000_000L
+        val access = DesktopTaskSurfaceAccess()
+        access.onAccountAuthenticated(token1, store)
+
+        val taskNoDeadline = createDefaultTodo("No deadline", nowEpochMs = 1000L)
+        val taskDateOnly = createDefaultTodo("Date only", nowEpochMs = 1000L).copy(
+            scheduleToken = "sched-tok-1",
+            deadline = TaskDeadline(
+                date = "2026-10-25",
+                time = null,
+                zone = "UTC",
+                offsetSeconds = 0L,
+                reminderAnchorTime = "09:00",
+                anchorEpochMs = fixedNow + 100_000L,
+                overdueEpochMs = fixedNow + 100_000L
+            )
+        )
+        val taskTimedFuture = createDefaultTodo("Timed future", nowEpochMs = 1000L).copy(
+            scheduleToken = "sched-tok-2",
+            deadline = TaskDeadline(
+                date = "2026-10-25",
+                time = "14:30",
+                zone = "Asia/Saigon",
+                offsetSeconds = 25200L,
+                reminderAnchorTime = null,
+                anchorEpochMs = fixedNow + 200_000L,
+                overdueEpochMs = fixedNow + 200_000L
+            )
+        )
+        val taskOverdue = createDefaultTodo("Timed overdue", nowEpochMs = 1000L).copy(
+            scheduleToken = "sched-tok-3",
+            deadline = TaskDeadline(
+                date = "2026-10-20",
+                time = "08:00",
+                zone = "Asia/Saigon",
+                offsetSeconds = 25200L,
+                reminderAnchorTime = null,
+                anchorEpochMs = fixedNow - 50_000L,
+                overdueEpochMs = fixedNow - 50_000L
+            )
+        )
+        val taskCompletedOverdue = createDefaultTodo("Completed overdue", nowEpochMs = 1000L).copy(
+            completed = true,
+            scheduleToken = "sched-tok-4",
+            deadline = TaskDeadline(
+                date = "2026-10-20",
+                time = "08:00",
+                zone = "Asia/Saigon",
+                offsetSeconds = 25200L,
+                reminderAnchorTime = null,
+                anchorEpochMs = fixedNow - 50_000L,
+                overdueEpochMs = fixedNow - 50_000L
+            )
+        )
+        store.saveTodoLocally(taskNoDeadline)
+        store.saveTodoLocally(taskDateOnly)
+        store.saveTodoLocally(taskTimedFuture)
+        store.saveTodoLocally(taskOverdue)
+        store.saveTodoLocally(taskCompletedOverdue)
+
+        var simulatedClock = fixedNow
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = {},
+            clock = { simulatedClock }
+        )
+        controller.startObserving(token1, store)
+
+        withContext(Dispatchers.Default) {
+            withTimeout(5000L) {
+                while (controller.stickyState.value.projectedSections.incomplete.size < 4) {
+                    delay(20)
+                }
+            }
+        }
+
+        val incomplete = controller.stickyState.value.projectedSections.incomplete
+        val itemNoDl = incomplete.first { it.todo.id == taskNoDeadline.id }
+        assertNull(itemNoDl.deadlinePresentation)
+
+        val itemDateOnly = incomplete.first { it.todo.id == taskDateOnly.id }
+        assertNotNull(itemDateOnly.deadlinePresentation)
+        assertEquals("Due 2026-10-25", itemDateOnly.deadlinePresentation?.label)
+        assertFalse(itemDateOnly.deadlinePresentation!!.isOverdue)
+
+        val itemTimed = incomplete.first { it.todo.id == taskTimedFuture.id }
+        assertNotNull(itemTimed.deadlinePresentation)
+        assertEquals("Due 2026-10-25 14:30 (Asia/Saigon)", itemTimed.deadlinePresentation?.label)
+        assertFalse(itemTimed.deadlinePresentation!!.isOverdue)
+
+        val itemOverdue = incomplete.first { it.todo.id == taskOverdue.id }
+        assertNotNull(itemOverdue.deadlinePresentation)
+        assertEquals("Due 2026-10-20 08:00 (Asia/Saigon)", itemOverdue.deadlinePresentation?.label)
+        assertTrue(itemOverdue.deadlinePresentation!!.isOverdue)
+        assertEquals("Overdue", itemOverdue.deadlinePresentation?.overdueLabel)
+
+        // Completed task with past deadline must NOT be overdue
+        val completed = controller.stickyState.value.projectedSections.completed
+        val itemDone = completed.first { it.todo.id == taskCompletedOverdue.id }
+        assertNotNull(itemDone.deadlinePresentation)
+        assertFalse(itemDone.deadlinePresentation!!.isOverdue)
+
+        // Advance clock so taskDateOnly becomes overdue, then refresh
+        simulatedClock = fixedNow + 150_000L
+        controller.refreshDeadlines(simulatedClock)
+        val refreshedDateOnly = controller.stickyState.value.projectedSections.incomplete.first { it.todo.id == taskDateOnly.id }
+        assertTrue(refreshedDateOnly.deadlinePresentation!!.isOverdue)
+        assertEquals("Due 2026-10-25", refreshedDateOnly.deadlinePresentation?.label)
+    }
+
+    @Test
+    fun testAccountSwitchingWhileSubmitPendingRejectsStalePublish() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        access.onAccountAuthenticated(token1, store)
+
+        var syncCount = 0
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = { syncCount++ }
+        )
+        controller.startObserving(token1, store)
+
+        controller.onAction(StickyTaskAction.ChangeTitle(token1, "Account 1 task"))
+        controller.onAction(StickyTaskAction.Submit(token1))
+
+        // Immediately switch account before submit completes
+        val token2 = SurfaceAccountToken(AccountKey("2222222222222222222222222222222222222222222222222222222222222222"), 1L)
+        val db2 = createInMemoryJvmDatabaseBuilder().build()
+        val store2 = RoomAccountStore(token2.accountKey, "user2", db2, "tabbyrush-test2")
+        try {
+            access.onAccountAuthenticated(token2, store2)
+
+            withContext(Dispatchers.Default) {
+                delay(100)
+            }
+
+            // Sync should NOT be triggered for token1 after switch
+            assertEquals(0, syncCount)
+            // State for new account must not have Account 1 task draft
+            assertEquals("", controller.stickyState.value.quickAdd.rawTitle)
+        } finally {
+            try { db2.close() } catch (_: Exception) {}
+        }
+    }
+
+    @Test
+    fun testQuickAddAlwaysCreatesIndependentRoot() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        access.onAccountAuthenticated(token1, store)
+
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = {}
+        )
+        controller.startObserving(token1, store)
+
+        controller.onAction(StickyTaskAction.ChangeTitle(token1, "Standalone Root Task"))
+        controller.onAction(StickyTaskAction.Submit(token1))
+
+        withContext(Dispatchers.Default) {
+            withTimeout(5000L) {
+                while (controller.stickyState.value.sections.incomplete.isEmpty()) {
+                    delay(20)
+                }
+            }
+        }
+
+        val saved = store.loadTodos().first { it.title == "Standalone Root Task" }
+        assertNull(saved.parentTaskId, "Sticky quick-add must create independent root tasks only")
+    }
+
+    @Test
+    fun testStartupOrderControllerConstructedBeforeAccountAuthentication() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        // Construct controller while access is still Restoring (production startup order in main.kt)
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = {}
+        )
+
+        // Pre-populate tasks in store
+        val task = createDefaultTodo(title = "Startup Task", nowEpochMs = 1000L)
+        store.saveTodoLocally(task)
+
+        // Then authenticate account and start observing
+        access.onAccountAuthenticated(token1, store)
+        controller.startObserving(token1, store)
+
+        // Controller must populate tasks and stay populated (never canceled or wiped by readiness race)
+        withContext(Dispatchers.Default) {
+            withTimeout(5000L) {
+                while (controller.stickyState.value.projectedSections.incomplete.isEmpty()) {
+                    delay(20)
+                }
+            }
+        }
+
+        val state = controller.stickyState.value
+        assertEquals(SurfaceReadiness.Ready(token1), state.readiness)
+        assertEquals(1, state.projectedSections.incomplete.size)
+        assertEquals("Startup Task", state.projectedSections.incomplete[0].todo.title)
     }
 }

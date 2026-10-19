@@ -80,6 +80,25 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 
 ---
 
+### 2.3 Phase 05 — Grouped Sticky Mode & Deadline Presentation Status (Parent/Child Tasks)
+
+| Gate | Requirement | Verification Method | Status |
+|---|---|---|---|
+| **Whole Compact Groups (Model)** | Mixed groups intact under Active; all-done groups under Completed; pure projection | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testWholeCompactGroupsMixedGroupIntactInActive`, `testFullyCompleteGroupMigratesToCompletedSection`) |
+| **Grouped Row Layout (UI)** | `SpacingLarge` child indentation, 2-line title clamping, >=48dp touch bounds | Source inspection (`sticky-task-content.kt`) | Layout provisions implemented; rendered Compose layout and native visual scaling deferred to Phase 06 |
+| **Absolute Own Deadlines (Model)** | Stored date/time/zone; no inheritance; overdue badge supplements date | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testIndependentOwnDeadlinesAndClockRefresh`) |
+| **Deadline & Overdue Badging (UI)** | `FlowRow` layout, error-colored overdue text on `TabbyRushCoralSurface`, full semantics | Source inspection (`sticky-task-content.kt`) | Implemented with `clearAndSetSemantics`; screen-reader audio traversal deferred to Phase 06 |
+| **Automatic Parent Completion (Model)** | Read-only checkbox on parent with live children; store admission rejects direct parent toggle | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testDirectParentCompletionRejectedNoMutationOrSync`) |
+| **Automatic Parent Semantics (UI)** | Disabled checkbox, `"Subtasks: X/Y completed"` visual label, TalkBack/Orca descriptions | Source inspection (`sticky-task-content.kt`) | Implemented in source; assistive technology verification deferred to Phase 06 |
+| **Child Desired-State Toggle** | Leaf child completion toggle updates parent effective status and triggers sync | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testChildDesiredStateCompletionUpdatesParentAndTriggersSync`) |
+| **Independent Root Quick-Add** | Creates independent root (`parentTaskId = null`); does not mutate main editor; preserves typing | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testQuickAddAlwaysCreatesIndependentRoot`, `testQuickAddDoesNotMutateMainEditor`, `testEditingQuickAddWhileSavePendingPreservesNewText`) |
+| **Admission & Token Fencing** | Actions fenced by `SurfaceAccountToken`; stale token rejected fail-closed | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testStaleTokenRejected`, `testAccountSwitchingWhileSubmitPendingRejectsStalePublish`) |
+| **Periodic Deadline Refresh** | 30s Compose ticker dispatches `RefreshDeadlines`; controller updates projection with clock | Unit suite & source | Reported unit coverage PASS (controller clock/update unit tested; Compose 30s ticker inspected in source) |
+| **Live Desktop Session Display** | Visual window rendering, DPI scaling, always-on-top, and tray recovery in live Linux GUI session | Interactive Linux desktop session | DEFERRED to Phase 06 acceptance gate (requires live desktop testbed; Gate G2 holds remain open) |
+
+Reported verification: 127 `:desktopApp:test` unit tests passed (including 20 `DesktopTaskSurfacesTest` assertions), 341 `:shared:jvmTest`, and 50 `:androidApp:testDebugUnitTest` (518 Gradle unit tests total, executed with `--dependency-verification=off`; see QA report `plans/reports/qa-261020-0200-phase-05-desktop-sticky-review-fixes.md`). Native Linux GUI session acceptance (always-on-top, Wayland/X11 tray, 200% scaling, Orca screen-reader) remains deferred to Phase 06 of plan `plans/261019-1511-parent-child-tasks-deadline-surfaces` (distinct from historical Phase 08 of plan `plans/261016-1409-sticky-task-surfaces`).
+---
+
 ## 3. Disclosed Limitations & Operator Prerequisites
 
 1. **Host `rpm-build` Package**:

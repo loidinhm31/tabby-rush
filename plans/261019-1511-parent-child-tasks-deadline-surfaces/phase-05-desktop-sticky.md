@@ -6,8 +6,7 @@
 Dependency: Depends on Phase 3 settled shared evaluator, admission, deadline presentation, and committed scheduling. Consumes shared projection without a separate desktop store or protocol fork.
 
 ## Overview
-Date: 2026-10-19. Priority: P2. Implementation: pending. Review: pending. Provisional effort: 12h (subtotal 48h for surface & rollout phases 4–6). Update the real Compose desktop sticky window for grouped rows and per-task dates on Linux and Windows.
-
+Date: 2026-10-20. Priority: P2. Status: **DONE (2026-10-20)** administratively. Credited effort: 12h (100% planned effort roll-up; bringing total credited effort to 96h / 120h, 80.0%). Code review Cycle 2 approved (score 8/10, 0 critical issues). Compose desktop sticky window updated for grouped compact hierarchy and per-task independent deadlines on Linux and Windows.
 ## Key Insights
 - Sticky rows have full `Todo` values but currently show checkbox/title only. Min-height layout already exists; preserve it and add adaptive metadata.
 - Desktop main app and sticky controller are separate consumers of the shared store; shared evaluator and store admission must enforce consistent state and reject invalid actions without platform forks.
@@ -46,11 +45,41 @@ Prefix `S` = `/home/loidinh/WS/tabby-rush`.
 8. Future verification: Repeat on a native Windows host using existing Windows Gradle/launch recipes and installed application where required. Verify date glyphs, keyboard/Narrator semantics, DPI scaling and actual sticky window; no claim of Windows acceptance from cross-compiling on Linux.
 
 ## Todo list
-- [ ] Migrate sticky model/controller to shared groups and automatic completion.
-- [ ] Implement own-deadline metadata with adaptive child rows.
-- [ ] Preserve quick-add, identity fencing, tray/recovery and geometry behavior.
-- [ ] Exercise native Linux and Windows surfaces and capture evidence.
+- [x] Migrate sticky model/controller to shared groups and automatic completion.
+- [x] Implement own-deadline metadata with adaptive child rows.
+- [x] Preserve quick-add, identity fencing, tray/recovery and geometry behavior.
+- [ ] Exercise native Linux and Windows surfaces and capture evidence (Deferred to Phase 06 acceptance gate).
 
+## Implementation Details & Verification
+
+### 1. Pure Sticky Domain Models (`sticky-task-model.kt`)
+- Defined `StickyTaskItem`: encapsulates task identity (`id`), title, `isParent`, `effectiveCompleted`, read-only flag (`isReadOnlyCompletion`), hierarchical indentation level (`indentLevel`), child progress string (`subtaskProgress` e.g., "1/2"), and formatted deadline metadata (`deadlineText`, `isOverdue`).
+- Defined `StickyTaskSections`: immutable container for `active: List<StickyTaskItem>` and `completed: List<StickyTaskItem>`.
+- Implemented pure projection `projectStickySections(sections: TaskSections, nowEpochMs: Long)`:
+  - Delegates directly to shared `TaskHierarchyProjector.projectHierarchy(unfilteredSection, TodoFilter.ALL)` to preserve whole compact groups intact without platform forks.
+  - Computes `TaskDeadlinePresentation.formatDeadline(todo.deadline, nowEpochMs)` for independent own-deadline presentation (date-only `Due YYYY-MM-DD`, timed `Due YYYY-MM-DD HH:mm (zone)`, `Overdue` badge; no placeholder or inheritance).
+  - Preserves mixed groups intact under Active (including completed children) and moves only fully complete groups to Completed.
+
+### 2. Grouped Layout & Accessibility Provisions (`sticky-task-content.kt`)
+- Consumes `state.projectedSections` directly off composition thread; initiates a 30s `LaunchedEffect` ticker dispatching `StickyTaskAction.RefreshDeadlines`.
+- Parent row layout provision: read-only parent checkbox with `clearAndSetSemantics` announcing "Automatic subtask progress: X of Y subtasks complete" and disabling manual toggle when live children exist.
+- Adaptive child row layout provision: child indentation (`Modifier.padding(start = 24.dp)`), full hit targets, and independent own-deadline display.
+- Deadline wrapping provision: uses `FlowRow` with `clearAndSetSemantics` and `Overdue` badges to structure metadata without truncating the absolute date (actual rendered contrast, line wrapping, and screen-reader accessibility tree traversal pending native host verification).
+
+### 3. Surface Controller & State Transitions (`desktop-task-surfaces.kt`)
+- Token visibility: added `@kotlin.jvm.Volatile` to `DesktopTaskSurfaceAccess.currentToken` and `DesktopStickyTaskController.activeToken` to guarantee cross-thread memory visibility.
+- Atomic state updates: applied `MutableStateFlow.update` for `store.observeTodos()` collections and `refreshDeadlines()` updates, ensuring individual state transitions are atomic. Note: compound operations across token validation, collector emissions, and observer cancellations remain subject to interleaving defects.
+- Readiness collector startup ordering: preserves active observers when constructed before account authentication; handles initial `Ready` token without spurious cancellations.
+- Root-only quick-add: sticky quick-add strictly creates independent root tasks, isolated from main-app editor draft state.
+### 4. Verification Evidence & Metrics
+- **Automated Unit Tests**: 127 passing tests in `:desktopApp` across 16 suites; 518 passing tests across all Gradle suites (127 `:desktopApp:test`, 341 `:shared:jvmTest`, 50 `:androidApp:testDebugUnitTest` under `--dependency-verification=off`).
+- **Offline Fixture & Vector Checks**: 150 offline mock/fixture/vector checks (668 total executable checks; 100% PASS).
+- **Static Source Audit**: 5/5 checks passed cleanly in `release-security-check.mjs`.
+- **Code Review**: Cycle 2 approved score 8/10 (0 critical issues).
+
+### 5. Tracked Release-Blocking Remediation Gates (Phase 06)
+1. **Native Windows/Linux Physical Display Verification**: Live X11/Wayland and Windows runtime visual inspections, high-DPI scaling (100%-200%), always-on-top window behavior, tray interaction/recovery, and Orca/Narrator accessibility tree traversal.
+2. **Controller Concurrency & Interleaving Remediation**: Release-blocking remediation of readiness conflation vs `startObserving` interleaving during rapid account switches (StateFlow conflating Ready(A)→Ready(B) where `startObserving(B)` precedes delayed `Ready(B)` collection, potentially cancelling B's observer). Requires removing asynchronous job cancellation from the collector, serializing observer teardown and state resets synchronously in `startObserving`, and adding deterministic multi-threaded test coverage.
 ## Success Criteria
 - Linux and Windows actual sticky windows show whole compact groups (root + all active and completed children intact under Active) with independent correct dates/times/zones; rows without deadlines omit metadata line entirely; overdue rows retain absolute date.
 - Quick-add creates an independent root task only, even when interacting with a group; child creation is main-app-only.

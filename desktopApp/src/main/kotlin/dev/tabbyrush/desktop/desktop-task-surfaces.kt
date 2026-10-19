@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -80,10 +81,9 @@ class DesktopTaskSurfaceAccess : TaskSurfaceAccess, LeaveSchedulerCancelGate {
     private var gateState = SurfaceGateState.OPEN
     private var inFlightCount = 0
     private var drainSignal: CompletableDeferred<Unit>? = null
-
+    @kotlin.jvm.Volatile
     private var currentToken: SurfaceAccountToken? = null
     private var activeStore: RoomAccountStore? = null
-
     /**
      * Waits up to [timeoutMs] for readiness to resolve from Restoring.
      */
@@ -275,34 +275,45 @@ class DesktopStickyTaskController(
     private val scope: CoroutineScope,
     private val onOpenApp: () -> Unit,
     private val onQuit: () -> Unit,
-    private val onTriggerSync: () -> Unit
+    private val onTriggerSync: () -> Unit,
+    private val clock: () -> Long = { System.currentTimeMillis() }
 ) {
 
     private val _stickyState = MutableStateFlow(
         StickyTaskState(
             readiness = access.readiness.value,
             sections = TaskSections(emptyList(), emptyList()),
-            quickAdd = StickyQuickAddState()
+            quickAdd = StickyQuickAddState(),
+            projectedSections = StickyTaskSections(emptyList(), emptyList())
         )
     )
     val stickyState: StateFlow<StickyTaskState> = _stickyState.asStateFlow()
 
+    @kotlin.jvm.Volatile
     private var activeObserverJob: Job? = null
+    @kotlin.jvm.Volatile
     private var activeToken: SurfaceAccountToken? = null
 
     init {
         scope.launch {
             access.readiness.collect { r ->
-                _stickyState.value = _stickyState.value.copy(readiness = r)
-                if (r !is SurfaceReadiness.Ready) {
-                    // Blank content and input on transition away from Ready
-                    _stickyState.value = _stickyState.value.copy(
+                val prevReadyToken = (stickyState.value.readiness as? SurfaceReadiness.Ready)?.token
+                val newReadyToken = (r as? SurfaceReadiness.Ready)?.token
+                val tokenChanged = prevReadyToken != null && newReadyToken != null && prevReadyToken != newReadyToken
+                if (r !is SurfaceReadiness.Ready || tokenChanged) {
+                    _stickyState.value = StickyTaskState(
+                        readiness = r,
                         sections = TaskSections(emptyList(), emptyList()),
-                        quickAdd = StickyQuickAddState()
+                        quickAdd = StickyQuickAddState(),
+                        projectedSections = StickyTaskSections(emptyList(), emptyList())
                     )
-                    activeToken = null
-                    activeObserverJob?.cancel()
-                    activeObserverJob = null
+                    activeToken = newReadyToken
+                    if (tokenChanged) {
+                        activeObserverJob?.cancel()
+                        activeObserverJob = null
+                    }
+                } else {
+                    _stickyState.value = _stickyState.value.copy(readiness = r)
                 }
             }
         }
@@ -310,18 +321,29 @@ class DesktopStickyTaskController(
 
     /**
      * Starts observing tasks for the active account runtime.
-     * Unfiltered tasks are partitioned into [TaskSections] via [partitionSurfaceTodos].
+     * Unfiltered tasks are partitioned into [TaskSections] via [partitionSurfaceTodos]
+     * and projected into whole compact groups via [projectStickySections].
      */
     fun startObserving(token: SurfaceAccountToken, store: RoomAccountStore): Job {
         activeObserverJob?.cancel()
+        val prev = activeToken
         activeToken = token
+        if (prev != null && prev != token) {
+            _stickyState.value = _stickyState.value.copy(
+                sections = TaskSections(emptyList(), emptyList()),
+                projectedSections = StickyTaskSections(emptyList(), emptyList()),
+                quickAdd = StickyQuickAddState()
+            )
+        }
         val job = scope.launch {
             try {
                 store.observeTodos().collect { todos ->
                     // Token check prevents stale emissions from previous account/generation
                     if (activeToken == token && access.getCurrentToken() == token) {
                         val sections = partitionSurfaceTodos(todos)
-                        _stickyState.value = _stickyState.value.copy(sections = sections)
+                        val now = clock()
+                        val projected = projectStickySections(sections, now)
+                        _stickyState.update { it.copy(sections = sections, projectedSections = projected) }
                     }
                 }
             } catch (ce: CancellationException) {
@@ -334,6 +356,17 @@ class DesktopStickyTaskController(
         return job
     }
 
+    fun refreshDeadlines(nowEpochMs: Long = clock()) {
+        _stickyState.update { current ->
+            if (current.readiness is SurfaceReadiness.Ready) {
+                val projected = projectStickySections(current.sections, nowEpochMs)
+                current.copy(projectedSections = projected)
+            } else {
+                current
+            }
+        }
+    }
+
     fun stopObserving() {
         activeObserverJob?.cancel()
         activeObserverJob = null
@@ -344,7 +377,7 @@ class DesktopStickyTaskController(
         when (action) {
             is StickyTaskAction.ChangeTitle -> {
                 val current = activeToken
-                if (current == null || current != action.token) return
+                if (current == null || current != action.token || access.getCurrentToken() != action.token) return
                 val res = TitlePolicy.normalizeAndValidate(action.rawTitle)
                 val err = (res as? ApiResult.Failure)?.let {
                     (it.error as? SafeError.Validation)?.message ?: "Invalid title"
@@ -358,7 +391,7 @@ class DesktopStickyTaskController(
             }
             is StickyTaskAction.Submit -> {
                 val current = activeToken
-                if (current == null || current != action.token) return
+                if (current == null || current != action.token || access.getCurrentToken() != action.token) return
                 val currentQuickAdd = _stickyState.value.quickAdd
                 if (currentQuickAdd.submitting) return // Reject duplicate submissions
 
@@ -379,8 +412,18 @@ class DesktopStickyTaskController(
 
                 scope.launch {
                     val result = access.withSurfaceAdmission(action.token) { store ->
-                        val todo = createDefaultTodo(title)
+                        val todo = createDefaultTodo(title, nowEpochMs = clock())
                         store.saveTodoLocally(todo)
+                    }
+
+                    // Strengthened account fencing: ensure controller activeToken and access token still match action.token
+                    if (activeToken != action.token || access.getCurrentToken() != action.token) {
+                        if (activeToken == action.token) {
+                            _stickyState.value = _stickyState.value.copy(
+                                quickAdd = _stickyState.value.quickAdd.copy(submitting = false)
+                            )
+                        }
+                        return@launch
                     }
 
                     when (result) {
@@ -411,18 +454,23 @@ class DesktopStickyTaskController(
             }
             is StickyTaskAction.SetCompleted -> {
                 val current = activeToken
-                if (current == null || current != action.token) return
+                if (current == null || current != action.token || access.getCurrentToken() != action.token) return
                 scope.launch {
                     val res = access.setCompleted(
                         token = action.token,
                         taskId = action.taskId,
                         completed = action.completed,
-                        nowEpochMs = System.currentTimeMillis()
+                        nowEpochMs = clock()
                     )
-                    if (res is SurfaceResult.Value && res.value == CompletionChange.Changed) {
-                        onTriggerSync()
+                    if (activeToken == action.token && access.getCurrentToken() == action.token) {
+                        if (res is SurfaceResult.Value && res.value == CompletionChange.Changed) {
+                            onTriggerSync()
+                        }
                     }
                 }
+            }
+            is StickyTaskAction.RefreshDeadlines -> {
+                refreshDeadlines()
             }
             is StickyTaskAction.OpenApp -> {
                 onOpenApp()

@@ -17,6 +17,9 @@ import dev.tabbyrush.shared.contract.StrictSyncDigest
 import dev.tabbyrush.shared.contract.StrictTodoData
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.StrictSyncV2Contract
+import dev.tabbyrush.shared.contract.StrictSyncV3Contract
+import dev.tabbyrush.shared.contract.StrictSyncV3Digest
+import dev.tabbyrush.shared.contract.StrictV3TodoData
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.ReminderRule
 import dev.tabbyrush.shared.data.AccountSyncMetaEntity
@@ -509,5 +512,341 @@ class AccountSyncCoordinatorTest {
         // New schedule token generated
         assertNotNull(newOp.scheduleToken)
         assertTrue(newOp.scheduleToken != "old-tok")
+    }
+
+    @Test
+    fun testV3PushAndAckSuccess() = runTest {
+        val parentUuid = "c0000000-0000-4000-8000-000000000001"
+        val childUuid = "c0000000-0000-4000-8000-000000000002"
+
+        val expectedDigest = StrictSyncV3Digest.computeDigest(
+            domain = StrictSyncV3Contract.PROTOCOL_VERSION,
+            appId = "tabby-rush",
+            userId = "user-123",
+            epoch = "epoch-v3",
+            tableName = "todos",
+            rowId = childUuid,
+            opId = "op-child-v3",
+            kind = StrictOperationKind.CREATE,
+            expectedRevision = 0L,
+            data = StrictV3TodoData(
+                id = childUuid,
+                title = "Child Task",
+                completed = false,
+                createdAt = 1100L,
+                parentTaskId = parentUuid
+            )
+        )
+
+        val engine = TestHttpEngine { request ->
+            when {
+                request.url.encodedPath.endsWith("/strong/bootstrap") -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v3","appId":"tabby-rush","epoch":"epoch-v3","tables":["todos"]}"""
+                    )
+                }
+                request.url.encodedPath.endsWith("/strong/pull") -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{
+                            "protocol":"strict-v3",
+                            "epoch":"epoch-v3",
+                            "records":[
+                                {
+                                    "tableName":"todos",
+                                    "rowId":"$parentUuid",
+                                    "revision":1,
+                                    "deleted":false,
+                                    "data":{
+                                        "id":"$parentUuid",
+                                        "title":"Parent Root",
+                                        "completed":false,
+                                        "createdAt":1000,
+                                        "parentTaskId":null
+                                    }
+                                }
+                            ],
+                            "cursor":null,
+                            "hasMore":false
+                        }"""
+                    )
+                }
+                request.url.encodedPath.endsWith("/strong/push") -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{
+                            "protocol":"strict-v3",
+                            "epoch":"epoch-v3",
+                            "results":[
+                                {
+                                    "opId":"op-child-v3",
+                                    "rowId":"$childUuid",
+                                    "digest":"$expectedDigest",
+                                    "status":"accepted",
+                                    "acceptedRevision":1
+                                }
+                            ]
+                        }"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.NotFound, "{}")
+            }
+        }
+
+        val (coordinator, store, dao) = createTestSetup(engine)
+        dao.upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-v3",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        // Confirmed parent in server_base
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = parentUuid,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Parent Root",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-v3",
+                parentTaskId = null
+            )
+        )
+
+        // Child in outbox
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-child-v3",
+                epoch = "epoch-v3",
+                tableName = "todos",
+                rowId = childUuid,
+                kind = "create",
+                expectedRevision = 0L,
+                title = "Child Task",
+                completed = false,
+                createdAt = 1100L,
+                digest = "d-child-v3",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1100L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = parentUuid
+            )
+        )
+
+        coordinator.triggerSync()
+
+        // Outbox entry should be reconciled/deleted
+        assertNull(dao.getOutboxEntry("op-child-v3"))
+
+        // Base should have child with parentTaskId
+        val childBase = dao.getServerBase(childUuid)
+        assertNotNull(childBase)
+        assertEquals(1L, childBase.serverRevision)
+        assertEquals(parentUuid, childBase.parentTaskId)
+    }
+
+    @Test
+    fun testServerV2RejectsPendingV3Outbox() = runTest {
+        val engine = TestHttpEngine { request ->
+            when {
+                request.url.encodedPath.endsWith("/strong/bootstrap") -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v2","appId":"tabby-rush","epoch":"epoch-v2","tables":["todos"]}"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.OK, "{}")
+            }
+        }
+
+        val (coordinator, store, dao) = createTestSetup(engine)
+        dao.upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-v2",
+                syncStatus = "ready-v2"
+            )
+        )
+
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-v3-pending",
+                epoch = "epoch-v2",
+                tableName = "todos",
+                rowId = "child-v3",
+                kind = "create",
+                expectedRevision = 0L,
+                title = "Child Task",
+                completed = false,
+                createdAt = 1000L,
+                digest = "d-v3",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1000L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = "parent-id"
+            )
+        )
+
+        coordinator.triggerSync()
+
+        val progress = coordinator.progress.value
+        assertEquals(SyncStatus.PAUSED_PROTOCOL, progress.status)
+        assertNotNull(progress.safeError)
+        assertEquals("SERVER_V2_INCOMPATIBLE", progress.safeError?.code)
+    }
+
+    @Test
+    fun testServerV1RejectsPendingV3Outbox() = runTest {
+        val engine = TestHttpEngine { request ->
+            when {
+                request.url.encodedPath.endsWith("/strong/bootstrap") -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v1","appId":"tabby-rush","epoch":"epoch-v1","tables":["todos"]}"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.OK, "{}")
+            }
+        }
+
+        val (coordinator, store, dao) = createTestSetup(engine)
+        dao.upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-v1",
+                syncStatus = "ready-v1"
+            )
+        )
+
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-v3-pending",
+                epoch = "epoch-v1",
+                tableName = "todos",
+                rowId = "child-v3",
+                kind = "create",
+                expectedRevision = 0L,
+                title = "Child Task",
+                completed = false,
+                createdAt = 1000L,
+                digest = "d-v3",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1000L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = "parent-id"
+            )
+        )
+
+        coordinator.triggerSync()
+
+        val progress = coordinator.progress.value
+        assertEquals(SyncStatus.PAUSED_PROTOCOL, progress.status)
+        assertNotNull(progress.safeError)
+        assertEquals("SERVER_V1_INCOMPATIBLE", progress.safeError?.code)
+    }
+
+    @Test
+    fun testReapplyConflictOnV3ChildPreservesParentAndSelectsV3Contract() = runTest {
+        val engine = TestHttpEngine { Pair(HttpStatusCode.OK, "{}") }
+        val (coordinator, store, dao) = createTestSetup(engine)
+
+        val parentUuid = "e0000000-0000-4000-8000-000000000001"
+        val childUuid = "e0000000-0000-4000-8000-000000000002"
+
+        dao.upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-v3-reapply",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = parentUuid,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Parent Task",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-v3-reapply",
+                parentTaskId = null
+            )
+        )
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = childUuid,
+                serverRevision = 2L,
+                deleted = false,
+                title = "Child Task on Server",
+                completed = false,
+                createdAt = 1100L,
+                updatedAt = 1100L,
+                epoch = "epoch-v3-reapply",
+                parentTaskId = parentUuid
+            )
+        )
+
+        // Conflicted child update in outbox
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-child-conflict",
+                epoch = "epoch-v3-reapply",
+                tableName = "todos",
+                rowId = childUuid,
+                kind = "update",
+                expectedRevision = 1L, // Server was at 2L, hence conflict
+                title = "Local Child Edit",
+                completed = true,
+                createdAt = 1100L,
+                digest = "d-old-v3",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_CONFLICT,
+                createdAtEpochMs = 1200L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = parentUuid
+            )
+        )
+
+        coordinator.reapplyConflict(childUuid)
+
+        // Old conflict op removed, new op queued with v3 contract, parent preserved, expectedRevision = 2L
+        assertNull(dao.getOutboxEntry("op-child-conflict"))
+        val ops = dao.getOutboxByRowId(childUuid)
+        assertEquals(1, ops.size)
+        val newOp = ops[0]
+        assertEquals(OutboxEntity.CONTRACT_VERSION_V3, newOp.contractVersion)
+        assertEquals(parentUuid, newOp.parentTaskId)
+        assertEquals(2L, newOp.expectedRevision)
+        assertEquals("Local Child Edit", newOp.title)
+        assertTrue(newOp.completed == true)
+        val expectedDigest = StrictSyncV3Digest.computeDigest(
+            domain = StrictSyncV3Contract.PROTOCOL_VERSION,
+            appId = "tabby-rush",
+            userId = "user-123",
+            epoch = "epoch-v3-reapply",
+            tableName = "todos",
+            rowId = childUuid,
+            opId = newOp.opId,
+            kind = StrictOperationKind.UPDATE,
+            expectedRevision = 2L,
+            data = StrictV3TodoData(
+                id = childUuid,
+                title = "Local Child Edit",
+                completed = true,
+                createdAt = 1100L,
+                parentTaskId = parentUuid
+            )
+        )
+        assertEquals(expectedDigest, newOp.digest)
     }
 }

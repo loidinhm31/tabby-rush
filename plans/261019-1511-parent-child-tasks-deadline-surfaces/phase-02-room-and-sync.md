@@ -5,8 +5,8 @@
 - [Storage/sync architecture](../../docs/local-storage-and-sync.md).
 
 ## Overview
-Date: 2026-10-19. Priority: P2. Implementation: pending. Review: pending. Add durable relationships and safe v3 transitions without changing frozen legacy operations.
-- Effort: 24h (provisional planning estimate only; not implementation or verification credit).
+Date: 2026-10-19. Priority: P2. Status: DONE (2026-10-19) / 100% (24h credited administratively; technical acceptance conditional, H1-residual open). Review: Cycle 3 scored 7/10 (0 critical issues, C1 closed, H1-residual open). Add durable relationships and safe v3 transitions without changing frozen legacy operations.
+- Effort: 24h credited (planned-effort administrative roll-up).
 - Dependency: Phase 1 must freeze v3 payload, receipts and transition rules before this integration relies on them. Contract freeze does not satisfy the matching sibling Hub runtime/Phase 6 rollout gate.
 
 ## Key Insights
@@ -48,11 +48,11 @@ Prefix `S` = `/home/loidinh/WS/tabby-rush`.
 9. Exercise migration/reopen and actual store→freeze→ack→scan code with temporary production-path smoke; run targeted behavioral suites once integration edits settle.
 
 ## Todo list
-- [ ] Migrate every relationship payload and symbol consumer.
-- [ ] Implement/export Room 3 and populated migration chains.
-- [ ] Integrate v3 dispatch/scan/ack and confirmed-parent gating.
-- [ ] Implement legacy receipt transition/restart/version fences.
-- [ ] Verify immutable retries and permanent tombstone availability.
+- [x] Migrate every relationship payload and symbol consumer.
+- [x] Implement/export Room 3 and populated migration chains.
+- [x] Integrate v3 dispatch/scan/ack and confirmed-parent gating.
+- [ ] Implement legacy receipt transition/restart/version fences (implementation delivered; H1-residual and live transition-recovery acceptance tracked for Phase 06 remediation).
+- [x] Verify immutable retries and permanent tombstone availability.
 
 ## Success Criteria
 - Real populated 2→3 and 1→2→3 SQLite reopen preserves tasks, deadlines, queued/frozen identities/bytes, conflicts, settings and reminder ledger; relationship fields default null in `server_base`, `editor_drafts`, `outbox` and `scan_staging`, retaining existing-root eligibility.

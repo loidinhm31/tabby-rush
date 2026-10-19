@@ -65,13 +65,18 @@ data class Todo(
     val isDeleted: Boolean = false,
     val deadline: TaskDeadline? = null,
     val reminderRule: ReminderRule = ReminderRule.DISABLED,
-    val scheduleToken: String? = null
+    val scheduleToken: String? = null,
+    val parentTaskId: String? = null
 ) {
     init {
         require(createdAt >= 0) { "createdAt must be non-negative" }
         require(updatedAt >= createdAt) { "updatedAt must be greater than or equal to createdAt" }
         require(serverRevision >= 0) { "serverRevision must be non-negative" }
         validateScheduleConsistency()
+        if (parentTaskId != null) {
+            require(parentTaskId.isNotBlank()) { "parentTaskId must not be blank" }
+            require(parentTaskId != id) { "parentTaskId must not equal id (self-reference forbidden)" }
+        }
     }
 
     private fun validateScheduleConsistency() {
@@ -139,6 +144,50 @@ fun Todo.toStrictV2TodoData(): StrictV2TodoData {
         reminderIntervalMinutes = reminderRule.intervalMinutes,
         reminderCount = reminderRule.count,
         scheduleToken = scheduleToken
+    )
+}
+
+fun Todo.toStrictV3TodoData(): StrictV3TodoData {
+    return StrictV3TodoData(
+        id = id,
+        title = title,
+        completed = completed,
+        createdAt = createdAt,
+        deadlineDate = deadline?.date,
+        deadlineTime = deadline?.time,
+        deadlineZone = deadline?.zone,
+        deadlineOffsetSeconds = deadline?.offsetSeconds,
+        reminderAnchorTime = deadline?.reminderAnchorTime,
+        deadlineAnchorEpochMs = deadline?.anchorEpochMs,
+        deadlineOverdueEpochMs = deadline?.overdueEpochMs,
+        reminderEnabled = reminderRule.enabled,
+        reminderLeadMinutes = reminderRule.leadMinutes,
+        reminderIntervalMinutes = reminderRule.intervalMinutes,
+        reminderCount = reminderRule.count,
+        scheduleToken = scheduleToken,
+        parentTaskId = parentTaskId
+    )
+}
+
+fun StrictV3TodoData.toDeadline(): TaskDeadline? {
+    val date = deadlineDate ?: return null
+    return TaskDeadline(
+        date = date,
+        time = deadlineTime,
+        zone = requireNotNull(deadlineZone) { "deadlineZone required when deadlineDate is present" },
+        offsetSeconds = requireNotNull(deadlineOffsetSeconds) { "deadlineOffsetSeconds required when deadlineDate is present" },
+        reminderAnchorTime = reminderAnchorTime,
+        anchorEpochMs = requireNotNull(deadlineAnchorEpochMs) { "deadlineAnchorEpochMs required when deadlineDate is present" },
+        overdueEpochMs = requireNotNull(deadlineOverdueEpochMs) { "deadlineOverdueEpochMs required when deadlineDate is present" }
+    )
+}
+
+fun StrictV3TodoData.toReminderRule(): ReminderRule {
+    return ReminderRule(
+        enabled = reminderEnabled,
+        leadMinutes = reminderLeadMinutes,
+        intervalMinutes = reminderIntervalMinutes,
+        count = reminderCount
     )
 }
 

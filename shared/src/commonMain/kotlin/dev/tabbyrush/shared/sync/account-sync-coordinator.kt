@@ -11,6 +11,9 @@ import dev.tabbyrush.shared.contract.StrictTodoData
 import dev.tabbyrush.shared.contract.StrictSyncV2Contract
 import dev.tabbyrush.shared.contract.StrictSyncV2Digest
 import dev.tabbyrush.shared.contract.StrictV2TodoData
+import dev.tabbyrush.shared.contract.StrictSyncV3Contract
+import dev.tabbyrush.shared.contract.StrictSyncV3Digest
+import dev.tabbyrush.shared.contract.StrictV3TodoData
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.ReminderRule
 import dev.tabbyrush.shared.contract.SyncCoordinator
@@ -142,34 +145,84 @@ class AccountSyncCoordinator(
         }
 
         val activeEpoch = serverEpoch
+        val isServerV3 = bootstrap.protocol == StrictSyncV3Contract.PROTOCOL_VERSION
         val isServerV2 = bootstrap.protocol == StrictSyncV2Contract.PROTOCOL_VERSION
         val transitionCoordinator = ContractTransitionCoordinator(store, syncClient)
+        val durablePhase = transitionCoordinator.getDurablePhase()
+        if (durablePhase == TransitionPhase.READY_V3 && !isServerV3) {
+            handleSyncFailure(
+                SafeError.ProtocolIncompatible(
+                    code = "SERVER_DOWNGRADE_FORBIDDEN",
+                    message = "Account is upgraded to strict-v3; server is on ${bootstrap.protocol}"
+                )
+            )
+            return
+        }
+        if (durablePhase == TransitionPhase.READY_V2 && bootstrap.protocol == StrictSyncContract.PROTOCOL_VERSION) {
+            handleSyncFailure(
+                SafeError.ProtocolIncompatible(
+                    code = "SERVER_DOWNGRADE_FORBIDDEN",
+                    message = "Account is upgraded to strict-v2; server is on strict-v1"
+                )
+            )
+            return
+        }
 
-        if (isServerV2) {
+        if (isServerV3) {
             val durablePhase = transitionCoordinator.getDurablePhase()
-            if (durablePhase != TransitionPhase.READY_V2) {
-                val transitionResult = transitionCoordinator.executeTransition(activeEpoch)
+            if (durablePhase != TransitionPhase.READY_V3) {
+                val transitionResult = transitionCoordinator.executeTransition(
+                    activeEpoch = activeEpoch,
+                    targetProtocol = StrictSyncV3Contract.PROTOCOL_VERSION,
+                    isFenced = { capturedGeneration != currentGeneration || store.isFrozen }
+                )
+                if (transitionResult is ApiResult.Failure) {
+                    handleSyncFailure(transitionResult.error)
+                    return
+                }
+            }
+        } else if (isServerV2) {
+            val hasV3Outbox = store.dao.countOutboxByVersion(OutboxEntity.CONTRACT_VERSION_V3) > 0
+            if (hasV3Outbox) {
+                handleSyncFailure(
+                    SafeError.ProtocolIncompatible(
+                        code = "SERVER_V2_INCOMPATIBLE",
+                        message = "Server is on strict-v2; cannot sync pending strict-v3 operations until server upgrades"
+                    )
+                )
+                return
+            }
+            val durablePhase = transitionCoordinator.getDurablePhase()
+            if (durablePhase != TransitionPhase.READY_V2 && durablePhase != TransitionPhase.READY_V3) {
+                val transitionResult = transitionCoordinator.executeTransition(
+                    activeEpoch = activeEpoch,
+                    targetProtocol = StrictSyncV2Contract.PROTOCOL_VERSION,
+                    isFenced = { capturedGeneration != currentGeneration || store.isFrozen }
+                )
                 if (transitionResult is ApiResult.Failure) {
                     handleSyncFailure(transitionResult.error)
                     return
                 }
             }
         } else {
-            // Server is on v1: verify local outbox contains no v2 operations
-            val hasV2Outbox = store.dao.countOutboxByVersion(OutboxEntity.CONTRACT_VERSION_V2) > 0
-            if (hasV2Outbox) {
+            val hasAdvancedOutbox = store.dao.countOutboxByVersion(OutboxEntity.CONTRACT_VERSION_V2) > 0 ||
+                    store.dao.countOutboxByVersion(OutboxEntity.CONTRACT_VERSION_V3) > 0
+            if (hasAdvancedOutbox) {
                 handleSyncFailure(
                     SafeError.ProtocolIncompatible(
                         code = "SERVER_V1_INCOMPATIBLE",
-                        message = "Server is on strict-v1; cannot sync pending strict-v2 operations until server upgrades"
+                        message = "Server is on strict-v1; cannot sync pending strict-v2/strict-v3 operations until server upgrades"
                     )
                 )
                 return
             }
         }
 
-        val syncProtocol = if (isServerV2) StrictSyncV2Contract.PROTOCOL_VERSION else StrictSyncContract.PROTOCOL_VERSION
-
+        val syncProtocol = when {
+            isServerV3 -> StrictSyncV3Contract.PROTOCOL_VERSION
+            isServerV2 -> StrictSyncV2Contract.PROTOCOL_VERSION
+            else -> StrictSyncContract.PROTOCOL_VERSION
+        }
         // 3. Stage 1: Initial Staged Full Scan
         var initialScan = StagedFullScan(
             syncClient = syncClient,
@@ -206,7 +259,10 @@ class AccountSyncCoordinator(
             val frozenBatch = reconciliation.prepareAndFreezeBatch(eligibleBatch)
 
             val pushResult = try {
-                if (isServerV2) {
+                if (isServerV3) {
+                    val dtos = frozenBatch.map { reconciliation.toV3Dto(it) }
+                    syncClient.pushV3(activeEpoch, dtos)
+                } else if (isServerV2) {
                     val dtos = frozenBatch.map { reconciliation.toV2Dto(it) }
                     syncClient.pushV2(activeEpoch, dtos)
                 } else {
@@ -371,65 +427,104 @@ class AccountSyncCoordinator(
         val scheduleToken = draft?.scheduleToken ?: conflictOp?.scheduleToken ?: currentBase?.scheduleToken
 
         val hasDeadline = deadlineDate != null
-        val contractVersion = if (hasDeadline || conflictOp?.contractVersion == OutboxEntity.CONTRACT_VERSION_V2) {
-            OutboxEntity.CONTRACT_VERSION_V2
-        } else {
-            OutboxEntity.CONTRACT_VERSION_V1
+        val parentTaskId = draft?.parentTaskId ?: conflictOp?.parentTaskId ?: currentBase?.parentTaskId
+        val isReadyV3 = store.isAccountV3()
+        val isReadyV2 = store.isAccountV2()
+        val contractVersion = when {
+            isReadyV3 || conflictOp?.contractVersion == OutboxEntity.CONTRACT_VERSION_V3 || parentTaskId != null -> OutboxEntity.CONTRACT_VERSION_V3
+            isReadyV2 || conflictOp?.contractVersion == OutboxEntity.CONTRACT_VERSION_V2 || hasDeadline -> OutboxEntity.CONTRACT_VERSION_V2
+            else -> OutboxEntity.CONTRACT_VERSION_V1
         }
 
         val nextRev = store.allocateNextLocalRevision()
         val newOpId = generateUuid()
 
-        val digest = if (contractVersion == OutboxEntity.CONTRACT_VERSION_V2) {
-            val v2Data = if (kind == StrictOperationKind.DELETE) null else StrictV2TodoData(
-                id = rowId,
-                title = title,
-                completed = completed,
-                createdAt = createdAt,
-                deadlineDate = deadlineDate,
-                deadlineTime = deadlineTime,
-                deadlineZone = deadlineZone,
-                deadlineOffsetSeconds = deadlineOffsetSeconds,
-                reminderAnchorTime = reminderAnchorTime,
-                deadlineAnchorEpochMs = deadlineAnchorEpochMs,
-                deadlineOverdueEpochMs = deadlineOverdueEpochMs,
-                reminderEnabled = reminderEnabled,
-                reminderLeadMinutes = reminderLeadMinutes,
-                reminderIntervalMinutes = reminderIntervalMinutes,
-                reminderCount = reminderCount,
-                scheduleToken = scheduleToken
-            )
-            StrictSyncV2Digest.computeDigest(
-                domain = StrictSyncV2Contract.PROTOCOL_VERSION,
-                appId = store.appId,
-                userId = store.userId,
-                epoch = activeEpoch,
-                tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                rowId = rowId,
-                opId = newOpId,
-                kind = kind,
-                expectedRevision = expectedRev,
-                data = v2Data
-            )
-        } else {
-            val todoData = if (kind == StrictOperationKind.DELETE) null else StrictTodoData(
-                id = rowId,
-                title = title,
-                completed = completed,
-                createdAt = createdAt
-            )
-            StrictSyncDigest.computeDigest(
-                domain = StrictSyncContract.PROTOCOL_VERSION,
-                appId = store.appId,
-                userId = store.userId,
-                epoch = activeEpoch,
-                tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                rowId = rowId,
-                opId = newOpId,
-                kind = kind,
-                expectedRevision = expectedRev,
-                data = todoData
-            )
+        val digest = when (contractVersion) {
+            OutboxEntity.CONTRACT_VERSION_V3 -> {
+                val v3Data = if (kind == StrictOperationKind.DELETE) null else StrictV3TodoData(
+                    id = rowId,
+                    title = title,
+                    completed = completed,
+                    createdAt = createdAt,
+                    deadlineDate = deadlineDate,
+                    deadlineTime = deadlineTime,
+                    deadlineZone = deadlineZone,
+                    deadlineOffsetSeconds = deadlineOffsetSeconds,
+                    reminderAnchorTime = reminderAnchorTime,
+                    deadlineAnchorEpochMs = deadlineAnchorEpochMs,
+                    deadlineOverdueEpochMs = deadlineOverdueEpochMs,
+                    reminderEnabled = reminderEnabled,
+                    reminderLeadMinutes = reminderLeadMinutes,
+                    reminderIntervalMinutes = reminderIntervalMinutes,
+                    reminderCount = reminderCount,
+                    scheduleToken = scheduleToken,
+                    parentTaskId = parentTaskId
+                )
+                StrictSyncV3Digest.computeDigest(
+                    domain = StrictSyncV3Contract.PROTOCOL_VERSION,
+                    appId = store.appId,
+                    userId = store.userId,
+                    epoch = activeEpoch,
+                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                    rowId = rowId,
+                    opId = newOpId,
+                    kind = kind,
+                    expectedRevision = expectedRev,
+                    data = v3Data
+                )
+            }
+            OutboxEntity.CONTRACT_VERSION_V2 -> {
+                val v2Data = if (kind == StrictOperationKind.DELETE) null else StrictV2TodoData(
+                    id = rowId,
+                    title = title,
+                    completed = completed,
+                    createdAt = createdAt,
+                    deadlineDate = deadlineDate,
+                    deadlineTime = deadlineTime,
+                    deadlineZone = deadlineZone,
+                    deadlineOffsetSeconds = deadlineOffsetSeconds,
+                    reminderAnchorTime = reminderAnchorTime,
+                    deadlineAnchorEpochMs = deadlineAnchorEpochMs,
+                    deadlineOverdueEpochMs = deadlineOverdueEpochMs,
+                    reminderEnabled = reminderEnabled,
+                    reminderLeadMinutes = reminderLeadMinutes,
+                    reminderIntervalMinutes = reminderIntervalMinutes,
+                    reminderCount = reminderCount,
+                    scheduleToken = scheduleToken
+                )
+                StrictSyncV2Digest.computeDigest(
+                    domain = StrictSyncV2Contract.PROTOCOL_VERSION,
+                    appId = store.appId,
+                    userId = store.userId,
+                    epoch = activeEpoch,
+                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                    rowId = rowId,
+                    opId = newOpId,
+                    kind = kind,
+                    expectedRevision = expectedRev,
+                    data = v2Data
+                )
+            }
+            else -> {
+                val todoData = if (kind == StrictOperationKind.DELETE) null else StrictTodoData(
+                    id = rowId,
+                    title = title,
+                    completed = completed,
+                    createdAt = createdAt
+                )
+                StrictSyncDigest.computeDigest(
+                    domain = StrictSyncContract.PROTOCOL_VERSION,
+                    appId = store.appId,
+                    userId = store.userId,
+                    epoch = activeEpoch,
+                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                    rowId = rowId,
+                    opId = newOpId,
+                    kind = kind,
+                    expectedRevision = expectedRev,
+                    data = todoData
+                )
+            }
         }
 
         store.withMutationLock {
@@ -462,7 +557,8 @@ class AccountSyncCoordinator(
                 reminderCount = if (kind == StrictOperationKind.DELETE) 1L else reminderCount,
                 scheduleToken = if (kind == StrictOperationKind.DELETE) null else scheduleToken,
                 contractVersion = contractVersion,
-                intentMask = if (kind == StrictOperationKind.DELETE) OutboxEntity.INTENT_DELETE else conflictOp?.intentMask
+                intentMask = if (kind == StrictOperationKind.DELETE) OutboxEntity.INTENT_DELETE else conflictOp?.intentMask,
+                parentTaskId = parentTaskId
             )
         )
         }

@@ -11,6 +11,7 @@ import dev.tabbyrush.shared.contract.CredentialBundle
 import dev.tabbyrush.shared.contract.HubConfig
 import dev.tabbyrush.shared.contract.SafeError
 import dev.tabbyrush.shared.contract.StrictSyncV2Contract
+import dev.tabbyrush.shared.contract.StrictSyncV3Contract
 import dev.tabbyrush.shared.data.AccountSyncMetaEntity
 import dev.tabbyrush.shared.data.AccountLocalSettingsEntity
 import dev.tabbyrush.shared.data.TabbyRushDao
@@ -46,6 +47,10 @@ class FakeTabbyRushDao : TabbyRushDao {
     override suspend fun deleteServerBase(rowId: String) { serverBase.remove(rowId) }
     override suspend fun clearServerBase() { serverBase.clear() }
     override suspend fun countServerBase(): Int = serverBase.size
+    override suspend fun getActiveChildrenServerBase(parentTaskId: String): List<ServerBaseEntity> =
+        serverBase.values.filter { it.parentTaskId == parentTaskId && !it.deleted }
+    override suspend fun getAllChildrenServerBase(parentTaskId: String): List<ServerBaseEntity> =
+        serverBase.values.filter { it.parentTaskId == parentTaskId }
 
     override suspend fun getOutboxEntry(opId: String): OutboxEntity? = outbox[opId]
     override suspend fun getOutboxByRowId(rowId: String): List<OutboxEntity> =
@@ -941,5 +946,354 @@ class StagedFullScanTest {
         assertIs<ApiResult.Failure>(result)
         assertIs<SafeError.ProtocolIncompatible>(result.error)
         assertEquals("DIVERGENT_REVISION", result.error.code)
+    }
+
+    @Test
+    fun testV3FullScanPromotesParentChildRelationshipsAndRetainsTombstones() = runTest {
+        val rootUuid = "70000000-0000-4000-8000-000000000001"
+        val childUuid = "70000000-0000-4000-8000-000000000002"
+        val tombUuid = "70000000-0000-4000-8000-000000000003"
+
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v3",
+                    "epoch":"epoch-v3-scan",
+                    "records":[
+                        {
+                            "tableName":"todos",
+                            "rowId":"$rootUuid",
+                            "revision":1,
+                            "deleted":false,
+                            "data":{
+                                "id":"$rootUuid",
+                                "title":"Root Task",
+                                "completed":false,
+                                "createdAt":1000,
+                                "parentTaskId":null
+                            }
+                        },
+                        {
+                            "tableName":"todos",
+                            "rowId":"$childUuid",
+                            "revision":1,
+                            "deleted":false,
+                            "data":{
+                                "id":"$childUuid",
+                                "title":"Child Task",
+                                "completed":false,
+                                "createdAt":1100,
+                                "parentTaskId":"$rootUuid"
+                            }
+                        },
+                        {
+                            "tableName":"todos",
+                            "rowId":"$tombUuid",
+                            "revision":2,
+                            "deleted":true,
+                            "data":null
+                        }
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        val scan = StagedFullScan(
+            syncClient = client,
+            store = store,
+            activeEpoch = "epoch-v3-scan",
+            protocol = StrictSyncV3Contract.PROTOCOL_VERSION
+        )
+
+        val result = scan.executeScan()
+        assertIs<ApiResult.Success<Int>>(result)
+        assertEquals(3, result.value)
+
+        // Verify server_base promotion
+        val rootBase = store.dao.getServerBase(rootUuid)
+        assertNotNull(rootBase)
+        assertEquals("Root Task", rootBase.title)
+        assertNull(rootBase.parentTaskId)
+
+        val childBase = store.dao.getServerBase(childUuid)
+        assertNotNull(childBase)
+        assertEquals("Child Task", childBase.title)
+        assertEquals(rootUuid, childBase.parentTaskId)
+
+        val tombBase = store.dao.getServerBase(tombUuid)
+        assertNotNull(tombBase)
+        assertTrue(tombBase.deleted)
+    }
+
+    @Test
+    fun testV3ScanRejectsHigherRevisionReparenting() = runTest {
+        val root1Uuid = "80000000-0000-4000-8000-000000000001"
+        val root2Uuid = "80000000-0000-4000-8000-000000000002"
+        val childUuid = "80000000-0000-4000-8000-000000000003"
+
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v3",
+                    "epoch":"epoch-reparent-test",
+                    "records":[
+                        {
+                            "tableName":"todos",
+                            "rowId":"$childUuid",
+                            "revision":2,
+                            "deleted":false,
+                            "data":{
+                                "id":"$childUuid",
+                                "title":"Child Reparented on Server",
+                                "completed":false,
+                                "createdAt":1000,
+                                "parentTaskId":"$root2Uuid"
+                            }
+                        }
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        store.dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = childUuid,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Child under root 1",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-reparent-test",
+                parentTaskId = root1Uuid
+            )
+        )
+
+        val scan = StagedFullScan(
+            syncClient = client,
+            store = store,
+            activeEpoch = "epoch-reparent-test",
+            protocol = StrictSyncV3Contract.PROTOCOL_VERSION
+        )
+
+        val result = scan.executeScan()
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.ProtocolIncompatible>(result.error)
+        assertEquals("IMMUTABLE_PARENT_VIOLATION", result.error.code)
+    }
+
+    @Test
+    fun testV3ScanRejectsConvertingRootToChildOnHigherRevision() = runTest {
+        val rootUuid = "90000000-0000-4000-8000-000000000001"
+        val otherParentUuid = "90000000-0000-4000-8000-000000000009"
+
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v3",
+                    "epoch":"epoch-root-to-child",
+                    "records":[
+                        {
+                            "tableName":"todos",
+                            "rowId":"$rootUuid",
+                            "revision":2,
+                            "deleted":false,
+                            "data":{
+                                "id":"$rootUuid",
+                                "title":"Root Converted to Child on Server",
+                                "completed":false,
+                                "createdAt":1000,
+                                "parentTaskId":"$otherParentUuid"
+                            }
+                        }
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        store.dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootUuid,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Original Root",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-root-to-child",
+                parentTaskId = null
+            )
+        )
+
+        val scan = StagedFullScan(
+            syncClient = client,
+            store = store,
+            activeEpoch = "epoch-root-to-child",
+            protocol = StrictSyncV3Contract.PROTOCOL_VERSION
+        )
+
+        val result = scan.executeScan()
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.ProtocolIncompatible>(result.error)
+        assertEquals("ROOT_CONVERTED_TO_CHILD", result.error.code)
+    }
+
+    @Test
+    fun testV3ScanEqualRevisionRejectsNonMatchingParent() = runTest {
+        val rowUuid = "a0000000-0000-4000-8000-000000000001"
+        val parentUuid = "a0000000-0000-4000-8000-000000000002"
+
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v3",
+                    "epoch":"epoch-eq-parent",
+                    "records":[
+                        {
+                            "tableName":"todos",
+                            "rowId":"$rowUuid",
+                            "revision":1,
+                            "deleted":false,
+                            "data":{
+                                "id":"$rowUuid",
+                                "title":"Equal Rev Task",
+                                "completed":false,
+                                "createdAt":1000,
+                                "parentTaskId":"$parentUuid"
+                            }
+                        }
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        store.dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = rowUuid,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Equal Rev Task",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-eq-parent",
+                parentTaskId = null // Local has null parent, server has parentUuid at equal revision
+            )
+        )
+
+        val scan = StagedFullScan(
+            syncClient = client,
+            store = store,
+            activeEpoch = "epoch-eq-parent",
+            protocol = StrictSyncV3Contract.PROTOCOL_VERSION
+        )
+
+        val result = scan.executeScan()
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.ProtocolIncompatible>(result.error)
+        assertEquals("DIVERGENT_REVISION", result.error.code)
+    }
+
+    @Test
+    fun testChildTombstoneHigherRevisionPreservesParentIdentity() = runTest {
+        val rootUuid = "b0000000-0000-4000-8000-000000000001"
+        val childUuid = "b0000000-0000-4000-8000-000000000002"
+
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "protocol":"strict-v3",
+                    "epoch":"epoch-child-tomb",
+                    "records":[
+                        {
+                            "tableName":"todos",
+                            "rowId":"$rootUuid",
+                            "revision":1,
+                            "deleted":false,
+                            "data":{
+                                "id":"$rootUuid",
+                                "title":"Root Task",
+                                "completed":false,
+                                "createdAt":1000,
+                                "parentTaskId":null
+                            }
+                        },
+                        {
+                            "tableName":"todos",
+                            "rowId":"$childUuid",
+                            "revision":2,
+                            "deleted":true,
+                            "data":null
+                        }
+                    ],
+                    "cursor":null,
+                    "hasMore":false
+                }"""
+            )
+        }
+
+        val (client, store) = createTestSetup(engine)
+        // Local base has root and active child
+        store.dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootUuid,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Root Task",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-child-tomb",
+                parentTaskId = null
+            )
+        )
+        store.dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = childUuid,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Child Task",
+                completed = false,
+                createdAt = 1100L,
+                updatedAt = 1100L,
+                epoch = "epoch-child-tomb",
+                parentTaskId = rootUuid
+            )
+        )
+
+        val scan = StagedFullScan(
+            syncClient = client,
+            store = store,
+            activeEpoch = "epoch-child-tomb",
+            protocol = StrictSyncV3Contract.PROTOCOL_VERSION
+        )
+
+        val result = scan.executeScan()
+        assertIs<ApiResult.Success<Int>>(result)
+        assertEquals(2, result.value)
+
+        // Child tombstone promoted without error, preserving parentTaskId
+        val promotedChild = store.dao.getServerBase(childUuid)
+        assertNotNull(promotedChild)
+        assertTrue(promotedChild.deleted)
+        assertEquals(2L, promotedChild.serverRevision)
+        assertEquals(rootUuid, promotedChild.parentTaskId)
     }
 }

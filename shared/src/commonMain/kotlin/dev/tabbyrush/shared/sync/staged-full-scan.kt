@@ -133,6 +133,26 @@ class StagedFullScan(
                                     )
                                 )
                             }
+                            if (data.parentTaskId != null) {
+                                if (data.parentTaskId.isBlank() || data.parentTaskId == data.id || !dev.tabbyrush.shared.contract.StrictSyncV3Contract.isCanonicalUuid(data.parentTaskId)) {
+                                    store.dao.clearStaging()
+                                    return ApiResult.Failure(
+                                        SafeError.ProtocolIncompatible(
+                                            code = "INVALID_RELATIONSHIP",
+                                            message = "Active record ${record.rowId} had invalid parentTaskId ${data.parentTaskId}"
+                                        )
+                                    )
+                                }
+                            }
+                            if (protocol != dev.tabbyrush.shared.contract.StrictSyncV3Contract.PROTOCOL_VERSION && data.parentTaskId != null) {
+                                store.dao.clearStaging()
+                                return ApiResult.Failure(
+                                    SafeError.ProtocolIncompatible(
+                                        code = "UNEXPECTED_RELATIONSHIP",
+                                        message = "Record ${record.rowId} had parentTaskId in non-v3 protocol ($protocol)"
+                                    )
+                                )
+                            }
                         }
 
                         // Row ordering and uniqueness check (C8)
@@ -178,7 +198,8 @@ class StagedFullScan(
                                 reminderLeadMinutes = record.data?.reminderLeadMinutes ?: 0L,
                                 reminderIntervalMinutes = record.data?.reminderIntervalMinutes,
                                 reminderCount = record.data?.reminderCount ?: 1L,
-                                scheduleToken = record.data?.scheduleToken
+                                scheduleToken = record.data?.scheduleToken,
+                                parentTaskId = record.data?.parentTaskId
                             )
                         )
                     }
@@ -271,12 +292,34 @@ class StagedFullScan(
                         reminderLeadMinutes = staged.reminderLeadMinutes,
                         reminderIntervalMinutes = staged.reminderIntervalMinutes,
                         reminderCount = staged.reminderCount,
-                        scheduleToken = staged.scheduleToken
+                        scheduleToken = staged.scheduleToken,
+                        parentTaskId = staged.parentTaskId
                     )
                 )
             } else {
                 when {
                     staged.serverRevision > currentBase.serverRevision -> {
+                        // Higher confirmed revision: validate immutable parent identity for active records
+                        if (!staged.deleted) {
+                            if (currentBase.parentTaskId != null && staged.parentTaskId != currentBase.parentTaskId) {
+                                store.dao.clearStaging()
+                                return@withMutationLock ApiResult.Failure(
+                                    SafeError.ProtocolIncompatible(
+                                        code = "IMMUTABLE_PARENT_VIOLATION",
+                                        message = "Server revision changed immutable parentTaskId from ${currentBase.parentTaskId} to ${staged.parentTaskId} on row ${staged.rowId}"
+                                    )
+                                )
+                            }
+                            if (currentBase.parentTaskId == null && staged.parentTaskId != null) {
+                                store.dao.clearStaging()
+                                return@withMutationLock ApiResult.Failure(
+                                    SafeError.ProtocolIncompatible(
+                                        code = "ROOT_CONVERTED_TO_CHILD",
+                                        message = "Server revision converted root task ${staged.rowId} to child of ${staged.parentTaskId}"
+                                    )
+                                )
+                            }
+                        }
                         // Higher confirmed revision: promote!
                         basesToUpsert.add(
                             ServerBaseEntity(
@@ -299,7 +342,8 @@ class StagedFullScan(
                                 reminderLeadMinutes = staged.reminderLeadMinutes,
                                 reminderIntervalMinutes = staged.reminderIntervalMinutes,
                                 reminderCount = staged.reminderCount,
-                                scheduleToken = staged.scheduleToken
+                                scheduleToken = staged.scheduleToken,
+                                parentTaskId = if (staged.deleted) currentBase.parentTaskId else (staged.parentTaskId ?: currentBase.parentTaskId)
                             )
                         )
                     }
@@ -310,6 +354,7 @@ class StagedFullScan(
                         val createdAtEqual = staged.createdAt == currentBase.createdAt
                         val deletedEqual = staged.deleted == currentBase.deleted
 
+                        val parentEqual = staged.parentTaskId == currentBase.parentTaskId
                         val baseHasTemporal = currentBase.deadlineDate != null ||
                                 currentBase.reminderEnabled || currentBase.scheduleToken != null
                         val stagedHasTemporal = staged.deadlineDate != null ||
@@ -334,7 +379,7 @@ class StagedFullScan(
                         }
 
                         val logicallyEqual = deletedEqual && (staged.deleted ||
-                                (titlesEqual && completedEqual && createdAtEqual && temporalEqual))
+                                (titlesEqual && completedEqual && createdAtEqual && temporalEqual && parentEqual))
 
                         if (!logicallyEqual) {
                             store.dao.clearStaging()
@@ -369,7 +414,8 @@ class StagedFullScan(
                                     reminderLeadMinutes = staged.reminderLeadMinutes,
                                     reminderIntervalMinutes = staged.reminderIntervalMinutes,
                                     reminderCount = staged.reminderCount,
-                                    scheduleToken = staged.scheduleToken
+                                    scheduleToken = staged.scheduleToken,
+                                    parentTaskId = currentBase.parentTaskId
                                 )
                             )
                         }

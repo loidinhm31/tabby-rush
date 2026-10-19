@@ -8,6 +8,7 @@ import dev.tabbyrush.shared.contract.StrictSyncV2Contract
 import dev.tabbyrush.shared.contract.StrictV2TodoData
 import dev.tabbyrush.shared.data.EditorDraftEntity
 import dev.tabbyrush.shared.data.OutboxEntity
+import dev.tabbyrush.shared.data.ServerBaseEntity
 import dev.tabbyrush.shared.data.RoomAccountStore
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -676,5 +677,230 @@ class OutboxReconciliationTest {
         val updated = dao.getOutboxEntry("op-uncertain-marker")
         assertNotNull(updated)
         assertEquals(OutboxEntity.STATE_UNKNOWN_SUPERSEDED, updated.deliveryState)
+    }
+
+    @Test
+    fun testChildOpPendingGatedUntilRootConfirmedInCurrentEpoch() = runTest {
+        val (store, dao) = createStore()
+        val rootId = "root-gated-1"
+        val childId = "child-gated-1"
+
+        // Enqueue unconfirmed root create
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-root-create",
+                epoch = "epoch-1",
+                tableName = "todos",
+                rowId = rootId,
+                kind = "create",
+                expectedRevision = 0L,
+                title = "Root unconfirmed",
+                completed = false,
+                createdAt = 1000L,
+                digest = "d-root",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1000L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = null
+            )
+        )
+
+        // Enqueue child create referencing unconfirmed root
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-child-create",
+                epoch = "epoch-1",
+                tableName = "todos",
+                rowId = childId,
+                kind = "create",
+                expectedRevision = 0L,
+                title = "Child pending",
+                completed = false,
+                createdAt = 1100L,
+                digest = "d-child",
+                localRevision = 2L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1100L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = rootId
+            )
+        )
+
+        val reconciliation = OutboxReconciliation(store, activeEpoch = "epoch-1")
+
+        // 1. Root is not yet confirmed in server_base: only root is eligible, child is gated
+        val batch1 = reconciliation.getEligibleDispatchBatch()
+        assertEquals(1, batch1.size)
+        assertEquals("op-root-create", batch1[0].opId)
+
+        // 2. Simulate root confirmed on server
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootId,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Root confirmed",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-1",
+                parentTaskId = null
+            )
+        )
+        dao.deleteOutbox("op-root-create")
+
+        // 3. Now child becomes eligible!
+        val batch2 = reconciliation.getEligibleDispatchBatch()
+        assertEquals(1, batch2.size)
+        assertEquals("op-child-create", batch2[0].opId)
+    }
+
+    @Test
+    fun testChildOpUncertainReplayBypassesParentLivenessCheck() = runTest {
+        val (store, dao) = createStore()
+        val rootId = "root-deleted-1"
+        val childId = "child-uncertain-1"
+
+        // Simulate root tombstone in server_base
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootId,
+                serverRevision = 5L,
+                deleted = true,
+                title = "",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 2000L,
+                epoch = "epoch-1",
+                parentTaskId = null
+            )
+        )
+
+        // Child was previously dispatched and marked UNCERTAIN
+        val uncertainOp = OutboxEntity(
+            opId = "op-child-lost-response",
+            epoch = "epoch-1",
+            tableName = "todos",
+            rowId = childId,
+            kind = "create",
+            expectedRevision = 0L,
+            title = "Child with lost ack",
+            completed = false,
+            createdAt = 1050L,
+            digest = "exact-frozen-digest-123",
+            localRevision = 2L,
+            deliveryState = OutboxEntity.STATE_UNCERTAIN,
+            createdAtEpochMs = 1050L,
+            contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+            parentTaskId = rootId,
+            dispatchHistory = """{"dispatched":true,"uncertain":true}"""
+        )
+        dao.upsertOutbox(uncertainOp)
+
+        val reconciliation = OutboxReconciliation(store, activeEpoch = "epoch-1")
+
+        // UNCERTAIN replay bypasses renewed parent-liveness gating!
+        val eligible = reconciliation.getEligibleDispatchBatch()
+        assertEquals(1, eligible.size)
+        assertEquals("op-child-lost-response", eligible[0].opId)
+
+        val frozen = reconciliation.prepareAndFreezeBatch(eligible)
+        assertEquals(1, frozen.size)
+        assertEquals("exact-frozen-digest-123", frozen[0].digest) // Exact preimage & digest preserved
+        assertEquals(OutboxEntity.STATE_DISPATCHING, frozen[0].deliveryState)
+    }
+
+    @Test
+    fun testChildPendingDeleteAllowedWhenParentIsDeleted() = runTest {
+        val (store, dao) = createStore()
+        val rootId = "root-deleted-2"
+        val childId = "child-delete-pending-1"
+
+        // Parent is a tombstone
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootId,
+                serverRevision = 5L,
+                deleted = true,
+                title = "",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 2000L,
+                epoch = "epoch-1",
+                parentTaskId = null
+            )
+        )
+
+        // Child delete is PENDING (e.g. staged by user or cleanup)
+        val deleteOp = OutboxEntity(
+            opId = "op-child-delete",
+            epoch = "epoch-1",
+            tableName = "todos",
+            rowId = childId,
+            kind = "delete",
+            expectedRevision = 2L,
+            title = null,
+            completed = null,
+            createdAt = null,
+            digest = "d-del",
+            localRevision = 3L,
+            deliveryState = OutboxEntity.STATE_PENDING,
+            createdAtEpochMs = 2100L,
+            contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+            parentTaskId = rootId
+        )
+        dao.upsertOutbox(deleteOp)
+
+        val reconciliation = OutboxReconciliation(store, activeEpoch = "epoch-1")
+
+        // Child DELETE must remain eligible even after parent is deleted!
+        val eligible = reconciliation.getEligibleDispatchBatch()
+        assertEquals(1, eligible.size)
+        assertEquals("op-child-delete", eligible[0].opId)
+
+        val frozen = reconciliation.prepareAndFreezeBatch(eligible)
+        assertEquals(1, frozen.size)
+        assertEquals("op-child-delete", frozen[0].opId)
+        assertEquals(OutboxEntity.STATE_DISPATCHING, frozen[0].deliveryState)
+    }
+
+    @Test
+    fun testReadyV3AccountFencesUntranslatedLegacyOpsFromDispatch() = runTest {
+        val (store, dao) = createStore()
+        dao.upsertMeta(
+            dev.tabbyrush.shared.data.AccountSyncMetaEntity(
+                id = dev.tabbyrush.shared.data.AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        // Enqueue an un-translated V2 pending op
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-v2-legacy",
+                epoch = "epoch-1",
+                tableName = "todos",
+                rowId = "row-legacy-1",
+                kind = "create",
+                expectedRevision = 0L,
+                title = "Legacy V2 Task",
+                completed = false,
+                createdAt = 1000L,
+                digest = "d-v2",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1000L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                parentTaskId = null
+            )
+        )
+
+        val reconciliation = OutboxReconciliation(store, activeEpoch = "epoch-1")
+
+        // When account is ready-v3, un-translated V2 op is fenced from v3 push
+        val eligible = reconciliation.getEligibleDispatchBatch()
+        assertEquals(0, eligible.size)
     }
 }

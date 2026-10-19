@@ -41,7 +41,8 @@ data class OutboxEntity(
     val contractVersion: String = CONTRACT_VERSION_V1,
     val dispatchHistory: String? = null,
     val intentMask: String? = null,
-    val transitionCheckpoint: String? = null
+    val transitionCheckpoint: String? = null,
+    val parentTaskId: String? = null
 ) {
     companion object {
         const val STATE_PENDING = "PENDING"
@@ -52,12 +53,14 @@ data class OutboxEntity(
 
         const val CONTRACT_VERSION_V1 = "strict-v1"
         const val CONTRACT_VERSION_V2 = "strict-v2"
-
+        const val CONTRACT_VERSION_V3 = "strict-v3"
         const val INTENT_TITLE = "TITLE"
         const val INTENT_COMPLETED = "COMPLETED"
         const val INTENT_DEADLINE = "DEADLINE"
         const val INTENT_REMINDER = "REMINDER"
         const val INTENT_DELETE = "DELETE"
+        const val INTENT_PARENT = "PARENT"
+        const val INTENT_LAST_CHILD_PRESERVATION = "LAST_CHILD_PRESERVATION"
         const val INTENT_REQUIRES_REVIEW = "REQUIRES_REVIEW"
     }
 }

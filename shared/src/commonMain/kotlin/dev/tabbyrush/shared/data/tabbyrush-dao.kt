@@ -36,6 +36,12 @@ interface TabbyRushDao {
     @Query("SELECT COUNT(*) FROM server_base")
     suspend fun countServerBase(): Int
 
+    @Query("SELECT * FROM server_base WHERE parentTaskId = :parentTaskId AND deleted = 0")
+    suspend fun getActiveChildrenServerBase(parentTaskId: String): List<ServerBaseEntity>
+
+    @Query("SELECT * FROM server_base WHERE parentTaskId = :parentTaskId")
+    suspend fun getAllChildrenServerBase(parentTaskId: String): List<ServerBaseEntity>
+
     // -------------------------------------------------------------------------
     // Outbox
     // -------------------------------------------------------------------------

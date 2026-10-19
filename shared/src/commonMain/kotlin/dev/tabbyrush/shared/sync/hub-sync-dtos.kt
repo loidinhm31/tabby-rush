@@ -48,6 +48,45 @@ data class StrictV2PushRequestDto(
     val operations: List<StrictV2OperationDto>
 )
 
+@Serializable
+data class StrictV3TodoDataDto(
+    val id: String = "",
+    val title: String = "",
+    val completed: Boolean = false,
+    val createdAt: Long = 0L,
+    val deadlineDate: String? = null,
+    val deadlineTime: String? = null,
+    val deadlineZone: String? = null,
+    val deadlineOffsetSeconds: Long? = null,
+    val reminderAnchorTime: String? = null,
+    val deadlineAnchorEpochMs: Long? = null,
+    val deadlineOverdueEpochMs: Long? = null,
+    val reminderEnabled: Boolean = false,
+    val reminderLeadMinutes: Long = 0L,
+    val reminderIntervalMinutes: Long? = null,
+    val reminderCount: Long = 1L,
+    val scheduleToken: String? = null,
+    val parentTaskId: String? = null
+)
+
+@Serializable
+data class StrictV3OperationDto(
+    val opId: String,
+    val epoch: String,
+    val tableName: String = "todos",
+    val rowId: String,
+    val kind: String, // "create", "update", "delete"
+    val expectedRevision: Long,
+    val data: StrictV3TodoDataDto? = null
+)
+
+@Serializable
+data class StrictV3PushRequestDto(
+    val protocol: String = "strict-v3",
+    val epoch: String,
+    val operations: List<StrictV3OperationDto>
+)
+
 object LegacyReceiptStatus {
     const val PROVEN_ACCEPTED = "provenAccepted"
     const val PROVEN_NOT_ACCEPTED = "provenNotAccepted"
@@ -153,7 +192,7 @@ data class StrictPullRecordDto(
     val rowId: String,
     val revision: Long,
     val deleted: Boolean,
-    val data: StrictV2TodoDataDto? = null
+    val data: StrictV3TodoDataDto? = null
 )
 
 @Serializable

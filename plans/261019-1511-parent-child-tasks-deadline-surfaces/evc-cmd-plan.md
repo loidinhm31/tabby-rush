@@ -12,7 +12,7 @@ created: 2026-10-19
 # Parent/child tasks and compact deadlines
 
 ## Scope and confirmed decisions
-- Phase 01 contract freeze and Hub upgrade/receipt source deliverables completed and marked DONE on 2026-10-19. Client implementation (Phases 02–05) and integrated rollout (Phase 06) remain pending.
+- Phase 01 contract freeze and Hub upgrade/receipt source deliverables completed and marked DONE on 2026-10-19 (24h credited). Phase 02 Room migration and versioned sync integration completed and marked DONE administratively on 2026-10-19 (24h credited; technical acceptance conditional, H1-residual open). Client UI implementation (Phases 03–05) and integrated rollout (Phase 06) remain pending.
 - Exactly two levels: roots and children. Existing tasks remain top-level, standalone or parent-capable; new children may be created under them. No moving/reparenting existing tasks.
 - All live children complete → parent automatically complete; reopening/adding an incomplete child → parent active. Parent with children has no manual/group toggle.
 - Deleting a parent confirms and deletes the group. Locally observed last-child deletion preserves immediately preceding effective completion and restores manual completion with that resultant raw value. Cross-device guarantee: local atomicity + conflict review, not globally ordered group mutations.
@@ -26,13 +26,13 @@ created: 2026-10-19
 - [Architecture baseline](../../docs/system-architecture.md#9-parentchild-tasks--compact-deadlines--strict-v3-architecture-phase-01-implemented).
 - [Hierarchy/storage/sync research](./research/hierarchy-sync.md).
 - [Main UI/widget/sticky research](./research/surface-ui.md).
-- This authorized revision aligns the existing hard-workflow plan in place. Planned effort totals 120h; Phase 01 completed administrative delivery on 2026-10-19 with 24h credited (20.0% planned-effort roll-up); Phases 02–06 remain pending.
+- This authorized revision aligns the existing hard-workflow plan in place. Planned effort totals 120h; Phase 01 (24h) and Phase 02 (24h) completed administrative delivery on 2026-10-19 with 48h credited (40.0% planned-effort roll-up); Phases 03–06 remain pending.
 
 ## Phases
 | # | Phase | Depends on | Status / progress |
 |---|---|---|---|
 | 1 | [Freeze v3 contract and implement Hub upgrade/receipts](./phase-01-contract-and-hub.md) | None | DONE (2026-10-19) / 100% (24h credited) |
-| 2 | [Migrate Room and integrate versioned sync](./phase-02-room-and-sync.md) | 1 contract freeze | Pending / 0% |
+| 2 | [Migrate Room and integrate versioned sync](./phase-02-room-and-sync.md) | 1 contract freeze | DONE (2026-10-19) / 100% (24h credited) |
 | 3 | [Shared hierarchy semantics and main UI](./phase-03-hierarchy-and-main-ui.md) | 2 | Pending / 0% |
 | 4 | [Android grouped widget and deadline labels](./phase-04-android-widget.md) | 3 evaluator/admission/deadline/schedule contracts | Pending / 0% |
 | 5 | [Linux/Windows grouped sticky mode and deadlines](./phase-05-desktop-sticky.md) | 3 evaluator/admission/deadline/schedule contracts | Pending / 0% |

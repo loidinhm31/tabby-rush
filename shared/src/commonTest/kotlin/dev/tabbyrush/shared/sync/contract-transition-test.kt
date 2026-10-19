@@ -11,6 +11,7 @@ import dev.tabbyrush.shared.contract.CredentialBundle
 import dev.tabbyrush.shared.contract.HubConfig
 import dev.tabbyrush.shared.contract.StrictOperationKind
 import dev.tabbyrush.shared.contract.StrictSyncV2Contract
+import dev.tabbyrush.shared.contract.StrictSyncV3Contract
 import dev.tabbyrush.shared.data.EditorDraftEntity
 import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.RoomAccountStore
@@ -392,6 +393,259 @@ class ContractTransitionTest {
         val result = coordinator.executeTransition("epoch-v2")
         assertIs<ApiResult.Success<TransitionPhase>>(result)
         assertEquals(TransitionPhase.READY_V2, result.value)
+    }
+
+    @Test
+    fun testV2ToV3TransitionTranslatesPendingV2IntentsToV3() = runTest {
+        val (store, dao) = createStore()
+
+        // Setup: Account is at READY_V2
+        coordinatorSetPhase(store, TransitionPhase.READY_V2)
+
+        val rootUuid = "d0000000-0000-4000-8000-000000000001"
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootUuid,
+                serverRevision = 2L,
+                deleted = false,
+                title = "Root V2 Task",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-v3",
+                deadlineDate = "2026-10-30",
+                parentTaskId = null
+            )
+        )
+
+        // 1. Pending V2 CREATE with deadline and reminder
+        val newRowUuid = "d0000000-0000-4000-8000-000000000002"
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-v2-pending-create",
+                epoch = "epoch-v3",
+                tableName = "todos",
+                rowId = newRowUuid,
+                kind = "create",
+                expectedRevision = 0L,
+                title = "New V2 Task With Deadline",
+                completed = false,
+                createdAt = 1100L,
+                digest = "d-create-v2",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1100L,
+                deadlineDate = "2026-11-15",
+                deadlineTime = "10:00",
+                deadlineZone = "Asia/Saigon",
+                deadlineOffsetSeconds = 25200L,
+                reminderAnchorTime = null,
+                deadlineAnchorEpochMs = 1794711600000L,
+                deadlineOverdueEpochMs = 1794711600000L,
+                reminderEnabled = true,
+                reminderLeadMinutes = 15L,
+                reminderCount = 1L,
+                scheduleToken = "create-v2-token",
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                parentTaskId = null
+            )
+        )
+
+        // 2. Pending V2 UPDATE with deadline
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-v2-pending-update",
+                epoch = "epoch-v3",
+                tableName = "todos",
+                rowId = rootUuid,
+                kind = "update",
+                expectedRevision = 2L,
+                title = "Updated V2 Title",
+                completed = true,
+                createdAt = 1000L,
+                digest = "d-old-v2",
+                localRevision = 2L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1200L,
+                deadlineDate = "2026-10-31",
+                deadlineZone = "UTC",
+                deadlineOffsetSeconds = 0L,
+                reminderAnchorTime = "09:00",
+                deadlineAnchorEpochMs = 1793437200000L,
+                deadlineOverdueEpochMs = 1793437200000L,
+                reminderEnabled = true,
+                reminderLeadMinutes = 30L,
+                reminderCount = 1L,
+                scheduleToken = "updated-v2-token",
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                parentTaskId = null
+            )
+        )
+        val engine = TestHttpEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/v1/sync/tabby-rush/strong/pull" -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{
+                            "protocol":"strict-v3",
+                            "epoch":"epoch-v3",
+                            "records":[
+                                {
+                                    "tableName":"todos",
+                                    "rowId":"$rootUuid",
+                                    "revision":2,
+                                    "deleted":false,
+                                    "data":{
+                                        "id":"$rootUuid",
+                                        "title":"Root V2 Task",
+                                        "completed":false,
+                                        "createdAt":1000,
+                                        "deadlineDate":"2026-10-30",
+                                        "parentTaskId":null
+                                    }
+                                }
+                            ],
+                            "cursor":null,
+                            "hasMore":false
+                        }"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.NotFound, "")
+            }
+        }
+
+        val session = createSession(engine)
+        val syncClient = HubSyncClient(config, session)
+        val coordinator = ContractTransitionCoordinator(store, syncClient)
+
+        val result = coordinator.executeTransition(
+            activeEpoch = "epoch-v3",
+            targetProtocol = StrictSyncV3Contract.PROTOCOL_VERSION
+        )
+        assertIs<ApiResult.Success<TransitionPhase>>(result)
+        assertEquals(TransitionPhase.READY_V3, result.value)
+        assertEquals(TransitionPhase.READY_V3, coordinator.getDurablePhase())
+
+        // Verify both pending v2 operations were translated into v3 with preserved temporal metadata!
+        val allOutbox = dao.getAllOutbox()
+        assertEquals(2, allOutbox.size)
+
+        val translatedCreate = allOutbox.first { it.rowId == newRowUuid }
+        assertEquals(OutboxEntity.CONTRACT_VERSION_V3, translatedCreate.contractVersion)
+        assertEquals("TRANSLATED_V3", translatedCreate.transitionCheckpoint)
+        assertEquals("New V2 Task With Deadline", translatedCreate.title)
+        assertEquals("2026-11-15", translatedCreate.deadlineDate)
+        assertEquals("10:00", translatedCreate.deadlineTime)
+        assertEquals("create-v2-token", translatedCreate.scheduleToken)
+        assertTrue(translatedCreate.reminderEnabled)
+        assertEquals(15L, translatedCreate.reminderLeadMinutes)
+
+        val translatedUpdate = allOutbox.first { it.rowId == rootUuid }
+        assertEquals(OutboxEntity.CONTRACT_VERSION_V3, translatedUpdate.contractVersion)
+        assertEquals("TRANSLATED_V3", translatedUpdate.transitionCheckpoint)
+        assertEquals(rootUuid, translatedUpdate.rowId)
+        assertEquals("Updated V2 Title", translatedUpdate.title)
+        assertEquals("2026-10-31", translatedUpdate.deadlineDate)
+        assertEquals("updated-v2-token", translatedUpdate.scheduleToken)
+        assertEquals(30L, translatedUpdate.reminderLeadMinutes)
+        assertTrue(translatedUpdate.completed == true)
+    }
+
+    @Test
+    fun testV2ToV3TransitionUpdateClearingDeadlineDoesNotResurrectBaseDeadline() = runTest {
+        val (store, dao) = createStore()
+        coordinatorSetPhase(store, TransitionPhase.READY_V2)
+
+        val rowUuid = "f0000000-0000-4000-8000-000000000001"
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = rowUuid,
+                serverRevision = 2L,
+                deleted = false,
+                title = "Task with deadline",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1000L,
+                epoch = "epoch-v3-clear",
+                deadlineDate = "2026-10-30",
+                scheduleToken = "base-tok",
+                parentTaskId = null
+            )
+        )
+
+        // User explicitly cleared the deadline in V2 update
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-v2-clear-deadline",
+                epoch = "epoch-v3-clear",
+                tableName = "todos",
+                rowId = rowUuid,
+                kind = "update",
+                expectedRevision = 2L,
+                title = "Task with deadline cleared",
+                completed = false,
+                createdAt = 1000L,
+                digest = "d-clear",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1200L,
+                deadlineDate = null,
+                scheduleToken = null,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                parentTaskId = null
+            )
+        )
+
+        val engine = TestHttpEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/v1/sync/tabby-rush/strong/pull" -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{
+                            "protocol":"strict-v3",
+                            "epoch":"epoch-v3-clear",
+                            "records":[
+                                {
+                                    "tableName":"todos",
+                                    "rowId":"$rowUuid",
+                                    "revision":2,
+                                    "deleted":false,
+                                    "data":{
+                                        "id":"$rowUuid",
+                                        "title":"Task with deadline",
+                                        "completed":false,
+                                        "createdAt":1000,
+                                        "deadlineDate":"2026-10-30",
+                                        "scheduleToken":"base-tok",
+                                        "parentTaskId":null
+                                    }
+                                }
+                            ],
+                            "cursor":null,
+                            "hasMore":false
+                        }"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.NotFound, "")
+            }
+        }
+
+        val session = createSession(engine)
+        val syncClient = HubSyncClient(config, session)
+        val coordinator = ContractTransitionCoordinator(store, syncClient)
+
+        val result = coordinator.executeTransition(
+            activeEpoch = "epoch-v3-clear",
+            targetProtocol = StrictSyncV3Contract.PROTOCOL_VERSION
+        )
+        assertIs<ApiResult.Success<TransitionPhase>>(result)
+
+        val allOutbox = dao.getAllOutbox()
+        assertEquals(1, allOutbox.size)
+        val translated = allOutbox[0]
+        assertEquals(OutboxEntity.CONTRACT_VERSION_V3, translated.contractVersion)
+        assertNull(translated.deadlineDate) // Base deadline NOT resurrected!
+        assertNull(translated.scheduleToken)
     }
 
     private suspend fun coordinatorSetPhase(store: RoomAccountStore, phase: TransitionPhase) {

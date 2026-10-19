@@ -8,6 +8,9 @@ import dev.tabbyrush.shared.contract.StrictTodoData
 import dev.tabbyrush.shared.contract.StrictSyncV2Contract
 import dev.tabbyrush.shared.contract.StrictSyncV2Digest
 import dev.tabbyrush.shared.contract.StrictV2TodoData
+import dev.tabbyrush.shared.contract.StrictSyncV3Contract
+import dev.tabbyrush.shared.contract.StrictSyncV3Digest
+import dev.tabbyrush.shared.contract.StrictV3TodoData
 import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.RoomAccountStore
 
@@ -53,6 +56,18 @@ class OutboxReconciliation(
 
             // Only dispatch if head is PENDING or UNCERTAIN
             if (head.deliveryState in setOf(OutboxEntity.STATE_PENDING, OutboxEntity.STATE_UNCERTAIN)) {
+                // Legacy version fence: if store is upgraded to strict-v3, do not dispatch un-translated legacy v1/v2 ops
+                if (store.isAccountV3() && head.contractVersion != OutboxEntity.CONTRACT_VERSION_V3) {
+                    continue
+                }
+                // If child in PENDING state (first dispatch), verify confirmed live root in current epoch for non-delete ops
+                // Child DELETE operations remain legal even after parent deletion (design contract)
+                if (head.parentTaskId != null && head.deliveryState == OutboxEntity.STATE_PENDING && head.kind != StrictOperationKind.DELETE.wireName) {
+                    val parentBase = store.dao.getServerBase(head.parentTaskId)
+                    if (parentBase == null || parentBase.deleted || parentBase.serverRevision <= 0L || parentBase.epoch != activeEpoch || parentBase.parentTaskId != null) {
+                        continue
+                    }
+                }
                 eligible.add(head)
                 if (eligible.size >= maxCount) {
                     break
@@ -84,6 +99,15 @@ class OutboxReconciliation(
                 continue
             }
 
+            // Enforce parent admission at freeze: recheck root confirmation for non-delete child operations
+            if (op.parentTaskId != null && op.deliveryState == OutboxEntity.STATE_PENDING && op.kind != StrictOperationKind.DELETE.wireName) {
+                val parentBase = store.dao.getServerBase(op.parentTaskId)
+                if (parentBase == null || parentBase.deleted || parentBase.serverRevision <= 0L || parentBase.epoch != activeEpoch || parentBase.parentTaskId != null) {
+                    // Root is not confirmed; child remains unfrozen and pending
+                    continue
+                }
+            }
+
             val base = store.dao.getServerBase(op.rowId)
 
             val kind: StrictOperationKind
@@ -102,57 +126,94 @@ class OutboxReconciliation(
                 }
             }
 
+            val isV3 = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V3
             val isV2 = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V2
-            val digest = if (isV2) {
-                val v2Data = if (kind == StrictOperationKind.DELETE) null else StrictV2TodoData(
-                    id = op.rowId,
-                    title = op.title ?: "",
-                    completed = op.completed ?: false,
-                    createdAt = op.createdAt ?: 0L,
-                    deadlineDate = op.deadlineDate,
-                    deadlineTime = op.deadlineTime,
-                    deadlineZone = op.deadlineZone,
-                    deadlineOffsetSeconds = op.deadlineOffsetSeconds,
-                    reminderAnchorTime = op.reminderAnchorTime,
-                    deadlineAnchorEpochMs = op.deadlineAnchorEpochMs,
-                    deadlineOverdueEpochMs = op.deadlineOverdueEpochMs,
-                    reminderEnabled = op.reminderEnabled,
-                    reminderLeadMinutes = op.reminderLeadMinutes,
-                    reminderIntervalMinutes = op.reminderIntervalMinutes,
-                    reminderCount = op.reminderCount,
-                    scheduleToken = op.scheduleToken
-                )
-                StrictSyncV2Digest.computeDigest(
-                    domain = StrictSyncV2Contract.PROTOCOL_VERSION,
-                    appId = store.appId,
-                    userId = store.userId,
-                    epoch = activeEpoch,
-                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                    rowId = op.rowId,
-                    opId = op.opId,
-                    kind = kind,
-                    expectedRevision = expectedRev,
-                    data = v2Data
-                )
-            } else {
-                val todoData = if (kind == StrictOperationKind.DELETE) null else StrictTodoData(
-                    id = op.rowId,
-                    title = op.title ?: "",
-                    completed = op.completed ?: false,
-                    createdAt = op.createdAt ?: 0L
-                )
-                StrictSyncDigest.computeDigest(
-                    domain = StrictSyncContract.PROTOCOL_VERSION,
-                    appId = store.appId,
-                    userId = store.userId,
-                    epoch = activeEpoch,
-                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                    rowId = op.rowId,
-                    opId = op.opId,
-                    kind = kind,
-                    expectedRevision = expectedRev,
-                    data = todoData
-                )
+            val digest = when {
+                isV3 -> {
+                    val v3Data = if (kind == StrictOperationKind.DELETE) null else StrictV3TodoData(
+                        id = op.rowId,
+                        title = op.title ?: "",
+                        completed = op.completed ?: false,
+                        createdAt = op.createdAt ?: 0L,
+                        deadlineDate = op.deadlineDate,
+                        deadlineTime = op.deadlineTime,
+                        deadlineZone = op.deadlineZone,
+                        deadlineOffsetSeconds = op.deadlineOffsetSeconds,
+                        reminderAnchorTime = op.reminderAnchorTime,
+                        deadlineAnchorEpochMs = op.deadlineAnchorEpochMs,
+                        deadlineOverdueEpochMs = op.deadlineOverdueEpochMs,
+                        reminderEnabled = op.reminderEnabled,
+                        reminderLeadMinutes = op.reminderLeadMinutes,
+                        reminderIntervalMinutes = op.reminderIntervalMinutes,
+                        reminderCount = op.reminderCount,
+                        scheduleToken = op.scheduleToken,
+                        parentTaskId = op.parentTaskId
+                    )
+                    StrictSyncV3Digest.computeDigest(
+                        domain = StrictSyncV3Contract.PROTOCOL_VERSION,
+                        appId = store.appId,
+                        userId = store.userId,
+                        epoch = activeEpoch,
+                        tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                        rowId = op.rowId,
+                        opId = op.opId,
+                        kind = kind,
+                        expectedRevision = expectedRev,
+                        data = v3Data
+                    )
+                }
+                isV2 -> {
+                    val v2Data = if (kind == StrictOperationKind.DELETE) null else StrictV2TodoData(
+                        id = op.rowId,
+                        title = op.title ?: "",
+                        completed = op.completed ?: false,
+                        createdAt = op.createdAt ?: 0L,
+                        deadlineDate = op.deadlineDate,
+                        deadlineTime = op.deadlineTime,
+                        deadlineZone = op.deadlineZone,
+                        deadlineOffsetSeconds = op.deadlineOffsetSeconds,
+                        reminderAnchorTime = op.reminderAnchorTime,
+                        deadlineAnchorEpochMs = op.deadlineAnchorEpochMs,
+                        deadlineOverdueEpochMs = op.deadlineOverdueEpochMs,
+                        reminderEnabled = op.reminderEnabled,
+                        reminderLeadMinutes = op.reminderLeadMinutes,
+                        reminderIntervalMinutes = op.reminderIntervalMinutes,
+                        reminderCount = op.reminderCount,
+                        scheduleToken = op.scheduleToken
+                    )
+                    StrictSyncV2Digest.computeDigest(
+                        domain = StrictSyncV2Contract.PROTOCOL_VERSION,
+                        appId = store.appId,
+                        userId = store.userId,
+                        epoch = activeEpoch,
+                        tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                        rowId = op.rowId,
+                        opId = op.opId,
+                        kind = kind,
+                        expectedRevision = expectedRev,
+                        data = v2Data
+                    )
+                }
+                else -> {
+                    val todoData = if (kind == StrictOperationKind.DELETE) null else StrictTodoData(
+                        id = op.rowId,
+                        title = op.title ?: "",
+                        completed = op.completed ?: false,
+                        createdAt = op.createdAt ?: 0L
+                    )
+                    StrictSyncDigest.computeDigest(
+                        domain = StrictSyncContract.PROTOCOL_VERSION,
+                        appId = store.appId,
+                        userId = store.userId,
+                        epoch = activeEpoch,
+                        tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+                        rowId = op.rowId,
+                        opId = op.opId,
+                        kind = kind,
+                        expectedRevision = expectedRev,
+                        data = todoData
+                    )
+                }
             }
 
             val frozenOp = op.copy(
@@ -229,6 +290,46 @@ class OutboxReconciliation(
         }
 
         return StrictV2OperationDto(
+            opId = entity.opId,
+            epoch = entity.epoch,
+            tableName = entity.tableName,
+            rowId = entity.rowId,
+            kind = entity.kind,
+            expectedRevision = entity.expectedRevision,
+            data = dataDto
+        )
+    }
+
+    /**
+     * Converts a frozen OutboxEntity to a wire StrictV3OperationDto.
+     * Delete operation data payload is serialized as null.
+     */
+    fun toV3Dto(entity: OutboxEntity): StrictV3OperationDto {
+        val dataDto = if (entity.kind == StrictOperationKind.DELETE.wireName) {
+            null
+        } else {
+            StrictV3TodoDataDto(
+                id = entity.rowId,
+                title = entity.title ?: "",
+                completed = entity.completed ?: false,
+                createdAt = entity.createdAt ?: 0L,
+                deadlineDate = entity.deadlineDate,
+                deadlineTime = entity.deadlineTime,
+                deadlineZone = entity.deadlineZone,
+                deadlineOffsetSeconds = entity.deadlineOffsetSeconds,
+                reminderAnchorTime = entity.reminderAnchorTime,
+                deadlineAnchorEpochMs = entity.deadlineAnchorEpochMs,
+                deadlineOverdueEpochMs = entity.deadlineOverdueEpochMs,
+                reminderEnabled = entity.reminderEnabled,
+                reminderLeadMinutes = entity.reminderLeadMinutes,
+                reminderIntervalMinutes = entity.reminderIntervalMinutes,
+                reminderCount = entity.reminderCount,
+                scheduleToken = entity.scheduleToken,
+                parentTaskId = entity.parentTaskId
+            )
+        }
+
+        return StrictV3OperationDto(
             opId = entity.opId,
             epoch = entity.epoch,
             tableName = entity.tableName,

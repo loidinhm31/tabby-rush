@@ -143,9 +143,17 @@ object DatabaseMigrations {
             )
         }
     }
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(connection: SQLiteConnection) {
+            connection.execSQL("ALTER TABLE `server_base` ADD COLUMN `parentTaskId` TEXT DEFAULT NULL")
+            connection.execSQL("ALTER TABLE `editor_drafts` ADD COLUMN `parentTaskId` TEXT DEFAULT NULL")
+            connection.execSQL("ALTER TABLE `scan_staging` ADD COLUMN `parentTaskId` TEXT DEFAULT NULL")
+            connection.execSQL("ALTER TABLE `outbox` ADD COLUMN `parentTaskId` TEXT DEFAULT NULL")
+        }
+    }
 
     /**
      * All registered migrations for TabbyRushDatabase.
      */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2)
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 }

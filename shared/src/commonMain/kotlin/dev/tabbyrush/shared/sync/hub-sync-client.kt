@@ -7,6 +7,7 @@ import dev.tabbyrush.shared.contract.HubConfig
 import dev.tabbyrush.shared.contract.SafeError
 import dev.tabbyrush.shared.contract.StrictSyncContract
 import dev.tabbyrush.shared.contract.StrictSyncV2Contract
+import dev.tabbyrush.shared.contract.StrictSyncV3Contract
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -53,7 +54,8 @@ class HubSyncClient(
                         try {
                             val parsed = json.decodeFromString<BootstrapResponseDto>(response.bodyAsText())
                             if (parsed.protocol != StrictSyncContract.PROTOCOL_VERSION &&
-                                parsed.protocol != StrictSyncV2Contract.PROTOCOL_VERSION
+                                parsed.protocol != StrictSyncV2Contract.PROTOCOL_VERSION &&
+                                parsed.protocol != StrictSyncV3Contract.PROTOCOL_VERSION
                             ) {
                                 ApiResult.Failure(
                                     SafeError.ProtocolIncompatible(
@@ -228,6 +230,96 @@ class HubSyncClient(
                         try {
                             val parsed = json.decodeFromString<StrictPushResponseDto>(response.bodyAsText())
                             if (parsed.protocol != StrictSyncV2Contract.PROTOCOL_VERSION) {
+                                ApiResult.Failure(
+                                    SafeError.ProtocolIncompatible(
+                                        code = "PROTOCOL_MISMATCH",
+                                        message = "Server returned unsupported protocol: ${parsed.protocol}"
+                                    )
+                                )
+                            } else if (parsed.epoch != epoch) {
+                                ApiResult.Failure(
+                                    SafeError.ResetRequired(
+                                        code = "EPOCH_MISMATCH",
+                                        message = "Response epoch ${parsed.epoch} mismatched request epoch $epoch"
+                                    )
+                                )
+                            } else {
+                                ApiResult.Success(parsed)
+                            }
+                        } catch (e: Exception) {
+                            ApiResult.Failure(
+                                SafeError.ProtocolIncompatible(
+                                    code = "MALFORMED_RESPONSE",
+                                    message = "Failed to parse push response: ${e.message}"
+                                )
+                            )
+                        }
+                    } else {
+                        ApiResult.Failure(parseStrictError(response.status, response.bodyAsText()))
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun pushV3(
+        epoch: String,
+        operations: List<StrictV3OperationDto>
+    ): ApiResult<StrictPushResponseDto> {
+        if (operations.size > MAX_BATCH_SIZE) {
+            return ApiResult.Failure(
+                SafeError.Validation(
+                    code = "BATCH_TOO_LARGE",
+                    message = "Operation batch exceeds maximum of $MAX_BATCH_SIZE (got ${operations.size})"
+                )
+            )
+        }
+
+        val rowIds = operations.map { it.rowId }
+        if (rowIds.toSet().size != rowIds.size) {
+            return ApiResult.Failure(
+                SafeError.Validation(
+                    code = "DUPLICATE_ROW_IDS",
+                    message = "Push operations must not contain duplicate rowIds"
+                )
+            )
+        }
+
+        val requestDto = StrictV3PushRequestDto(
+            protocol = StrictSyncV3Contract.PROTOCOL_VERSION,
+            epoch = epoch,
+            operations = operations
+        )
+
+        val bodyJson = json.encodeToString(requestDto)
+        val bodyBytes = bodyJson.encodeToByteArray()
+        if (bodyBytes.size > MAX_PAYLOAD_BYTES) {
+            return ApiResult.Failure(
+                SafeError.Validation(
+                    code = "PAYLOAD_TOO_LARGE",
+                    message = "Serialized push body exceeds $MAX_PAYLOAD_BYTES bytes (got ${bodyBytes.size})"
+                )
+            )
+        }
+
+        val path = "/api/v1/sync/${config.appId}/strong/push"
+
+        return session.authorizedRequest { token ->
+            val responseResult = httpClient.executeRaw(
+                method = HttpMethod.Post,
+                path = path,
+                accessToken = token,
+                bodyJson = bodyJson
+            )
+
+            when (responseResult) {
+                is ApiResult.Failure -> responseResult
+                is ApiResult.Success -> {
+                    val response = responseResult.value
+                    if (response.status == HttpStatusCode.OK) {
+                        try {
+                            val parsed = json.decodeFromString<StrictPushResponseDto>(response.bodyAsText())
+                            if (parsed.protocol != StrictSyncV3Contract.PROTOCOL_VERSION) {
                                 ApiResult.Failure(
                                     SafeError.ProtocolIncompatible(
                                         code = "PROTOCOL_MISMATCH",

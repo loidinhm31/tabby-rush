@@ -5,6 +5,7 @@ import dev.tabbyrush.shared.contract.SafeError
 import dev.tabbyrush.shared.contract.StrictOperationKind
 import dev.tabbyrush.shared.contract.StrictSyncContract
 import dev.tabbyrush.shared.contract.StrictSyncV2Contract
+import dev.tabbyrush.shared.contract.StrictSyncV3Contract
 import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.RoomAccountStore
 import dev.tabbyrush.shared.data.ServerBaseEntity
@@ -17,8 +18,9 @@ enum class TransitionPhase(val wireName: String) {
     LEGACY_RECONCILING("legacy-reconciling"),
     V2_BASE_SCANNING("v2-base-scanning"),
     SAFE_INTENTS_TRANSLATING("safe-intents-translating"),
-    READY_V2("ready-v2");
-
+    READY_V2("ready-v2"),
+    V3_BASE_SCANNING("v3-base-scanning"),
+    READY_V3("ready-v3");
     companion object {
         fun fromWireName(wireName: String?): TransitionPhase? {
             return entries.firstOrNull { it.wireName == wireName }
@@ -53,6 +55,9 @@ class ContractTransitionCoordinator(
             val phaseStr = status.removePrefix(TRANSITION_PREFIX)
             return TransitionPhase.fromWireName(phaseStr) ?: TransitionPhase.READY_V1
         }
+        if (status == TransitionPhase.READY_V3.wireName) {
+            return TransitionPhase.READY_V3
+        }
         if (status == TransitionPhase.READY_V2.wireName) {
             return TransitionPhase.READY_V2
         }
@@ -61,10 +66,10 @@ class ContractTransitionCoordinator(
 
     suspend fun setDurablePhase(phase: TransitionPhase) {
         val meta = store.dao.getMeta() ?: dev.tabbyrush.shared.data.AccountSyncMetaEntity()
-        val newStatus = if (phase == TransitionPhase.READY_V2) {
-            TransitionPhase.READY_V2.wireName
-        } else {
-            "$TRANSITION_PREFIX${phase.wireName}"
+        val newStatus = when (phase) {
+            TransitionPhase.READY_V3 -> TransitionPhase.READY_V3.wireName
+            TransitionPhase.READY_V2 -> TransitionPhase.READY_V2.wireName
+            else -> "$TRANSITION_PREFIX${phase.wireName}"
         }
         store.dao.upsertMeta(
             meta.copy(
@@ -76,21 +81,95 @@ class ContractTransitionCoordinator(
 
     suspend fun executeTransition(
         activeEpoch: String,
+        targetProtocol: String = StrictSyncV2Contract.PROTOCOL_VERSION,
+        isFenced: (() -> Boolean)? = null,
         onProgress: ((TransitionPhase) -> Unit)? = null
     ): ApiResult<TransitionPhase> {
-        if (store.isFrozen) {
+        if (store.isFrozen || isFenced?.invoke() == true) {
             return ApiResult.Failure(
-                SafeError.Unauthorized("STORE_FROZEN", "Store is frozen for account leave")
+                SafeError.Unauthorized("STORE_FROZEN", "Store is frozen or fenced for transition")
             )
         }
 
         var currentPhase = getDurablePhase()
+
+        if (targetProtocol == StrictSyncV3Contract.PROTOCOL_VERSION) {
+            if (currentPhase == TransitionPhase.READY_V2 ||
+                currentPhase == TransitionPhase.V3_BASE_SCANNING ||
+                currentPhase == TransitionPhase.SAFE_INTENTS_TRANSLATING
+            ) {
+                // 1. Quiesce any in-flight dispatches
+                store.recoverInterruptedDispatches()
+
+                currentPhase = TransitionPhase.V3_BASE_SCANNING
+                setDurablePhase(currentPhase)
+                onProgress?.invoke(currentPhase)
+
+                // 2. Base scan on v3
+                val scan = StagedFullScan(
+                    syncClient = syncClient,
+                    store = store,
+                    activeEpoch = activeEpoch,
+                    protocol = StrictSyncV3Contract.PROTOCOL_VERSION,
+                    isMigration = true,
+                    isFenced = isFenced
+                ).executeScan()
+
+                when (scan) {
+                    is ApiResult.Failure -> return scan
+                    is ApiResult.Success -> { /* Base scan promoted */ }
+                }
+
+                if (store.isFrozen || isFenced?.invoke() == true) {
+                    return ApiResult.Failure(SafeError.Unauthorized("STORE_FROZEN", "Store is frozen or fenced"))
+                }
+
+                // 3. Translate safe intents from v2 to v3
+                currentPhase = TransitionPhase.SAFE_INTENTS_TRANSLATING
+                setDurablePhase(currentPhase)
+                onProgress?.invoke(currentPhase)
+
+                val translateResult = translateSafeIntents(OutboxEntity.CONTRACT_VERSION_V3)
+                if (translateResult is ApiResult.Failure) {
+                    return translateResult
+                }
+
+                // Quarantine un-reconciled V2 ops as visible conflicts without overwriting existing conflicts/diagnostics
+                val unreviewedV2Ops = store.dao.getAllOutbox().filter {
+                    it.contractVersion == OutboxEntity.CONTRACT_VERSION_V2 &&
+                    it.deliveryState != OutboxEntity.STATE_CONFLICT &&
+                    it.deliveryState != OutboxEntity.STATE_UNKNOWN_SUPERSEDED
+                }
+                for (op in unreviewedV2Ops) {
+                    store.withMutationLock {
+                        store.dao.updateDeliveryState(
+                            opId = op.opId,
+                            state = OutboxEntity.STATE_CONFLICT,
+                            errorMessage = op.errorMessage ?: "Requires user review: un-reconciled strict-v2 operation during strict-v3 upgrade"
+                        )
+                    }
+                }
+
+                if (store.isFrozen || isFenced?.invoke() == true) {
+                    return ApiResult.Failure(SafeError.Unauthorized("STORE_FROZEN", "Store is frozen or fenced"))
+                }
+
+                currentPhase = TransitionPhase.READY_V3
+                setDurablePhase(currentPhase)
+                onProgress?.invoke(currentPhase)
+                return ApiResult.Success(currentPhase)
+            }
+        }
 
         // Phase 1: Upgrade Detected
         if (currentPhase == TransitionPhase.READY_V1 || currentPhase == TransitionPhase.UPGRADE_DETECTED) {
             currentPhase = TransitionPhase.UPGRADE_DETECTED
             setDurablePhase(currentPhase)
             onProgress?.invoke(currentPhase)
+        }
+
+        if (store.isFrozen || isFenced?.invoke() == true) {
+            return ApiResult.Failure(SafeError.Unauthorized("STORE_FROZEN", "Store is frozen or fenced"))
         }
 
         // Phase 2: Dispatch Quiesced
@@ -119,6 +198,10 @@ class ContractTransitionCoordinator(
             onProgress?.invoke(currentPhase)
         }
 
+        if (store.isFrozen || isFenced?.invoke() == true) {
+            return ApiResult.Failure(SafeError.Unauthorized("STORE_FROZEN", "Store is frozen or fenced"))
+        }
+
         // Phase 3: Legacy Receipts Reconciliation
         if (currentPhase == TransitionPhase.DISPATCH_QUIESCED || currentPhase == TransitionPhase.LEGACY_RECONCILING) {
             currentPhase = TransitionPhase.LEGACY_RECONCILING
@@ -131,9 +214,26 @@ class ContractTransitionCoordinator(
             }
         }
 
-        // Phase 4: V2 Base Scanning
-        if (currentPhase == TransitionPhase.LEGACY_RECONCILING || currentPhase == TransitionPhase.V2_BASE_SCANNING) {
-            currentPhase = TransitionPhase.V2_BASE_SCANNING
+        if (store.isFrozen || isFenced?.invoke() == true) {
+            return ApiResult.Failure(SafeError.Unauthorized("STORE_FROZEN", "Store is frozen or fenced"))
+        }
+
+        val scanProtocol = if (targetProtocol == StrictSyncV3Contract.PROTOCOL_VERSION) {
+            StrictSyncV3Contract.PROTOCOL_VERSION
+        } else {
+            StrictSyncV2Contract.PROTOCOL_VERSION
+        }
+
+        // Phase 4: Base Scanning
+        if (currentPhase == TransitionPhase.LEGACY_RECONCILING ||
+            currentPhase == TransitionPhase.V2_BASE_SCANNING ||
+            currentPhase == TransitionPhase.V3_BASE_SCANNING
+        ) {
+            currentPhase = if (targetProtocol == StrictSyncV3Contract.PROTOCOL_VERSION) {
+                TransitionPhase.V3_BASE_SCANNING
+            } else {
+                TransitionPhase.V2_BASE_SCANNING
+            }
             setDurablePhase(currentPhase)
             onProgress?.invoke(currentPhase)
 
@@ -141,8 +241,9 @@ class ContractTransitionCoordinator(
                 syncClient = syncClient,
                 store = store,
                 activeEpoch = activeEpoch,
-                protocol = StrictSyncV2Contract.PROTOCOL_VERSION,
-                isMigration = true
+                protocol = scanProtocol,
+                isMigration = true,
+                isFenced = isFenced
             ).executeScan()
 
             when (scan) {
@@ -151,20 +252,40 @@ class ContractTransitionCoordinator(
             }
         }
 
+        if (store.isFrozen || isFenced?.invoke() == true) {
+            return ApiResult.Failure(SafeError.Unauthorized("STORE_FROZEN", "Store is frozen or fenced"))
+        }
+
         // Phase 5: Safe Intents Translating
-        if (currentPhase == TransitionPhase.V2_BASE_SCANNING || currentPhase == TransitionPhase.SAFE_INTENTS_TRANSLATING) {
+        if (currentPhase == TransitionPhase.V2_BASE_SCANNING ||
+            currentPhase == TransitionPhase.V3_BASE_SCANNING ||
+            currentPhase == TransitionPhase.SAFE_INTENTS_TRANSLATING
+        ) {
             currentPhase = TransitionPhase.SAFE_INTENTS_TRANSLATING
             setDurablePhase(currentPhase)
             onProgress?.invoke(currentPhase)
 
-            val translateResult = translateSafeIntents()
+            val targetContractVersion = if (targetProtocol == StrictSyncV3Contract.PROTOCOL_VERSION) {
+                OutboxEntity.CONTRACT_VERSION_V3
+            } else {
+                OutboxEntity.CONTRACT_VERSION_V2
+            }
+            val translateResult = translateSafeIntents(targetContractVersion)
             if (translateResult is ApiResult.Failure) {
                 return translateResult
             }
         }
 
-        // Phase 6: Ready V2
-        currentPhase = TransitionPhase.READY_V2
+        if (store.isFrozen || isFenced?.invoke() == true) {
+            return ApiResult.Failure(SafeError.Unauthorized("STORE_FROZEN", "Store is frozen or fenced"))
+        }
+
+        // Phase 6: Final Ready State
+        currentPhase = if (targetProtocol == StrictSyncV3Contract.PROTOCOL_VERSION) {
+            TransitionPhase.READY_V3
+        } else {
+            TransitionPhase.READY_V2
+        }
         setDurablePhase(currentPhase)
         onProgress?.invoke(currentPhase)
 
@@ -177,6 +298,7 @@ class ContractTransitionCoordinator(
             op.contractVersion == OutboxEntity.CONTRACT_VERSION_V1 &&
                     op.transitionCheckpoint != "PROVEN_NOT_ACCEPTED" &&
                     op.transitionCheckpoint != "TRANSLATED_V2" &&
+                    op.transitionCheckpoint != "TRANSLATED_V3" &&
                     (op.deliveryState == OutboxEntity.STATE_UNCERTAIN ||
                             op.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED ||
                             op.consecutiveFailures > 0 ||
@@ -279,16 +401,15 @@ class ContractTransitionCoordinator(
         return ApiResult.Success(Unit)
     }
 
-    private suspend fun translateSafeIntents(): ApiResult<Unit> {
+    private suspend fun translateSafeIntents(targetContractVersion: String = OutboxEntity.CONTRACT_VERSION_V2): ApiResult<Unit> {
         val allOutbox = store.dao.getAllOutbox()
         val translatableOps = allOutbox.filter { op ->
-            op.contractVersion == OutboxEntity.CONTRACT_VERSION_V1 &&
+            (op.contractVersion == OutboxEntity.CONTRACT_VERSION_V1 || op.contractVersion == OutboxEntity.CONTRACT_VERSION_V2) &&
                     (op.transitionCheckpoint == "PROVEN_NOT_ACCEPTED" ||
                             (op.deliveryState == OutboxEntity.STATE_PENDING &&
                                     op.dispatchHistory == null &&
                                     op.consecutiveFailures == 0))
         }
-
         for (op in translatableOps) {
             if (op.intentMask == OutboxEntity.INTENT_REQUIRES_REVIEW) {
                 store.withMutationLock {
@@ -315,7 +436,9 @@ class ContractTransitionCoordinator(
                             )
                         }
                     } else {
-                        val newV2Op = OutboxEntity(
+                        val isSourceV2 = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V2
+                        val checkpoint = if (targetContractVersion == OutboxEntity.CONTRACT_VERSION_V3) "TRANSLATED_V3" else "TRANSLATED_V2"
+                        val newOp = OutboxEntity(
                             opId = newOpId,
                             epoch = op.epoch,
                             tableName = op.tableName,
@@ -329,12 +452,25 @@ class ContractTransitionCoordinator(
                             localRevision = op.localRevision,
                             deliveryState = OutboxEntity.STATE_PENDING,
                             createdAtEpochMs = op.createdAtEpochMs,
-                            contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                            deadlineDate = if (isSourceV2) op.deadlineDate else null,
+                            deadlineTime = if (isSourceV2) op.deadlineTime else null,
+                            deadlineZone = if (isSourceV2) op.deadlineZone else null,
+                            deadlineOffsetSeconds = if (isSourceV2) op.deadlineOffsetSeconds else null,
+                            reminderAnchorTime = if (isSourceV2) op.reminderAnchorTime else null,
+                            deadlineAnchorEpochMs = if (isSourceV2) op.deadlineAnchorEpochMs else null,
+                            deadlineOverdueEpochMs = if (isSourceV2) op.deadlineOverdueEpochMs else null,
+                            reminderEnabled = if (isSourceV2) op.reminderEnabled else false,
+                            reminderLeadMinutes = if (isSourceV2) op.reminderLeadMinutes else 0L,
+                            reminderIntervalMinutes = if (isSourceV2) op.reminderIntervalMinutes else null,
+                            reminderCount = if (isSourceV2) op.reminderCount else 1L,
+                            scheduleToken = if (isSourceV2) op.scheduleToken else null,
+                            contractVersion = targetContractVersion,
                             intentMask = op.intentMask ?: "${OutboxEntity.INTENT_TITLE}|${OutboxEntity.INTENT_COMPLETED}",
-                            transitionCheckpoint = "TRANSLATED_V2"
+                            transitionCheckpoint = checkpoint,
+                            parentTaskId = if (isSourceV2) op.parentTaskId else null
                         )
                         store.withMutationLock {
-                            store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newV2Op)
+                            store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newOp)
                         }
                     }
                 }
@@ -349,7 +485,9 @@ class ContractTransitionCoordinator(
                             )
                         }
                     } else {
-                        val newV2Op = OutboxEntity(
+                        val isSourceV2 = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V2
+                        val checkpoint = if (targetContractVersion == OutboxEntity.CONTRACT_VERSION_V3) "TRANSLATED_V3" else "TRANSLATED_V2"
+                        val newOp = OutboxEntity(
                             opId = newOpId,
                             epoch = op.epoch,
                             tableName = op.tableName,
@@ -363,24 +501,25 @@ class ContractTransitionCoordinator(
                             localRevision = op.localRevision,
                             deliveryState = OutboxEntity.STATE_PENDING,
                             createdAtEpochMs = op.createdAtEpochMs,
-                            deadlineDate = base.deadlineDate,
-                            deadlineTime = base.deadlineTime,
-                            deadlineZone = base.deadlineZone,
-                            deadlineOffsetSeconds = base.deadlineOffsetSeconds,
-                            reminderAnchorTime = base.reminderAnchorTime,
-                            deadlineAnchorEpochMs = base.deadlineAnchorEpochMs,
-                            deadlineOverdueEpochMs = base.deadlineOverdueEpochMs,
-                            reminderEnabled = base.reminderEnabled,
-                            reminderLeadMinutes = base.reminderLeadMinutes,
-                            reminderIntervalMinutes = base.reminderIntervalMinutes,
-                            reminderCount = base.reminderCount,
-                            scheduleToken = base.scheduleToken,
-                            contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                            deadlineDate = if (isSourceV2) op.deadlineDate else base.deadlineDate,
+                            deadlineTime = if (isSourceV2) op.deadlineTime else base.deadlineTime,
+                            deadlineZone = if (isSourceV2) op.deadlineZone else base.deadlineZone,
+                            deadlineOffsetSeconds = if (isSourceV2) op.deadlineOffsetSeconds else base.deadlineOffsetSeconds,
+                            reminderAnchorTime = if (isSourceV2) op.reminderAnchorTime else base.reminderAnchorTime,
+                            deadlineAnchorEpochMs = if (isSourceV2) op.deadlineAnchorEpochMs else base.deadlineAnchorEpochMs,
+                            deadlineOverdueEpochMs = if (isSourceV2) op.deadlineOverdueEpochMs else base.deadlineOverdueEpochMs,
+                            reminderEnabled = if (isSourceV2) op.reminderEnabled else base.reminderEnabled,
+                            reminderLeadMinutes = if (isSourceV2) op.reminderLeadMinutes else base.reminderLeadMinutes,
+                            reminderIntervalMinutes = if (isSourceV2) op.reminderIntervalMinutes else base.reminderIntervalMinutes,
+                            reminderCount = if (isSourceV2) op.reminderCount else base.reminderCount,
+                            scheduleToken = if (isSourceV2) op.scheduleToken else base.scheduleToken,
+                            contractVersion = targetContractVersion,
                             intentMask = op.intentMask ?: "${OutboxEntity.INTENT_TITLE}|${OutboxEntity.INTENT_COMPLETED}",
-                            transitionCheckpoint = "TRANSLATED_V2"
+                            transitionCheckpoint = checkpoint,
+                            parentTaskId = if (isSourceV2) (op.parentTaskId ?: base.parentTaskId) else base.parentTaskId
                         )
                         store.withMutationLock {
-                            store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newV2Op)
+                            store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newOp)
                         }
                     }
                 }
@@ -391,7 +530,8 @@ class ContractTransitionCoordinator(
                             store.dao.deleteOutbox(op.opId)
                         }
                     } else {
-                        val newV2Op = OutboxEntity(
+                        val checkpoint = if (targetContractVersion == OutboxEntity.CONTRACT_VERSION_V3) "TRANSLATED_V3" else "TRANSLATED_V2"
+                        val newOp = OutboxEntity(
                             opId = newOpId,
                             epoch = op.epoch,
                             tableName = op.tableName,
@@ -405,12 +545,13 @@ class ContractTransitionCoordinator(
                             localRevision = op.localRevision,
                             deliveryState = OutboxEntity.STATE_PENDING,
                             createdAtEpochMs = op.createdAtEpochMs,
-                            contractVersion = OutboxEntity.CONTRACT_VERSION_V2,
+                            contractVersion = targetContractVersion,
                             intentMask = OutboxEntity.INTENT_DELETE,
-                            transitionCheckpoint = "TRANSLATED_V2"
+                            transitionCheckpoint = checkpoint,
+                            parentTaskId = base.parentTaskId
                         )
                         store.withMutationLock {
-                            store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newV2Op)
+                            store.dao.replaceOutboxAtomic(oldOpId = op.opId, newOp = newOp)
                         }
                     }
                 }

@@ -20,7 +20,7 @@ import androidx.room.RoomDatabaseConstructor
         AccountLocalSettingsEntity::class,
         ReminderDeliveryLedgerEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @ConstructedBy(TabbyRushDatabaseConstructor::class)

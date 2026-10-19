@@ -3,6 +3,31 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Parent/Child Tasks & Deadline Surfaces / Phase 02] - 2026-10-19: Room Schema 3 Migration & Versioned Sync Integration
+
+### Delivered
+- **Room Schema Version 3 Migration**: Added additive `MIGRATION_2_3` in `database-migrations.kt` registering migration to Room schema version 3 (`schemas/.../TabbyRushDatabase/3.json`). Added nullable `parentTaskId: String?` column across all four task-bearing tables (`server_base`, `editor_drafts`, `outbox`, and `scan_staging`), preserving existing tasks as root/parent-capable with null relationships without altering legacy wire payloads.
+- **Confirmed-Root First-Dispatch Gating**: Added first-dispatch parent verification in `OutboxReconciliation` before initial child task freezing (serialized by coordinator mutex rather than inside SQLite freeze transaction); unfrozen children under unconfirmed parents remain pending and visible. Frozen `UNCERTAIN` operations bypass renewed parent-liveness gating to guarantee exact replay invariance.
+- **Versioned v3 Sync Integration**: Integrated typed v3 push, pull, and bootstrap handling in `HubSyncClient`, `StagedFullScan`, and `AccountSyncCoordinator`. Updated conflict review and reapply logic to retain `parentTaskId` and select strict-v3 contracts.
+- **Safe V2->V3 Intent Translation**: Delivered non-destructive translation in `ContractTransitionCoordinator` preserving all pending V2 temporal fields (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, and `scheduleToken`).
+
+### Reported Automated Evidence
+- **Reported Verification Totals**: QA report ([qa-261019-2139-phase-02-cycle-3-validation.md](../plans/reports/qa-261019-2139-phase-02-cycle-3-validation.md)) records 371 passing validations (100% PASS across 4 suites/runners, 0 failures, 0 skipped).
+- **TabbyRush Shared JVM Tests** (`JAVA_HOME=... ./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks`): 318/318 tests passed across 39 test suites, including Room migration suites (`RoomMigrationV2ToV3Test`, `RoomMigrationV1ToV2Test`, `RoomAccountStoreTest`), sync suites (`ContractTransitionTest`, `AccountSyncCoordinatorTest`, `OutboxReconciliationTest`, `StagedFullScanTest`, `HubSyncClientTest`), and v3 vector suites (`StrictV3DigestVectorTest`).
+- **Node.js Strict-v3 Vector Runner** (`node scripts/strict-v3-vector-runner.mjs`): 11/11 vector checks passed (6 valid + 5 rejections; canonical fingerprint verified).
+- **Node.js Strict-v2 Cutover Rehearsal** (`node scripts/strict-v2-cutover-rehearsal.mjs --self-test`): 8/8 rehearsal checks passed.
+- **Admin Announcements Smoke Runner** (`node scripts/admin-announcements-smoke.mjs --self-test`): 34/34 checks passed.
+
+### Code Review & Operational Caveats
+- Code review Cycle 3 ([code-reviewer-261019-2145-phase-02-cycle-3-review.md](../plans/reports/code-reviewer-261019-2145-phase-02-cycle-3-review.md)) scored **7/10**, with C1 closed and 0 critical issues open.
+- **Tracked Operational Caveats & Remaining Gates**:
+  - *H1-Residual (V2 Uncertain Op Fencing)*: In V2->V3 transition, non-translatable V2 uncertain/dispatched ops are fenced from V3 push, causing rows to stall silently without visible conflict state; this release-blocking functional defect requires explicit user-review conflict surfacing and dispatch fence tests tracked for Phase 06 remediation.
+  - *Legacy Receipt Reconciliation Scope*: Glean Hub receipt models/services define v1/v2 structures, but the live receipts route currently processes strict-v1 payloads; v2->v3 legacy receipts remain tracked for subsequent phase alignment.
+  - *Parent-Liveness Checking Atomicity*: Parent-liveness check is practically serialized by the coordinator mutex rather than inside SQLite atomic freeze transaction.
+  - *Preservation-Intent Persistence*: Stored last-child preservation review provenance remains an open Phase 03 implementation prerequisite; Phase 03 contract-based development is unblocked.
+  - *Live Acceptance Gates*: Live transition-recovery acceptance and live MongoDB replica set staging cluster acceptance remain execution prerequisites tracked in Phase 06 rollout.
+
+---
 ## [Parent/Child Tasks & Deadline Surfaces / Phase 01] - 2026-10-19: Strict-v3 Contract Freeze & Hub Upgrade/Receipts Implementation
 
 ### Delivered

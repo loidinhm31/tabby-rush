@@ -29,5 +29,6 @@ data class ScanStagingEntity(
     val reminderLeadMinutes: Long = 0L,
     val reminderIntervalMinutes: Long? = null,
     val reminderCount: Long = 1L,
-    val scheduleToken: String? = null
+    val scheduleToken: String? = null,
+    val parentTaskId: String? = null
 )

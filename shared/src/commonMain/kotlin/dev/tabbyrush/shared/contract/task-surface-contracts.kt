@@ -2,7 +2,7 @@ package dev.tabbyrush.shared.contract
 
 import kotlinx.coroutines.flow.StateFlow
 
-enum class CompletionChange { Changed, Unchanged, Missing }
+enum class CompletionChange { Changed, Unchanged, Missing, AutomaticParentRejected }
 
 data class SurfaceAccountToken(val accountKey: AccountKey, val generation: Long)
 

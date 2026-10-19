@@ -8,6 +8,8 @@ import dev.tabbyrush.shared.contract.StrictOperationKind
 import dev.tabbyrush.shared.contract.StrictSyncV2Contract
 import dev.tabbyrush.shared.contract.StrictSyncV2Digest
 import dev.tabbyrush.shared.contract.CompletionChange
+import dev.tabbyrush.shared.contract.StrictSyncV3Contract
+import kotlin.test.assertFailsWith
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -1135,5 +1137,226 @@ class RoomAccountStoreTest {
         val loaded = store.loadTodos().first { it.id == "t-uncomplete" }
         assertFalse(loaded.completed)
         assertEquals(now + 2000L, loaded.updatedAt)
+    }
+
+    @Test
+    fun testCreateChildTaskRequiresReadyV3() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v2"
+            )
+        )
+
+        val now = 10_000L
+        val rootId = "10000000-0000-4000-8000-000000000001"
+        val childId = "10000000-0000-4000-8000-000000000002"
+        val root = Todo(
+            id = rootId,
+            title = "Root task",
+            completed = false,
+            createdAt = now
+        )
+        store.saveTodoLocally(root)
+
+        val child = Todo(
+            id = childId,
+            title = "Child task",
+            completed = false,
+            createdAt = now + 100L,
+            parentTaskId = rootId
+        )
+
+        val ex = assertFailsWith<IllegalArgumentException> {
+            store.saveTodoLocally(child)
+        }
+        assertTrue(ex.message?.contains("strict-v3") == true)
+    }
+
+    @Test
+    fun testCreateChildTaskUnderExistingRootWhenReadyV3() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        val now = 10_000L
+        val rootId = "20000000-0000-4000-8000-000000000001"
+        val childId = "20000000-0000-4000-8000-000000000002"
+        val root = Todo(
+            id = rootId,
+            title = "Root task title",
+            completed = false,
+            createdAt = now
+        )
+        store.saveTodoLocally(root)
+
+        val child = Todo(
+            id = childId,
+            title = "Child task title",
+            completed = false,
+            createdAt = now + 100L,
+            parentTaskId = rootId
+        )
+        store.saveTodoLocally(child)
+
+        // Verify child draft & outbox
+        val draft = database.tabbyRushDao().getDraft(childId)
+        assertNotNull(draft)
+        assertEquals(rootId, draft.parentTaskId)
+
+        val ops = database.tabbyRushDao().getOutboxByRowId(childId)
+        assertEquals(1, ops.size)
+        val op = ops[0]
+        assertEquals("strict-v3", op.contractVersion)
+        assertEquals(rootId, op.parentTaskId)
+        assertTrue(op.intentMask?.contains(OutboxEntity.INTENT_PARENT) == true)
+
+        val loaded = store.loadTodos()
+        assertEquals(2, loaded.size)
+        val loadedChild = loaded.first { it.id == childId }
+        assertEquals(rootId, loadedChild.parentTaskId)
+    }
+
+    @Test
+    fun testRejectConvertingRootToChildOrReparenting() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        val now = 10_000L
+        val rootId = "30000000-0000-4000-8000-000000000001"
+        val childId = "30000000-0000-4000-8000-000000000002"
+        val otherRootId = "30000000-0000-4000-8000-000000000009"
+        val root = Todo(
+            id = rootId,
+            title = "Root 1",
+            completed = false,
+            createdAt = now
+        )
+        store.saveTodoLocally(root)
+
+        val child = Todo(
+            id = childId,
+            title = "Child 1",
+            completed = false,
+            createdAt = now + 50L,
+            parentTaskId = rootId
+        )
+        store.saveTodoLocally(child)
+
+        // Try converting root-task-1 into a child -> must fail
+        val convertedRoot = root.copy(parentTaskId = otherRootId)
+        val rootEx = assertFailsWith<IllegalArgumentException> {
+            store.saveTodoLocally(convertedRoot)
+        }
+        assertTrue(rootEx.message?.contains("Cannot convert existing root task into a child task") == true)
+
+        // Try reparenting child to another parent -> must fail
+        val reparentedChild = child.copy(parentTaskId = otherRootId)
+        val reparentEx = assertFailsWith<IllegalArgumentException> {
+            store.saveTodoLocally(reparentedChild)
+        }
+        assertTrue(reparentEx.message?.contains("Cannot reparent or detach child task") == true)
+
+        // Try detaching child into a root -> must fail
+        val detachedChild = child.copy(parentTaskId = null)
+        val detachEx = assertFailsWith<IllegalArgumentException> {
+            store.saveTodoLocally(detachedChild)
+        }
+        assertTrue(detachEx.message?.contains("Cannot reparent or detach child task") == true)
+    }
+
+    @Test
+    fun testRejectNestingBeyondTwoLevels() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        val now = 10_000L
+        val level0Id = "40000000-0000-4000-8000-000000000000"
+        val level1Id = "40000000-0000-4000-8000-000000000001"
+        val level2Id = "40000000-0000-4000-8000-000000000002"
+        val root = Todo(id = level0Id, title = "Level 0 Root", completed = false, createdAt = now)
+        store.saveTodoLocally(root)
+
+        val child = Todo(id = level1Id, title = "Level 1 Child", completed = false, createdAt = now + 10L, parentTaskId = level0Id)
+        store.saveTodoLocally(child)
+
+        // Attempt to create a child under level-1 -> must fail
+        val grandChild = Todo(id = level2Id, title = "Level 2 Grandchild", completed = false, createdAt = now + 20L, parentTaskId = level1Id)
+        val ex = assertFailsWith<IllegalArgumentException> {
+            store.saveTodoLocally(grandChild)
+        }
+        assertTrue(ex.message?.contains("cannot be a child (max 2 levels)") == true)
+    }
+
+    @Test
+    fun testAutomaticParentCompletionRejection() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        val now = 10_000L
+        val parentId = "50000000-0000-4000-8000-000000000001"
+        val childId = "50000000-0000-4000-8000-000000000002"
+        val root = Todo(id = parentId, title = "Auto Parent", completed = false, createdAt = now)
+        store.saveTodoLocally(root)
+
+        val child = Todo(id = childId, title = "Auto Child", completed = false, createdAt = now + 10L, parentTaskId = parentId)
+        store.saveTodoLocally(child)
+
+        // Calling setCompletedLocally on parent when child exists -> AutomaticParentRejected
+        val result = store.setCompletedLocally(parentId, completed = true, nowEpochMs = now + 20L)
+        assertEquals(CompletionChange.AutomaticParentRejected, result)
+
+        // Child can be completed normally
+        val childResult = store.setCompletedLocally(childId, completed = true, nowEpochMs = now + 30L)
+        assertEquals(CompletionChange.Changed, childResult)
+    }
+
+    @Test
+    fun testDeleteParentWithChildrenDoesNotUseSingleRowCancelShortcut() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        val now = 10_000L
+        val rootId = "60000000-0000-4000-8000-000000000001"
+        val childId = "60000000-0000-4000-8000-000000000002"
+        val root = Todo(id = rootId, title = "Root to delete", completed = false, createdAt = now)
+        store.saveTodoLocally(root)
+
+        val child = Todo(id = childId, title = "Child of del", completed = false, createdAt = now + 10L, parentTaskId = rootId)
+        store.saveTodoLocally(child)
+
+        // Delete root
+        store.deleteTodoLocally(rootId)
+
+        // Should enqueue a DELETE operation in outbox, not cancelUnsentCreate
+        val ops = database.tabbyRushDao().getOutboxByRowId(rootId)
+        val deleteOp = ops.firstOrNull { it.kind == StrictOperationKind.DELETE.wireName }
+        assertNotNull(deleteOp)
+        assertEquals(OutboxEntity.CONTRACT_VERSION_V3, deleteOp.contractVersion)
     }
 }

@@ -6,7 +6,13 @@
 Dependency: Depends on Phase 3 settled shared evaluator, admission, deadline presentation, and committed scheduling. Consumes shared projection without a separate Android store or protocol fork.
 
 ## Overview
-Date: 2026-10-19. Priority: P2. Implementation: pending. Review: pending. Provisional effort: 12h (subtotal 48h for surface & rollout phases 4–6). Render the shared group projection and actual deadline dates in the native launcher widget.
+Date: 2026-10-20. Priority: P2. Status: DONE (2026-10-20), credited 12h.
+Implementation: marked DONE administratively on 2026-10-20 per user approval after Cycle 3 code review (score 8.5/10, 0 critical issues; see `plans/reports/code-reviewer-261020-0115-phase-04-android-widget-cycle3.md`). Renders the shared group projection and actual deadline dates in the native Glance launcher widget.
+- Effort: 12h credited (100% planned effort roll-up; total 84h / 120h credited, 70.0%).
+- Automated Verification: QA report records 402 passing automated assertions (341 `:shared:jvmTest` across 41 suites, 50 `:androidApp:testDebugUnitTest` across 8 suites, 11 canonical strict-v3 vectors under `--dependency-verification=off`); 47 Gradle tasks compiling androidTest sources executed cleanly; connected device execution pending.
+- Review & Approval: Cycle 3 review scored 8.5/10 (0 critical issues).
+- Technical Acceptance Qualifier: Physical launcher device verification (interactive launcher pinning, responsive 120×120 to 320×360dp scaling, 200% font accessibility, and on-device >=48dp hit area validation) is formally deferred to the Phase 06 acceptance gate (`phase-06-acceptance-and-rollout.md`).
+- Dependency: Consumes shared Phase 03 evaluators (`TaskHierarchyProjector`, `TaskDeadlinePresentation`) and store admission directly without Android protocol forks. Feeds widget surface artifacts into Phase 06 acceptance gate.
 
 ## Key Insights
 - Widget already receives full `Todo` deadlines; current `TaskRow` has fixed 48dp height and one-line title. Adding text without changing layout risks clipping.
@@ -47,10 +53,10 @@ Prefix `S` = `/home/loidinh/WS/tabby-rush`.
 8. Future verification: Exercise responsive 120×120, 240×120, 240×240 and 320×360dp layouts plus 200% text. Observe after child completion/reopen, remote sync, app restart and account switch. Capture runtime screenshots, not Compose/design mockups.
 
 ## Todo list
-- [ ] Adapt native widget model to shared grouped/effective state.
-- [ ] Implement adaptive own-deadline rows and accessibility labels.
-- [ ] Preserve automatic-parent and token-fenced child actions.
-- [ ] Verify real launcher behavior, refresh/privacy and responsive scaling.
+- [x] Adapt native widget model to shared grouped/effective state (`task-widget-projection.kt`, `task-widget.kt`).
+- [x] Implement adaptive own-deadline rows and accessibility labels (`task-widget-strings.xml`, `task-widget.kt`).
+- [x] Preserve automatic-parent and token-fenced child actions (`task-widget.kt`, `task-widget-model-test.kt`).
+- [~] Verify real launcher behavior, refresh/privacy and responsive scaling (automated tests and instrumentation compilation PASS; physical launcher device verification deferred to Phase 06 acceptance gate).
 
 ## Success Criteria
 - Real launcher screenshot shows whole compact groups (mixed group shows parent + active and completed children intact under Active) with each row's own stored deadline date/optional time/zone; no inheritance; date remains present when overdue; row with no deadline omits deadline metadata line entirely.

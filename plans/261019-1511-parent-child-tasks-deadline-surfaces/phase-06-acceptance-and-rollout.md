@@ -25,6 +25,12 @@ Date: 2026-10-20. Priority: P2. Implementation: pending. Review: pending. Provis
   - Conflict-review copy: implement explanatory copy in `conflict-review.kt` for preservation/barrier CAS conflicts and partial group outcomes.
   - Native UI smoke verification: execute real UI smoke on Android and desktop (group creation, completion, deletion, filters).
 
+- Tracked Phase 04 Android launcher acceptance gate:
+  - Physical launcher pinning & live rendering: pin Glance widget to connected Android device/emulator launcher and capture runtime screenshots.
+  - Responsive layout scaling: verify rendering across 120×120, 240×120, 240×240, and 320×360dp sizes.
+  - Accessibility: verify 200% font scaling, TalkBack aggregated descriptions (title + subtask progress + deadline), and >=48dp physical hit areas across checkbox and row actions.
+  - Deadline text wrapping: verify long timed deadline labels (`Due YYYY-MM-DD HH:mm (zone) • Overdue`) wrap cleanly without truncating the absolute date.
+  - Lifecycle & security refresh: verify widget state updates cleanly across child completion/reopen, app restart, remote sync, and account switch/sign-out without data leakage.
 ## Architecture
 Backend-first version-capable deployment → publish clients with local Room 3 but hierarchy creation gated → **staging environment:** staging dry-run/backup/permit checks → fenced v2→v3 staging migration → schema/fingerprint/epoch read-back → receipt reconciliation/base scan → `ready-v3` staging hierarchy unlock → cross-device acceptance on staging → **production environment:** separate operator-authorized procedure (pre-migration backup, permit checks, fenced cutover, read-back, unlock).
 
@@ -57,6 +63,7 @@ Prefix `S` = `/home/loidinh/WS/tabby-rush`.
 - [ ] Remediate Phase 03 W1: mixed-group queue drainage and unsent child op cancellation.
 - [ ] Remediate Phase 03 W2: preservation-marker retention during edit coalescing and preservation bypass.
 - [ ] Deliver Phase 03 deferred recovery items: late-child sync cleanup, unresolved-section UI, and conflict-review copy.
+- [ ] Execute Phase 04 physical launcher acceptance: responsive sizes (120×120 to 320×360dp), 200% font scale, physical touch targets, deadline wrapping, and lifecycle refresh.
 - [ ] Complete authorized rollout/read-back or report exact operational hold.
 - [ ] Reconcile docs/changelog/phase status with exercised evidence.
 

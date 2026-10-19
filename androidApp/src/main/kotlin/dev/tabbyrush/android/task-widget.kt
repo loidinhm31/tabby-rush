@@ -29,6 +29,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -40,9 +41,13 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextDecoration
 import androidx.glance.text.TextStyle
+import dev.tabbyrush.shared.contract.DeadlinePresentation
 import dev.tabbyrush.shared.contract.SurfaceAccountToken
+import dev.tabbyrush.shared.contract.TaskDeadlinePresentation
+import dev.tabbyrush.shared.contract.TaskHierarchyProjector
 import dev.tabbyrush.shared.contract.TaskSections
 import dev.tabbyrush.shared.contract.Todo
+import dev.tabbyrush.shared.contract.TodoFilter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -246,7 +251,10 @@ private fun WidgetTaskList(
     isCompact: Boolean,
     context: Context
 ) {
-    val totalCount = sections.incomplete.size + sections.completed.size
+    val nowEpochMs = System.currentTimeMillis()
+    val incompleteItems = projectWidgetItems(sections.incomplete, nowEpochMs)
+    val completedItems = projectWidgetItems(sections.completed, nowEpochMs)
+    val totalCount = incompleteItems.size + completedItems.size
 
     Column(modifier = GlanceModifier.fillMaxSize()) {
         // Top Header
@@ -306,46 +314,46 @@ private fun WidgetTaskList(
         } else {
             LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
                 // 1. Incomplete Section
-                if (sections.incomplete.isNotEmpty()) {
+                if (incompleteItems.isNotEmpty()) {
                     item {
                         SectionHeader(
                             title = context.getString(
                                 R.string.task_widget_incomplete_header,
-                                sections.incomplete.size
+                                incompleteItems.size
                             )
                         )
                     }
                     items(
-                        items = sections.incomplete,
-                        itemId = { it.id.hashCode().toLong() }
-                    ) { todo ->
+                        items = incompleteItems,
+                        itemId = { it.todo.id.hashCode().toLong() }
+                    ) { item ->
                         TaskRow(
                             token = token,
-                            todo = todo,
-                            isCompleted = false,
+                            item = item,
+                            isCompact = isCompact,
                             context = context
                         )
                     }
                 }
 
                 // 2. Completed Section
-                if (sections.completed.isNotEmpty()) {
+                if (completedItems.isNotEmpty()) {
                     item {
                         SectionHeader(
                             title = context.getString(
                                 R.string.task_widget_completed_header,
-                                sections.completed.size
+                                completedItems.size
                             )
                         )
                     }
                     items(
-                        items = sections.completed,
-                        itemId = { it.id.hashCode().toLong() }
-                    ) { todo ->
+                        items = completedItems,
+                        itemId = { it.todo.id.hashCode().toLong() }
+                    ) { item ->
                         TaskRow(
                             token = token,
-                            todo = todo,
-                            isCompleted = true,
+                            item = item,
+                            isCompact = isCompact,
                             context = context
                         )
                     }
@@ -376,53 +384,136 @@ private fun SectionHeader(title: String) {
 @Composable
 private fun TaskRow(
     token: SurfaceAccountToken,
-    todo: Todo,
-    isCompleted: Boolean,
+    item: WidgetTaskItem,
+    isCompact: Boolean,
     context: Context
 ) {
-    val descriptionRes = if (isCompleted) {
-        R.string.task_widget_checkbox_completed
-    } else {
-        R.string.task_widget_checkbox_incomplete
-    }
-    val contentDesc = context.getString(descriptionRes, todo.title)
+    val todo = item.todo
+    val isCompleted = item.effectiveCompleted
+    val startPadding = if (item.isChild) (if (isCompact) 12.dp else 20.dp) else 0.dp
 
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .height(48.dp) // Minimum 48dp accessible tap target
-            .padding(vertical = 2.dp),
+            .padding(start = startPadding, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        CheckBox(
-            checked = isCompleted,
-            onCheckedChange = actionRunCallback<ToggleTaskActionCallback>(
-                TaskWidgetActionKeys.toggleTaskParameters(
-                    token = token,
-                    taskId = todo.id,
-                    desiredCompleted = !isCompleted
-                )
-            ),
-            modifier = GlanceModifier.semantics {
-                contentDescription = contentDesc
+        if (item.hasLiveChildren) {
+            CheckBox(
+                checked = isCompleted,
+                onCheckedChange = null,
+                modifier = GlanceModifier
+                    .width(48.dp)
+                    .height(48.dp)
+                    .semantics {
+                        contentDescription = context.getString(
+                            R.string.task_widget_parent_automatic_content_desc,
+                            todo.title,
+                            item.completedChildCount,
+                            item.childCount
+                        )
+                    }
+            )
+        } else {
+            val descriptionRes = if (item.isChild) {
+                if (isCompleted) R.string.task_widget_child_checkbox_completed
+                else R.string.task_widget_child_checkbox_incomplete
+            } else {
+                if (isCompleted) R.string.task_widget_checkbox_completed
+                else R.string.task_widget_checkbox_incomplete
             }
-        )
-
+            CheckBox(
+                checked = isCompleted,
+                onCheckedChange = actionRunCallback<ToggleTaskActionCallback>(
+                    TaskWidgetActionKeys.toggleTaskParameters(
+                        token = token,
+                        taskId = todo.id,
+                        desiredCompleted = !isCompleted
+                    )
+                ),
+                modifier = GlanceModifier
+                    .width(48.dp)
+                    .height(48.dp)
+                    .semantics {
+                        contentDescription = context.getString(descriptionRes, todo.title)
+                    }
+            )
+        }
         Spacer(modifier = GlanceModifier.width(8.dp))
 
-        Text(
-            text = todo.title,
-            maxLines = 1,
-            style = TextStyle(
-                color = if (isCompleted) GlanceTheme.colors.onSurfaceVariant else GlanceTheme.colors.onSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Normal,
-                textDecoration = if (isCompleted) TextDecoration.LineThrough else TextDecoration.None
-            ),
+        val subtasksProgress = if (item.hasLiveChildren) {
+            context.getString(
+                R.string.task_widget_subtasks_progress,
+                item.completedChildCount,
+                item.childCount
+            )
+        } else null
+
+        val deadlinePres = item.deadlinePresentation
+        val rowContentDescription = buildString {
+            append(todo.title)
+            if (subtasksProgress != null) {
+                append(". ")
+                append(subtasksProgress)
+            }
+            if (deadlinePres != null) {
+                append(". ")
+                append(deadlinePres.contentDescription)
+            }
+        }
+
+        Column(
             modifier = GlanceModifier
                 .defaultWeight()
+                .fillMaxHeight()
                 .clickable(actionStartActivity(createOpenTaskIntent(context, token, todo.id)))
-                .semantics { contentDescription = todo.title }
-        )
+                .semantics { contentDescription = rowContentDescription },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = todo.title,
+                maxLines = if (isCompact) 1 else 2,
+                style = TextStyle(
+                    color = if (isCompleted) GlanceTheme.colors.onSurfaceVariant else GlanceTheme.colors.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                    textDecoration = if (isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                )
+            )
+
+            if (subtasksProgress != null) {
+                Spacer(modifier = GlanceModifier.height(2.dp))
+                Text(
+                    text = subtasksProgress,
+                    style = TextStyle(
+                        color = GlanceTheme.colors.primary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                )
+            }
+
+            if (deadlinePres != null) {
+                Spacer(modifier = GlanceModifier.height(2.dp))
+                val deadlineText = if (deadlinePres.isOverdue) {
+                    context.getString(
+                        R.string.task_widget_deadline_with_overdue,
+                        deadlinePres.label,
+                        context.getString(R.string.task_widget_overdue)
+                    )
+                } else {
+                    deadlinePres.label
+                }
+                Text(
+                    text = deadlineText,
+                    maxLines = 3,
+                    style = TextStyle(
+                        color = if (deadlinePres.isOverdue) GlanceTheme.colors.error else GlanceTheme.colors.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        fontWeight = if (deadlinePres.isOverdue) FontWeight.Bold else FontWeight.Normal
+                    )
+                )
+            }
+        }
     }
 }

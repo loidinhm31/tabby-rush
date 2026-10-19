@@ -3,6 +3,30 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Parent/Child Tasks & Deadline Surfaces / Phase 04] - 2026-10-20: Android Grouped Widget & Deadline Labels
+
+### Delivered
+- **Pure projectWidgetItems Projection**: Added stateless widget item projection in `dev.tabbyrush.android.projectWidgetItems` (`task-widget-projection.kt`) transforming task sections via shared `TaskHierarchyProjector.projectHierarchy` with `TodoFilter.ALL`. Keeps whole compact groups intact under Incomplete (active parents display with all active and completed sibling children) and Completed sections, enforcing ancestor deletion dominance and effective parent completion without platform-specific hierarchy forks.
+- **Absolute Own Deadlines & Overdue Styling**: Implemented per-row absolute deadline presentation using `TaskDeadlinePresentation.formatDeadline`. Formats absolute date (`"Due YYYY-MM-DD"`) and timed deadlines (`"Due YYYY-MM-DD HH:mm (captured zone)"`) strictly from each task's own stored deadline, with zero deadline inheritance between parent and child. Date-only reminder rule anchor (09:00 default) is never leaked as deadline time; tasks lacking deadlines omit the metadata row. Overdue active rows append `• Overdue` decoration in `GlanceTheme.colors.error` and `FontWeight.Bold` while keeping the absolute date visible; completed tasks never render overdue.
+- **Adaptive Glance Row Layout & Accessible Touch Targets**: Replaced fixed 48dp single-line row with an adaptive Glance layout in `task-widget.kt`. Explicit 48×48dp CheckBox container `Box(contentAlignment = Alignment.Center)` and minimum 48dp `Spacer` provide layout bounds intended to satisfy Android >=48dp touch target guidelines (physical touch targets remain subject to on-device launcher verification). Receptive title/metadata `Column` declares `.fillMaxHeight()` with `Alignment.CenterVertically` for clickable navigation. Set deadline `maxLines = 3` to accommodate multi-line wrapped deadline and overdue strings on compact widths (truncation prevention under 200% font scaling remains subject to on-device verification). Indents child subtasks by 12dp (compact) or 20dp (expanded).
+- **Read-Only Automatic Parent Progress & Token-Fenced Actions**: Parents with live children render read-only checkboxes (`onCheckedChange = null`) reflecting automatic progress (`"Subtasks: X/Y completed"`) with aggregated TalkBack content descriptions (`task_widget_parent_automatic_content_desc`), preventing direct group toggle. Child subtasks and standalone roots bind interactive callbacks fenced by `SurfaceAccountToken(accountKey, generation)`. Widget Add button routes to `createAddTaskIntent` creating independent root tasks only (child creation remains main-app-only). Stale parent completion callbacks are rejected by shared store admission.
+- **Accessibility & String Localization**: Added dedicated accessibility strings in `task-widget-strings.xml` for child checkbox actions (`task_widget_child_checkbox_incomplete`, `task_widget_child_checkbox_completed`), subtask progress counters (`task_widget_subtasks_progress`), automatic progress content descriptions (`task_widget_parent_automatic_content_desc`), and localized overdue badges (`task_widget_overdue`, `task_widget_deadline_with_overdue`).
+
+### Reported Automated Evidence
+- **Reported Verification Totals**: QA report ([qa-261020-0053-phase-04-android-widget-deadline-labels.md](../plans/reports/qa-261020-0053-phase-04-android-widget-deadline-labels.md)) records 402 reported passing tests/checks across 3 automated test targets (100% PASS, 0 failures, 0 skipped, run with `--dependency-verification=off`).
+- **TabbyRush Shared JVM Tests** (`JAVA_HOME=... ./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks`): 341/341 tests passed across 41 test suites.
+- **Android Unit Tests** (`./gradlew :androidApp:testDebugUnitTest`): 50/50 tests passed across 8 test suites, including 18 `TaskWidgetModelTest` assertions verifying ancestor deletion dominance, mixed compact group preservation, raw completion disagreement, absolute deadline/overdue presentation, absence of deadline inheritance, automatic parent progress, and `SurfaceAccountToken` fence isolation.
+- **Android Instrumentation Compilation** (`JAVA_HOME=... ./gradlew :androidApp:compileDebugAndroidTestKotlin --dependency-verification=off`): Build succeeded with 47 executed Gradle tasks; instrumented test sources compile clean (not counted as test assertions).
+- **Node.js Strict-v3 Vector Runner** (`node scripts/strict-v3-vector-runner.mjs`): 11/11 vector checks passed (6 valid + 5 rejections; canonical fingerprint verified).
+
+### Code Review & Operational Caveats
+- Code review Cycle 3 ([code-reviewer-261020-0115-phase-04-android-widget-cycle3.md](../plans/reports/code-reviewer-261020-0115-phase-04-android-widget-cycle3.md)) scored **8.5/10** with 0 critical issues.
+- **Technical Acceptance Qualifier & Deferred Proof (Phase 06 Gate)**:
+  - *Physical Launcher Device Verification Deferred*: Physical connected device/emulator launcher verification (pinning widget, responsive scaling at 120×120, 240×120, 240×240, and 320×360dp, 200% font scaling, and TalkBack audio inspection) remains formally held at Gate G2 and deferred to the Phase 06 acceptance gate due to headless CI execution constraints.
+  - *Overdue Boundary Refresh*: Overdue evaluation captures `nowEpochMs = System.currentTimeMillis()` at composition time; automatic midnight/boundary trigger refresh is tracked for Phase 06 integration.
+  - *Open Safety Findings*: Open findings (delivery-drain timeout in `closeRuntimeInternal()`, swallowed widget cleanup errors in `task-widget-updater.kt`, 149-checksum verification baseline, and Glance provenance hold) remain active.
+
+---
 ## [Parent/Child Tasks & Deadline Surfaces / Phase 03] - 2026-10-20: Shared Hierarchy Semantics & Main UI
 
 ### Delivered

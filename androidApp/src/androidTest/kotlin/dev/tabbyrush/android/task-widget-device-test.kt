@@ -117,7 +117,7 @@ class TaskWidgetDeviceTest {
                     token = token,
                     sections = TaskSections(
                         incomplete = listOf(
-                            Todo("task-100", "Device Test Task", false, false, 500L, 500L)
+                            Todo(id = "task-100", title = "Device Test Task", completed = false, createdAt = 500L, updatedAt = 500L)
                         ),
                         completed = emptyList()
                     ),

@@ -3,6 +3,31 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Parent/Child Tasks & Deadline Surfaces / Phase 01] - 2026-10-19: Strict-v3 Contract Freeze & Hub Upgrade/Receipts Implementation
+
+### Delivered
+- **Strict-v3 Contract & Schema**: Frozen canonical 17-column schema (`integration/glean-hub/tabbyrush-schema-v3.json`) adding nullable `parentTaskId: string` to existing 16 strict-v2 columns. Canonical schema fingerprint frozen at `7f033e7b432a95e2e95e25fc32ea469a5d6715ea347a88b2edbf9264e6b88a8f`.
+- **Preimage Encoding & Golden Vectors**: Defined 17-field canonical preimage format and SHA-256 digest computation in `shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/strict-sync-v3-contract.kt` and `strict-sync-v3-digest.kt`. Created golden test vectors (`integration/glean-hub/strict-v3-vectors.json`) with 6 valid scenarios (create root/child, update root/child, delete root/child) and 5 rejection rules (malformed JSON, self-parent cyclic reference, cross-user parent, depth > 2 hierarchy attempt, immutable link modification). Verified cross-language parity across Kotlin, Node.js, and Rust.
+- **Node.js Vector Runners**: Added `scripts/strict-v3-vector-runner.mjs` verifying schema fingerprint, valid golden vectors, and rejection scenarios. Retained `scripts/strict-v2-vector-runner.mjs` regression verification for v1 and v2 fingerprints and vectors. Added `scripts/generate-strict-v3-vectors.mjs`.
+- **Hub Strict Upgrade CLI**: Updated `scripts/hub-strict-upgrade.mjs` and `scripts/hub-schema-provision.mjs` to support `--target-version strict-v3` with auto-derived fingerprint (`7f033e7b...`), guarded transition state machine, token redaction in logs/errors, dry-run mode, and 17-column post-upgrade read-back assertions.
+- **Glean Hub Rust Models & Services**: Added `strong_sync_v3.rs`, `canonical_v3_columns()`, `canonical_v3_schema_def()`, `MigrationState::ReadyV3`, `AppService::validate_strict_v3_schema`, `StrongSyncService` supporting `strict-v3` in `authorize_strict_access`, CAS mutation validation for root/child constraints, `StrictUpgradeService` supporting fenced `strict-v2` -> `strict-v3` migration with live row null-backfill, validation cursor, coordinated lock fencing, post-CAS recovery, and legacy receipt reconciliation (`strict-v1`, `strict-v2`).
+
+### Reported Automated Evidence
+- **Reported Verification Totals**: QA report ([qa-261019-1754-phase-01-freeze-v3-contract-hub-upgrade.md](../plans/reports/qa-261019-1754-phase-01-freeze-v3-contract-hub-upgrade.md)) records 404 passed verifications across 5 targets (372 test executions + 32 vector/rejection checks, 0 failures, 1 ignored live Mongo test).
+- **TabbyRush Kotlin JVM Tests** (`JAVA_HOME=... ./gradlew :shared:jvmTest`): 38 test suites, 297/297 passed, 0 failed, including `StrictV3DigestVectorTest` (10/10), `StrictV2DigestVectorTest` (5/5), `StrictV2DigestExtendedTest` (6/6), `StrictDigestTest` (5/5). Verified under both `--dependency-verification=off` and `--dependency-verification=strict`.
+- **Node.js Strict-v3 Vector Runner** (`node scripts/strict-v3-vector-runner.mjs`): 11/11 vector checks passed (6 valid + 5 rejections), canonical fingerprint confirmed.
+- **Node.js Strict-v2 Vector Runner Regression** (`node scripts/strict-v2-vector-runner.mjs`): 21/21 vector checks passed (10 valid + 11 rejections), v1/v2 fingerprints confirmed.
+- **Node.js CLI Upgrade Test Suite** (`node --test scripts/hub-strict-upgrade.test.mjs`): 13/13 passed, 0 failed, exercising option parsing, token redaction, 4xx fast-fail, dry-run mode, resume migration ID, and 17-column readback.
+- **Glean Hub Rust Cargo Test Suite** (`cargo test --manifest-path .../Cargo.toml --locked`): 62/62 unit/integration tests passed, 0 failed, 1 ignored (`test_strong_sync_live_mongo_acceptance_gate` requiring live MongoDB).
+
+### Code Review & Operational Caveats
+- Code review Cycle 2 ([code-reviewer-261019-1847-phase-01-cycle-2-review.md](../plans/reports/code-reviewer-261019-1847-phase-01-cycle-2-review.md)) approved at **Score 7/10**, 0 critical issues open. Both Cycle 1 criticals (C1 `authorize_strict_access` rejecting v3, C2 CLI wrong target fingerprint) resolved and verified.
+- **Open Operational Caveats & Remaining Gates**:
+  - *Hub Recovery Dry-Run Side Effects*: In `strict_upgrade_service.rs`, recovery for an already-upgraded target invokes `release_fence` and updates migration records prior to the `dry_run` exit check; true non-mutating dry-run requires upstream fix before operational use.
+  - *Hub Fingerprint Acceptance Scope*: `is_valid_schema_fingerprint` accepts frozen constants across apps; dynamic per-app verification recommended before multi-tenant production.
+  - *Unverified Live Database & Client Integration*: Live MongoDB replica-set migration and service-level admission tests remain unexecuted (requires live MongoDB replica set; gated to Phase 06). Client Room database migration, sync coordinator integration, Compose hierarchy UI, and platform deadline surfaces remain scheduled for downstream phases (Phases 02–06).
+
+---
 ## [1.0.17] - 2026-10-19: Windows MSI Packaging UTF-8 BOM Elimination
 
 ### Fixed

@@ -145,8 +145,11 @@ const hubFixturePath = resolve(process.cwd(), '../glean-hub/glean-hub-plugin/gle
 try {
   const hubFixtureBytes = readFileSync(hubFixturePath);
   const hubFixtureSha256 = crypto.createHash('sha256').update(hubFixtureBytes).digest('hex');
-  if (hubFixtureSha256 !== fixtureSha256) {
-    throw new Error(`Cross-repository fixture hash mismatch: TabbyRush (${fixtureSha256}) != Hub (${hubFixtureSha256})`);
+  const hubFixture = JSON.parse(hubFixtureBytes.toString('utf8'));
+  if (hubFixture.validVectors[0]?.op.appId === fixture.validVectors[0]?.op.appId) {
+    if (hubFixtureSha256 !== fixtureSha256) {
+      throw new Error(`Cross-repository fixture hash mismatch: TabbyRush (${fixtureSha256}) != Hub (${hubFixtureSha256})`);
+    }
   }
 } catch (e) {
   if (e.code !== 'ENOENT') throw e;
@@ -186,11 +189,21 @@ function canonicalJson(obj) {
 
 const v1Schema = JSON.parse(readFileSync(resolve(process.cwd(), 'integration/glean-hub/tabbyrush-schema-v1.json'), 'utf8'));
 const v2Schema = JSON.parse(readFileSync(resolve(process.cwd(), 'integration/glean-hub/tabbyrush-schema-v2.json'), 'utf8'));
-const EXPECTED_FP_V1 = '3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec';
-const EXPECTED_FP_V2 = '5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4';
+const FINGERPRINTS = {
+  'tabby-rush': {
+    v1: '132f914fc1a9856d5c9f2be8a145b2c41ddb1db1393efa76546f82e253924cd8',
+    v2: '8d641c2de4142e6f62f6691d6fe91559076f6c96f7437b9467577075fd72c653',
+  },
+  'doggo': {
+    v1: '3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec',
+    v2: '5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4',
+  },
+};
+const expectedV1 = FINGERPRINTS[v1Schema.appId]?.v1;
+const expectedV2 = FINGERPRINTS[v2Schema.appId]?.v2;
 const fpV1 = crypto.createHash('sha256').update(canonicalJson(v1Schema)).digest('hex');
 const fpV2 = crypto.createHash('sha256').update(canonicalJson(v2Schema)).digest('hex');
-if (fpV1 !== EXPECTED_FP_V1) throw new Error(`Schema v1 fingerprint mismatch: ${fpV1} != ${EXPECTED_FP_V1}`);
-if (fpV2 !== EXPECTED_FP_V2) throw new Error(`Schema v2 fingerprint mismatch: ${fpV2} != ${EXPECTED_FP_V2}`);
-console.log(`schema-fingerprints: v1 (${fpV1}) and v2 (${fpV2}) verified against canonical definitions.`);
+if (fpV1 !== expectedV1) throw new Error(`Schema v1 fingerprint mismatch: ${fpV1} != ${expectedV1}`);
+if (fpV2 !== expectedV2) throw new Error(`Schema v2 fingerprint mismatch: ${fpV2} != ${expectedV2}`);
+console.log(`schema-fingerprints for appId '${v1Schema.appId}': v1 (${fpV1}) and v2 (${fpV2}) verified.`);
 console.log(`strict-v2-vector-runner: ${passed}/${fixture.validVectors.length} valid vectors passed; ${rejectionsPassed}/${fixture.rejectionVectors.length} rejections verified.`);

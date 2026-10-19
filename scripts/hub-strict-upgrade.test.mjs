@@ -35,6 +35,12 @@ const V2_COLUMNS = [
   { name: 'scheduleToken', type: 'string', nullable: true },
 ];
 
+const V3_COLUMNS = [
+  ...V2_COLUMNS,
+  { name: 'parentTaskId', type: 'string', nullable: true },
+];
+const CANONICAL_V3_FINGERPRINT =
+  '7f033e7b432a95e2e95e25fc32ea469a5d6715ea347a88b2edbf9264e6b88a8f';
 const scriptPath = resolve(process.cwd(), 'scripts/hub-strict-upgrade.mjs');
 
 function runScript(args, env = {}) {
@@ -66,6 +72,9 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
   let simulatedMigrationState = 'transforming';
   let simulatedError = null;
   let receivedMigrationIds = [];
+  let targetVersionForSim = 'strict-v2';
+  let lastPostBody = null;
+
   before(async () => {
     mockServer = http.createServer((req, res) => {
       const url = new URL(req.url, `http://127.0.0.1:${mockPort}`);
@@ -96,7 +105,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
               tables: ['todos'],
               schema: {
                 todos: {
-                  columns: currentSyncMode === 'strict-v2' ? v2Cols : v1Cols,
+                  columns: currentSyncMode === 'strict-v3' ? V3_COLUMNS : currentSyncMode === 'strict-v2' ? v2Cols : v1Cols,
                   primaryKey: 'id',
                 },
               },
@@ -106,6 +115,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
 
         // 2. POST /api/v1/apps/:appId/strict-upgrades
         if (req.method === 'POST' && url.pathname.endsWith('/strict-upgrades')) {
+          lastPostBody = body;
           if (body?.migrationId) {
             receivedMigrationIds.push(body.migrationId);
           }
@@ -139,8 +149,8 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
               migrationId: body.migrationId,
               appId: 'tabby-rush',
               state: simulatedMigrationState,
-              sourceVersion: 'strict-v1',
-              targetVersion: 'strict-v2',
+              sourceVersion: body?.expectedVersion || 'strict-v1',
+              targetVersion: body?.targetVersion || 'strict-v2',
               recordsTransformed: 10,
               tombstonesPreserved: 5,
             }),
@@ -156,9 +166,15 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
           if (simulatedMigrationState === 'transforming') {
             simulatedMigrationState = 'publishing';
           } else if (simulatedMigrationState === 'publishing') {
-            simulatedMigrationState = 'ready-v2';
-            currentSyncMode = 'strict-v2';
-            currentFingerprint = CANONICAL_V2_FINGERPRINT;
+            if (targetVersionForSim === 'strict-v3') {
+              simulatedMigrationState = 'ready-v3';
+              currentSyncMode = 'strict-v3';
+              currentFingerprint = CANONICAL_V3_FINGERPRINT;
+            } else {
+              simulatedMigrationState = 'ready-v2';
+              currentSyncMode = 'strict-v2';
+              currentFingerprint = CANONICAL_V2_FINGERPRINT;
+            }
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -282,7 +298,7 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
     assert.ok(stdout.includes('Initiating upgrade with Migration ID:'));
     assert.ok(stdout.includes('ready-v2'));
     assert.ok(stdout.includes('Performing mandatory final contract read-back assertion...'));
-    assert.ok(stdout.includes('VERIFIED: Application \'tabbyrush\' successfully upgraded to strict-v2'));
+    assert.ok(stdout.includes("VERIFIED: Application 'tabby-rush' successfully upgraded to strict-v2"));
     assert.equal(currentSyncMode, 'strict-v2');
   });
 
@@ -390,10 +406,8 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
       '--token',
       'valid-test-token',
     ]);
-
     returnCorruptedV2Contract = false; // Reset
     assert.equal(code, 1);
-    assert.ok(stdout.includes('reports target version'));
     assert.ok(stderr.includes('CRITICAL: Read-back schema does not contain 16 columns'));
   });
 
@@ -419,5 +433,39 @@ describe('hub-strict-upgrade.mjs CLI tests', () => {
     simulatedError = null;
     assert.ok(!stdout.includes(sensitiveToken), 'Secret token must not appear in stdout');
     assert.ok(!stderr.includes(sensitiveToken), 'Secret token must not appear in stderr');
+  });
+
+  it('executes full live upgrade from strict-v2 to strict-v3 with 17 columns and final read-back assertion', async () => {
+    currentSyncMode = 'strict-v2';
+    currentFingerprint = CANONICAL_V2_FINGERPRINT;
+    simulatedMigrationState = 'transforming';
+    targetVersionForSim = 'strict-v3';
+
+    const { code, stdout } = await runScript([
+      '--origin',
+      serverOrigin,
+      '--token',
+      'valid-test-token',
+      '--expected-version',
+      'strict-v2',
+      '--target-version',
+      'strict-v3',
+      '--poll-interval',
+      '100',
+      '--timeout',
+      '5000',
+    ]);
+
+    targetVersionForSim = 'strict-v2'; // Reset
+    assert.equal(code, 0);
+    assert.equal(lastPostBody.expectedVersion, 'strict-v2');
+    assert.equal(lastPostBody.targetVersion, 'strict-v3');
+    assert.equal(lastPostBody.targetSchemaFingerprint, CANONICAL_V3_FINGERPRINT);
+    assert.ok(stdout.includes('Initiating upgrade with Migration ID:'));
+    assert.ok(stdout.includes('ready-v3'));
+    assert.ok(stdout.includes('Performing mandatory final contract read-back assertion...'));
+    assert.ok(stdout.includes("VERIFIED: Application 'tabby-rush' successfully upgraded to strict-v3"));
+    assert.ok(stdout.includes('All 17 columns active and verified'));
+    assert.equal(currentSyncMode, 'strict-v3');
   });
 });

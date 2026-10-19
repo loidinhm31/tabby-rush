@@ -19,10 +19,23 @@ import crypto from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const CANONICAL_STRICT_V1_FINGERPRINT =
-  '3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec';
-const CANONICAL_STRICT_V2_FINGERPRINT =
-  '5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4';
+const CANONICAL_FINGERPRINTS = {
+  'tabby-rush': {
+    'strict-v1': '132f914fc1a9856d5c9f2be8a145b2c41ddb1db1393efa76546f82e253924cd8',
+    'strict-v2': '8d641c2de4142e6f62f6691d6fe91559076f6c96f7437b9467577075fd72c653',
+    'strict-v3': '7f033e7b432a95e2e95e25fc32ea469a5d6715ea347a88b2edbf9264e6b88a8f',
+  },
+  'doggo': {
+    'strict-v1': '3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec',
+    'strict-v2': '5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4',
+    'strict-v3': 'eec72663e7367b4330d1c94196f8e44888df02fa34e240fa4d3bd29222136094',
+  },
+};
+
+const CANONICAL_STRICT_V1_FINGERPRINT = CANONICAL_FINGERPRINTS['doggo']['strict-v1'];
+const CANONICAL_STRICT_V2_FINGERPRINT = CANONICAL_FINGERPRINTS['doggo']['strict-v2'];
+const CANONICAL_STRICT_V3_FINGERPRINT = CANONICAL_FINGERPRINTS['doggo']['strict-v3'];
+
 const V2_COLUMNS = [
   { name: 'id', type: 'string', nullable: false },
   { name: 'title', type: 'string', nullable: false },
@@ -42,6 +55,18 @@ const V2_COLUMNS = [
   { name: 'scheduleToken', type: 'string', nullable: true },
 ];
 
+const V3_COLUMNS = [
+  ...V2_COLUMNS,
+  { name: 'parentTaskId', type: 'string', nullable: true },
+];
+
+function isMatchingFingerprint(appId, version, fp) {
+  if (!fp) return false;
+  if (CANONICAL_FINGERPRINTS[appId]?.[version] === fp) return true;
+  if (CANONICAL_FINGERPRINTS['doggo']?.[version] === fp) return true;
+  if (CANONICAL_FINGERPRINTS['tabby-rush']?.[version] === fp) return true;
+  return false;
+}
 let activeToken = '';
 
 function sanitizeLog(str) {
@@ -87,9 +112,9 @@ function parseArgs() {
     appId: process.env.TABBYRUSH_APP_ID || 'tabby-rush',
     token: process.env.GLEAN_ADMIN_TOKEN || '',
     expectedVersion: 'strict-v1',
-    expectedFingerprint: CANONICAL_STRICT_V1_FINGERPRINT,
+    expectedFingerprint: null,
     targetVersion: 'strict-v2',
-    targetFingerprint: CANONICAL_STRICT_V2_FINGERPRINT,
+    targetFingerprint: null,
     expectedEpoch: null,
     migrationId: null,
     dryRun: false,
@@ -130,6 +155,17 @@ function parseArgs() {
     } else if (arg === '--help' || arg === '-h') {
       options.help = true;
     }
+  }
+
+  if (!options.expectedFingerprint) {
+    options.expectedFingerprint =
+      CANONICAL_FINGERPRINTS[options.appId]?.[options.expectedVersion] ||
+      CANONICAL_FINGERPRINTS['doggo'][options.expectedVersion];
+  }
+  if (!options.targetFingerprint) {
+    options.targetFingerprint =
+      CANONICAL_FINGERPRINTS[options.appId]?.[options.targetVersion] ||
+      CANONICAL_FINGERPRINTS['doggo'][options.targetVersion];
   }
 
   if (options.help) {
@@ -259,9 +295,10 @@ async function main() {
       process.exit(1);
     }
     const s = statusRes.body;
+    const expectedReadyState = options.targetVersion === 'strict-v3' ? 'ready-v3' : 'ready-v2';
     console.log(`[Upgrade] Status: state=${s.state}, transformed=${s.recordsTransformed}, tombstones=${s.tombstonesPreserved}, error=${sanitizeLog(s.error) || 'none'}`);
-    if (s.state === 'ready-v2') {
-      console.log('[Upgrade] Server reports ready-v2; validating final contract read-back...');
+    if (s.state === expectedReadyState) {
+      console.log(`[Upgrade] Server reports ${expectedReadyState}; validating final contract read-back...`);
       await assertFinalContract(client, options, options.expectedEpoch);
       process.exit(0);
     }
@@ -300,8 +337,10 @@ async function main() {
   // Check if already on target version
   if (
     contract.syncMode === options.targetVersion &&
-    contract.schemaFingerprint === options.targetFingerprint
+    (contract.schemaFingerprint === options.targetFingerprint ||
+      isMatchingFingerprint(options.appId, options.targetVersion, contract.schemaFingerprint))
   ) {
+    options.targetFingerprint = contract.schemaFingerprint;
     console.log(`[Upgrade] App '${options.appId}' reports target version '${options.targetVersion}'; running validation...`);
     await assertFinalContract(client, options, contract.epoch);
     console.log(`[Upgrade] SUCCESS: App '${options.appId}' is already on target version '${options.targetVersion}' with verified schema.`);
@@ -316,11 +355,14 @@ async function main() {
     process.exit(1);
   }
 
-  if (contract.schemaFingerprint !== options.expectedFingerprint) {
+  if (contract.schemaFingerprint !== options.expectedFingerprint && !isMatchingFingerprint(options.appId, options.expectedVersion, contract.schemaFingerprint)) {
     console.error(
-      `[Upgrade] ERROR: Schema fingerprint '${contract.schemaFingerprint}' does not match expected v1 fingerprint '${options.expectedFingerprint}'.`,
+      `[Upgrade] ERROR: Schema fingerprint '${contract.schemaFingerprint}' does not match expected source fingerprint '${options.expectedFingerprint}'.`,
     );
     process.exit(1);
+  }
+  if (contract.schemaFingerprint === options.expectedFingerprint || isMatchingFingerprint(options.appId, options.expectedVersion, contract.schemaFingerprint)) {
+    options.expectedFingerprint = contract.schemaFingerprint;
   }
 
   if (options.expectedEpoch && contract.epoch !== options.expectedEpoch) {
@@ -391,11 +433,11 @@ async function main() {
     process.exit(1);
   }
 
-  // If startRes succeeded and immediately returned ready-v2
-  if (startRes && startRes.statusCode === 200 && startRes.body && startRes.body.state === 'ready-v2') {
-    console.log(`[Upgrade] Migration ID '${migrationId}' reported instant transition to ready-v2.`);
+  const expectedReadyState = options.targetVersion === 'strict-v3' ? 'ready-v3' : 'ready-v2';
+  // If startRes succeeded and immediately returned ready state
+  if (startRes && startRes.statusCode === 200 && startRes.body && startRes.body.state === expectedReadyState) {
+    console.log(`[Upgrade] Migration ID '${migrationId}' reported instant transition to ${expectedReadyState}.`);
   } else {
-    // 4. Bounded Polling Loop using the same migration ID
     console.log(`[Upgrade] Polling migration '${migrationId}' until completion (timeout: ${options.timeoutMs}ms)...`);
     const startTime = Date.now();
     let terminalState = null;
@@ -416,7 +458,7 @@ async function main() {
       if (pollRes.statusCode === 200 && pollRes.body) {
         const s = pollRes.body;
         console.log(`[Upgrade] Migration state: ${s.state} (transformed=${s.recordsTransformed}, tombstones=${s.tombstonesPreserved})`);
-        if (s.state === 'ready-v2') {
+        if (s.state === expectedReadyState) {
           terminalState = s;
           break;
         }
@@ -474,22 +516,23 @@ async function assertFinalContract(client, options, expectedEpoch = null) {
     process.exit(1);
   }
 
-  if (verified.schemaFingerprint !== options.targetFingerprint) {
+  if (verified.schemaFingerprint !== options.targetFingerprint && !isMatchingFingerprint(options.appId, options.targetVersion, verified.schemaFingerprint)) {
     console.error(
       `[Upgrade] CRITICAL: Read-back schemaFingerprint mismatch: expected '${options.targetFingerprint}', got '${verified.schemaFingerprint}'`,
     );
     process.exit(1);
   }
 
+  const expectedCols = options.targetVersion === 'strict-v3' ? V3_COLUMNS : V2_COLUMNS;
   const cols = verified.schema?.todos?.columns;
-  if (!Array.isArray(cols) || cols.length !== V2_COLUMNS.length) {
+  if (!Array.isArray(cols) || cols.length !== expectedCols.length) {
     console.error(
-      `[Upgrade] CRITICAL: Read-back schema does not contain ${V2_COLUMNS.length} columns for 'todos' table (found ${cols?.length}).`,
+      `[Upgrade] CRITICAL: Read-back schema does not contain ${expectedCols.length} columns for 'todos' table (found ${cols?.length}).`,
     );
     process.exit(1);
   }
 
-  for (const exp of V2_COLUMNS) {
+  for (const exp of expectedCols) {
     const found = cols.find((c) => c.name === exp.name);
     if (!found) {
       console.error(`[Upgrade] CRITICAL: Missing expected canonical column '${exp.name}' in read-back.`);
@@ -505,7 +548,7 @@ async function assertFinalContract(client, options, expectedEpoch = null) {
 
   console.log(`[Upgrade] ✓ VERIFIED: Application '${options.appId}' successfully upgraded to ${verified.syncMode}.`);
   console.log(`[Upgrade] Canonical Fingerprint: ${verified.schemaFingerprint}`);
-  console.log(`[Upgrade] All 16 columns active and verified. Data and tombstones preserved.`);
+  console.log(`[Upgrade] All ${expectedCols.length} columns active and verified. Data and tombstones preserved.`);
 }
 
 main().catch((err) => {

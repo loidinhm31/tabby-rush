@@ -549,19 +549,31 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 | `desktopApp/src/main/.../desktop-remote-runtime.kt` | `DesktopRemoteRuntime` | Desktop SSE lifecycle coordinator, background thread management, and leave cancel gate integration. |
 | `scripts/admin-announcements-smoke.mjs` | Node.js smoke runner & self-test | Automated verification of contract-v1.json, 13 golden vectors, idempotency, and in-process mock server (21/21 PASS). |
 
+### 2.15 Parent/Child Tasks & Strict-v3 Foundation (Phase 01)
+
+| Component File (Repo Relative) | Primary Types & Functions | Architectural Role |
+|---|---|---|
+| `shared/.../strict-sync-v3-contract.kt` | `StrictV3TodoPayload`, validation functions | Pure Multiplatform contracts, limits validation, and wire serialization models for 17-column strict-v3. |
+| `shared/.../strict-sync-v3-digest.kt` | `computeStrictV3Digest`, preimage formatting | Canonical SHA-256 binary digest computation matching Rust and Node implementations. |
+| `integration/glean-hub/tabbyrush-schema-v3.json` | JSON Schema definition | Canonical strict-v3 schema definition with 17 columns (including nullable `parentTaskId`). |
+| `integration/glean-hub/strict-v3-vectors.json` | Golden test fixtures | 6 valid scenarios and 5 rejection test vectors across create, update, delete operations. |
+| `scripts/strict-v3-vector-runner.mjs` | Node.js verification runner | Automates cross-language validation of fingerprints, valid golden preimages, and rejection rules. |
+| `scripts/generate-strict-v3-vectors.mjs` | Generator script | Deterministic generation and encoding of strict-v3 golden vectors. |
+| `scripts/hub-strict-upgrade.mjs` | Upgrade runner CLI | Extended with `--target-version strict-v3`, auto-derived target fingerprint, dry-run mode, and 17-column read-back. |
+
 ---
 
-## 3. Repomix Compaction Metrics (Generated: 2026-10-18)
+## 3. Repomix Compaction Metrics (Generated: 2026-10-19)
 - **Compaction Artifact:** `repomix-output.xml` at repository root; generated with `repomix --style xml --compress` (default broad scan).
-- **Included Files:** 610 files; 6 security-scanner exclusions.
-- **Packed Size:** 6,718,802 characters and 1,647,198 tokens.
+- **Included Files:** 645 files; 6 security-scanner exclusions.
+- **Packed Size:** 7,050,501 characters and 1,624,947 tokens.
 - **Scope:** Default broad scan including source, tests, scripts, configuration, and documentation.
 - **Top 5 Files by Token Count:**
-  1. `docs/assets/tabbyrush-app-icon.svg` (200,502 tokens, 296,208 chars)
-  2. `shared/gradle.lockfile` (56,057 tokens, 314,065 chars)
-  3. `gradle/verification-metadata.xml` (45,214 tokens, 138,636 chars)
-  4. `docs/project-roadmap.md` (32,770 tokens, 141,655 chars)
-  5. `docs/system-architecture.md` (25,519 tokens, 114,482 chars)
+  1. `shared/gradle.lockfile` (56,057 tokens, 314,065 chars)
+  2. `gradle/verification-metadata.xml` (45,214 tokens, 138,636 chars)
+  3. `docs/project-roadmap.md` (35,015 tokens, 151,515 chars)
+  4. `docs/system-architecture.md` (27,127 tokens, 123,096 chars)
+  5. `docs/codebase-summary.md` (26,394 tokens, 115,243 chars)
 - **Security-Scanner Exclusions (6):**
   1. `docs/security-and-recovery.md`
   2. `plans/reports/code-reviewer-261014-1624-phase-08-release-operations-cycle2.md`
@@ -695,3 +707,9 @@ Following Phases 01–12, the repository contains the Android and shared Compose
     - `P11 Deployment Preflight & Staged Rollout`: Preflight verification script (`scripts/announcement-preflight.mjs`), non-destructive rollback runbook, and environment variable toggles.
     - `P12 Acceptance Tooling & Evidence`: Standalone Node.js smoke runner (`scripts/admin-announcements-smoke.mjs`) passing 21/21 assertions and 13 golden vectors; Playwright browser suite (`scripts/admin-announcements-browser.spec.ts`); comprehensive acceptance matrix (`docs/evidence/admin-announcements-acceptance.md`).
     - `Acceptance Status`: QA regression report (`qa-261018-1548-c1-c6-regression-verification.md`) records 566 verifications passing (548 test executions across 8 targets + 18 vector/static checks); Cycle 2 code review approved at Score 8/10 with 0 critical issues. Restricted pilot gate approved as recorded in acceptance evidence for internal Android & Linux trials; Gate G5 (Windows Desktop Runtime) formally held on Linux build host. Inherited release holds (G2/G3/G6/G7, 149-checksum baseline, Glance provenance) remain open.
+53. **Parent/Child Tasks & Strict-v3 Foundation (Phase 01 Delivered)**: Delivered on 2026-10-19. Strict-v3 hierarchy contract, canonical 17-column schema, golden vectors, Glean Hub Rust models/services, and upgrade tooling:
+    - `Strict-v3 Contract & Schema`: Canonical 17-column table `todos` with nullable `parentTaskId: string`. Canonical schema fingerprint frozen at `7f033e7b432a95e2e95e25fc32ea469a5d6715ea347a88b2edbf9264e6b88a8f` (TabbyRush) / `eec72663e7367b4330d1c94196f8e44888df02fa34e240fa4d3bd29222136094` (generic Hub).
+    - `Golden Vectors & Digests`: 6 valid vectors and 5 rejection vectors verified with byte-level parity across Kotlin (`StrictV3DigestVectorTest`), Node (`strict-v3-vector-runner.mjs`), and Rust (`tests/fixtures/strict-v3-vectors.json`).
+    - `Glean Hub Sync Service & Models`: Added `StrictV3TodoData`, `canonical_v3_columns()`, `AppService::validate_strict_v3_schema()`, `StrongSyncService` supporting `strict-v3` in `authorize_strict_access`, CAS mutation validation for root/child constraints, and legacy receipt reconciliation (`strict-v1`, `strict-v2`).
+    - `Fenced In-Place Upgrade Machine`: `StrictUpgradeService` extended for `strict-v2` -> `strict-v3` migration with live row null-backfill, validation cursor, coordinated lock fencing, and post-CAS fence release recovery; `scripts/hub-strict-upgrade.mjs` CLI supporting `--target-version strict-v3`, auto-derived target fingerprint, dry-run mode, and 17-column read-back assertions.
+    - `Reported Verification`: QA report records 404 passing checks (297 JVM, 11 Node v3, 21 Node v2 regression, 13 Node CLI, 62 Rust cargo tests). Cycle 2 code review approved at Score 7/10 with 0 critical issues; C1 and C2 resolved. Downstream client integration and live Mongo rollout scheduled for Phases 02–06; open caveats noted for recovery dry-run writes and cross-app fingerprint checks.

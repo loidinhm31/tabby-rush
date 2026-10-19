@@ -61,6 +61,11 @@ const V2_COLUMNS = [
   { name: 'scheduleToken', type: 'string', nullable: true },
 ];
 
+const V3_COLUMNS = [
+  ...V2_COLUMNS,
+  { name: 'parentTaskId', type: 'string', nullable: true },
+];
+
 function validateSchemaColumns(schema, expectedVersion = 'strict-v1') {
   const todos = schema?.todos;
   if (!todos) {
@@ -70,7 +75,11 @@ function validateSchemaColumns(schema, expectedVersion = 'strict-v1') {
     throw new Error(`Invalid primaryKey '${todos.primaryKey}', expected 'id'`);
   }
 
-  const expectedColumns = expectedVersion === 'strict-v2' ? V2_COLUMNS : V1_COLUMNS;
+  const expectedColumns = expectedVersion === 'strict-v3'
+    ? V3_COLUMNS
+    : expectedVersion === 'strict-v2'
+    ? V2_COLUMNS
+    : V1_COLUMNS;
 
   if (!Array.isArray(todos.columns) || todos.columns.length !== expectedColumns.length) {
     throw new Error(`Expected exactly ${expectedColumns.length} columns in 'todos' for ${expectedVersion}, found ${todos.columns?.length}`);

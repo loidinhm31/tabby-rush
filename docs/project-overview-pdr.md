@@ -1,7 +1,8 @@
 # TabbyRush Project Overview & Product Development Requirements (PDR)
 
-Last Updated: 2026-10-18
-Document Version: 1.11.0
+Last Updated: 2026-10-19
+Document Version: 1.17.0
+Application Version: `1.0.17` (versionCode `18`)
 Status: Active
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Android Acceptance](./android-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md) · [Auth Acceptance](./auth-acceptance.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Announcement Contract](./announcement-contract.md) · [Remote Notification Setup](./remote-notification-setup.md) · [Admin Announcements Acceptance](./evidence/admin-announcements-acceptance.md)
 
@@ -159,7 +160,7 @@ Phase 04 implements the multiplatform authentication client, session state machi
 
 ## 7. Phase 05 Requirements & Acceptance: Durable Local State & Strict Per-Record Sync
 
-Phase 05 implements local persistence via Room KMP version 1 and SQLite `BundledSQLiteDriver`, strict per-record outbox reconciliation, staged full scans, and crash-safe fail-closed account teardown.
+Phase 05 delivered local persistence via Room KMP version 1 and SQLite `BundledSQLiteDriver`, strict per-record outbox reconciliation, staged full scans, and crash-safe fail-closed account teardown. *(Note: The production database has since transitioned to Room version 2 with 7 entities via explicit migration `DatabaseMigrations.MIGRATION_1_2` as delivered in the Deadlines & Reminders initiative).*
 
 ### 7.1 Local Persistence & Sync Requirements
 - **FR-STORE-01 (Room Schema & Partitioning)**: Room database version 1 (`TabbyRushDatabase`) defines 5 stores (`server_base`, `outbox`, `editor_drafts`, `scan_staging`, `account_sync_meta`). Exported schema validated at `shared/schemas/.../1.json`. Destructive fallback is strictly forbidden. Storage is partitioned by canonical `AccountKey` SHA-256 string with path traversal validation.
@@ -287,7 +288,7 @@ Phase 10 implementation was delivered and is recorded at **100% (2026-10-14)**. 
 | Windows Vault & SPI | `windows-dpapi-vault.kt`, Windows `META-INF/services` descriptor | Implemented; live JNA DPAPI round-trip and provider discovery reported in the Windows evidence summary. |
 | Target Lock & Isolation | `gradle-windows.lockfile`, JNA-only Windows target dependencies | 160 configurations locked; package inspection reports Windows provider present and Linux D-Bus artifacts absent. |
 | Automated Tests | Windows `desktopApp` tests and `:shared:jvmTest` | 25/25 desktop and 96/96 shared tests reported passing (121/121 combined) in [Windows Test Summary](./evidence/windows-test-summary.md). |
-| Distribution Artifacts | `createDistributable`, `packageMsi` | `TabbyRush.exe` bundle and `TabbyRush-1.0.0.msi` generated and audited; MSI is 100.68 MB and unsigned. |
+| Distribution Artifacts | `createDistributable`, `packageMsi` | `TabbyRush.exe` bundle and `TabbyRush-<version>.msi` (historical `1.0.0` build 100.68 MB unsigned). |
 | Package Verification | `scripts/windows-package-smoke.ps1` | Audits distributable JAR contents/provider, target isolation, MSI SHA-256, Authenticode status, and COM metadata. |
 | UI Evidence | Seven `docs/evidence/windows-*.png` renders | Design mockups only; not live application captures or Narrator evidence. |
 | **Technical Acceptance Gates** | Interactive MSI install/runtime, Narrator verification, strict dependency verification | **BLOCKED** pending operator prerequisites; package metadata inspection is not proof of installed runtime behavior. |
@@ -397,3 +398,15 @@ The Server Admin Announcements initiative (`plans/261018-0707-server-admin-notif
 - **Restricted Pilot Gate (Android/Linux/Web Admin)**: Common safety, server durability semantics, Android runtime, Linux desktop adapter, and Admin Web console verified for internal restricted pilot ($\le 500$ users per send).
 - **Full Delivery Gate (Windows Inclusive)**: Windows C ABI v1 `tabbyrush-toast.dll` and WiX3 MSI packaging are implemented in source but held at Gate G5 on Linux build hosts. Full rollout requires clean-host Windows proof.
 - **Release Holds**: Inherited release holds (G2/G3/G6/G7, 149-checksum baseline, Glance provenance) remain open until separate resolution.
+
+---
+
+## 17. Release Baseline & Recent Fixes (1.0.12–1.0.17)
+
+The current application version is **1.0.17** (versionCode **18**), incorporating targeted fixes across packaging, security auditing, and branding:
+- **1.0.17 (2026-10-19)**: Windows remote MSI packaging eliminates UTF-8 BOM in `TabbyRush.cfg` and `.env` (`scripts/build-windows-remote-msi.ps1`), preventing native `jpackage` launcher startup failures (`Fail to launch JVM`). `DotEnvLoader` strips BOM on parsing; `scripts/windows-package-smoke.ps1` verifies BOM-free configuration.
+- **1.0.16 (2026-10-18)**: `scripts/release-security-check.mjs` accepts both `@xml/task-widget-info` / `@xml/task_widget_info` and compiled `@ref/0x[0-9a-fA-F]+` resource identifiers from `apkanalyzer manifest print` for `TabbyRushTaskWidgetReceiver` provider metadata.
+- **1.0.15 (2026-10-18)**: `scripts/release-security-check.mjs` permits AndroidX system receivers protected by `android.permission.DUMP` (`DiagnosticsReceiver`, `ProfileInstallReceiver`) and services protected by system permissions (`GlanceRemoteViewsService` with `BIND_REMOTEVIEWS`, `SystemJobService` with `BIND_JOB_SERVICE`).
+- **1.0.14 (2026-10-18)**: Disabled `InvalidFragmentVersionForActivityResult` in `androidApp/build.gradle.kts` `lint` configuration to permit release compilation (`lintVitalRelease`).
+- **1.0.13 (2026-10-18)**: Fixed GitHub Actions step syntax in `.github/workflows/release.yml` and enabled configuring Hub origin and API key via repository variables (`vars.APPROVED_HUB_ORIGIN`, `vars.TABBYRUSH_API_KEY`).
+- **1.0.12 (2026-10-18)**: Updated app icon from vector SVG across all platform targets and updated deterministic asset generator (`scripts/generate-app-assets.py`).

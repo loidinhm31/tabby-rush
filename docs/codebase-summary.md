@@ -1,7 +1,8 @@
 # Codebase Summary
 
-Generated on: 2026-10-18
-Based on Repomix compaction snapshot: `repomix-output.xml` (2026-10-18; 610 files included, 6 security-scanner exclusions; 1,647,198 tokens, 6,718,802 chars; default broad scan, not an allowlist)
+Generated on: 2026-10-19
+Application Version: `1.0.17` (versionCode `18`)
+Based on Repomix compaction snapshot: `repomix-output.xml` (repository snapshot: 610 files packed; 6 security-scanner exclusions: `docs/security-and-recovery.md`, 4 historical reports, and `endpoint-policy-test.kt`; default broad scan, not an allowlist)
 ---
 
 ## 1. Repository Overview
@@ -321,8 +322,8 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 |---|---|---|
 | `settings.gradle.kts` | Staged assembly & plugin management | Unconditionally includes `:shared`; conditionally guards `:androidApp` and `:desktopApp` based on file existence. |
 | `build.gradle.kts` | Root build script | Registers `clean` task; declares plugins with `apply false`. |
-| `gradle.properties` | Build engine settings | Configures 4 GB Gradle JVM heap, Kotlin daemon parallel compilation, AndroidX support, and Compose compiler metrics. |
-| `gradle/libs.versions.toml` | Pinned version catalog | Pins Kotlin 2.1.10, Compose Multiplatform 1.7.3, AGP 8.7.3, Coroutines 1.10.1, Serialization 1.8.0, Ktor 3.1.0, Room 2.7.0-alpha12, and SQLite 2.5.0-SNAPSHOT. |
+| `gradle.properties` | Build engine settings | Configures 2 GB (-Xmx2048m) Gradle JVM heap, Kotlin daemon parallel compilation, AndroidX support, and appVersion=1.0.17 (versionCode 18). |
+| `gradle/libs.versions.toml` | Pinned version catalog | Pins Kotlin 2.1.10, Compose Multiplatform 1.7.3, AGP 8.7.3, Coroutines 1.10.1, Serialization 1.8.0, Ktor 3.1.0, Room 2.7.0-alpha12, and SQLite 2.5.0-alpha12. |
 | `gradle/wrapper/gradle-wrapper.properties` | Wrapper distribution | Specifies Gradle 8.11.1 bin distribution with official checksum. |
 | `gradle/wrapper/gradle-wrapper.jar` | Wrapper binary launcher | Checksum verified against known Gradle release hash. |
 | `gradle/verification-metadata.xml` | Dependency verification | Checksum configuration file establishing dependency verification rules during resolution. |
@@ -338,8 +339,8 @@ Following Phases 01–12, the repository contains the Android and shared Compose
 
 - `hub-auth-dtos.kt`, `hub-http-client.kt`, `hub-auth-client.kt`: Wire DTOs and client enforcing origin allowlists, route classification, dual-auth headers, and bounded timeouts.
 - `hub-auth-session.kt`, `single-flight-refresh.kt`: Generation-fenced auth state machine and concurrent refresh leader.
-- `android-keystore-vault.kt`: Android Keystore AES-256-GCM vault with fresh nonces, AAD binding, and atomic file replacement.
-
+- `android-keystore-vault.kt`: Android Keystore AES-256-GCM vault (`AndroidKeystoreVault`) with fresh nonces, AAD binding, and atomic file replacement (located in `shared/src/androidMain/kotlin/dev/tabbyrush/shared/auth/`).
+- Desktop credential vaults: Implemented as target-specific desktop providers loaded via Java `ServiceLoader` through `PlatformVaultDispatcher`: `LinuxSecretServiceVault` resides in `desktopApp/src/linuxMain/` (Freedesktop Secret Service over D-Bus via `secret-tool`), and `WindowsDpapiVault` resides in `desktopApp/src/windowsMain/` (current-user DPAPI via JNA Crypt32). Neither desktop vault is housed in `shared/src/jvmMain/`.
 ### 2.4 Local Storage & Strict Synchronization Subsystem (Phase 05)
 
 | Component File | Primary Types & Functions | Architectural Role |

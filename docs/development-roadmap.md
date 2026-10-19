@@ -1,7 +1,8 @@
 # TabbyRush Development Roadmap
 
-**Document Version**: 1.3.0  
-**Last Updated**: 2026-10-17
+**Document Version**: 1.17.0
+**Last Updated**: 2026-10-19
+**Release Baseline**: 1.0.17 (versionCode 18)
 **Primary Reference**: [Project Roadmap](./project-roadmap.md) · [Project Overview PDR](./project-overview-pdr.md)
 
 ---
@@ -19,11 +20,17 @@
 | **Cross-cutting initiative** | — | Sticky Task Surfaces | [Plan 261016-1409](../plans/261016-1409-sticky-task-surfaces/plan.md) | **Phase 07 documentation and automated-verification evidence delivered (6h/12h); native Android/Windows hardware acceptance held (G2); Phase 08 Linux session pending; 118h/132h credited (89.4%)** |
 | **Cross-cutting initiative** | — | Date & Time Picker Migration | [Plan 261017-0709](../plans/261017-0709-date-time-pickers/plan.md) | **Picker source delivered; 372/372 unit/build results reported before latest range change; conditional pending post-change rerun, rendered UI tests, and device/accessibility acceptance** |
 | **Design & Visual Identity** | — | App Icon Design & Platform Delivery | [Plan 261017-1123](../plans/261017-1123-app-icon-design/plan.md) | **Source & assets delivered; master SVG, Android adaptive vectors (108dp / 66dp safe circle), desktop runtime (256px), tray (32px), Windows multi-size ICO, and unit/build verification passing** |
+| **Cross-cutting initiative** | — | Server Admin Announcements | [Plan 261018-0707](../plans/261018-0707-server-admin-notifications/plan.md) | **Phases 01–12 delivered; restricted pilot approved (Android/Linux/Web Admin); Windows runtime held at Gate G5; 566 verifications PASS** |
+| **Release Operations** | — | Release Packaging & Security Fixes (1.0.12–1.0.17) | [Deployment Guide](./deployment-guide.md) | **1.0.17 baseline; Windows MSI UTF-8 BOM elimination, release security check resource format validation, AndroidX service permissions** |
 
 **Sticky Task Surfaces:** Phases 01–06 delivered; Phase 07 delivered Android/Windows acceptance documentation and automated-verification evidence (6h/12h credited), with native hardware acceptance conditionally held under Gate G2. Phase 08 requires an actual Linux target/session. The Phase 07 acceptance and code-review reports each list 364/364 Gradle tests; the earlier Cycle 2 review lists 363/363 (231 shared, 98 desktop, 34 Android). These totals are attributed to their respective reports; no tests were rerun in this roadmap update. The four PNGs in `docs/evidence/` are visual design baselines, not runtime OS captures. The 149-checksum root verification baseline and separate Glance artifact-provenance hold remain; Android `closeRuntimeInternal()` catches/logs a delivery-drain timeout and returns, after which `closeActiveRuntime()` clears the runtime reference while coroutine cleanup and Room closure are skipped. Glance cleanup failures and release gates G2/G3/G6/G7 remain open.
 
 **Date & Time Picker Migration:** Replaced manual date/time entry for all four deadline/reminder values with shared Material 3 calendar/clock controls. UTC-midnight normalization prevents local-zone date drift. The 372/372 unit/build results are reported as passing before the current `0..9999` range change; no rerun after that change is evidenced. Rendered UI interactions and native accessibility/device checks remain pending, so technical acceptance is conditional.
 
+
+**Server Admin Announcements:** Unidirectional administrator announcements delivered across Phases 01–12. Staged restricted pilot approved for Android (FCM generic alerts, Keystore install proof), Linux (D-Bus notifications), and Web Admin console. Windows desktop runtime remains held at Gate G5 pending native execution proof on physical Windows.
+
+**Release Operations (1.0.12–1.0.17):** Delivers release baseline 1.0.17 (versionCode 18). Eliminates UTF-8 BOM in Windows MSI packaging configs (`scripts/build-windows-remote-msi.ps1`), validates widget provider resource formats (`@xml/` and `@ref/0x` patterns) in `scripts/release-security-check.mjs`, permits verified AndroidX system services/receivers, suppresses `InvalidFragmentVersionForActivityResult` in release lint, and fixes CI release step syntax.
 - **Phase 08:** Tooling, security audit scripts, disaster recovery runbooks, and offline harnesses are implemented; live compilation and device acceptance require operator SDK setup and Phase 07 remediation.
 - **Phase 09:** Source and standalone distributable were delivered; live RPM packaging/installation and Secret Service runtime gates remain pending operator prerequisites.
 - **Phase 10:** Implementation was delivered and recorded at 100% (2026-10-14); technical acceptance is blocked pending operator prerequisites for interactive MSI installation, Narrator verification, and strict dependency verification. Separately, ACL enforcement is not guaranteed by the current source; clean-user runtime/sync and uninstall/reinstall evidence remain open. The recorded MSI is unsigned. See the [Project Roadmap](./project-roadmap.md) and [Windows Acceptance](./windows-acceptance.md).

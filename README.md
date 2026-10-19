@@ -16,9 +16,9 @@ The application reuses the **Glean Hub** backend infrastructure with an opt-in, 
 - **Accessible Light UI**: Clean, high-contrast light theme conforming to WCAG 2.1 AA contrast requirements and ForumFlash design guidelines.
 - **Sticky Task Surfaces**: Android provides a native Glance task widget and an opt-in, quiet deadline notification; Desktop provides a compact Compose Multiplatform sticky window with tray controls when the host session supports a usable tray.
 - **Server Admin Announcements**: Secure, unidirectional administrator broadcasts via Glean Hub. Features 90-day retention backed by MongoDB BSON DateTime TTL indexes, FCM HTTP v1 generic notifications for Android with channel `tabbyrush.remote.announcements` and tag `remote:<messageId>`, streaming SSE broker with `streamEpoch`, monotonic `acceptanceOrdinal`, and ready baseline, in-memory 200-item sliding cache, no persistent offline content or read outbox, Keystore-backed install proof fencing, and restricted pilot staged rollout (Android & Linux verified; Windows desktop runtime held at Gate G5).
+- **Hardened Packaging & Release Audits**: Current release baseline `1.0.17` (versionCode `18`). Windows MSI packaging eliminates UTF-8 BOM in launcher and environment configurations (`scripts/build-windows-remote-msi.ps1`). Release security audit (`scripts/release-security-check.mjs`) enforces Fail-Closed APK verification, strict exported component boundaries, and widget metadata resource format validation (`@xml/` and `@ref/0x` patterns).
 
 Server Admin Announcements delivery is recorded with 566 passing verifications in QA regression testing (`qa-261018-1548-c1-c6-regression-verification.md`); standalone smoke verification records 21/21 mock assertions and 13 golden vectors passing (`node scripts/admin-announcements-smoke.mjs --self-test`). Restricted pilot is approved as recorded in acceptance evidence for Android, Linux, and Web Admin; Windows desktop runtime remains held at Gate G5, and inherited release holds G2/G3/G6/G7 and checksum verification baseline remain open.
-
 ---
 
 ## Architecture & Directory Structure
@@ -53,13 +53,10 @@ Server Admin Announcements delivery is recorded with 566 passing verifications i
 
 ## Development Prerequisites
 
-### 1. Run Shared Multiplatform Tests
-Execute the unit and SQLite integration suites across the shared core:
-```bash
-# Use JDK 21 LTS (e.g. export JAVA_HOME=/path/to/jdk-21)
-JAVA_HOME="${JAVA_HOME:-/home/loidinh/.local/share/jvm/jdk-21}" ./gradlew :shared:jvmTest --dependency-verification=off
-```
-- **Headless Display**: Xpra 6.x on display `:100` for remote GUI workflows.
+- **JDK 21 LTS**: Required for shared KMP, Android, and desktop compilation (e.g. export `JAVA_HOME=/path/to/jdk-21`).
+- **Android SDK Platform 35 / Build-Tools 35**: Required for Android builds (`androidApp/`).
+- **Node.js 20+**: Required for integration scripts, smoke runners, and security audits (`scripts/*.mjs`).
+- **Headless Display**: Xpra 6.x on display `:100` for remote GUI workflows on headless hosts.
 
 ---
 
@@ -107,15 +104,15 @@ node scripts/admin-announcements-smoke.mjs --self-test
 
 ### 7. GitHub Flow CI & Multiplatform Releases
 - **Pull Request CI (`.github/workflows/pr-test.yml`)**: Runs shared, Android, and Desktop unit tests only (fast verification without packaging overhead).
-- **End-User Releases (`.github/workflows/release.yml`)**: Triggered by pushing a version tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) after bumping `appVersion` in `gradle.properties`. Builds and publishes all installable end-user packages (Android APK, Linux RPM + tarball, Windows MSI + ZIP) to GitHub Releases.
+- **End-User Releases (`.github/workflows/release.yml`)**: Triggered by pushing a version tag (e.g. `git tag v1.0.17 && git push origin v1.0.17`) after bumping `appVersion` in `gradle.properties`. Builds and publishes 5 installable release assets (Android APK, Linux RPM + tarball, Windows MSI + ZIP) to GitHub Releases. When release signing credentials are not configured in repository secrets, Android builds fall back to a debug APK with an explicit workflow warning.
 See [Deployment Guide](docs/deployment-guide.md#12-github-flow-cicd-pipeline--multiplatform-releases) for version bump instructions and artifact details.
 
 ### 8. Bump Application Version
 Bump version and Android versionCode centrally via JavaScript runner or Just task:
 ```bash
-just bump patch       # Increment patch: 1.0.0 -> 1.0.1 (versionCode: 2)
-just bump minor       # Increment minor: 1.0.0 -> 1.1.0 (versionCode: 2)
-just bump-tag patch   # Bump and create git tag v1.0.1
+just bump patch       # Increment patch: 1.0.17 -> 1.0.18 (versionCode: 19)
+just bump minor       # Increment minor: 1.0.17 -> 1.1.0 (versionCode: 19)
+just bump-tag patch   # Bump and create git tag v1.0.18
 # Or directly: node scripts/bump-version.mjs patch [--git-tag] [--dry-run]
 ```
 ---
@@ -125,6 +122,7 @@ just bump-tag patch   # Bump and create git tag v1.0.1
 - [Project Overview & PDR](docs/project-overview-pdr.md)
 - [System Architecture](docs/system-architecture.md)
 - [Code Standards](docs/code-standards.md)
+- [Code Standards Pointer](docs/evc-cmd-code-standards.md)
 - [Codebase Summary](docs/codebase-summary.md)
 - [Design Guidelines](docs/design-guidelines.md)
 - [Local Storage & Sync](docs/local-storage-and-sync.md)

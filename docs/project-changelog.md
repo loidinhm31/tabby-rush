@@ -3,6 +3,65 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [1.0.17] - 2026-10-19: Windows MSI Packaging UTF-8 BOM Elimination
+
+### Fixed
+- **Windows MSI Packaging**: Normalized `TabbyRush.cfg` and `.env` in `scripts/build-windows-remote-msi.ps1` to strictly BOM-free UTF-8 (stripping leading `0xEF 0xBB 0xBF` if present), resolving an issue where the native `jpackage` launcher failed to initialize the bundled JVM runtime.
+- **Environment Variable Parsing**: Added BOM stripping in `dev.tabbyrush.desktop.DotEnvLoader.parse()` (`rawLine.removePrefix("\uFEFF").trim()`) so UTF-8 BOMs on the first line of `.env` files are transparently ignored.
+- **Packaging Smoke Audit**: Enhanced `scripts/windows-package-smoke.ps1` to audit `TabbyRush.cfg` and all present `.env` files, failing closed if any UTF-8 BOM is detected.
+- **Version Bump**: Bumped `appVersion` to `1.0.17` and `appVersionCode` to `18`.
+
+### Verification
+- `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/dot-env-loader-test.kt`: 4/4 tests pass including BOM stripping assertions.
+
+---
+
+## [1.0.16] - 2026-10-18: Release Security Check Compiled Resource Support
+
+### Fixed
+- **Release Security Audit**: Enhanced `scripts/release-security-check.mjs` to accept both raw `@xml/task-widget-info` / `@xml/task_widget_info` and compiled `@ref/0x[0-9a-fA-F]+` resource identifiers produced by `apkanalyzer manifest print` for widget provider metadata.
+- **Version Bump**: Bumped `appVersion` to `1.0.16` and `appVersionCode` to `17`.
+
+### Verification
+- `scripts/release-security-check.test.mjs`: Added tests verifying that compiled `@ref/0x...` IDs pass while bare hex values without `@ref/` or invalid XML paths fail closed (24/24 tests pass).
+
+---
+
+## [1.0.15] - 2026-10-18: AndroidX System Services & Receivers Security Exemption
+
+### Fixed
+- **Release Security Audit**: Updated `scripts/release-security-check.mjs` exported-component validator to permit AndroidX system receivers protected by `android.permission.DUMP` (`androidx.work.impl.diagnostics.DiagnosticsReceiver`, `androidx.profileinstaller.ProfileInstallReceiver`) and system services protected by appropriate permissions (`androidx.glance.appwidget.GlanceRemoteViewsService` with `BIND_REMOTEVIEWS`, `androidx.work.impl.background.systemjob.SystemJobService` with `BIND_JOB_SERVICE`).
+- **Version Bump**: Bumped `appVersion` to `1.0.15` and `appVersionCode` to `16`.
+
+### Verification
+- `scripts/release-security-check.test.mjs`: 24/24 tests pass.
+
+---
+
+## [1.0.14] - 2026-10-18: Android Lint Vital Release Suppression
+
+### Fixed
+- **Android Lint**: Added `disable += "InvalidFragmentVersionForActivityResult"` in `androidApp/build.gradle.kts` `lint` configuration to permit release compilation (`lintVitalRelease`) with Compose and Activity dependencies.
+- **Version Bump**: Bumped `appVersion` to `1.0.14` and `appVersionCode` to `15`.
+
+---
+
+## [1.0.13] - 2026-10-18: CI Release Workflow Step Syntax & Variable Support
+
+### Fixed
+- **CI Release Workflow**: Fixed GitHub Actions step syntax in `.github/workflows/release.yml`. Allowed configuring Hub origin and API key via either GitHub repository secrets or repository variables (`vars.APPROVED_HUB_ORIGIN`, `vars.TABBYRUSH_API_KEY`).
+- **Version Bump**: Bumped `appVersion` to `1.0.13` and `appVersionCode` to `14`.
+
+---
+
+## [1.0.12] - 2026-10-18: App Icon Brand Refresh from Vector SVG
+
+### Added
+- **Brand Assets**: Refreshed multiplatform app icons from canonical vector SVG: Android adaptive foreground, mipmaps (mdpi to xxxhdpi), desktop runtime PNG (256px), Windows multi-resolution ICO, and system tray artwork.
+- **Asset Generation**: Updated `scripts/generate-app-assets.py` to deterministically regenerate all platform icons from vector source.
+- **Version Bump**: Bumped `appVersion` to `1.0.12` and `appVersionCode` to `13`.
+
+---
 ## [Server Admin Announcements / Phases 01–12] - 2026-10-18: Cross-System Delivery & Acceptance
 
 ### Delivered
@@ -329,290 +388,52 @@ All notable changes to the TabbyRush project are documented in this file, organi
 ## [Phase 07] - 2026-10-15: Shared Scheduling, Persisted Eligibility & Account Safety (Gate G5 Passed; Native Adapters Unlocked for Phases 08/09)
 
 ### Added
-- Shared reminder scheduling calculator in `:shared` (`dev.tabbyrush.shared.contract.reminder-schedule-calculator.kt`):
-  - `ReminderScheduleCalculator`: Calculates all planned occurrences (`CalculatedReminderOccurrence`) using checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) without floating-point errors.
-  - Enforces repeat bounds: `rule.count` in `1..10`, non-repeating rules require null interval, repeating rules require interval >= 15m, and last occurrence cannot exceed anchor instant.
-  - Evaluates strict 5-minute grace window (`GRACE_PERIOD_MS = 300_000L`): exactly 300,000ms included, 300,001ms skipped.
-  - Latest opportunity selection: selects at most the single latest eligible occurrence per task, marking older unconsumed opportunities `SKIPPED`.
-  - Consumed opportunity barrier: if latest eligible occurrence was already consumed (`CLAIMED` or `POSTED`), fallback to older opportunities is strictly blocked (`isLatestConsumed = true`).
-  - Preserves all future occurrences (`dueEpochMs > nowEpochMs`) for future alarm scheduling.
-- Draft-free persisted schedule projector (`dev.tabbyrush.shared.contract.persisted-schedule-projector.kt`):
-  - `PersistedScheduleProjector.computeProjection()`: Computes schedule projection directly from atomic SQLite snapshots of `server_base` overlaid with submitted `outbox` records (`PENDING`, `DISPATCHING`, `UNCERTAIN`).
-  - Strict isolation: `editor_drafts` table is never read; uncommitted typing and user edits never schedule alarms or cancel reminders.
-  - Explicit nullable clearing: explicit deadline removal clears all deadline fields and scheduleToken, resetting reminder rules to disabled (`ReminderRule.DISABLED`), while updating deadline parameters recomputes schedule projection with the new temporal bounds.
-  - Conflict head suppression: suppresses schedule calculations (`hasUnresolvedConflict = true`) when the row's head outbox operation has `deliveryState == STATE_CONFLICT` or `STATE_UNKNOWN_SUPERSEDED`.
-  - Cancellation barriers: task completion, local delete, or disabled reminder rule acts as an immediate cancellation barrier even when another rule on the row is conflicted.
-- Durable occurrence ledger store (`dev.tabbyrush.shared.data.reminder-occurrence-store.kt`):
-  - `ReminderOccurrenceStore`: Manages lifecycle of `reminder_delivery_ledger` entries under composite primary key 5-tuple (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`).
-  - Monotonic occurrence identity: Schedule tokens rotate exclusively on temporal schedule changes; task title updates modify notification copy without altering schedule tokens or duplicating occurrence opportunities.
-  - Reopened task preservation: Reactivates ledger records from `CANCELLED` to `ACTIVE` while preserving prior consumed claim outcomes (`CLAIMED`, `POSTED`).
-  - Reconcile delta computation (`syncPlannedOccurrences`): syncs planned occurrences, cancels orphan tasks and stale tokens, identifies future alarms (`dueEpochMs > nowEpochMs`), and detects obsolete posted notifications for removal.
-  - Atomic claim-before-post (`evaluateAndClaimDueOpportunity`): evaluates grace window and atomically claims occurrence in Room `@Transaction` (`claimOccurrenceAtomic`), marking older opportunities skipped in the same SQLite transaction.
-  - Platform notification acknowledgment: `recordPosted()` commits platform-assigned notification ID; `clearPostedNotificationId()` clears notification reference after native removal acknowledgment.
-- Delivery gate concurrency coordinator (`dev.tabbyrush.shared.sync.reminder-delivery-gate.kt`):
-  - `ReminderDeliveryGate`: Coordinates concurrency between store mutations, alarm callbacks, and account teardown.
-  - Enforces three-tier lock hierarchy: `delivery gate admission -> store mutex -> DB transaction`. Inversion is prohibited; admission tracks in-flight deliveries across native adapter operations so teardown can drain them, while the gate's internal mutex and SQLite transaction locks are never held across platform IPC or network socket calls.
-  - Gate lifecycle states: `OPEN`, `CLOSING`, `CLOSED`.
-  - Fail-closed callback admission (`withDeliveryAdmission`): verifies gate state `OPEN`, absence of pending `wipe.marker`, and persisted generation equality; fails closed returning `null` on any mismatch.
-  - Teardown quiescence (`closeAndDrain(5000L)`): transitions gate to `CLOSING`, blocks new callback admissions, and waits for active in-flight callbacks and mutations to reach 0 before transitioning to `CLOSED`.
-- Per-account scheduling coordinator (`dev.tabbyrush.shared.sync.reminder-scheduling-coordinator.kt`):
-  - `ReminderSchedulingCoordinator`: Owns per-account scheduling lifecycle binding `RoomAccountStore`, `ReminderOccurrenceStore`, `NativeReminderAdapter`, and `ReminderDeliveryGate`.
-  - Mutation-gated reconciliation (`reconcile()`): executes under gate mutation admission, computes planned occurrence delta, reconciles scheduled alarms via `adapter.reconcileSchedule()`, removes obsolete notifications via `adapter.removeOwnedNotification()`, and acknowledges removal in the ledger.
-  - Claim-before-post delivery flow (`deliverReminder()`): acquires delivery gate admission, checks capabilities, re-reads current persisted task projection from SQLite (re-validating eligibility and fetching fresh title text), executes atomic SQLite claim, re-checks wipe marker and eligibility pre-post, posts natively via `adapter.postOwnedNotification()`, and commits platform notification ID via `occurrenceStore.recordPosted()`.
-  - Opportunity delivery semantics: cross-process OS posting and SQLite commits cannot achieve two-phase atomic commit; claim-before-post enforces at most one posting attempt per durable occurrence identity (assuming atomic claims and preserved ledger state; crashes after claim may forfeit alerts to avoid double posting). Failed native posting is recorded as claimed/attempted with no retry loop.
-  - Teardown cancellation: implements `LeaveSchedulerCancelGate`, establishing the required teardown cancellation contract via `adapter.cancelAllForAccount(accountKey)` (physical platform alarm/notification removal verified in Phases 08/09).
-- Automated test suites:
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/reminder-schedule-calculator-test.kt`: 9 unit tests for checked arithmetic, 1..10 repeat bounds, exact 300,000ms grace inclusion, 300,001ms exclusion, latest opportunity selection, and consumed barrier blocking.
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/persisted-schedule-projection-test.kt`: 5 unit tests for draft-free projection, base + outbox overlay, nullable clearing, conflict head suppression, and completion/delete barriers.
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/data/reminder-occurrence-store-test.kt`: 4 unit tests for ledger persistence, atomic claim, grace skip marking, and idempotent sync.
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/reminder-delivery-gate-test.kt`: 4 unit tests for mutation/delivery admission, drain signal, wipe marker rejection, and generation mismatch guard.
-  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/reminder-scheduling-coordinator-sqlite-smoke-test.kt`: 2 integration tests on BundledSQLite exercising local save/delete/complete/reopen, title update identity retention, grace bounds, duplicate callback rejection, and wipe race protection.
-  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/reminder-teardown-barrier-sqlite-test.kt`: 1 integration test on BundledSQLite demonstrating teardown gate drain synchronization, fail-closed wipe marker retention on cancel failure, and startup wipe recovery.
-
-### Changed
-- `AccountLeaveProtocol` (`dev.tabbyrush.shared.sync.account-leave-protocol.kt`):
-  - Integrates `deliveryGate.closeAndDrain(5000L)` into teardown sequence before database closure. Drain timeout aborts fail-closed leaving store frozen.
-  - Fail-closed marker retention: if background scheduler cancellation (`schedulerCancelGate.cancelAndAwait()`) fails or throws, teardown retains `wipe.marker` and remains frozen fail-closed (no rollback to unfrozen state).
-  - Interrupted startup recovery (`completePendingWipe`): cancels schedulers via `schedulerCancelGate`, deletes remaining database files (`tabbyrush.db`, `tabbyrush.db-wal`, `tabbyrush.db-shm`), clears vault credentials, and clears `wipe.marker` fail-closed.
-- `RoomAccountStore` (`dev.tabbyrush.shared.data.room-account-store.kt`):
-  - Added `@kotlin.jvm.Volatile` to `var deliveryGate: ReminderDeliveryGate? = null` for safe multi-threaded coroutine visibility.
-  - Wrapped all outbox error state transitions (retryable failures, malformed accepted revisions, unrecognized statuses) in `withMutationLock` to ensure gate admission tracking and schedule change notifications.
-  - Exposes `getPersistedScheduleProjection()` and `observePersistedSchedule()` emitting updates on committed mutations without polling drafts.
-- `TabbyRushDao` (`dev.tabbyrush.shared.data.tabbyrush-dao.kt`):
-  - Added `clearPostedNotificationId(accountKey, generation, platformNotificationId, nowEpochMs)` to acknowledged native removals in the SQLite ledger.
-  - Added atomic claim and skip transaction methods: `claimOccurrenceAtomic`, `markOccurrencesSkippedAtomic`, `recordPostedAtomic`.
-
-### Verification and Delivery Status
-- Automated test suites pass 270 executed checks with 0 failures:
-  1. `:shared:jvmTest` (182 tests PASS across 26 classes, executed with `--dependency-verification=off`).
-  2. `:desktopApp:test` (32 tests PASS across 6 classes, executed with `--dependency-verification=off`).
-  3. `node scripts/strict-v2-vector-runner.mjs` (23/23 PASS).
-  4. `node scripts/hub-live-smoke.mjs --fixture-test` (18/18 PASS against offline fixture mock server).
-  5. `node scripts/release-security-check.mjs --diagnose-source` (6/6 PASS: static manifest rules, export audit, security XML, HTTPS origin, 0 hardcoded secrets).
-  6. `node scripts/hub-strict-upgrade.test.mjs` (9/9 PASS: upgrade CLI runner test suite).
-- Code reviews completed with all remediations verified (documented in `plans/reports/code-review-261015-1928-phase-07-shared-scheduling-account-safety.md` and `code-review-261015-1944-phase-07-remediations-rereview.md`).
-- **Delivery Boundaries & Downstream Unlocks**:
-  - Gate G5 is formally passed for shared scheduling arithmetic, draft-free persisted projection, durable ledger lifecycle, delivery gate concurrency, and account safety.
-  - Native platform alarm scheduling and notification display are unlocked for Phase 08 (Android Exact Alarm / Notification Delivery) and Phase 09 (Linux Desktop Delivery).
-  - Physical connected platform acceptance and live multi-device sync cutover remain scheduled for Phase 11.
+- **Scheduling Calculator**: `ReminderScheduleCalculator` in `:shared` computing planned occurrences with checked 64-bit arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`), 1..10 repeat bounds, strict 5-minute grace window (`300_000ms`), latest opportunity selection, and consumed opportunity barriers.
+- **Persisted Schedule Projector**: `PersistedScheduleProjector` computing projections directly from atomic SQLite snapshots of `server_base` and `outbox`, strictly isolating `editor_drafts`, clearing nullable deadlines, and applying conflict head suppression and completion cancellation barriers.
+- **Occurrence Ledger Store**: `ReminderOccurrenceStore` managing `reminder_delivery_ledger` under composite 5-tuple PK (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`), supporting reopened task preservation, reconcile deltas, atomic claim-before-post (`evaluateAndClaimDueOpportunity`), and native removal tracking.
+- **Delivery Gate**: `ReminderDeliveryGate` enforcing three-tier lock hierarchy (`gate admission -> store mutex -> DB transaction`), fail-closed callback admission, and teardown quiescence (`closeAndDrain(5000L)`).
+- **Scheduling Coordinator**: `ReminderSchedulingCoordinator` managing per-account lifecycle across store, ledger, native adapter, and delivery gate.
+- **Verification**: 270 automated checks pass with 0 failures (182 shared JVM tests, 32 desktop tests, 23 strict-v2 vectors, 18 smoke fixture checks, 6 security diagnostics, 9 CLI tests). Gate G5 formally passed.
 
 ---
+
 ## [Phase 06] - 2026-10-15: Client Version Transition, Safe Replay & Intention Preservation (Gate G4 Logic Delivered; Connected Platform Acceptance Pending Phases 08/11)
 
 ### Added
-- Client transition state coordinator in `:shared` (`dev.tabbyrush.shared.sync.contract-transition-coordinator.kt`):
-  - `TransitionPhase` enum: `READY_V1`, `UPGRADE_DETECTED`, `DISPATCH_QUIESCED`, `LEGACY_RECONCILING`, `V2_BASE_SCANNING`, `SAFE_INTENTS_TRANSLATING`, `READY_V2`.
-  - `ContractTransitionCoordinator`: Implements durable 7-state / 6-transition upgrade lifecycle (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`), persisting active phase in `AccountSyncMetaEntity.syncStatus` (`"TRANSITION:<phase>"`) and `safeErrorCode = "CHECKPOINT_<PHASE>"` for interruption recovery.
-  - Quiesces network dispatch and recovers in-flight `DISPATCHING` operations to `UNCERTAIN` via `RoomAccountStore.recoverInterruptedDispatches()`.
-  - Bounded legacy receipt matching against `POST /api/v1/sync/{appId}/strong/legacy-receipts`: verifies `opId`, `rowId`, `expectedRevision`, and `digest`, advancing base on `PROVEN_ACCEPTED`, unblocking on `PROVEN_NOT_ACCEPTED`, flagging `STATE_UNKNOWN_SUPERSEDED` on server revision skew, flagging `STATE_CONFLICT` on `INTEGRITY_FAILURE`, and defaulting omitted receipts safely to `STATE_UNCERTAIN` (never treated as non-delivery proof or permitting automatic rehash).
-  - Migration-mode base promotion via `StagedFullScan(..., protocol = StrictSyncV2Contract.PROTOCOL_VERSION, isMigration = true)`.
-  - Transactional safe intent translation (`translateSafeIntents()`): reuses row identity, applies known changed fields over scanned v2 base, generates fresh v2 UUID `opId`, and marks old intention replaced in SQLite via `replaceOutboxAtomic` (`transitionCheckpoint = "TRANSLATED_V2"`). Rows marked `INTENT_REQUIRES_REVIEW` from Room v1 migration fail closed to `STATE_CONFLICT`.
-- Legacy receipt wire models and network client integration (`dev.tabbyrush.shared.sync.hub-sync-dtos.kt` and `hub-sync-client.kt`):
-  - `LegacyReceiptItemDto`: Serializes `opId`, `tableName`, `rowId`, `kind`, `expectedRevision`, `digest`, and `data` (`StrictTodoDataDto`).
-  - `LegacyReceiptResultDto`: Deserializes `opId`, `rowId`, `status` (`LegacyReceiptStatus`), and nullable `acceptedRevision`.
-  - `LegacyReceiptsRequestDto` and `LegacyReceiptsResponseDto`.
-  - `HubSyncClient.legacyReceipts(epoch, receipts)`: POSTs to `/api/v1/sync/{appId}/strong/legacy-receipts` with dual-auth and batch size validation (`<= 100`).
-  - `HubSyncClient.pushV2(epoch, operations)`: Dispatches `StrictV2OperationDto` batches (`<= 100`) to strict-v2 push endpoint.
-  - `HubHttpClient`: Added `/api/v1/sync/{appId}/strong/legacy-receipts` to `RouteClassification.DUAL_AUTH_STRICT` route allowlist.
-- Room DAO and Entity extensions in `dev.tabbyrush.shared.data`:
-  - `TabbyRushDao.countOutboxByVersion(version: String): Int`: Index-backed outbox query for server version regression detection.
-  - `TabbyRushDao.discardRegressiveReconcileAtomic(opId: String, rowId: String, clearDraft: Boolean)`: `@Transaction` method deleting stale outbox and draft atomically on regressive server revision receipt.
-- UI conflict review and semantics enhancements (`dev.tabbyrush.shared.contract.todo-ui-state.kt` and `dev.tabbyrush.shared.ui.conflict-review.kt`):
-  - `EditorState.isUnknownSuperseded: Boolean = false`: Flags operations with ambiguous delivery history.
-  - `ConflictReview`: Renders high-visibility coral warning card (`coralSurface`) on `isUnknownSuperseded` conflicts, explaining potential prior remote acceptance and warning against duplicate reapply.
-  - `VersionCard`: Displays formatted deadline date, time, zone, and reminder recurrence details with WCAG 2.1 AA accessible contrast tokens.
-- Automated test suites:
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/contract-transition-test.kt`: 4 unit tests covering transition state progression, durable checkpoint resume, unknown-superseded blocking, and user review gating.
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/account-sync-coordinator-test.kt`: 9 unit tests for upgrade detection, quiescence, receipt rebase, and v2 push dispatch.
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/hub-sync-client-test.kt`: 12 unit tests covering bootstrap v2 negotiation, pushV2, pull v2, and legacy-receipt envelopes.
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/outbox-reconciliation-test.kt`: 12 unit tests for optimistic locking, FIFO batches, receipt matching, and CAS acknowledgement.
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/staged-full-scan-test.kt`: 13 unit tests for multi-page full scan, monotonic promotion, and migration-mode equal-revision temporal enrichment.
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/todo-semantics-test.kt`: 8 unit tests for semantics, contrast tokens, and conflict warning copy.
-  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt`: Extended with 7 new tests (21 total) covering non-destructive intent-masked rebasing, atomic cleanup on regressive revisions, and schedule token rotation.
-
-### Changed
-- `RoomAccountStore.reconcileAccepted()`:
-  - Non-destructive intent-masked rebasing: Acknowledging legacy strict-v1 outbox operations or title/completed-only mutations preserves remote temporal metadata (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`) on `server_base`.
-  - Atomic regressive cleanup: Invokes `TabbyRushDao.discardRegressiveReconcileAtomic` when received server revision is lower than confirmed base.
-- `RoomAccountStore.saveTodoLocally()`:
-  - Dynamically assigns `contractVersion = OutboxEntity.CONTRACT_VERSION_V2` when `syncStatus` is `ready-v2` / `READY_V2`.
-- `AccountSyncCoordinator.executeSyncRound()`:
-  - Intercepts v2 protocol in bootstrap response; triggers `ContractTransitionCoordinator.executeTransition()` if durable phase is not `READY_V2`.
-  - Enforces server version compatibility: aborts with `SafeError.ProtocolIncompatible("SERVER_VERSION_REGRESSION")` if connecting to a v1 server while v2 outbox operations exist.
-  - Dispatches outbox mutations via `syncClient.pushV2()` when active protocol is strict-v2.
-- `StagedFullScan`:
-  - Added `protocol: String` parameter (passed to `syncClient.pull`).
-  - Added `isMigration: Boolean` parameter: enriches confirmed base with remote temporal metadata when revisions are equal and local base lacks temporal metadata.
-  - Added `isFenced: (() -> Boolean)?` parameter: verifies store and coordinator freeze status before invoking `promoteStagingAtomic`.
-- `OutboxReconciliation`:
-  - Added `toV2Dto()` converting `OutboxEntity` to `StrictV2OperationDto`.
-  - Enhanced `wasUncertain` detection to inspect `op.dispatchHistory` and `op.transitionCheckpoint` in addition to `STATE_UNCERTAIN` and failure counts.
-
-### Verification and Delivery Status
-- Automated test suites pass 243 executed checks with 0 failures (reported in `plans/reports/qa-261015-1815-phase-06-client-transition-and-replay.md`):
-  1. `:shared:jvmTest` (155 tests PASS across 20 test classes, executed with `--dependency-verification=off`).
-  2. `:desktopApp:test` (32 tests PASS across 6 test classes, executed with `--dependency-verification=off`).
-  3. `node scripts/strict-v2-vector-runner.mjs` (23/23 PASS: v1/v2 schema fingerprints, 10 valid vectors, 11 rejection vectors).
-  4. `node scripts/hub-live-smoke.mjs --fixture-test` (18/18 PASS against offline fixture mock server).
-  5. `node scripts/release-security-check.mjs --diagnose-source` (6/6 PASS: static manifest rules, export audit, security XML, HTTPS origin, 0 hardcoded secrets).
-  6. `node scripts/hub-strict-upgrade.test.mjs` (9/9 PASS: upgrade CLI runner test suite).
-- Code review completed with 0 critical/high issues (documented in `plans/reports/code-review-261015-1830-phase-06-client-transition-and-replay.md`).
-- **Delivery Boundaries & Remaining Holds**:
-  1. Gate G4 offline-client upgrade round-trip and safe replay logic are delivered and verified on JVM BundledSQLite. Android instrumented execution (`:shared:connectedAndroidTest`) remains pending Phase 08 emulator/device testbeds.
-  2. Connected native notification delivery (Android AlarmManager, Linux Secret Service / D-Bus notifications, Windows DPAPI / toast bridge) remains scheduled for platform phases 08–10.
-  3. Live multi-device mixed-version strict-v2 cutover across network boundaries is scheduled for Phase 11 end-to-end integration.
+- **Transition Coordinator**: `ContractTransitionCoordinator` implementing 7-state upgrade lifecycle (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`) with durable SQLite checkpointing in `AccountSyncMetaEntity`.
+- **Legacy Receipts Wire & Client**: Wire DTOs and `HubSyncClient.legacyReceipts()` for `POST /api/v1/sync/{appId}/strong/legacy-receipts` under `DUAL_AUTH_STRICT` with bounded batches (`<= 100`).
+- **DAO & Reconciler Extensions**: `TabbyRushDao.countOutboxByVersion()`, `discardRegressiveReconcileAtomic()`, non-destructive intent-masked rebasing in `RoomAccountStore.reconcileAccepted()`, and migration-mode staging in `StagedFullScan`.
+- **Conflict Review**: `isUnknownSuperseded` banner and accessible version comparison card.
+- **Verification**: 243 automated checks pass with 0 failures (155 shared JVM, 32 desktop, 23 vectors, 18 smoke fixture, 6 security, 9 CLI tests). Gate G4 offline logic delivered; connected Android and platform notifications remain pending Phases 08–11.
 
 ---
+
 ## [Phase 05] - 2026-10-15: Shared Task Model & Explicit Room v2 Migration (Gate G4 Storage Migration Delivered; Instrumented Platform Acceptance Pending)
 
 ### Added
-- Shared task scheduling models and invariants in `:shared` (`dev.tabbyrush.shared.contract.todo-models.kt`):
-  - `TaskDeadline`: Immutable data class (`date`, nullable `time`, `zone`, `offsetSeconds`, nullable `reminderAnchorTime`, `anchorEpochMs`, `overdueEpochMs`). Enforces non-empty date/zone; date-only deadline requires non-null `reminderAnchorTime`; timed deadline requires null `reminderAnchorTime` and `overdueEpochMs == anchorEpochMs`.
-  - `ReminderRule`: Immutable data class (`enabled`, non-negative `leadMinutes`, nullable `intervalMinutes`, `count` in 1..10). When `count == 1`, `intervalMinutes` must be null; when `count > 1`, `intervalMinutes` must be non-null and `>= 15`. Provides `ReminderRule.DISABLED`.
-  - `Todo` domain entity extensions: Integrates `deadline: TaskDeadline?`, `reminderRule: ReminderRule`, and `scheduleToken: String?`. Validates schedule consistency: null deadline requires disabled reminder (lead 0, count 1, interval null) and null token; present deadline requires non-empty `scheduleToken` and checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`) verifying `last <= anchor` (last scheduled reminder occurrence cannot exceed deadline anchor).
-  - Model mapping extensions: `Todo.toStrictV2TodoData()`, `StrictV2TodoData.toDeadline()`, `StrictV2TodoData.toReminderRule()`, and `hasScheduleSemanticChange()`.
-- Room database version 2 schema and explicit step-by-step migration (`DatabaseMigrations.kt`):
-  - `DatabaseMigrations.MIGRATION_1_2`: Explicit SQLite migration upgrading schema version 1 to 2 without destructive fallback. Registered across both JVM and Android database builders via `DatabaseMigrations.ALL`.
-  - Exported Room schema artifact: `shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/2.json` (`identityHash: 06a93ffbac4a0570d56446f47e0e3e4c`).
-- New Room entities in `dev.tabbyrush.shared.data`:
-  - `AccountLocalSettingsEntity` (`account_local_settings`): Partition-local notification and reminder preferences (singleton `id = 'singleton'`, `notificationsEnabled`, `defaultReminderEnabled`, `defaultReminderLeadMinutes`, `defaultReminderIntervalMinutes`, `defaultReminderCount`, `defaultDateOnlyAnchorTime = "09:00"`). Strictly account-local, wiped on logout, never sent to Hub.
-  - `ReminderDeliveryLedgerEntity` (`reminder_delivery_ledger`): Durable occurrence state and claim outcomes for native reminders. Composite primary key: 5-tuple (`accountKey`, `generation`, `taskId`, `scheduleToken`, `occurrenceIndex`). Composite index on `[accountKey, generation, taskId]` and index on `[dueEpochMs]`. Tracks `claimOutcome` (`PENDING`, `CLAIMED`, `POSTED`, `MISSED`, `CANCELLED`, `SKIPPED`) and `cancellationState` (`ACTIVE`, `CANCELLED`). Durable across restarts, wiped on logout, never sent over wire.
-- New DAO methods in `TabbyRushDao`:
-  - `getLocalSettings()`, `upsertLocalSettings()`, `clearLocalSettings()` for `AccountLocalSettingsEntity`.
-  - `getLedgerEntry()`, `getLedgerEntriesForTask()`, `getDueLedgerEntries()`, `getAllLedgerEntries()`, `upsertLedgerEntry()`, `upsertLedgerEntries()`, `cancelLedgerEntriesForTask()`, `deleteLedgerForAccount()`, `clearLedger()`, `countLedgerEntries()` for `ReminderDeliveryLedgerEntity`.
-  - Updated `wipeAllTablesAtomic()` clearing all 7 tables in a single SQLite transaction.
-- Automated test suites:
-  - `shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-deadline-reminder-models-test.kt`: 6 unit tests covering valid date-only/timed deadlines, last reminder bounds, tokens, overflow arithmetic, and schedule consistency invariants.
-  - `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-migration-v1-to-v2-test.kt`: Migration test asserting schema upgrade from v1 to v2, verifying column addition, conservative intent mask derivation, default value population, and table creation on BundledSQLite.
-
-### Changed
-- `dev.tabbyrush.shared.data.TabbyRushDatabase`: Upgraded to database `version = 2` with 7 registered entities (`ServerBaseEntity`, `OutboxEntity`, `EditorDraftEntity`, `ScanStagingEntity`, `AccountSyncMetaEntity`, `AccountLocalSettingsEntity`, `ReminderDeliveryLedgerEntity`).
-- Expanded existing entities with 12 strict-v2 temporal columns (`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, `scheduleToken`):
-  - `ServerBaseEntity` (`server_base`)
-  - `EditorDraftEntity` (`editor_drafts`)
-  - `ScanStagingEntity` (`scan_staging`)
-  - `OutboxEntity` (`outbox`)
-- `OutboxEntity` provenance and versioning fields:
-  - `contractVersion: String = CONTRACT_VERSION_V1`: Distinguishes legacy `"strict-v1"` mutations from `"strict-v2"`.
-  - `dispatchHistory: String? = null`: JSON log tracking dispatch events and migration provenance.
-  - `intentMask: String? = null`: Mutation mask (`TITLE`, `COMPLETED`, `DEADLINE`, `REMINDER`, `DELETE`, `REQUIRES_REVIEW`).
-  - `transitionCheckpoint: String? = null`: Migration checkpoint marker (`MIGRATED_FROM_ROOM_V1`).
-- `DatabaseMigrations.MIGRATION_1_2` legacy outbox provenance SQL:
-  - Updates existing legacy outbox rows to set `transitionCheckpoint = 'MIGRATED_FROM_ROOM_V1'`, `dispatchHistory = '{"event":"ROOM_V1_MIGRATION","priorState":"' || deliveryState || '"}'`, and conservative `intentMask` (`'DELETE'` for deletes, `'TITLE|COMPLETED'` for creates and complete updates, `'REQUIRES_REVIEW'` for partial/ambiguous updates).
-- `RoomAccountStore`:
-  - `saveTodoLocally`: Dynamically derives `intentMask` by comparing edited fields against `server_base` (defaults to `INTENT_TITLE` when no differences detected), binds `contractVersion = CONTRACT_VERSION_V2`, and computes SHA-256 digest via `StrictSyncV2Digest` for v2 vs `StrictSyncDigest` for v1.
-  - Guards unsent create-delete cancellation and outbox coalescing with `transitionCheckpoint == null` to prevent mutating migrated operations.
-  - Enforces tombstone non-mutation with `IllegalStateException`.
-  - Exposes `getLocalSettings()`, `updateLocalSettings()`, `getLedgerEntriesForTask()`, `upsertLedgerEntry()`, `cancelLedgerEntriesForTask()`.
-- `jvm-database-builder.kt`: Verified migration registration through `DatabaseMigrations.ALL`.
-- Expanded unit test coverage in `shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt` (14 tests covering BundledSQLite persistence, v2 schedule tokens, and draft recovery).
-
-### Verification and Delivery Status
-- Shared Kotlin Multiplatform JVM test suite passes 128 tests across 19 classes (`./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` in 6.46s):
-  - `RoomMigrationV1ToV2Test` (1/1 PASS): Validates explicit v1->v2 SQLite schema migration and data preservation.
-  - `RoomAccountStoreTest` (14/14 PASS): Validates BundledSQLite persistence, draft recovery, and v2 token survival.
-  - `TaskDeadlineReminderModelsTest` (6/6 PASS): Validates temporal domain models and checked 64-bit arithmetic.
-- Strict-v2 vector runner passes 23/23 checks (`node scripts/strict-v2-vector-runner.mjs`):
-  - Schema fingerprints verified: v1 (`3361a80f...`) and v2 (`5f539551...`).
-  - 10 valid vectors + 11 boundary/rejection vectors PASS.
-- Hub offline smoke fixture self-test passes 18/18 checks (`node scripts/hub-live-smoke.mjs --fixture-test`).
-- Static source security diagnostics passes 6/6 checks (`node scripts/release-security-check.mjs --diagnose-source`).
-- Total: 175 executed automated checks passed cleanly in a single test run with 0 failures.
-- **Coverage Boundaries & Remaining Holds**:
-  1. Room v2 schema, explicit migration, and temporal models are delivered and verified on JVM BundledSQLite. Android instrumented execution (`:shared:connectedAndroidTest`) remains pending Phase 08 device/emulator availability.
-  2. Storage migration delivery does NOT establish safe end-to-end mixed-version synchronization. Cross-version outbox reconciliation and client sync migration remain scheduled for Phase 06 (`phase-06-client-version-transition-and-replay`). In particular, non-destructive intent-masked rebasing in `reconcileAccepted` (safeguarding remote v2 deadline fields from legacy v1 acknowledgements) and atomic cleanup on regressive server revision (`discardRegressiveReconcileAtomic`) are Phase 06 dependencies.
-  3. Production admission and live staging acceptance remain on hold per earlier phase gates (G2 native platform environments, G3 live replica-set cluster).
+- **Temporal Domain Models**: `TaskDeadline`, `ReminderRule`, and `Todo` extensions in `:shared` with schedule token presence and checked 64-bit integer arithmetic.
+- **Room Database v2 Migration**: `DatabaseMigrations.MIGRATION_1_2` explicit step-by-step SQLite migration upgrading schema v1 to v2 without destructive fallback, registered in `DatabaseMigrations.ALL`.
+- **Room Entities & DAO**: Added `AccountLocalSettingsEntity` (`account_local_settings`) and `ReminderDeliveryLedgerEntity` (`reminder_delivery_ledger`), and expanded 4 existing entities with 12 temporal fields. Extended `TabbyRushDao` with local settings and ledger queries and atomic transactions.
+- **Verification**: 175 automated checks pass with 0 failures (128 shared JVM tests including `RoomMigrationV1ToV2Test`, 23 vectors, 18 smoke fixture checks, 6 security checks). Storage migration delivered; cross-version outbox reconciliation scheduled for Phase 06.
 
 ---
+
 ## [Phase 04] - 2026-10-15: Hub Admin UI and Shared-Operation Upgrade Script (Gate G3 Operator Tooling Delivered; Staging Acceptance Pending)
 
 ### Added
-- Dedicated CLI upgrade runner `scripts/hub-strict-upgrade.mjs`:
-  - Implements administrative migration runner for `strict-v1` -> `strict-v2` transitions via Glean Hub Admin API.
-  - Preconditions verification querying `GET /api/v1/apps/:appId/strict-contract`, verifying active `syncMode`, canonical v1 schema fingerprint (`3361a80f...`), and matching epoch UUID.
-  - Non-mutating preflight dry-run mode (`--dry-run`) issuing `dryRun: true` to discover eligible live records and tombstones without modifying data or schema version.
-  - Automated bounded status polling against `GET /api/v1/apps/:appId/strict-upgrades/:migrationId` with configurable intervals and timeouts (default: 1500ms poll, 60s timeout).
-  - Single migration ID invariant: interrupted initial POST requests never mint a new ID; recovers status using the active ID.
-  - Explicit HTTP 4xx rejection fail-fast preventing misleading polling loops on definitive client errors.
-  - Exit code contracts: 0 (success / dry-run / already upgraded), 1 (precondition failure / rejected / terminal error), 2 (polling timeout with resume guidance).
-  - Secret redaction scrubbing `Bearer <token>` patterns and bare token substrings from all stdout and stderr logs.
-  - Mandatory read-back assertion: verifies `syncMode: strict-v2`, canonical v2 fingerprint (`5f539551...`), and all 16 columns active before reporting completion.
-- Automated CLI test suite `scripts/hub-strict-upgrade.test.mjs`:
-  - 7 unit/contract tests using local mock HTTP server verifying `--help`, missing token validation, secret log redaction, dry-run preflights, full live upgrade with bounded polling and read-back assertions, network interruption recovery with same-ID polling, and `--status-only` queries.
-- Admin Web UI components in `glean-hub-app`:
-  - `StrictAppUpgradePanel` (`src/components/organisms/strict-app-upgrade-panel.tsx`): Manages upgrade lifecycle, preflight dry-run discovery, operator confirmation modals, bounded polling, `sessionStorage` resumption (`strict_upgrade_mig_${appId}`), manual migration ID input, and mandatory post-upgrade read-back assertions.
-  - `StrictContractCard` (`src/components/organisms/strict-contract-card.tsx`): Read-only view displaying active sync mode, strict epoch UUID, canonical SHA-256 fingerprint, and active column definitions.
-  - `StrictUpgradeControls` (`src/components/organisms/strict-upgrade-controls.tsx`): Action buttons for Dry Run Preflight, Execute Upgrade, and Manual Resume.
-- Frontend Admin Services & Unit Tests in `glean-hub-app`:
-  - `sync-admin-service.ts`: Extended with `getStrictContract`, `startStrictUpgrade`, `getStrictUpgradeStatus`, and `updateAppSchema` guard, with URL encoding for `appId`.
-  - `sync-admin-service.test.ts`: 8 unit tests verifying parameter encoding, contract fetching, dry-run payload construction, status queries, and 403 Forbidden handling.
-  - Native test runner scripts `scripts/test-loader.mjs` and `scripts/test-register.mjs` supporting TypeScript stripping via Node.js native test runner (`node --test`).
-- Gate 5 strict contract metadata validation in `scripts/hub-compatibility-smoke.mjs`.
+- **CLI Upgrade Runner**: `scripts/hub-strict-upgrade.mjs` supporting `--dry-run`, bounded status polling, same-ID retry, secret redaction, and 16-column v2 read-back assertions.
+- **Admin Web UI**: `StrictAppUpgradePanel`, `StrictContractCard`, and `StrictUpgradeControls` in `glean-hub-app`.
+- **Verification**: 13 `glean-hub-app` tests, 7 CLI runner tests, 18 smoke fixture checks, 23 vectors, 6 security checks pass. Production admission remains on hold pending Gate G3 live replica-set staging.
 
-### Changed
-- `glean-hub-app/src/pages/admin/edit-app.tsx`: Added strict application detection and guarding: hides editable legacy schema builder and sharing editor for `strict-v1` and `strict-v2` applications, blocks arbitrary `PUT /api/v1/apps/:appId/schema` calls, and embeds `StrictContractCard` and `StrictAppUpgradePanel`.
-- `scripts/hub-schema-provision.mjs`: Updated to support dual-version schema validation (4 columns for `strict-v1`, 16 columns for `strict-v2`), and handles idempotent provisioning of already-upgraded v2 apps without failure.
-- `scripts/hub-compatibility-smoke.mjs`: Updated bootstrap protocol assertion to accept both `strict-v1` and `strict-v2`, and added Gate 5 strict contract endpoint verification.
-- `scripts/hub-live-smoke.mjs`: Updated to dynamically detect active admitted protocol (`strict-v1` or `strict-v2`), emit schema-compliant payloads for strict-v2 (including `reminderCount: 1`), and retain strict-v1 offline fixture coverage (`--fixture-test`).
-- `docs/hub-schema-integration.md`: Updated to Phase 04 Delivered, documenting Operator Surfaces (Admin UI and Upgrade CLI), CLI parameters, exit code contracts, and test verification matrix.
-- `../glean-hub/docs/tabbyrush-strict-sync.md`: Sibling runbook updated with Phase 04 Admin UI and CLI upgrade instructions, and same-ID resumption procedures.
-
-### Verification and Production Admission Status
-- `glean-hub-app` unit tests pass 13/13 tests across 2 suites (`pnpm test:unit` in 120ms): 8 tests covering `sync-admin-service.ts` HTTP contract methods and parameter encoding, 5 tests covering Vite preload chunk recovery. Interactive browser UI actions and session-storage reload recovery remain unexercised by automated tests.
-- `glean-hub-app` production build succeeds with zero TypeScript errors and complete Vite production bundle (`pnpm build`).
-- TabbyRush strict upgrade CLI test suite passes 7/7 tests (`node scripts/hub-strict-upgrade.test.mjs` in 10.8s) against in-process mock HTTP server, exercising `--help`, auth guards, bearer redaction, dry-run, live upgrade, interrupted POST recovery, and `--status-only` queries.
-- TabbyRush live smoke protocol fixture self-test passes 18/18 checks (`node scripts/hub-live-smoke.mjs --fixture-test`).
-- TabbyRush strict-v2 vector suite passes 23/23 checks (`node scripts/strict-v2-vector-runner.mjs`).
-- TabbyRush release security check passes 6/6 static checks (`node scripts/release-security-check.mjs --diagnose-source`).
-- TabbyRush shared Kotlin Multiplatform JVM tests execute 15 tasks successfully with exit 0 (`./gradlew :shared:jvmTest --dependency-verification=off`).
-- Rust Hub backend unit tests pass 54 tests (+1 ignored for live Mongo gate) in `glean-hub-sync` (`cargo test --locked`).
-- Documentation internal links validated cleanly (163 links working, 0 broken via `validate-docs.cjs`).
-- Production Admission Hold: Phase 04 operator tooling and script suites are verified in unit tests and against local mock fixtures. Production admission remains on hold pending resolution of: (1) Gate G3 physical multi-instance replica-set staging deployment, concurrent client write fence draining, and cross-entrypoint browser/CLI resume, (2) coordination document `permitCount` backfill/compatibility for pre-existing records, (3) exact cumulative accounting across mid-batch crash interruptions during document transformation, and (4) duplicate permit release filtering.
 ---
+
 ## [Phase 03] - 2026-10-15: Hub v2 Admission, Fencing and Migration (Gate G3 Backend Logic & Tests Delivered; Staging Gate Pending)
 
 ### Added
-- Sibling backend models and migration state machine in `glean-hub-sync` (`models/strict_upgrade.rs`):
-  - Canonical schema definitions and JSON builders (`canonical_v1_schema_json`, `canonical_v2_schema_json`) matching fingerprints `3361a80f...` (v1) and `5f539551...` (v2).
-  - 8-stage migration transition state machine (`MigrationState`: `ready-v1`, `fencing`, `transforming`, `validating`, `publishing`, `ready-v2`, `operatorRequired`, `rolledBack`).
-  - DTOs for contract queries (`StrictContractInfo`), upgrade requests (`StrictUpgradeRequest`), migration records (`MigrationRecord`), coordination documents (`AppCoordinationDoc`, `PermitEntry`), and legacy receipt reconciliation (`LegacyReceiptItem`, `LegacyReceiptsRequest`, `LegacyReceiptStatus`, `LegacyReceiptResult`, `LegacyReceiptsResponse`).
-- Durable permit admission and exclusive fencing service in `glean-hub-sync` (`services/permit_service.rs`):
-  - `PermitService` managing coordination records in `_coordination` (`permit:<appId>`).
-  - Enforces bounded concurrency ceiling `MAX_CONCURRENT_PERMITS = 1000` via atomic CAS filter `permitCount: { $lt: 1000 }` with `$inc: { permitCount: 1 }`.
-  - Permit release verifies `activePermits.<permit_id>: { $exists: true }` before decrementing `permitCount: -1`.
-  - Exclusive migration fence acquisition (`fenced: true`, `fenceOwner`, incremented `fenceGeneration`) and active permit draining.
-- In-place strict upgrade engine in `glean-hub-sync` (`services/strict_upgrade_service.rs`):
-  - `StrictUpgradeService` orchestrating contract inspection, dry-run preflights, exclusive fencing, and permit draining.
-  - Chunked in-place MongoDB document transformation (`BATCH_SIZE = 500`) setting 12 missing v2 fields to default/null on live rows while preserving `{}` tombstones.
-  - Idempotent `$exists: false` matching and resumption passing prior recorded `recordsTransformed` and `tombstonesPreserved` (with exact mid-batch interruption accounting remaining an open item awaiting revalidation).
-  - Schema publication via CAS in `_schemas` using majority journaled write concern, followed by exclusive fence release.
-- Legacy receipt reconciliation bridge in `glean-hub-sync` (`services/strong_sync_service.rs`):
-  - Dedicated reconciliation route for v1 client receipts (`POST /api/v1/sync/:app_id/strong/legacy-receipts`).
-  - Bounded batch limit `<= 100` receipts per request (`MAX_BATCH_SIZE`).
-  - Protocol validation enforcing `request.protocol == "strict-v1"` (rejecting mismatched protocols with HTTP 426 `protocolUnsupported`).
-  - SHA-256 v1 digest recomputation and 4-way receipt status classification (`provenAccepted`, `provenNotAccepted`, `unknownSuperseded`, `integrityFailure`).
-  - Durable replay confirmation writes (`confirmationNonce`) for matching `lastOp` without mutating task payload data.
-- App-scoped administration routes and authorization middleware in `glean-hub-sync` (`routes/strict_upgrades.rs`, `middleware/dual_auth.rs`):
-  - `GET /api/v1/apps/:app_id/strict-contract`, `POST /api/v1/apps/:app_id/strict-upgrades`, `GET /api/v1/apps/:app_id/strict-upgrades/:migration_id`.
-  - `app_scoped_admin_middleware` requiring both `is_admin: true` and target app present in `claims.apps` (returning HTTP 401 for non-admin, HTTP 403 for ungranted app).
-- Integration test suite in `glean-hub-sync` (`services/strict_upgrade_tests.rs`):
-  - 11 unit/contract tests covering app-scoped admin authorization, 401/403 status mappings, route parameter extraction, schema validation, error response codes, request parsing, and coordination document serialization.
-- Sibling operator documentation in `glean-hub` (`docs/tabbyrush-strict-sync.md`):
-  - Strict-v2 upgrade invariants, management endpoints, multi-node coordination runbook, and migration procedures.
-
-### Changed
-- `glean-hub-sync/src/services/strong_sync_service.rs`: Integrated durable permit acquisition and release gates across all strict data access endpoints (`bootstrap`, `push`, `pull`, `legacy-receipts`), rejecting client ingress with HTTP 503 `migrationInProgress` when app is fenced.
-- `glean-hub-sync/src/services/app_service.rs`: Extended schema validation to support `strict-v2` 16-column specifications and mode-specific column rules.
-- `docs/system-architecture.md`: Updated Section 6 to record Phase 03 delivered logic, documented management endpoints, bounded coordination permits, in-place migration engine, legacy receipt reconciliation, and Invariants 33–36.
-- `docs/hub-schema-integration.md`: Updated status to Phase 03 Delivered, detailed upgrade and legacy receipt wire contracts, bounded coordination permit gate, error mappings, and release gating criteria.
-- `docs/codebase-summary.md`: Updated Repomix metrics based on fresh compaction (340 files, 656,907 tokens), documented delivered Phase 03 backend architecture and modules, and added Invariants 38–41.
-
-### Verification and Gate G3 Status
-- Backend test runner passes 54 tests in Rust `glean-hub-sync` (1 ignored: `test_strong_sync_live_mongo_acceptance_gate` due to missing `MONGO_TEST_URI`), clippy clean (0 compiler warnings).
-- Vector runner passes 23/23 checks (`scripts/strict-v2-vector-runner.mjs`).
-- Live smoke offline fixture self-test passes 18/18 checks (`node scripts/hub-live-smoke.mjs --fixture-test`).
-- Shared Kotlin Multiplatform JVM test suites pass 116 tests (`./gradlew :shared:jvmTest --dependency-verification=off`).
-- Production admission remains on hold: Phase 03 backend contracts and logic are delivered with passing unit/contract checks; (1) Gate G3 live multi-instance replica-set acceptance is unexecuted pending staging testbed, (2) coordination-document compatibility/backfill for documents missing `permitCount` requires live verification, and (3) exact cumulative accounting across mid-batch crash interruptions requires formal revalidation.
+- **Backend Models & Migration Machine**: 8-stage migration machine and canonical v1/v2 schema builders in `glean-hub-sync`.
+- **Permit Service & Upgrade Engine**: Bounded coordination permits (`MAX_CONCURRENT_PERMITS = 1000`), exclusive migration fencing, and chunked in-place MongoDB document transformation (`BATCH_SIZE = 500`).
+- **Legacy Receipts Bridge**: `POST /api/v1/sync/:app_id/strong/legacy-receipts` route with dual-auth and bounded batches (`<= 100`).
+- **Verification**: 54 Rust tests in `glean-hub-sync` pass, clippy clean; 23 vectors, 18 smoke fixture checks pass. Gate G3 live cluster execution remains on hold.
 
 ---
 ## [Phase 02] - 2026-10-15: Native Delivery & Strict DST Resolution (Gate G2 Blocked on Host Prerequisites)

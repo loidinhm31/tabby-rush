@@ -1,6 +1,6 @@
 # TabbyRush Code Standards & Implementation Guidelines
 
-Last Updated: 2026-10-18
+Last Updated: 2026-10-19
 Phase: Server Admin Announcements Phase 12 delivered & verified (Score 8/10, 0 critical issues); staged pilot ready (Android/Linux/Web Admin); Windows desktop runtime held at Gate G5; inherited release holds (G2/G3/G6/G7) remain open
 Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Announcement Contract](./announcement-contract.md) · [Remote Notification Setup](./remote-notification-setup.md) · [Admin Announcements Acceptance](./evidence/admin-announcements-acceptance.md)
 
@@ -148,8 +148,9 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - Provide consistent CLI flag parsing with documented defaults and environment variable fallbacks:
   - Origin: `--origin` flag, fallback `process.env.GLEAN_ORIGIN || 'http://127.0.0.1:3000'`.
   - Admin JWT: `--token` flag, fallback `process.env.GLEAN_ADMIN_TOKEN`.
-  - App ID: `--app-id` flag, fallback `process.env.TABBYRUSH_APP_ID || 'tabbyrush'`.
+  - App ID: `--app-id` flag, fallback `process.env.TABBYRUSH_APP_ID || 'tabby-rush'`.
   - API Key: `--api-key` flag, fallback `process.env.TABBYRUSH_API_KEY`.
+- **Environment Variable Custody**: While scripts accept `--token` for diagnostic and mock test runners, production automation and CI workflows **MUST** provide credentials via protected environment variables (`GLEAN_ADMIN_TOKEN`, `TABBYRUSH_API_KEY`) rather than bare `argv` parameters, strictly adhering to Section 8 Invariant 12 to prevent exposure in process tables (`/proc/<pid>/cmdline`, `ps`).
 - Implement a `--help` / `-h` flag printing usage instructions and exit with code 0.
 
 ### 4.3 Key Custody & Security
@@ -222,6 +223,7 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - Run desktop tests on the matching native host/target (`-PdesktopTarget=linux` on Linux; `-PdesktopTarget=windows` on Windows); the platform-specific vault suite must exercise the real OS API where available.
 - Resolve dependencies from the target-specific lockfile. Use `--write-locks` only when intentionally regenerating a reviewed lockfile, not for ordinary builds.
 - Run the corresponding package smoke harness against the distributable and MSI/RPM artifact. Static class/metadata inspection is not a substitute for interactive install, runtime, vault, or accessibility acceptance.
+- **Windows Packaging BOM-Free Standard**: All WiX source files (`*.wxs`), launcher configuration files (`TabbyRush.cfg`), and packaged configuration files (`.env`) must be encoded in strictly BOM-free UTF-8. The presence of a UTF-8 BOM (`0xEF 0xBB 0xBF`) causes the native `jpackage` launcher to fail (`Fail to launch JVM`). The packaging pipeline (`scripts/build-windows-remote-msi.ps1`) normalizes these files, and `scripts/windows-package-smoke.ps1` verifies the absence of UTF-8 BOMs.
 
 ---
 
@@ -346,3 +348,8 @@ Current implementation divergence: Android `closeRuntimeInternal()` catches and 
 ### 11.8 Staged Pilot Boundaries & Platform Scopes
 - **Restricted Pilot Scope**: Restricted pilot encompasses Android mobile, Linux desktop, and Web Admin console for cohort sizes $\le 500$ recipients per send.
 - **Full Rollout Hold**: Full multiplatform rollout requires native Windows desktop acceptance; Windows MSI packaging and WinRT toast integration are held at Gate G5 on Linux build hosts pending verified clean-host Windows proof.
+
+### 11.9 Release Security Auditor & Widget Provider Invariants
+- **Fail-Closed Verification**: `scripts/release-security-check.mjs` enforces Fail-Closed release gating; absence of release artifacts or required Android SDK tools halts release pipelines with exit code 1.
+- **Widget Provider Metadata Formats**: `TabbyRushTaskWidgetReceiver` metadata must declare `android.appwidget.provider` pointing to either raw `@xml/task-widget-info` / `@xml/task_widget_info` or compiled `@ref/0x[0-9a-fA-F]+` resource identifiers produced by `apkanalyzer manifest print`. Malformed resource formats (e.g. bare hex, missing `@xml/`, or foreign attributes) fail closed.
+- **Permitted AndroidX System Components**: Transitive AndroidX system receivers protected by `android.permission.DUMP` (`DiagnosticsReceiver`, `ProfileInstallReceiver`) and services protected by system permissions (`GlanceRemoteViewsService` with `BIND_REMOTEVIEWS`, `SystemJobService` with `BIND_JOB_SERVICE`) are permitted; all other exported services, receivers, and content providers are strictly prohibited.

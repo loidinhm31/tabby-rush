@@ -1,6 +1,8 @@
 # TabbyRush Deployment & Operations Guide
 
-**Document Version**: 1.5.0
+**Document Version**: 1.17.0
+**Last Updated**: 2026-10-19
+**Release Baseline**: 1.0.17 (versionCode 18)
 **Phase**: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08; production cutover remains blocked by G3/G6/G7
 **Related Documents**: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
@@ -254,33 +256,32 @@ rm -rf ~/.local/share/tabbyrush
 ## 8. Windows Desktop & MSI Deployment
 
 ### 8.1 Build Host Prerequisites
-Build and package on a Windows x64 host with JDK 21 LTS (`java`, `javac`, and `jpackage`) and PowerShell. The `:desktopApp:packageMsi` task also requires WiX tooling; the recorded build used WiX 3.11 provisioned by the Compose Desktop plugin. Run diagnostics before resolving dependencies:
+Build and package on a Windows x64 host with JDK 21 LTS (`java`, `javac`, and `jpackage`), CMake/MSVC for C++20 WinRT, and PowerShell. Note that bare `:desktopApp:packageMsi` is guarded in `desktopApp/build.gradle.kts` (requiring `-PallowBarePackageMsi` if run directly). CI and official release packaging use the dedicated remote MSI packaging script `scripts/build-windows-remote-msi.ps1` (or `:desktopApp:packageRemoteMsi`), which compiles the native C++/WinRT toast DLL (`tabbyrush-toast.dll`), stages resources, normalizes configs to BOM-free UTF-8, and packages a per-user MSI with WiX.
+
+Run diagnostics before resolving dependencies:
 
 ```powershell
 .\scripts\windows-package-smoke.ps1 -Diagnose
 ```
 
-The Windows build selects `desktopTarget=windows`; explicit targets that do not match the host are rejected. Keep Gradle dependency verification enabled for package builds. Do not use `--dependency-verification=off` to produce a distributable or MSI.
+The Windows build selects `desktopTarget=windows`; explicit targets that do not match the host are rejected. Note: CI currently runs with `--dependency-verification=off` due to the open 149-hash buildscript verification baseline hold.
 
-### 8.2 Build and Test
-Run the target-specific build, Windows desktop tests, and shared JVM regression suite:
+### 8.2 Build and Packaging via Remote MSI Script
+Run the packaging script to compile the native toast bridge, assemble distributables, and build the MSI:
 
 ```powershell
-.\gradlew.bat -PdesktopTarget=windows :desktopApp:dependencies
-.\gradlew.bat -PdesktopTarget=windows :desktopApp:compileKotlin :desktopApp:test
-.\gradlew.bat :shared:jvmTest
-.\gradlew.bat -PdesktopTarget=windows :desktopApp:createDistributable
-.\gradlew.bat -PdesktopTarget=windows :desktopApp:packageMsi
+# Execute complete Windows desktop build and per-user MSI packaging
+powershell -ExecutionPolicy Bypass -File .\scripts\build-windows-remote-msi.ps1 -Verification off
 ```
 
-The Windows lockfile is `desktopApp\gradle-windows.lockfile`; ordinary builds consume the target-specific lock without `--write-locks`. The self-contained application image is written to `desktopApp\build\compose\binaries\main\app\TabbyRush\`. The MSI output is `desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.0.msi`. `createDistributable` includes the runtime and `TabbyRush.exe`; it does not require WiX.
+The Windows lockfile is `desktopApp\gradle-windows.lockfile`; ordinary builds consume the target-specific lock without `--write-locks`. The self-contained application image is written to `desktopApp\build\compose\binaries\main\app\TabbyRush\`. The MSI output is written to `desktopApp\build\compose\binaries\main\msi\TabbyRush-<version>.msi` (or `desktopApp\build\windows-installer\TabbyRush-<version>.msi`).
 
 ### 8.3 Audit the Bundle and MSI
 Inspect the distributable and MSI using the Windows-specific PowerShell harness:
 
 ```powershell
 .\scripts\windows-package-smoke.ps1 -DistDir desktopApp\build\compose\binaries\main\app\TabbyRush
-.\scripts\windows-package-smoke.ps1 -MsiPath desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.0.msi
+.\scripts\windows-package-smoke.ps1 -MsiPath desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.17.msi
 ```
 
 The bundle audit checks the launcher/runtime, Windows DPAPI class and SPI registration, exactly one registered vault provider, and absence of Linux D-Bus/Secret Service classes. The MSI audit calculates SHA-256, reports Authenticode status, and reads Windows Installer metadata through COM. See [Windows Test Summary](./evidence/windows-test-summary.md) for the recorded 100.68 MB unsigned development MSI and its exact hash; rebuilds may have different hashes.
@@ -426,7 +427,7 @@ TabbyRush implements an automated GitHub Flow workflow structure:
 
 | Platform | Built File | Generated Release Asset | Description |
 |---|---|---|---|
-| **Android** | `:androidApp:assembleRelease` | `tabbyrush-<version>.apk` | Signed production Android application package |
+| **Android** | `:androidApp:assembleRelease` (or `:androidApp:assembleDebug`) | `tabbyrush-<version>.apk` | Signed production Android package (or fallback debug APK staged as `tabbyrush-<version>.apk` when signing secrets are unprovisioned) |
 | **Linux Desktop** | `:desktopApp:packageRpm` | `tabbyrush-<version>.rpm` | Native RPM installer (Fedora / RHEL / openSUSE) |
 | **Linux Desktop** | `:desktopApp:createDistributable` | `tabbyrush-<version>-linux-x64.tar.gz` | Portable standalone executable tarball |
 | **Windows Desktop** | `:desktopApp:packageMsi` | `TabbyRush-<version>.msi` | Native per-user MSI installer |
@@ -443,11 +444,11 @@ TabbyRush provides an automated JavaScript bump-version runner at `scripts/bump-
 just bump patch --dry-run
 node scripts/bump-version.mjs patch --dry-run
 
-# Bump patch version (e.g. 1.0.0 -> 1.0.1, versionCode 1 -> 2)
+# Bump patch version (e.g. 1.0.17 -> 1.0.18, versionCode 18 -> 19)
 just bump patch
 # or: node scripts/bump-version.mjs patch
 
-# Bump minor version (e.g. 1.0.0 -> 1.1.0)
+# Bump minor version (e.g. 1.0.17 -> 1.1.0)
 just bump minor
 
 # Bump and create git release tag automatically
@@ -460,12 +461,12 @@ just bump-tag patch
    ```bash
    just bump patch
    git add gradle.properties
-   git commit -m "chore(release): bump version to 1.0.1"
-   git tag v1.0.1
+   git commit -m "chore(release): bump version to 1.0.18"
+   git tag v1.0.18
    ```
 2. Push to GitHub:
    ```bash
-   git push origin main v1.0.1
+   git push origin main v1.0.18
    ```
 3. The `release.yml` GitHub Actions workflow triggers automatically on the tag push, validates version synchronization, builds the 5 multiplatform packages, and attaches them to a new GitHub Release.
 
@@ -473,3 +474,4 @@ just bump-tag patch
 - **Dependency Verification Notice**: CI builds currently execute with `--dependency-verification=off` to accommodate the 149-hash buildscript verification baseline hold documented in Section 7.2.
 - **Windows Packaging**: The MSI installer produced by the workflow is an unsigned development installer; public distribution requires Authenticode signing on an authorized build workstation.
 - **Platform Acceptance Status**: Packaging verification in CI confirms installer and binary assembly, not installed-runtime or physical device acceptance (Gates G2/G6 remain held).
+- **Android Release Signing Mode & Fallback**: The workflow determines signing custody dynamically (`id: signing_check`). If all release keystore credentials (`TABBYRUSH_KEYSTORE_BASE64`, `TABBYRUSH_KEY_ALIAS`, `TABBYRUSH_STORE_PASSWORD`, `TABBYRUSH_KEY_PASSWORD`, `APPROVED_HUB_ORIGIN`, `TABBYRUSH_API_KEY`) are present, it builds and audits a signed release APK (`androidApp-release.apk`) via `scripts/release-security-check.mjs`. If signing secrets are unprovisioned, it emits a workflow warning and falls back to building an Android debug APK (`androidApp-debug.apk`), staging it as `tabbyrush-<version>.apk` solely for testing release workflow asset delivery. A debug fallback APK does NOT constitute production release acceptance or verified signature custody.

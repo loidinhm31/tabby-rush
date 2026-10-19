@@ -17,7 +17,20 @@ object PersistedScheduleProjector {
         val outboxByRow = outboxEntries.groupBy { it.rowId }
         val allRowIds = (baseMap.keys + outboxByRow.keys).toSet()
 
-        val result = ArrayList<PersistedTaskSchedule>(allRowIds.size)
+        data class IntermediateSchedule(
+            val rowId: String,
+            var title: String,
+            var rawCompleted: Boolean,
+            var isDeleted: Boolean,
+            var deadline: TaskDeadline?,
+            var reminderRule: ReminderRule,
+            var scheduleToken: String?,
+            val hasUnresolvedConflict: Boolean,
+            var parentTaskId: String?,
+            val hasUnresolvedPreservationBarrier: Boolean
+        )
+
+        val intermediateList = ArrayList<IntermediateSchedule>(allRowIds.size)
 
         for (rowId in allRowIds) {
             val base = baseMap[rowId]
@@ -30,10 +43,15 @@ object PersistedScheduleProjector {
                 headOp.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED
             )
 
+            val hasPreservationBarrier = rowOps.any {
+                it.intentMask?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true
+            }
+
             // Initialize from server_base
             var title = base?.title ?: ""
             var completed = base?.completed ?: false
             var isDeleted = base?.deleted ?: false
+            var parentTaskId = base?.parentTaskId
 
             var deadline: TaskDeadline? = if (
                 base?.deadlineDate != null &&
@@ -68,6 +86,9 @@ object PersistedScheduleProjector {
 
             // Overlay submitted intentions
             for (op in rowOps) {
+                if (op.parentTaskId != null) {
+                    parentTaskId = op.parentTaskId
+                }
                 when (op.kind) {
                     StrictOperationKind.CREATE.wireName -> {
                         title = op.title ?: title
@@ -108,6 +129,9 @@ object PersistedScheduleProjector {
                             if (mask.contains(OutboxEntity.INTENT_DELETE)) isDeleted = true
                             if (mask.contains(OutboxEntity.INTENT_TITLE)) title = op.title ?: title
                             if (mask.contains(OutboxEntity.INTENT_COMPLETED)) completed = op.completed ?: completed
+                            if (mask.contains(OutboxEntity.INTENT_PARENT) && op.parentTaskId != null) {
+                                parentTaskId = op.parentTaskId
+                            }
                             if (mask.contains(OutboxEntity.INTENT_DEADLINE)) {
                                 if (op.deadlineDate != null && op.deadlineZone != null && op.deadlineOffsetSeconds != null && op.deadlineAnchorEpochMs != null && op.deadlineOverdueEpochMs != null) {
                                     deadline = TaskDeadline(
@@ -142,6 +166,7 @@ object PersistedScheduleProjector {
                         } else {
                             if (op.title != null) title = op.title
                             if (op.completed != null) completed = op.completed
+                            if (op.parentTaskId != null) parentTaskId = op.parentTaskId
                             if (op.deadlineDate != null && op.deadlineZone != null && op.deadlineOffsetSeconds != null && op.deadlineAnchorEpochMs != null && op.deadlineOverdueEpochMs != null) {
                                 deadline = TaskDeadline(
                                     date = op.deadlineDate,
@@ -167,16 +192,57 @@ object PersistedScheduleProjector {
                 }
             }
 
-            result.add(
-                PersistedTaskSchedule(
-                    taskId = rowId,
+            intermediateList.add(
+                IntermediateSchedule(
+                    rowId = rowId,
                     title = title,
-                    completed = completed,
+                    rawCompleted = completed,
                     isDeleted = isDeleted,
                     deadline = deadline,
                     reminderRule = reminderRule,
                     scheduleToken = scheduleToken,
-                    hasUnresolvedConflict = hasUnresolvedConflict
+                    hasUnresolvedConflict = hasUnresolvedConflict,
+                    parentTaskId = parentTaskId,
+                    hasUnresolvedPreservationBarrier = hasPreservationBarrier
+                )
+            )
+        }
+
+        val intermediateTodos = intermediateList.map { item ->
+            Todo(
+                id = item.rowId,
+                title = item.title,
+                completed = item.rawCompleted,
+                createdAt = 1000L,
+                isDeleted = item.isDeleted,
+                deadline = item.deadline,
+                reminderRule = item.reminderRule,
+                scheduleToken = item.scheduleToken,
+                parentTaskId = item.parentTaskId
+            )
+        }
+
+        val hierarchySnapshot = TaskHierarchyProjector.projectHierarchy(intermediateTodos, TodoFilter.ALL)
+        val validItemsById = hierarchySnapshot.items.associateBy { it.todo.id }
+
+        val result = ArrayList<PersistedTaskSchedule>(intermediateList.size)
+        for (item in intermediateList) {
+            val hierarchicalItem = validItemsById[item.rowId]
+            val isDeleted = item.isDeleted || hierarchicalItem == null
+            val completed = hierarchicalItem?.effectiveCompleted ?: item.rawCompleted
+
+            result.add(
+                PersistedTaskSchedule(
+                    taskId = item.rowId,
+                    title = item.title,
+                    completed = completed,
+                    isDeleted = isDeleted,
+                    deadline = item.deadline,
+                    reminderRule = item.reminderRule,
+                    scheduleToken = item.scheduleToken,
+                    hasUnresolvedConflict = item.hasUnresolvedConflict,
+                    parentTaskId = item.parentTaskId,
+                    hasUnresolvedPreservationBarrier = item.hasUnresolvedPreservationBarrier
                 )
             )
         }

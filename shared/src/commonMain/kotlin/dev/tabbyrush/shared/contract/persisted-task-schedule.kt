@@ -13,13 +13,16 @@ data class PersistedTaskSchedule(
     val deadline: TaskDeadline?,
     val reminderRule: ReminderRule,
     val scheduleToken: String?,
-    val hasUnresolvedConflict: Boolean
+    val hasUnresolvedConflict: Boolean,
+    val parentTaskId: String? = null,
+    val hasUnresolvedPreservationBarrier: Boolean = false
 ) {
     /**
      * A task is eligible for scheduling reminders if and only if:
      * - It is not deleted
      * - It is not completed (saved completion is a cancellation barrier)
      * - It has no unresolved conflict (conflict/unknown heads suppress scheduling)
+     * - It has no unresolved preservation barrier (preservation intent suppresses parent scheduling)
      * - It has an active deadline
      * - Reminder rule is enabled (reminder-disable is a cancellation barrier)
      * - Schedule token is present
@@ -28,6 +31,7 @@ data class PersistedTaskSchedule(
         get() = !isDeleted &&
                 !completed &&
                 !hasUnresolvedConflict &&
+                !hasUnresolvedPreservationBarrier &&
                 deadline != null &&
                 reminderRule.enabled &&
                 scheduleToken != null

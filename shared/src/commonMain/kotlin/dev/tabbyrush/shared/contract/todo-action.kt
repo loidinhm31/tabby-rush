@@ -2,7 +2,11 @@ package dev.tabbyrush.shared.contract
 
 sealed interface TodoAction {
     data class SelectFilter(val filter: TodoFilter) : TodoAction
-    data class OpenCreate(val initialTitle: String = "") : TodoAction
+    data class OpenCreate(
+        val initialTitle: String = "",
+        val parentTaskId: String? = null,
+        val parentTitle: String? = null
+    ) : TodoAction
     data class ChangeDraftTitle(val rawTitle: String) : TodoAction
     data object SubmitEditor : TodoAction
     data object CancelEditor : TodoAction

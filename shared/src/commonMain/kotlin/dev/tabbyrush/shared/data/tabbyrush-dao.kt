@@ -352,6 +352,42 @@ interface TabbyRushDao {
     }
 
     @Transaction
+    suspend fun deleteGroupAtomic(
+        meta: AccountSyncMetaEntity,
+        drafts: List<EditorDraftEntity>,
+        outboxes: List<OutboxEntity>
+    ) {
+        upsertMeta(meta)
+        for (draft in drafts) {
+            upsertDraft(draft)
+        }
+        upsertOutbox(outboxes)
+    }
+
+    @Transaction
+    suspend fun cancelUnsentGroupAtomic(rowIds: List<String>) {
+        for (rowId in rowIds) {
+            deleteDraft(rowId)
+            deleteOutboxByRowId(rowId)
+        }
+    }
+
+    @Transaction
+    suspend fun deleteChildAndPreserveParentAtomic(
+        meta: AccountSyncMetaEntity,
+        childDraft: EditorDraftEntity,
+        childOutbox: OutboxEntity,
+        parentDraft: EditorDraftEntity,
+        parentOutbox: OutboxEntity
+    ) {
+        upsertMeta(meta)
+        upsertDraft(childDraft)
+        upsertOutbox(childOutbox)
+        upsertDraft(parentDraft)
+        upsertOutbox(parentOutbox)
+    }
+
+    @Transaction
     suspend fun reconcileAcceptedAtomic(
         serverBase: ServerBaseEntity,
         opId: String,

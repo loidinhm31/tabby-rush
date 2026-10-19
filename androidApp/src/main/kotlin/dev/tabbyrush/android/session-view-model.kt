@@ -131,8 +131,9 @@ class SessionViewModel : ViewModel() {
         val runtime = app.getActiveRuntime() ?: return
         try {
             val isV2 = runtime.store.isAccountV2()
+            val isV3 = runtime.store.isAccountV3()
             allTodos = runtime.store.loadTodos(); applyFilterAndCounts()
-            _uiState.value = _uiState.value.copy(isAccountV2 = isV2)
+            _uiState.value = _uiState.value.copy(isAccountV2 = isV2, isAccountV3 = isV3)
             isTodosLoaded = true
             pendingTarget?.let { (k, t) -> dispatchTaskSelection(k, t) }
             pendingIntentAction?.let { action ->
@@ -143,21 +144,22 @@ class SessionViewModel : ViewModel() {
     }
 
     private fun applyFilterAndCounts() {
-        val total = allTodos.size; val completed = allTodos.count { it.completed }
-        val counts = TodoCounts(all = total, active = total - completed, completed = completed)
-        val filtered = when (_uiState.value.filter) {
-            TodoFilter.ALL -> allTodos
-            TodoFilter.ACTIVE -> allTodos.filter { !it.completed }
-            TodoFilter.COMPLETED -> allTodos.filter { it.completed }
-        }
-        _uiState.value = _uiState.value.copy(items = filtered, counts = counts)
+        val projection = dev.tabbyrush.shared.contract.TaskHierarchyProjector.projectHierarchy(
+            todos = allTodos,
+            filter = _uiState.value.filter
+        )
+        _uiState.value = _uiState.value.copy(
+            items = projection.items.map { it.todo },
+            hierarchicalItems = projection.items,
+            counts = projection.counts
+        )
     }
 
     fun onAction(action: TodoAction) = viewModelScope.launch {
         try {
             when (action) {
                 is TodoAction.SelectFilter -> { _uiState.value = _uiState.value.copy(filter = action.filter); applyFilterAndCounts() }
-                is TodoAction.OpenCreate -> openCreate(action.initialTitle)
+                is TodoAction.OpenCreate -> openCreate(action.initialTitle, action.parentTaskId, action.parentTitle)
                 is TodoAction.ChangeDraftTitle -> onTitleChanged(action.rawTitle)
                 is TodoAction.UpdateEditorState -> _uiState.value = _uiState.value.copy(editor = action.editor)
                 is TodoAction.SubmitEditor -> submitEditor()
@@ -170,7 +172,10 @@ class SessionViewModel : ViewModel() {
                 is TodoAction.OpenNotificationSettings -> openNotificationSettings()
                 is TodoAction.ClockTick -> _uiState.value = _uiState.value.copy(nowEpochMs = action.nowEpochMs)
                 is TodoAction.ToggleCompleted -> toggleCompleted(action.todo)
-                is TodoAction.RequestDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = action.todo)
+                is TodoAction.RequestDelete -> {
+                    val count = allTodos.count { it.parentTaskId == action.todo.id && !it.isDeleted }
+                    _uiState.value = _uiState.value.copy(deleteCandidate = action.todo, deleteCandidateChildCount = count)
+                }
                 is TodoAction.ConfirmDelete -> confirmDelete()
                 is TodoAction.CancelDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = null)
                 is TodoAction.TriggerSync -> triggerSync()
@@ -193,7 +198,7 @@ class SessionViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(editor = _uiState.value.editor?.copy(rawTitle = raw, error = err))
     }
 
-    private suspend fun openCreate(initialTitle: String) {
+    private suspend fun openCreate(initialTitle: String, parentTaskId: String? = null, parentTitle: String? = null) {
         val runtime = app.getActiveRuntime()
         val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
         val isV2 = runtime?.store?.isAccountV2() ?: true
@@ -212,7 +217,9 @@ class SessionViewModel : ViewModel() {
                 reminderLeadMinutes = settings.defaultReminderLeadMinutes,
                 reminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
                 reminderCount = settings.defaultReminderCount,
-                isAccountV2 = isV2
+                isAccountV2 = isV2,
+                parentTaskId = parentTaskId,
+                parentTitle = parentTitle
             )
         )
     }
@@ -222,6 +229,7 @@ class SessionViewModel : ViewModel() {
         val isV2 = runtime?.store?.isAccountV2() ?: true
         val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
         val dl = todo.deadline
+        val parentTitle = if (todo.parentTaskId != null) allTodos.firstOrNull { it.id == todo.parentTaskId }?.title else null
         val editor = if (dl != null) {
             EditorState(
                 id = todo.id,
@@ -240,7 +248,9 @@ class SessionViewModel : ViewModel() {
                 isAccountV2 = isV2,
                 originalDeadline = dl,
                 originalReminderRule = todo.reminderRule,
-                originalScheduleToken = todo.scheduleToken
+                originalScheduleToken = todo.scheduleToken,
+                parentTaskId = todo.parentTaskId,
+                parentTitle = parentTitle
             )
         } else {
             val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
@@ -260,7 +270,9 @@ class SessionViewModel : ViewModel() {
                 isAccountV2 = isV2,
                 originalDeadline = null,
                 originalReminderRule = ReminderRule.DISABLED,
-                originalScheduleToken = null
+                originalScheduleToken = null,
+                parentTaskId = todo.parentTaskId,
+                parentTitle = parentTitle
             )
         }
         _uiState.value = _uiState.value.copy(editor = editor)
@@ -388,7 +400,8 @@ class SessionViewModel : ViewModel() {
                     updatedAt = now,
                     deadline = deadline,
                     reminderRule = rule,
-                    scheduleToken = token
+                    scheduleToken = token,
+                    parentTaskId = editor.parentTaskId
                 )
             )
         } else {

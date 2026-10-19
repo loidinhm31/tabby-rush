@@ -502,24 +502,25 @@ class DesktopController(
         val r = activeRuntime ?: return
         try {
             val isV2 = r.store.isAccountV2()
+            val isV3 = r.store.isAccountV3()
             allTodos = r.store.loadTodos()
             applyFilterAndCounts()
-            _uiState.value = _uiState.value.copy(isAccountV2 = isV2)
+            _uiState.value = _uiState.value.copy(isAccountV2 = isV2, isAccountV3 = isV3)
         } catch (ce: CancellationException) {
             throw ce
         } catch (_: Exception) {}
     }
 
     private fun applyFilterAndCounts() {
-        val total = allTodos.size
-        val completed = allTodos.count { it.completed }
-        val counts = TodoCounts(all = total, active = total - completed, completed = completed)
-        val filtered = when (_uiState.value.filter) {
-            TodoFilter.ALL -> allTodos
-            TodoFilter.ACTIVE -> allTodos.filter { !it.completed }
-            TodoFilter.COMPLETED -> allTodos.filter { it.completed }
-        }
-        _uiState.value = _uiState.value.copy(items = filtered, counts = counts)
+        val projection = dev.tabbyrush.shared.contract.TaskHierarchyProjector.projectHierarchy(
+            todos = allTodos,
+            filter = _uiState.value.filter
+        )
+        _uiState.value = _uiState.value.copy(
+            items = projection.items.map { it.todo },
+            hierarchicalItems = projection.items,
+            counts = projection.counts
+        )
     }
 
     fun onAction(action: TodoAction) = scope.launch {
@@ -529,7 +530,7 @@ class DesktopController(
                     _uiState.value = _uiState.value.copy(filter = action.filter)
                     applyFilterAndCounts()
                 }
-                is TodoAction.OpenCreate -> openCreate(action.initialTitle)
+                is TodoAction.OpenCreate -> openCreate(action.initialTitle, action.parentTaskId, action.parentTitle)
                 is TodoAction.ChangeDraftTitle -> onTitleChanged(action.rawTitle)
                 is TodoAction.UpdateEditorState -> _uiState.value = _uiState.value.copy(editor = action.editor)
                 is TodoAction.SubmitEditor -> submitEditor()
@@ -542,7 +543,10 @@ class DesktopController(
                 is TodoAction.OpenNotificationSettings -> openOsNotificationSettings()
                 is TodoAction.ClockTick -> _uiState.value = _uiState.value.copy(nowEpochMs = action.nowEpochMs)
                 is TodoAction.ToggleCompleted -> toggleCompleted(action.todo)
-                is TodoAction.RequestDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = action.todo)
+                is TodoAction.RequestDelete -> {
+                    val count = allTodos.count { it.parentTaskId == action.todo.id && !it.isDeleted }
+                    _uiState.value = _uiState.value.copy(deleteCandidate = action.todo, deleteCandidateChildCount = count)
+                }
                 is TodoAction.ConfirmDelete -> confirmDelete()
                 is TodoAction.CancelDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = null)
                 is TodoAction.TriggerSync -> triggerSync()
@@ -594,7 +598,7 @@ class DesktopController(
         _uiState.value = _uiState.value.copy(editor = _uiState.value.editor?.copy(rawTitle = raw, error = err))
     }
 
-    private suspend fun openCreate(initialTitle: String) {
+    private suspend fun openCreate(initialTitle: String, parentTaskId: String? = null, parentTitle: String? = null) {
         val runtime = activeRuntime
         val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
         val isV2 = runtime?.store?.isAccountV2() ?: true
@@ -613,7 +617,9 @@ class DesktopController(
                 reminderLeadMinutes = settings.defaultReminderLeadMinutes,
                 reminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
                 reminderCount = settings.defaultReminderCount,
-                isAccountV2 = isV2
+                isAccountV2 = isV2,
+                parentTaskId = parentTaskId,
+                parentTitle = parentTitle
             )
         )
     }
@@ -622,6 +628,7 @@ class DesktopController(
         val runtime = activeRuntime
         val isV2 = runtime?.store?.isAccountV2() ?: true
         val dl = todo.deadline
+        val parentTitle = if (todo.parentTaskId != null) allTodos.firstOrNull { it.id == todo.parentTaskId }?.title else null
         val editor = if (dl != null) {
             EditorState(
                 id = todo.id,
@@ -638,7 +645,9 @@ class DesktopController(
                 reminderIntervalMinutes = todo.reminderRule.intervalMinutes,
                 reminderCount = todo.reminderRule.count,
                 originalScheduleToken = todo.scheduleToken,
-                isAccountV2 = isV2
+                isAccountV2 = isV2,
+                parentTaskId = todo.parentTaskId,
+                parentTitle = parentTitle
             )
         } else {
             val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
@@ -656,7 +665,9 @@ class DesktopController(
                 reminderIntervalMinutes = 15,
                 reminderCount = 1,
                 originalScheduleToken = null,
-                isAccountV2 = isV2
+                isAccountV2 = isV2,
+                parentTaskId = todo.parentTaskId,
+                parentTitle = parentTitle
             )
         }
         _uiState.value = _uiState.value.copy(editor = editor)
@@ -738,22 +749,22 @@ class DesktopController(
         val now = System.currentTimeMillis()
         val token = if (deadline != null) (editor.originalScheduleToken ?: UUID.randomUUID().toString()) else null
         if (editor.id == null) {
-            if (deadline == null) {
-                runtime.store.saveTodoLocally(createDefaultTodo(title, now))
+            val newTodo = if (deadline == null) {
+                createDefaultTodo(title, now).copy(parentTaskId = editor.parentTaskId)
             } else {
-                runtime.store.saveTodoLocally(
-                    Todo(
-                        id = UUID.randomUUID().toString().lowercase(),
-                        title = title,
-                        completed = false,
-                        createdAt = now,
-                        updatedAt = now,
-                        deadline = deadline,
-                        reminderRule = rule,
-                        scheduleToken = token
-                    )
+                Todo(
+                    id = UUID.randomUUID().toString().lowercase(),
+                    title = title,
+                    completed = false,
+                    createdAt = now,
+                    updatedAt = now,
+                    deadline = deadline,
+                    reminderRule = rule,
+                    scheduleToken = token,
+                    parentTaskId = editor.parentTaskId
                 )
             }
+            runtime.store.saveTodoLocally(newTodo)
         } else {
             val existing = allTodos.firstOrNull { it.id == editor.id } ?: return
             runtime.store.saveTodoLocally(

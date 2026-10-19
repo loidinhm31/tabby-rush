@@ -18,7 +18,9 @@ data class EditorState(
     val isAccountV2: Boolean = true,
     val originalDeadline: TaskDeadline? = null,
     val originalReminderRule: ReminderRule = ReminderRule.DISABLED,
-    val originalScheduleToken: String? = null
+    val originalScheduleToken: String? = null,
+    val parentTaskId: String? = null,
+    val parentTitle: String? = null
 )
 
 data class ReminderSettingsState(
@@ -50,6 +52,7 @@ data class TodoUiState(
     val identity: AccountIdentity? = null,
     val accessRequest: AccessRequestInfo? = null,
     val items: List<Todo> = emptyList(),
+    val hierarchicalItems: List<HierarchicalTodoItem> = emptyList(),
     val counts: TodoCounts = TodoCounts(0, 0, 0),
     val filter: TodoFilter = TodoFilter.ALL,
     val loading: Boolean = false,
@@ -58,8 +61,10 @@ data class TodoUiState(
     val settings: ReminderSettingsState? = null,
     val conflict: ConflictState? = null,
     val deleteCandidate: Todo? = null,
+    val deleteCandidateChildCount: Int = 0,
     val leaveGuard: LeaveGuardState? = null,
     val safeError: SafeError? = null,
     val isAccountV2: Boolean = true,
+    val isAccountV3: Boolean = true,
     val nowEpochMs: Long = 0L
 )

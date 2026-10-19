@@ -143,4 +143,148 @@ class PersistedScheduleProjectionTest {
         assertTrue(projections[0].hasUnresolvedConflict)
         assertFalse(projections[0].isEligibleForScheduling)
     }
+    @Test
+    fun testParentWithAllCompletedChildrenCancelsParentReminder() {
+        val parent = createBase(title = "Parent with deadline").copy(rowId = "p-1", completed = false)
+        val c1 = ServerBaseEntity(
+            rowId = "c-1",
+            serverRevision = 1L,
+            deleted = false,
+            title = "Child 1",
+            completed = true,
+            createdAt = 1000L,
+            updatedAt = 1000L,
+            epoch = "ep-1",
+            parentTaskId = "p-1"
+        )
+        val c2 = ServerBaseEntity(
+            rowId = "c-2",
+            serverRevision = 1L,
+            deleted = false,
+            title = "Child 2",
+            completed = true,
+            createdAt = 1000L,
+            updatedAt = 1000L,
+            epoch = "ep-1",
+            parentTaskId = "p-1"
+        )
+
+        val projections = PersistedScheduleProjector.computeProjection(
+            serverBases = listOf(parent, c1, c2),
+            outboxEntries = emptyList()
+        )
+
+        val projectedParent = projections.first { it.taskId == "p-1" }
+        assertTrue(projectedParent.completed, "Parent must be effectively completed when all children complete")
+        assertFalse(projectedParent.isEligibleForScheduling, "Completed parent must not be eligible for reminders")
+    }
+
+    @Test
+    fun testParentWithAnyActiveChildKeepsParentReminderEligible() {
+        val parent = createBase(title = "Parent with deadline").copy(rowId = "p-1", completed = true)
+        val c1 = ServerBaseEntity(
+            rowId = "c-1",
+            serverRevision = 1L,
+            deleted = false,
+            title = "Child 1",
+            completed = true,
+            createdAt = 1000L,
+            updatedAt = 1000L,
+            epoch = "ep-1",
+            parentTaskId = "p-1"
+        )
+        val c2 = ServerBaseEntity(
+            rowId = "c-2",
+            serverRevision = 1L,
+            deleted = false,
+            title = "Child 2",
+            completed = false,
+            createdAt = 1000L,
+            updatedAt = 1000L,
+            epoch = "ep-1",
+            parentTaskId = "p-1"
+        )
+
+        val projections = PersistedScheduleProjector.computeProjection(
+            serverBases = listOf(parent, c1, c2),
+            outboxEntries = emptyList()
+        )
+
+        val projectedParent = projections.first { it.taskId == "p-1" }
+        assertFalse(projectedParent.completed, "Parent must be effectively active when any child is incomplete")
+        assertTrue(projectedParent.isEligibleForScheduling, "Active parent with deadline and reminders is eligible")
+    }
+
+    @Test
+    fun testDeletedParentSuppressesChildSchedule() {
+        val parent = createBase(title = "Deleted Parent", deleted = true).copy(rowId = "p-1")
+        val child = ServerBaseEntity(
+            rowId = "c-1",
+            serverRevision = 1L,
+            deleted = false,
+            title = "Child with deadline",
+            completed = false,
+            createdAt = 1000L,
+            updatedAt = 1000L,
+            epoch = "ep-1",
+            deadlineDate = "2026-10-25",
+            deadlineZone = "UTC",
+            deadlineOffsetSeconds = 0L,
+            reminderAnchorTime = "09:00",
+            deadlineAnchorEpochMs = 1_000_000L,
+            deadlineOverdueEpochMs = 1_000_000L,
+            reminderEnabled = true,
+            reminderLeadMinutes = 15L,
+            reminderCount = 1L,
+            scheduleToken = "c-token-1",
+            parentTaskId = "p-1"
+        )
+
+        val projections = PersistedScheduleProjector.computeProjection(
+            serverBases = listOf(parent, child),
+            outboxEntries = emptyList()
+        )
+
+        val projectedChild = projections.first { it.taskId == "c-1" }
+        assertTrue(projectedChild.isDeleted, "Child schedule must be suppressed when parent is deleted")
+        assertFalse(projectedChild.isEligibleForScheduling)
+    }
+
+    @Test
+    fun testUnresolvedPreservationIntentSuppressesParentScheduling() {
+        val parent = createBase(title = "Parent").copy(rowId = "p-1", completed = false)
+        val preservationOp = OutboxEntity(
+            opId = "op-preservation",
+            epoch = "ep-1",
+            rowId = "p-1",
+            kind = StrictOperationKind.UPDATE.wireName,
+            expectedRevision = 1L,
+            title = "Parent",
+            completed = false,
+            createdAt = 1000L,
+            digest = "d-preserve",
+            localRevision = 2L,
+            deliveryState = OutboxEntity.STATE_PENDING,
+            createdAtEpochMs = 2000L,
+            intentMask = "${OutboxEntity.INTENT_COMPLETED}|${OutboxEntity.INTENT_LAST_CHILD_PRESERVATION}",
+            deadlineDate = parent.deadlineDate,
+            deadlineZone = parent.deadlineZone,
+            deadlineOffsetSeconds = parent.deadlineOffsetSeconds,
+            deadlineAnchorEpochMs = parent.deadlineAnchorEpochMs,
+            deadlineOverdueEpochMs = parent.deadlineOverdueEpochMs,
+            reminderEnabled = true,
+            reminderLeadMinutes = 15L,
+            reminderCount = 1L,
+            scheduleToken = "token-1"
+        )
+
+        val projections = PersistedScheduleProjector.computeProjection(
+            serverBases = listOf(parent),
+            outboxEntries = listOf(preservationOp)
+        )
+
+        val projectedParent = projections.first { it.taskId == "p-1" }
+        assertTrue(projectedParent.hasUnresolvedPreservationBarrier, "Unresolved preservation intent must set barrier")
+        assertFalse(projectedParent.isEligibleForScheduling, "Preservation barrier must suppress scheduling")
+    }
 }

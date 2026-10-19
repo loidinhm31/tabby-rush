@@ -5,7 +5,7 @@
 [Existing release gates](../../docs/release-acceptance.md), [v2 cutover precedent](../../docs/strict-v2-cutover-runbook.md).
 
 ## Overview
-Date: 2026-10-19. Priority: P2. Implementation: pending. Review: pending. Provisional effort: 24h (subtotal 48h for surface & rollout phases 4–6). Prove integrated behavior, safely activate v3 on staging/production, and reconcile documentation with actual delivery.
+Date: 2026-10-20. Priority: P2. Implementation: pending. Review: pending. Provisional effort: 24h (subtotal 48h for surface & rollout phases 4–6). Prove integrated behavior, safely activate v3 on staging/production, remediate tracked Phase 01/02/03 review findings, and reconcile documentation with actual delivery.
 
 ## Key Insights
 - Tests alone cannot prove Glance launcher/desktop sticky behavior. Runtime screenshots and interactions are required on Android, Linux and Windows.
@@ -17,6 +17,13 @@ Date: 2026-10-19. Priority: P2. Implementation: pending. Review: pending. Provis
 - Validate the confirmed behaviors and per-row refinements in the scenario matrix below against the [design contract](./design-contract.md); local atomicity is not globally coordinated deletion or account-wide scheduling suppression. Depend on Phases 1–5 and matching sibling Hub support before acceptance/cutover.
 - Existing v1/v2 data/frozen retries remain intact across upgrade; unsupported old writes fail closed without stranding legitimate receipts.
 - Preserve announcements/auth/account isolation and existing surface lifecycle behavior intentionally unchanged outside necessary callsite migration.
+- Tracked Phase 03 follow-up remediation gates:
+  - Mixed-group queue drainage (W1): when deleting a group where the root is synced but a child CREATE is pending, avoid stranding child operations in `[create:PENDING, delete:PENDING]` when root DELETE is accepted; ensure leaf rows are safely cancelled locally or properly drained without leaving pending count and leave guard uncleared.
+  - Preservation UPDATE coalescing & marker retention (W2): ensure preservation UPDATE does not bypass normal mutation coalescing (avoiding extraneous wire noise / permanent barriers for unsent children), and ensure subsequent manual root edits coalescing into a pending preservation op preserve the `LAST_CHILD_PRESERVATION` intent mask and client-local scheduling barrier until accepted or discarded.
+  - Sync-layer late-child cleanup & tombstone evidence: implement Step 7 late-child cleanup resolving exact operation state with per-row DELETE and verify production tombstone evidence path.
+  - Unresolved-child recovery UI: render `unresolvedChildren` (tasks whose parent is absent without a tombstone) in a dedicated recovery section.
+  - Conflict-review copy: implement explanatory copy in `conflict-review.kt` for preservation/barrier CAS conflicts and partial group outcomes.
+  - Native UI smoke verification: execute real UI smoke on Android and desktop (group creation, completion, deletion, filters).
 
 ## Architecture
 Backend-first version-capable deployment → publish clients with local Room 3 but hierarchy creation gated → **staging environment:** staging dry-run/backup/permit checks → fenced v2→v3 staging migration → schema/fingerprint/epoch read-back → receipt reconciliation/base scan → `ready-v3` staging hierarchy unlock → cross-device acceptance on staging → **production environment:** separate operator-authorized procedure (pre-migration backup, permit checks, fenced cutover, read-back, unlock).
@@ -47,6 +54,9 @@ Prefix `S` = `/home/loidinh/WS/tabby-rush`.
 - [ ] Run integrated behavioral regression and production-path smoke.
 - [ ] Prove live staging upgrade/receipts/fencing and adversarial convergence.
 - [ ] Capture Android, Linux and Windows actual surface acceptance.
+- [ ] Remediate Phase 03 W1: mixed-group queue drainage and unsent child op cancellation.
+- [ ] Remediate Phase 03 W2: preservation-marker retention during edit coalescing and preservation bypass.
+- [ ] Deliver Phase 03 deferred recovery items: late-child sync cleanup, unresolved-section UI, and conflict-review copy.
 - [ ] Complete authorized rollout/read-back or report exact operational hold.
 - [ ] Reconcile docs/changelog/phase status with exercised evidence.
 

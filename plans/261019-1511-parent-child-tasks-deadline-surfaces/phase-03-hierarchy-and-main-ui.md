@@ -4,10 +4,13 @@
 [Parent plan](./evc-cmd-plan.md), [behavior contract](./design-contract.md), [Phase 02](./phase-02-room-and-sync.md), [surface research](./research/surface-ui.md), [design guidelines](../../docs/design-guidelines.md).
 
 ## Overview
-Date: 2026-10-19. Priority: P2. Implementation: pending. Review: pending. Centralize effective group behavior, atomic local cascade, scheduling, and shared main-app UX.
-- Effort: 24h (provisional planning estimate only; not implementation or verification credit).
-- Dependency: Phase 2 must provide complete graph/tombstone evidence and committed/submitted-versus-draft provenance before shared hierarchy/surface interfaces freeze. Matching strict-v3 Hub runtime acceptance remains a rollout gate.
-
+Date: 2026-10-20. Priority: P2. Status: DONE (2026-10-20), credited 24h.
+Implementation: marked DONE administratively on 2026-10-20 per user approval after Cycle 2 code review (score 7/10, 0 critical issues; see `plans/reports/code-reviewer-261020-0030-phase-03-hierarchy-main-ui-cycle2.md`). Centralized effective group behavior, atomic local cascade, scheduling barrier, and shared main-app UX.
+- Effort: 24h credited (100% planned effort roll-up).
+- Automated Verification: QA report records 512 passing validations (339 `:shared:jvmTest`, 119 `:desktopApp:test`, 43 `:androidApp:testDebugUnitTest`, 11 canonical strict-v3 vectors; 515 passing validations cited in main-agent aggregation under `--dependency-verification=off`).
+- Review & Approval: Cycle 2 review scored 7/10 (0 critical issues). Approved by user with noted issues on 2026-10-20.
+- Tracked Follow-up Remediations: High-severity warnings (W1: mixed-group queue drainage where synced root + unsent child delete can strand operations; W2: preservation UPDATE bypasses coalescing and subsequent manual root edit drops `LAST_CHILD_PRESERVATION` barrier), along with deferred items (Step 7 late-child sync cleanup & tombstone evidence path, unresolved-section UI, conflict-review explanatory copy, and native UI smoke testing) are formally transferred to and tracked as release-blocking remediation gates in Phase 06 (`phase-06-acceptance-and-rollout.md`).
+- Dependency: Shared hierarchy interfaces freeze, unblocking Phase 04 (Android widget) and Phase 05 (Desktop sticky) surface adaptations. Matching strict-v3 Hub runtime acceptance and Phase 06 remediations remain rollout gates.
 ## Key Insights
 - Android and desktop hosts currently duplicate mutation/filter/count handling; both must call shared semantics, not independently recompute aggregates.
 - Raw wire completion and displayed effective completion must stay distinct. An edit must not accidentally persist an aggregate from a projected `Todo.copy`.
@@ -49,12 +52,12 @@ Prefix `S` = `/home/loidinh/WS/tabby-rush`.
 11. Smoke real main UI on Android and desktop: add a child to an existing root, complete/reopen/add incomplete child, delete a completed and an incomplete last child then manually change the root, confirm/cancel group deletion, switch filters and inspect counts. Use existing behavioral suites for edge/race/recovery coverage; these are future executions.
 
 ## Todo list
-- [ ] Implement shared complete-snapshot evaluator and stored/effective distinction.
-- [ ] Implement child creation, automatic-state admission and transactional deletion semantics.
-- [ ] Integrate recovery, committed scheduling and invalidation.
-- [ ] Migrate both hosts and shared main UI/filter/count/conflict workflows.
-- [ ] Exercise real UI and store/scheduler boundary cases.
-
+- [x] Implement shared complete-snapshot evaluator and stored/effective distinction (`TaskHierarchyProjector`, `TaskDeadlinePresentation`).
+- [x] Implement child creation, automatic-state admission and transactional deletion semantics (`RoomAccountStore`, `TabbyRushDao`).
+- [x] Integrate recovery, committed scheduling and invalidation (`PersistedScheduleProjector` hierarchy + preservation barrier).
+- [x] Migrate both hosts and shared main UI/filter/count/conflict workflows (`TodoList`, `TodoEditor`, `TabbyRushApp`, Android `SessionViewModel`, Desktop `main.kt`).
+- [~] Exercise real UI and store/scheduler boundary cases (512 passing unit/contract validations; native UI smoke and boundary cases transferred to Phase 06).
+- [!] Tracked Phase 06 remediations: mixed-group queue drainage (W1), preservation-marker retention during edit coalescing (W2), Step 7 late-child cleanup, unresolved-section recovery UI, and conflict-review copy.
 ## Success Criteria
 - Every child transition, remote promotion and conflict resolution updates parent state identically in main app, widget/sticky snapshots and committed schedules.
 - Parent cannot be toggled via stale UI/surface action once it has children; identical child desired state produces no extra write.
@@ -75,4 +78,4 @@ Derived-vs-stored confusion, filtered-subset aggregation, nested mutex acquisiti
 Preserve generation admission, account isolation and wipe barriers for group reads/mutations/recovery. Missing-parent recovery must not fetch across accounts. Preserve direct-boot/privacy rules.
 
 ## Next steps
-Consume Phase 2 graph/tombstone/committed provenance primitives, then freeze shared interfaces so Phases 4 and 5 can proceed independently. Preserve matching strict-v3 sibling Hub runtime and native acceptance gates; shared interfaces alone do not satisfy them. Unresolved product questions: none.
+Phase 03 shared hierarchy semantics and main UI are marked DONE administratively on 2026-10-20 (24h credited). Shared interfaces freeze, unblocking Phase 04 (Android widget) and Phase 05 (Desktop sticky) surface adaptations. Technical acceptance remains qualified: W1 mixed-group queue drainage, W2 preservation-marker retention during edit coalescing, Step 7 late-child cleanup, unresolved recovery UI, conflict-review copy, and native UI smoke are tracked in Phase 06 (`phase-06-acceptance-and-rollout.md`). Unresolved product questions: none.

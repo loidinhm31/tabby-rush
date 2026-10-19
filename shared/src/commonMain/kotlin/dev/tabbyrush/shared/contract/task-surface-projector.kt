@@ -18,17 +18,7 @@ data class DeadlineSelectionKey(
  * in a single pass while preserving encounter order (createdAt DESC, id DESC).
  */
 fun partitionSurfaceTodos(todos: List<Todo>): TaskSections {
-    val incomplete = mutableListOf<Todo>()
-    val completed = mutableListOf<Todo>()
-    for (todo in todos) {
-        if (todo.isDeleted) continue
-        if (todo.completed) {
-            completed.add(todo)
-        } else {
-            incomplete.add(todo)
-        }
-    }
-    return TaskSections(incomplete = incomplete, completed = completed)
+    return TaskHierarchyProjector.partitionCompactSections(todos)
 }
 
 private val DEADLINE_COMPARATOR = compareBy<PersistedTaskSchedule>(

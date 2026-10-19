@@ -427,7 +427,10 @@ private fun AuthenticatedWorkspace(
                                     filter = state.filter,
                                     deleteCandidate = state.deleteCandidate,
                                     onAction = onAction,
-                                    nowEpochMs = state.nowEpochMs
+                                    nowEpochMs = state.nowEpochMs,
+                                    hierarchicalItems = state.hierarchicalItems,
+                                    deleteCandidateChildCount = state.deleteCandidateChildCount,
+                                    isAccountV3 = state.isAccountV3
                                 )
                             }
                         }
@@ -626,7 +629,10 @@ private fun AuthenticatedWorkspace(
                                     filter = state.filter,
                                     deleteCandidate = state.deleteCandidate,
                                     onAction = onAction,
-                                    nowEpochMs = state.nowEpochMs
+                                    nowEpochMs = state.nowEpochMs,
+                                    hierarchicalItems = state.hierarchicalItems,
+                                    deleteCandidateChildCount = state.deleteCandidateChildCount,
+                                    isAccountV3 = state.isAccountV3
                                 )
                             }
                         }

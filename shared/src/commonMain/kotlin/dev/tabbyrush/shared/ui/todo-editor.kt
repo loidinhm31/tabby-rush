@@ -19,6 +19,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -103,11 +104,32 @@ fun TodoEditor(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                text = if (isCreating) "New Task" else "Edit Task",
+                text = if (isCreating) {
+                    if (editor.parentTaskId != null) "New Subtask" else "New Task"
+                } else "Edit Task",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.semantics { heading() }
             )
+
+            if (editor.parentTaskId != null) {
+                Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.small,
+                    color = TabbyRushThemeTokens.customColors.mintSurface.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        text = "Subtask of: ${editor.parentTitle ?: editor.parentTaskId}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TabbyRushThemeTokens.customColors.primaryDeep,
+                        modifier = Modifier.padding(
+                            horizontal = TabbyRushThemeTokens.SpacingMedium,
+                            vertical = TabbyRushThemeTokens.SpacingSmall
+                        )
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingMedium))
 

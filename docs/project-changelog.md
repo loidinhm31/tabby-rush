@@ -3,6 +3,32 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Parent/Child Tasks & Deadline Surfaces / Phase 03] - 2026-10-20: Shared Hierarchy Semantics & Main UI
+
+### Delivered
+- **TaskHierarchyProjector Pure Evaluator**: Added stateless hierarchy evaluator in `dev.tabbyrush.shared.contract.TaskHierarchyProjector` providing `projectHierarchy`, `computeCounts`, and `partitionCompactSections`. Enforces encounter ordering (`compareByDescending { it.createdAt }.thenByDescending { it.id }`), effective completion derivation (`children.all { it.completed }` for parents with live children, raw stored completion for childless roots and children), two-level constraint (`parentTaskId == null` roots), ancestor deletion dominance (suppressing children of deleted roots), context-only parent rows (`isContextOnly = true`, `depth = 0`) in `TodoFilter.ACTIVE` and `TodoFilter.COMPLETED` without sibling leakage, and compact whole-group partitioning (`partitionCompactSections` keeps mixed groups together in Active, and fully complete groups in Completed without splitting). Accurate metrics (`computeCounts`) count each unique real task once.
+- **TaskDeadlinePresentation Pure Formatting**: Added stateless presentation formatter in `dev.tabbyrush.shared.contract.TaskDeadlinePresentation` formatting absolute metadata: `"Due YYYY-MM-DD"` or `"Due YYYY-MM-DD HH:mm (captured zone)"`. Derives overdue (`nowEpochMs >= overdueEpochMs && !effectiveCompleted`) supplementing the date label rather than replacing it. Completed tasks never render as overdue.
+- **RoomAccountStore Atomic Group Deletion & Last-Child Preservation**: Added atomic group deletion and last-child preservation in `RoomAccountStore.deleteTodoLocally` under `withMutationLock`. Parent deletion with live children cancels fully-unsent groups atomically (`cancelUnsentGroupAtomic`) or issues transactional deletes across parent and children (`deleteGroupAtomic`) with distinct local revisions. Locally observed last-child deletion captures preceding parent effective completion in a single `@Transaction` (`deleteChildAndPreserveParentAtomic`) with intent mask `INTENT_LAST_CHILD_PRESERVATION`, restoring manual completion with the resultant raw value.
+- **PersistedScheduleProjector Hierarchy & Preservation Scheduling Barrier**: Delivered draft-free projection in `PersistedScheduleProjector` from committed `server_base` and submitted `outbox` entries (excluding `editor_drafts`), running `TaskHierarchyProjector.projectHierarchy` over intermediate models to apply ancestor deletion dominance and effective completion. Generates client-local parent scheduling barrier (`hasUnresolvedPreservationBarrier = true`) for unaccepted preservation intents, surviving process restarts while retained (subsequent manual root re-edits currently drop the marker pending Phase 06 remediation).
+- **Shared Compose UI Hierarchy Rendering, Read-Only Progress & Subtask Creation**: `TodoList` renders hierarchical items with `SpacingXLarge` start indentation for children (`depth == 1`). Roots with live children render disabled checkboxes with accessible state descriptions (`"Completed/Active (automatic: X/Y subtasks)"`) and visual subtask progress labels (`"Subtasks: X/Y completed"`). Roots on v3 accounts show `+ Add Subtask` button routing to `TodoEditor`, which presents a read-only parent context banner (`"Subtask of: <parentTitle>"`). Quick-create and compact-surface Add actions create roots only (compact lists still display existing child items within their group).
+
+### Reported Automated Evidence
+- **Reported Verification Totals**: QA report ([qa-261019-2350-phase-03-test-suite-validation.md](../plans/reports/qa-261019-2350-phase-03-test-suite-validation.md)) records 512 passing validations (100% PASS across 4 test targets, 0 failures, 0 skipped, executed with `--dependency-verification=off`).
+- **TabbyRush Shared JVM Tests** (`JAVA_HOME=... ./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks`): 339/339 tests passed across 41 test suites, including `TaskHierarchyProjectorTest` (8/8), `TaskDeadlinePresentationTest` (3/3), `PersistedScheduleProjectionTest` (9/9), and `RoomAccountStoreTest` (35/35).
+- **Desktop JVM/Linux Tests** (`./gradlew :desktopApp:test`): 119/119 tests passed across 10 test suites.
+- **Android Unit Tests** (`./gradlew :androidApp:testDebugUnitTest`): 43/43 tests passed across 8 test suites.
+- **Node.js Strict-v3 Vector Runner** (`node scripts/strict-v3-vector-runner.mjs`): 11/11 vector checks passed (6 valid + 5 rejections; canonical fingerprint verified).
+
+### Code Review & Operational Caveats
+- Code review Cycle 2 ([code-reviewer-261020-0030-phase-03-hierarchy-main-ui-cycle2.md](../plans/reports/code-reviewer-261020-0030-phase-03-hierarchy-main-ui-cycle2.md)) scored **7/10** with 0 critical issues; user approved with noted issues. Phase 03 shared hierarchy and main UI delivered; phase closure and native acceptance held.
+- **Tracked Operational Caveats & Remaining Gates (Phase 06 Remediation)**:
+  - *Mixed Group Deletion*: Deleting a group with a synced root and unsent child can strand outbox operations if the root delete is accepted first; leaf-row local cancellation tracked for Phase 06 remediation.
+  - *Preservation Marker Retention*: Manual root re-edit coalescing into a pending preservation UPDATE drops the `LAST_CHILD_PRESERVATION` intent mask; barrier retention across edits tracked for Phase 06 remediation.
+  - *Production Late-Child Cleanup & Unresolved UI*: The production data path lacks late-child delete cleanup and unresolved-child presentation; tombstone dominance suppresses them from UI/schedules, and durable cleanup is tracked for Phase 06.
+  - *Conflict-Review Copy & Real-UI Smoke*: Explanatory conflict-review copy and real-UI multiplatform smoke testing remain open.
+  - *Live Acceptance Gates*: Native surfaces (Android widget, desktop sticky) remain scheduled for Phases 04–05; live transition-recovery acceptance and live MongoDB replica-set staging cluster acceptance remain execution prerequisites tracked in Phase 06 rollout.
+
+---
 ## [Parent/Child Tasks & Deadline Surfaces / Phase 02] - 2026-10-19: Room Schema 3 Migration & Versioned Sync Integration
 
 ### Delivered

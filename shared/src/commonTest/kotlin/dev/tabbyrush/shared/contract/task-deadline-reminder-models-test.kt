@@ -40,7 +40,7 @@ class TaskDeadlineReminderModelsTest {
         assertEquals(deadline, todo.deadline)
         assertEquals(rule, todo.reminderRule)
 
-        val v2Data = todo.toStrictV2TodoData()
+        val v2Data = todo.toTaskData()
         assertEquals("todo-timed-1", v2Data.id)
         assertEquals("2026-10-15", v2Data.deadlineDate)
         assertEquals("15:00", v2Data.deadlineTime)

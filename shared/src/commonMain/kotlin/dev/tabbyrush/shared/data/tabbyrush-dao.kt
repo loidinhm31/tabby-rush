@@ -49,10 +49,10 @@ interface TabbyRushDao {
     @Query("SELECT * FROM outbox WHERE opId = :opId")
     suspend fun getOutboxEntry(opId: String): OutboxEntity?
 
-    @Query("SELECT * FROM outbox WHERE rowId = :rowId ORDER BY localRevision ASC")
+    @Query("SELECT * FROM outbox WHERE rowId = :rowId AND deliveryState NOT IN ('ACKNOWLEDGED','CONVERGED','DISCARDED') ORDER BY localRevision ASC, opId ASC")
     suspend fun getOutboxByRowId(rowId: String): List<OutboxEntity>
 
-    @Query("SELECT * FROM outbox ORDER BY localRevision ASC")
+    @Query("SELECT * FROM outbox WHERE deliveryState NOT IN ('ACKNOWLEDGED','CONVERGED','DISCARDED') ORDER BY localRevision ASC, opId ASC")
     suspend fun getAllOutbox(): List<OutboxEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -70,20 +70,27 @@ interface TabbyRushDao {
     @Query("DELETE FROM outbox")
     suspend fun clearOutbox()
 
-    @Query("SELECT COUNT(*) FROM outbox")
+    @Query("SELECT COUNT(*) FROM outbox WHERE deliveryState NOT IN ('ACKNOWLEDGED','CONVERGED','DISCARDED')")
     suspend fun countOutbox(): Int
 
     @Query("SELECT COUNT(*) FROM outbox WHERE deliveryState = :state")
     suspend fun countOutboxByState(state: String): Int
 
-    @Query("SELECT COUNT(*) FROM outbox WHERE contractVersion = :version")
-    suspend fun countOutboxByVersion(version: String): Int
 
     @Query("UPDATE outbox SET deliveryState = :state, errorMessage = :errorMessage WHERE opId = :opId")
     suspend fun updateDeliveryState(opId: String, state: String, errorMessage: String? = null)
 
     @Query("UPDATE outbox SET deliveryState = 'UNCERTAIN', errorMessage = 'Interrupted dispatch recovered' WHERE deliveryState = 'DISPATCHING'")
     suspend fun recoverInterruptedDispatches(): Int
+
+    @Query("SELECT * FROM legacy_sync_evidence ORDER BY sourceOpId")
+    suspend fun getLegacyEvidence(): List<LegacySyncEvidenceEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLegacyEvidence(evidence: LegacySyncEvidenceEntity)
+
+    @Query("DELETE FROM legacy_sync_evidence")
+    suspend fun clearLegacyEvidence()
 
     // -------------------------------------------------------------------------
     // Editor Drafts
@@ -227,6 +234,7 @@ interface TabbyRushDao {
         clearMeta()
         clearLocalSettings()
         clearLedger()
+        clearLegacyEvidence()
     }
     @Transaction
     suspend fun getScheduleSnapshotAtomic(): PersistedScheduleSnapshot {
@@ -408,20 +416,13 @@ interface TabbyRushDao {
         draftRowId: String,
         clearDraft: Boolean
     ) {
+        val op = getOutboxEntry(opId) ?: return
+        if (op.deliveryState != OutboxEntity.STATE_DISPATCHING || op.version == null || op.version > serverBase.serverRevision) return
         upsertServerBase(serverBase)
-        deleteOutbox(opId)
-        if (clearDraft) {
-            deleteDraft(draftRowId)
-        }
+        upsertOutbox(op.copy(deliveryState = "ACKNOWLEDGED", resolution = "EXPLICIT_ACCEPTED_TUPLE"))
+        if (clearDraft && getDraft(draftRowId)?.localRevision == op.localRevision) deleteDraft(draftRowId)
     }
 
-    @Transaction
-    suspend fun promoteStagingAtomic(
-        basesToUpsert: List<ServerBaseEntity>
-    ) {
-        upsertServerBase(basesToUpsert)
-        clearStaging()
-    }
 
     @Transaction
     suspend fun replaceOutboxAtomic(
@@ -429,7 +430,7 @@ interface TabbyRushDao {
         newOp: OutboxEntity
     ) {
         if (oldOpId != null) {
-            deleteOutbox(oldOpId)
+            getOutboxEntry(oldOpId)?.let { upsertOutbox(it.copy(deliveryState = "DISCARDED", resolution = "EXPLICIT_REAPPLY_REPLACEMENT")) }
         }
         upsertOutbox(newOp)
     }
@@ -440,33 +441,31 @@ interface TabbyRushDao {
         rowId: String,
         conflictLocalRev: Long
     ) {
-        deleteOutbox(opId)
+        getOutboxEntry(opId)?.let { upsertOutbox(it.copy(deliveryState = "DISCARDED", resolution = "EXPLICIT_DISCARD")) }
         val draft = getDraft(rowId)
         if (draft != null && draft.localRevision <= conflictLocalRev) {
             deleteDraft(rowId)
         }
     }
 
+    /** The copy and retirement of exactly its represented source revisions succeed or roll back together. */
     @Transaction
-    suspend fun purgeStaleOutboxAtomic(
-        opId: String,
-        rowId: String,
-        clearDraft: Boolean
+    suspend fun copyAsNewAtomic(
+        meta: AccountSyncMetaEntity,
+        draft: EditorDraftEntity,
+        outbox: OutboxEntity,
+        sourceRowId: String,
+        sourceRevision: Long
     ) {
-        if (clearDraft) {
-            deleteDraft(rowId)
+        saveTodoAtomic(meta, draft, outbox)
+        for (op in getOutboxByRowId(sourceRowId)) {
+            if (op.localRevision <= sourceRevision) {
+                upsertOutbox(op.copy(deliveryState = "DISCARDED", resolution = "EXPLICIT_COPY_AS_NEW"))
+            }
         }
-        deleteOutbox(opId)
+        if (getDraft(sourceRowId)?.localRevision?.let { it <= sourceRevision } == true) deleteDraft(sourceRowId)
     }
 
-    @Transaction
-    suspend fun discardRegressiveReconcileAtomic(
-        opId: String,
-        rowId: String,
-        clearDraft: Boolean
-    ) {
-        purgeStaleOutboxAtomic(opId, rowId, clearDraft)
-    }
 
     @Transaction
     suspend fun freezeOutboxAtomic(
@@ -480,5 +479,90 @@ interface TabbyRushDao {
         }
         upsertOutbox(newOp)
         return true
+    }
+
+    // No trustworthy retention horizon: stale staged rows are not evidence of current remote presence.
+    @Transaction
+    suspend fun beginScanAtomic(): AccountSyncMetaEntity {
+        val meta = getMeta() ?: AccountSyncMetaEntity()
+        check(meta.scanGeneration < Long.MAX_VALUE) { "Scan generation exhausted" }
+        clearStaging()
+        return meta.copy(scanGeneration = meta.scanGeneration + 1L, scanState = "SCANNING",
+            scanCheckpointUpdatedAt = null, scanCheckpointId = null).also { upsertMeta(it) }
+    }
+
+    @Transaction
+    suspend fun commitPageAtomic(
+        records: List<ServerBaseEntity>,
+        checkpointUpdatedAt: String,
+        checkpointId: String,
+        schemaVersion: Long,
+        generation: Long?,
+        hasMore: Boolean,
+        completedAt: Long
+    ) {
+        val meta = getMeta() ?: AccountSyncMetaEntity()
+        check(schemaVersion in 1..dev.tabbyrush.shared.sync.MAX_EXACT_VERSION)
+        if (generation != null) {
+            check(meta.scanGeneration == generation && meta.scanState == "SCANNING")
+            for (base in records) {
+                val prior = getStagedRecord(base.rowId)
+                if (prior != null && prior.serverRevision > base.serverRevision) continue
+                upsertStaging(ScanStagingEntity(rowId = base.rowId, tableName = "todos", serverRevision = base.serverRevision,
+                    deleted = base.deleted, title = base.title, completed = base.completed, createdAt = base.createdAt,
+                    rawJson = base.rawJson, syncedAt = base.syncedAt, scanGeneration = generation, projectionError = base.projectionError))
+            }
+            upsertMeta(meta.copy(hubSchemaVersion = maxOf(meta.hubSchemaVersion ?: 0L, schemaVersion),
+                scanCheckpointUpdatedAt = checkpointUpdatedAt, scanCheckpointId = checkpointId,
+                scanState = if (hasMore) "SCANNING" else "COMPLETE"))
+        } else {
+            for (base in records) {
+                val current = getServerBase(base.rowId)
+                if (current?.standardConfirmed == true && current.serverRevision > base.serverRevision) continue
+                upsertServerBase(if (base.deleted) base.copy(parentTaskId = current?.parentTaskId) else base)
+            }
+            upsertMeta(meta.copy(hubSchemaVersion = maxOf(meta.hubSchemaVersion ?: 0L, schemaVersion),
+                checkpointUpdatedAt = checkpointUpdatedAt, checkpointId = checkpointId,
+                lastCompletedCatchUpEpochMs = if (hasMore) meta.lastCompletedCatchUpEpochMs else completedAt))
+        }
+    }
+
+    @Transaction
+    suspend fun promoteCompletedScanAtomic(generation: Long, completedAt: Long) {
+        val meta = getMeta() ?: error("Missing scan metadata")
+        check(meta.scanState == "COMPLETE" && meta.scanGeneration == generation)
+        val staged = getAllStagedRecords().filter { it.scanGeneration == generation }
+        val seen = staged.map { it.rowId }.toSet()
+        for (row in staged) {
+            val base = dev.tabbyrush.shared.sync.TaskJsonMerge.project(dev.tabbyrush.shared.sync.PullRecordDto(
+                row.tableName, row.rowId, dev.tabbyrush.shared.sync.TaskJsonMerge.json.parseToJsonElement(requireNotNull(row.rawJson)),
+                row.serverRevision, requireNotNull(row.syncedAt), row.deleted))
+            val old = getServerBase(base.rowId)
+            if (old?.standardConfirmed == true && old.serverRevision > base.serverRevision) continue
+            upsertServerBase(if (base.deleted) base.copy(parentTaskId = old?.parentTaskId) else base)
+        }
+        for (old in getAllServerBase()) {
+            if (old.rowId !in seen) upsertServerBase(old.copy(deleted = true, standardConfirmed = true,
+                projectionError = "Absent after completed standard scan; retained locally, never recreated"))
+        }
+        upsertMeta(meta.copy(scanState = "READY", checkpointUpdatedAt = meta.scanCheckpointUpdatedAt,
+            checkpointId = meta.scanCheckpointId, lastCompletedCatchUpEpochMs = completedAt))
+        clearStaging()
+    }
+
+    @Transaction
+    suspend fun translateLegacyAtomic(source: LegacySyncEvidenceEntity, op: OutboxEntity?, outcome: String) {
+        val current = getLegacyEvidence().firstOrNull { it.sourceOpId == source.sourceOpId } ?: return
+        if (current.translatedOpId != null || current.outcome != "PENDING_REVIEW") return
+        if (op != null) upsertOutbox(op)
+        upsertLegacyEvidence(current.copy(outcome = outcome, translatedOpId = op?.opId))
+    }
+
+    @Transaction
+    suspend fun convergeAtomic(opId: String) {
+        val op = getOutboxEntry(opId) ?: return
+        if (op.deliveryState != OutboxEntity.STATE_UNCERTAIN) return
+        upsertOutbox(op.copy(deliveryState = "CONVERGED", resolution = "DESIRED_STATE_CONVERGENCE_NOT_RECEIPT"))
+        if (getDraft(op.rowId)?.localRevision == op.localRevision) deleteDraft(op.rowId)
     }
 }

@@ -34,13 +34,14 @@ object PersistedScheduleProjector {
 
         for (rowId in allRowIds) {
             val base = baseMap[rowId]
+            if (base?.projectionError != null) continue
             val rowOps = (outboxByRow[rowId] ?: emptyList()).sortedBy { it.localRevision }
 
             // Check for unresolved conflict head
             val headOp = rowOps.firstOrNull()
             val hasUnresolvedConflict = headOp != null && (
                 headOp.deliveryState == OutboxEntity.STATE_CONFLICT ||
-                headOp.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED
+                headOp.deliveryState == OutboxEntity.STATE_REVIEW
             )
 
             val hasPreservationBarrier = rowOps.any {
@@ -90,7 +91,7 @@ object PersistedScheduleProjector {
                     parentTaskId = op.parentTaskId
                 }
                 when (op.kind) {
-                    StrictOperationKind.CREATE.wireName -> {
+                    TaskOperationKind.CREATE.wireName -> {
                         title = op.title ?: title
                         completed = op.completed ?: completed
                         isDeleted = false
@@ -120,7 +121,7 @@ object PersistedScheduleProjector {
                             reminderRule = ReminderRule.DISABLED
                         }
                     }
-                    StrictOperationKind.DELETE.wireName -> {
+                    TaskOperationKind.DELETE.wireName -> {
                         isDeleted = true
                     }
                     else -> { // UPDATE
@@ -191,6 +192,8 @@ object PersistedScheduleProjector {
                     }
                 }
             }
+            // Complete-scan absence and confirmed tombstones dominate every retained/review overlay.
+            if (base?.deleted == true) isDeleted = true
 
             intermediateList.add(
                 IntermediateSchedule(

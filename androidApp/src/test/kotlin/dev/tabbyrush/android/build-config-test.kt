@@ -1,14 +1,19 @@
 package dev.tabbyrush.android
 
+import dev.tabbyrush.shared.contract.ApiResult
+import dev.tabbyrush.shared.contract.BuildMode
+import dev.tabbyrush.shared.contract.EndpointPolicy
+import dev.tabbyrush.shared.contract.HubConfig
 import kotlin.test.Test
-import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class BuildConfigTest {
-
-    @Test
-    fun testBuildConfigValuesLoadedFromDotEnv() {
-        assertEquals("https://api-glean-hub.qm-hub-v001.cloud", BuildConfig.HUB_ORIGIN_DEBUG)
-        assertEquals("https://api-glean-hub.qm-hub-v001.cloud", BuildConfig.HUB_ORIGIN_RELEASE)
-        assertEquals("XoaJSoximq8EhK06IjXAQCOqKqRtM6qy", BuildConfig.HUB_API_KEY)
+    @Test fun debugTargetObeysEndpointPolicyAndConfigurationNeverPrintsKey() {
+        assertIs<ApiResult.Success<String>>(EndpointPolicy.validate(BuildConfig.HUB_ORIGIN_DEBUG, BuildMode.DEBUG))
+        val config = HubConfig(BuildConfig.HUB_ORIGIN_DEBUG, "tabby-rush", "disposable-test-secret", BuildMode.DEBUG)
+        assertFalse(config.toString().contains("disposable-test-secret"))
+        assertTrue(BuildConfig.APPLICATION_ID == "dev.tabbyrush.android" || BuildConfig.APPLICATION_ID == "dev.tabbyrush.android.standardsmoke")
     }
 }

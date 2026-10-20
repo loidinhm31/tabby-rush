@@ -8,7 +8,7 @@ import androidx.room.RoomDatabaseConstructor
 /**
  * TabbyRushDatabase is the Room database for local state persistence.
  * Houses server_base, outbox, editor_drafts, scan_staging, and account_sync_meta.
- * Exports version 1 schema for validation. Destructive migration fallback is forbidden.
+ * Exports Room4; explicit migration preserves historical strict evidence. Destructive fallback is forbidden.
  */
 @Database(
     entities = [
@@ -18,9 +18,10 @@ import androidx.room.RoomDatabaseConstructor
         ScanStagingEntity::class,
         AccountSyncMetaEntity::class,
         AccountLocalSettingsEntity::class,
-        ReminderDeliveryLedgerEntity::class
+        ReminderDeliveryLedgerEntity::class,
+        LegacySyncEvidenceEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @ConstructedBy(TabbyRushDatabaseConstructor::class)

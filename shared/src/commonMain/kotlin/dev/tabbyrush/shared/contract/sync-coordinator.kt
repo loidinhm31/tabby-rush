@@ -7,7 +7,6 @@ enum class SyncStatus {
     SYNCING,
     PAUSED_CONFLICT,
     PAUSED_PROTOCOL,
-    RESET_REQUIRED,
     UNCERTAIN
 }
 

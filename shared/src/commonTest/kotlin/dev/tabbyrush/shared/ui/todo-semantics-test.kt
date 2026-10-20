@@ -215,10 +215,10 @@ class TodoSemanticsTest {
             rowId = rowId,
             localTodo = localTodo,
             remoteTodo = remoteTodo,
-            isUnknownSuperseded = true
+            requiresDeliveryReview = true
         )
 
-        assertTrue(conflict.isUnknownSuperseded)
+        assertTrue(conflict.requiresDeliveryReview)
         assertNotNull(conflict.localTodo?.deadline)
         assertEquals("2026-11-20", conflict.localTodo?.deadline?.date)
         assertEquals("15:00", conflict.localTodo?.deadline?.time)
@@ -260,8 +260,6 @@ class TodoSemanticsTest {
         val protocolProgress = SyncProgress(status = SyncStatus.PAUSED_PROTOCOL)
         assertEquals(SyncStatus.PAUSED_PROTOCOL, protocolProgress.status)
 
-        val resetProgress = SyncProgress(status = SyncStatus.RESET_REQUIRED)
-        assertEquals(SyncStatus.RESET_REQUIRED, resetProgress.status)
 
         val uncertainProgress = SyncProgress(status = SyncStatus.UNCERTAIN, uncertainCount = 4)
         assertEquals(SyncStatus.UNCERTAIN, uncertainProgress.status)
@@ -596,9 +594,9 @@ class TodoSemanticsTest {
             rowId = "c-1",
             localTodo = todo,
             remoteTodo = null,
-            isUnknownSuperseded = true
+            requiresDeliveryReview = true
         )
-        assertTrue(conflictState.isUnknownSuperseded)
+        assertTrue(conflictState.requiresDeliveryReview)
         assertEquals("c-1", conflictState.rowId)
         assertEquals("sched-token-1234", conflictState.localTodo?.scheduleToken)
         assertEquals(2L, conflictState.localTodo?.reminderRule?.count)

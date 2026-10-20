@@ -36,10 +36,6 @@ sealed interface SafeError {
         override val message: String
     ) : SafeError
 
-    data class ResetRequired(
-        override val code: String,
-        override val message: String
-    ) : SafeError
 
     data class UncertainOutcome(
         override val code: String,

@@ -231,15 +231,15 @@ class HubAuthClientTest {
         val engine = TestHttpEngine { request ->
             recordedApiKey = request.headers["X-API-Key"]
             recordedAppId = request.headers["X-App-Id"]
-            Pair(HttpStatusCode.OK, """{"protocol":"strict-v1","appId":"tabby-rush","epoch":"epoch-1","tables":["todos"]}""")
+            Pair(HttpStatusCode.OK, "{}")
         }
 
         val client = HubAuthClient(debugConfig, engine)
 
-        // Strict endpoint receives dual auth headers
+        // Only exact standard sync endpoints receive application credentials.
         val strictResult = client.httpClient.executeRaw(
             method = HttpMethod.Post,
-            path = "/api/v1/sync/tabby-rush/strong/bootstrap",
+            path = "/api/v1/sync/tabby-rush/pull",
             accessToken = "token-abc"
         )
         assertIs<ApiResult.Success<*>>(strictResult)

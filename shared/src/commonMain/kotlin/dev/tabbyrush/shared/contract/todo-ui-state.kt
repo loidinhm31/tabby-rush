@@ -15,7 +15,6 @@ data class EditorState(
     val reminderLeadMinutes: Long = 0L,
     val reminderIntervalMinutes: Long? = null,
     val reminderCount: Long = 1L,
-    val isAccountV2: Boolean = true,
     val originalDeadline: TaskDeadline? = null,
     val originalReminderRule: ReminderRule = ReminderRule.DISABLED,
     val originalScheduleToken: String? = null,
@@ -38,7 +37,7 @@ data class ConflictState(
     val rowId: String,
     val localTodo: Todo?,
     val remoteTodo: Todo?,
-    val isUnknownSuperseded: Boolean = false,
+    val requiresDeliveryReview: Boolean = false,
     val isPreservationConflict: Boolean = false,
     val isSubtaskConflict: Boolean = false,
     val isParentDeleted: Boolean = false
@@ -68,7 +67,5 @@ data class TodoUiState(
     val deleteCandidateChildCount: Int = 0,
     val leaveGuard: LeaveGuardState? = null,
     val safeError: SafeError? = null,
-    val isAccountV2: Boolean = true,
-    val isAccountV3: Boolean = false,
     val nowEpochMs: Long = 0L
 )

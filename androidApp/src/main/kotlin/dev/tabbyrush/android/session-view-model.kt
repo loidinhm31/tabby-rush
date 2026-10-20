@@ -130,10 +130,7 @@ class SessionViewModel : ViewModel() {
     private suspend fun reloadTodos() {
         val runtime = app.getActiveRuntime() ?: return
         try {
-            val isV2 = runtime.store.isAccountV2()
-            val isV3 = runtime.store.isAccountV3()
             allTodos = runtime.store.loadTodos(); applyFilterAndCounts()
-            _uiState.value = _uiState.value.copy(isAccountV2 = isV2, isAccountV3 = isV3)
             isTodosLoaded = true
             pendingTarget?.let { (k, t) -> dispatchTaskSelection(k, t) }
             pendingIntentAction?.let { action ->
@@ -202,7 +199,6 @@ class SessionViewModel : ViewModel() {
     private suspend fun openCreate(initialTitle: String, parentTaskId: String? = null, parentTitle: String? = null) {
         val runtime = app.getActiveRuntime()
         val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
-        val isV2 = runtime?.store?.isAccountV2() ?: true
         val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
         _uiState.value = _uiState.value.copy(
             editor = EditorState(
@@ -218,7 +214,6 @@ class SessionViewModel : ViewModel() {
                 reminderLeadMinutes = settings.defaultReminderLeadMinutes,
                 reminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
                 reminderCount = settings.defaultReminderCount,
-                isAccountV2 = isV2,
                 parentTaskId = parentTaskId,
                 parentTitle = parentTitle
             )
@@ -227,7 +222,6 @@ class SessionViewModel : ViewModel() {
 
     private suspend fun openEdit(todo: Todo) {
         val runtime = app.getActiveRuntime()
-        val isV2 = runtime?.store?.isAccountV2() ?: true
         val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
         val dl = todo.deadline
         val parentTitle = if (todo.parentTaskId != null) allTodos.firstOrNull { it.id == todo.parentTaskId }?.title else null
@@ -246,7 +240,6 @@ class SessionViewModel : ViewModel() {
                 reminderLeadMinutes = todo.reminderRule.leadMinutes,
                 reminderIntervalMinutes = todo.reminderRule.intervalMinutes,
                 reminderCount = todo.reminderRule.count,
-                isAccountV2 = isV2,
                 originalDeadline = dl,
                 originalReminderRule = todo.reminderRule,
                 originalScheduleToken = todo.scheduleToken,
@@ -268,7 +261,6 @@ class SessionViewModel : ViewModel() {
                 reminderLeadMinutes = settings.defaultReminderLeadMinutes,
                 reminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
                 reminderCount = settings.defaultReminderCount,
-                isAccountV2 = isV2,
                 originalDeadline = null,
                 originalReminderRule = ReminderRule.DISABLED,
                 originalScheduleToken = null,
@@ -366,10 +358,6 @@ class SessionViewModel : ViewModel() {
         val deadline: TaskDeadline?
         val rule: ReminderRule
         if (editor.hasDeadline) {
-            if (!editor.isAccountV2) {
-                _uiState.value = _uiState.value.copy(editor = editor.copy(error = "Strict-v2 account upgrade required to save deadlines or reminders."))
-                return
-            }
             when (val dRes = DeadlineCalculatorHelpers.validateAndComputeDeadline(editor)) {
                 is DeadlineValidationResult.Valid -> {
                     deadline = dRes.deadline
@@ -444,7 +432,7 @@ class SessionViewModel : ViewModel() {
 
     private suspend fun inspectAndShowConflict(runtime: AccountRuntime) {
         val entry = runtime.store.dao.getAllOutbox().firstOrNull {
-            it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED
+            it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW
         } ?: return
         val base = runtime.store.dao.getServerBase(entry.rowId)
         val bDate = base?.deadlineDate
@@ -533,7 +521,7 @@ class SessionViewModel : ViewModel() {
                 rowId = entry.rowId,
                 localTodo = localTodo,
                 remoteTodo = remoteTodo,
-                isUnknownSuperseded = entry.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED,
+                requiresDeliveryReview = entry.deliveryState == OutboxEntity.STATE_REVIEW,
                 isPreservationConflict = isPreservationConflict,
                 isSubtaskConflict = isSubtaskConflict,
                 isParentDeleted = isParentDeleted

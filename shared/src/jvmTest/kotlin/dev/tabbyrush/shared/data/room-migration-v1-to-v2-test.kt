@@ -3,7 +3,7 @@ package dev.tabbyrush.shared.data
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import dev.tabbyrush.shared.contract.AccountKey
-import dev.tabbyrush.shared.contract.StrictOperationKind
+import dev.tabbyrush.shared.contract.TaskOperationKind
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -114,7 +114,7 @@ class RoomMigrationV1ToV2Test {
             assertEquals("Live task 1", liveBase.title)
             assertFalse(liveBase.completed)
             assertFalse(liveBase.deleted)
-            assertEquals("epoch-1", liveBase.epoch)
+            assertFalse(liveBase.standardConfirmed)
             assertNull(liveBase.deadlineDate)
             assertNull(liveBase.deadlineTime)
             assertNull(liveBase.deadlineZone)
@@ -146,34 +146,17 @@ class RoomMigrationV1ToV2Test {
             assertEquals("Staged title", staged.title)
             assertNull(staged.deadlineDate)
 
-            // Verify outbox entries: preserved original IDs, digests, deliveryStates, plus provenance
+            // Active rows remain typed/reviewable; original envelope and provenance are archived losslessly.
             assertEquals(5, dao.countOutbox())
-
-            val opPending = dao.getOutboxEntry("op-pending-1")
-            assertNotNull(opPending)
-            assertEquals("create", opPending.kind)
-            assertEquals("digest-p1", opPending.digest)
-            assertEquals("PENDING", opPending.deliveryState)
-            assertEquals("strict-v1", opPending.contractVersion)
-            assertEquals("MIGRATED_FROM_ROOM_V1", opPending.transitionCheckpoint)
-            assertEquals("TITLE|COMPLETED", opPending.intentMask)
-            assertTrue(opPending.dispatchHistory?.contains("PENDING") == true)
-            assertNull(opPending.deadlineDate)
-
-            val opDisp = dao.getOutboxEntry("op-disp-1")
-            assertNotNull(opDisp)
-            assertEquals("DISPATCHING", opDisp.deliveryState)
-            assertEquals("digest-d1", opDisp.digest)
-            assertEquals("TITLE|COMPLETED", opDisp.intentMask)
-            assertEquals("MIGRATED_FROM_ROOM_V1", opDisp.transitionCheckpoint)
-            assertTrue(opDisp.dispatchHistory?.contains("DISPATCHING") == true)
-
-            val opDel = dao.getOutboxEntry("op-del-1")
-            assertNotNull(opDel)
-            assertEquals("delete", opDel.kind)
-            assertEquals("digest-del1", opDel.digest)
-            assertEquals("DELETE", opDel.intentMask)
-            assertEquals("MIGRATED_FROM_ROOM_V1", opDel.transitionCheckpoint)
+            val evidence = dao.getLegacyEvidence().associateBy { it.sourceOpId }
+            assertEquals(5, evidence.size)
+            val original = kotlinx.serialization.json.Json.parseToJsonElement(evidence.getValue("op-pending-1").originalJson).let { it as kotlinx.serialization.json.JsonObject }
+            assertEquals(kotlinx.serialization.json.JsonPrimitive("digest-p1"), original["digest"])
+            assertEquals(kotlinx.serialization.json.JsonPrimitive("PENDING"), original["deliveryState"])
+            assertEquals(kotlinx.serialization.json.JsonPrimitive("MIGRATED_FROM_ROOM_V1"), original["transitionCheckpoint"])
+            assertTrue(dao.getAllOutbox().all { it.deliveryState == OutboxEntity.STATE_REVIEW && it.legacyEvidenceId != null })
+            assertEquals("New task", dao.getOutboxEntry("op-pending-1")?.title)
+            assertFalse(dev.tabbyrush.shared.sync.LegacyStandardIntentMigration.provablyNeverDispatched(evidence.getValue("op-pending-1")))
 
             // Verify account_local_settings table created with defaults
             val settings = dao.getLocalSettings()

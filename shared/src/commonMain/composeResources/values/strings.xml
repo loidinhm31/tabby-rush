@@ -30,7 +30,6 @@
     <string name="sync_status_syncing">Syncing with Hub...</string>
     <string name="sync_status_conflict">Sync paused: conflict needs review</string>
     <string name="sync_status_protocol">Sync paused: protocol update required</string>
-    <string name="sync_status_reset">Sync paused: epoch reset required</string>
     <string name="sync_status_uncertain">Sync uncertain: delivery unconfirmed</string>
     <string name="access_pending_title">Access Request Pending</string>
     <string name="access_pending_desc">Your request to access the TabbyRush app is awaiting administrator approval.</string>
@@ -50,5 +49,4 @@
     <string name="settings_notifications_enabled">Allow notifications</string>
     <string name="settings_default_reminder">Default reminder for new tasks</string>
     <string name="settings_date_only_anchor">Date-only reminder time</string>
-    <string name="v2_upgrade_required">Strict-v2 account required for deadlines</string>
 </resources>

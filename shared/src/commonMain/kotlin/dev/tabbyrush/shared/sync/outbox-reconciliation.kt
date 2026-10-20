@@ -1,499 +1,123 @@
 package dev.tabbyrush.shared.sync
 
-import dev.tabbyrush.shared.contract.StrictOperationKind
-import dev.tabbyrush.shared.contract.StrictOperationStatus
-import dev.tabbyrush.shared.contract.StrictSyncContract
-import dev.tabbyrush.shared.contract.StrictSyncDigest
-import dev.tabbyrush.shared.contract.StrictTodoData
-import dev.tabbyrush.shared.contract.StrictSyncV2Contract
-import dev.tabbyrush.shared.contract.StrictSyncV2Digest
-import dev.tabbyrush.shared.contract.StrictV2TodoData
-import dev.tabbyrush.shared.contract.StrictSyncV3Contract
-import dev.tabbyrush.shared.contract.StrictSyncV3Digest
-import dev.tabbyrush.shared.contract.StrictV3TodoData
 import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.RoomAccountStore
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.jsonObject
 
-/**
- * OutboxReconciliation coordinates:
- * 1. Gathering eligible FIFO outbox operations:
- *    - Strictly checks head operation per rowId. If head is CONFLICT or UNKNOWN_SUPERSEDED,
- *      successors are blocked from dispatching (C3).
- * 2. Freezing expectedRevision, epoch, and digest at DISPATCH time against current base (C2, C5).
- * 3. Exact CAS acknowledgement matching:
- *    - Matching account, epoch, opId, rowId, digest, and acceptedRevision == expectedRevision + 1.
- *    - Advancing server_base monotonically while preserving newer editor drafts.
- *    - Converting apparent conflicts after UNCERTAIN dispatch into UNKNOWN_SUPERSEDED.
- *    - Bounded retry tracking for retryableFailure.
- */
-class OutboxReconciliation(
-    val store: RoomAccountStore,
-    val activeEpoch: String
-) {
+/** No strict receipts or automatic uncertain retries. Each row admits only its oldest active intent. */
+class OutboxReconciliation(val store: RoomAccountStore) {
+    suspend fun getEligibleDispatchBatch(maxCount: Int = 100): List<OutboxEntity> =
+        store.dao.getAllOutbox().groupBy { it.tableName to it.rowId }.values.mapNotNull { row ->
+            row.firstOrNull()?.takeIf { it.deliveryState == OutboxEntity.STATE_PENDING && it.envelopeJson == null }
+        }.take(maxCount)
 
-    /**
-     * Gathers eligible operations to dispatch.
-     * Enforces strict FIFO order per row: checks the earliest operation by localRevision.
-     * If the earliest operation is CONFLICT, UNKNOWN_SUPERSEDED, or DISPATCHING,
-     * no successor on that row can dispatch (C3).
-     * Capped at maxCount operations (default 100).
-     */
-    suspend fun getEligibleDispatchBatch(maxCount: Int = 100): List<OutboxEntity> {
-        val allOutbox = store.dao.getAllOutbox()
-        val byRow = allOutbox.groupBy { it.rowId }
-        val eligible = mutableListOf<OutboxEntity>()
-
-        for ((_, rowOps) in byRow) {
-            val head = rowOps.minByOrNull { it.localRevision } ?: continue
-
-            // If head is conflicted or unknown superseded, row is blocked; successors cannot pass (C3)
-            if (head.deliveryState == OutboxEntity.STATE_CONFLICT ||
-                head.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED ||
-                head.deliveryState == OutboxEntity.STATE_DISPATCHING
-            ) {
-                continue
-            }
-
-            // Only dispatch if head is PENDING or UNCERTAIN
-            if (head.deliveryState in setOf(OutboxEntity.STATE_PENDING, OutboxEntity.STATE_UNCERTAIN)) {
-                // Legacy version fence: if store is upgraded to strict-v3, do not dispatch un-translated legacy v1/v2 ops
-                if (store.isAccountV3() && head.contractVersion != OutboxEntity.CONTRACT_VERSION_V3) {
-                    continue
-                }
-                // If child in PENDING state (first dispatch), verify confirmed live root in current epoch for non-delete ops
-                // Child DELETE operations remain legal even after parent deletion (design contract)
-                if (head.parentTaskId != null && head.deliveryState == OutboxEntity.STATE_PENDING && head.kind != StrictOperationKind.DELETE.wireName) {
-                    val parentBase = store.dao.getServerBase(head.parentTaskId)
-                    if (parentBase == null || parentBase.deleted || parentBase.serverRevision <= 0L || parentBase.epoch != activeEpoch || parentBase.parentTaskId != null) {
-                        continue
-                    }
-                }
-                eligible.add(head)
-                if (eligible.size >= maxCount) {
-                    break
-                }
-            }
-        }
-
-        return eligible
-    }
-
-    /**
-     * Prepares and freezes batch operations at dispatch time (C2, C5).
-     * Recomputes expectedRevision from current server_base, binds activeEpoch,
-     * computes canonical digest, and marks state as DISPATCHING.
-     */
-    suspend fun prepareAndFreezeBatch(batch: List<OutboxEntity>): List<OutboxEntity> {
-        val frozenBatch = mutableListOf<OutboxEntity>()
-
-        for (op in batch) {
-            if (op.deliveryState == OutboxEntity.STATE_UNCERTAIN) {
-                // Retain exact frozen identity, revision, epoch, and digest for UNCERTAIN retry!
-                val history = op.dispatchHistory ?: """{"dispatched":true,"uncertain":true}"""
-                val dispatchingOp = op.copy(
-                    deliveryState = OutboxEntity.STATE_DISPATCHING,
-                    dispatchHistory = history
-                )
-                store.dao.upsertOutbox(dispatchingOp)
-                frozenBatch.add(dispatchingOp)
-                continue
-            }
-
-            // Enforce parent admission at freeze: recheck root confirmation for non-delete child operations
-            if (op.parentTaskId != null && op.deliveryState == OutboxEntity.STATE_PENDING && op.kind != StrictOperationKind.DELETE.wireName) {
-                val parentBase = store.dao.getServerBase(op.parentTaskId)
-                if (parentBase == null || parentBase.deleted || parentBase.serverRevision <= 0L || parentBase.epoch != activeEpoch || parentBase.parentTaskId != null) {
-                    // Root is not confirmed; child remains unfrozen and pending
-                    continue
-                }
-            }
-
+    suspend fun prepareAndFreezeBatch(
+        batch: List<OutboxEntity>,
+        pull: PullRequestDto = PullRequestDto()
+    ): List<OutboxEntity> = store.withMutationLock {
+        val frozen = mutableListOf<OutboxEntity>()
+        // Exact wire codec and captured pull: UTF-8 bytes, JSON punctuation and checkpoint escaping included.
+        val emptyBytes = syncWireJson.encodeToString(DeltaRequestDto(PushRequestDto(emptyList()), pull)).encodeToByteArray().size
+        var bodyBytes = emptyBytes
+        for (candidate in batch) {
+            val op = store.dao.getOutboxEntry(candidate.opId) ?: continue
+            if (op.localRevision != candidate.localRevision || op.deliveryState != OutboxEntity.STATE_PENDING || op.envelopeJson != null) continue
+            if (store.dao.getOutboxByRowId(op.rowId).firstOrNull()?.opId != op.opId) continue
             val base = store.dao.getServerBase(op.rowId)
-
-            val kind: StrictOperationKind
-            val expectedRev: Long
-
-            if (op.kind == StrictOperationKind.DELETE.wireName) {
-                kind = StrictOperationKind.DELETE
-                expectedRev = base?.serverRevision ?: 0L
-            } else {
-                if (base == null || base.serverRevision == 0L || base.deleted) {
-                    kind = StrictOperationKind.CREATE
-                    expectedRev = 0L
-                } else {
-                    kind = StrictOperationKind.UPDATE
-                    expectedRev = base.serverRevision
-                }
-            }
-
-            val isV3 = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V3
-            val isV2 = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V2
-            val digest = when {
-                isV3 -> {
-                    val v3Data = if (kind == StrictOperationKind.DELETE) null else StrictV3TodoData(
-                        id = op.rowId,
-                        title = op.title ?: "",
-                        completed = op.completed ?: false,
-                        createdAt = op.createdAt ?: 0L,
-                        deadlineDate = op.deadlineDate,
-                        deadlineTime = op.deadlineTime,
-                        deadlineZone = op.deadlineZone,
-                        deadlineOffsetSeconds = op.deadlineOffsetSeconds,
-                        reminderAnchorTime = op.reminderAnchorTime,
-                        deadlineAnchorEpochMs = op.deadlineAnchorEpochMs,
-                        deadlineOverdueEpochMs = op.deadlineOverdueEpochMs,
-                        reminderEnabled = op.reminderEnabled,
-                        reminderLeadMinutes = op.reminderLeadMinutes,
-                        reminderIntervalMinutes = op.reminderIntervalMinutes,
-                        reminderCount = op.reminderCount,
-                        scheduleToken = op.scheduleToken,
-                        parentTaskId = op.parentTaskId
-                    )
-                    StrictSyncV3Digest.computeDigest(
-                        domain = StrictSyncV3Contract.PROTOCOL_VERSION,
-                        appId = store.appId,
-                        userId = store.userId,
-                        epoch = activeEpoch,
-                        tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                        rowId = op.rowId,
-                        opId = op.opId,
-                        kind = kind,
-                        expectedRevision = expectedRev,
-                        data = v3Data
-                    )
-                }
-                isV2 -> {
-                    val v2Data = if (kind == StrictOperationKind.DELETE) null else StrictV2TodoData(
-                        id = op.rowId,
-                        title = op.title ?: "",
-                        completed = op.completed ?: false,
-                        createdAt = op.createdAt ?: 0L,
-                        deadlineDate = op.deadlineDate,
-                        deadlineTime = op.deadlineTime,
-                        deadlineZone = op.deadlineZone,
-                        deadlineOffsetSeconds = op.deadlineOffsetSeconds,
-                        reminderAnchorTime = op.reminderAnchorTime,
-                        deadlineAnchorEpochMs = op.deadlineAnchorEpochMs,
-                        deadlineOverdueEpochMs = op.deadlineOverdueEpochMs,
-                        reminderEnabled = op.reminderEnabled,
-                        reminderLeadMinutes = op.reminderLeadMinutes,
-                        reminderIntervalMinutes = op.reminderIntervalMinutes,
-                        reminderCount = op.reminderCount,
-                        scheduleToken = op.scheduleToken
-                    )
-                    StrictSyncV2Digest.computeDigest(
-                        domain = StrictSyncV2Contract.PROTOCOL_VERSION,
-                        appId = store.appId,
-                        userId = store.userId,
-                        epoch = activeEpoch,
-                        tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                        rowId = op.rowId,
-                        opId = op.opId,
-                        kind = kind,
-                        expectedRevision = expectedRev,
-                        data = v2Data
-                    )
-                }
-                else -> {
-                    val todoData = if (kind == StrictOperationKind.DELETE) null else StrictTodoData(
-                        id = op.rowId,
-                        title = op.title ?: "",
-                        completed = op.completed ?: false,
-                        createdAt = op.createdAt ?: 0L
-                    )
-                    StrictSyncDigest.computeDigest(
-                        domain = StrictSyncContract.PROTOCOL_VERSION,
-                        appId = store.appId,
-                        userId = store.userId,
-                        epoch = activeEpoch,
-                        tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                        rowId = op.rowId,
-                        opId = op.opId,
-                        kind = kind,
-                        expectedRevision = expectedRev,
-                        data = todoData
-                    )
-                }
-            }
-
-            val frozenOp = op.copy(
-                epoch = activeEpoch,
-                kind = kind.wireName,
-                expectedRevision = expectedRev,
-                digest = digest,
-                deliveryState = OutboxEntity.STATE_DISPATCHING,
-                dispatchHistory = op.dispatchHistory ?: """{"dispatched":true}"""
-            )
-
-            // N2: Optimistic concurrency check to ensure no intervening edit occurred
-            val frozen = store.dao.freezeOutboxAtomic(op.opId, op.localRevision, frozenOp)
-            if (frozen) {
-                frozenBatch.add(frozenOp)
-            }
-        }
-        return frozenBatch
-    }
-
-    /**
-     * Converts a frozen OutboxEntity to a wire StrictOperationDto.
-     * Delete operation data payload is serialized as null.
-     */
-    fun toDto(entity: OutboxEntity): StrictOperationDto {
-        val dataDto = if (entity.kind == StrictOperationKind.DELETE.wireName) {
-            null
-        } else {
-            StrictTodoDataDto(
-                id = entity.rowId,
-                title = entity.title ?: "",
-                completed = entity.completed ?: false,
-                createdAt = entity.createdAt ?: 0L
-            )
-        }
-
-        return StrictOperationDto(
-            opId = entity.opId,
-            epoch = entity.epoch,
-            tableName = entity.tableName,
-            rowId = entity.rowId,
-            kind = entity.kind,
-            expectedRevision = entity.expectedRevision,
-            data = dataDto
-        )
-    }
-
-    /**
-     * Converts a frozen OutboxEntity to a wire StrictV2OperationDto.
-     * Delete operation data payload is serialized as null.
-     */
-    fun toV2Dto(entity: OutboxEntity): StrictV2OperationDto {
-        val dataDto = if (entity.kind == StrictOperationKind.DELETE.wireName) {
-            null
-        } else {
-            StrictV2TodoDataDto(
-                id = entity.rowId,
-                title = entity.title ?: "",
-                completed = entity.completed ?: false,
-                createdAt = entity.createdAt ?: 0L,
-                deadlineDate = entity.deadlineDate,
-                deadlineTime = entity.deadlineTime,
-                deadlineZone = entity.deadlineZone,
-                deadlineOffsetSeconds = entity.deadlineOffsetSeconds,
-                reminderAnchorTime = entity.reminderAnchorTime,
-                deadlineAnchorEpochMs = entity.deadlineAnchorEpochMs,
-                deadlineOverdueEpochMs = entity.deadlineOverdueEpochMs,
-                reminderEnabled = entity.reminderEnabled,
-                reminderLeadMinutes = entity.reminderLeadMinutes,
-                reminderIntervalMinutes = entity.reminderIntervalMinutes,
-                reminderCount = entity.reminderCount,
-                scheduleToken = entity.scheduleToken
-            )
-        }
-
-        return StrictV2OperationDto(
-            opId = entity.opId,
-            epoch = entity.epoch,
-            tableName = entity.tableName,
-            rowId = entity.rowId,
-            kind = entity.kind,
-            expectedRevision = entity.expectedRevision,
-            data = dataDto
-        )
-    }
-
-    /**
-     * Converts a frozen OutboxEntity to a wire StrictV3OperationDto.
-     * Delete operation data payload is serialized as null.
-     */
-    fun toV3Dto(entity: OutboxEntity): StrictV3OperationDto {
-        val dataDto = if (entity.kind == StrictOperationKind.DELETE.wireName) {
-            null
-        } else {
-            StrictV3TodoDataDto(
-                id = entity.rowId,
-                title = entity.title ?: "",
-                completed = entity.completed ?: false,
-                createdAt = entity.createdAt ?: 0L,
-                deadlineDate = entity.deadlineDate,
-                deadlineTime = entity.deadlineTime,
-                deadlineZone = entity.deadlineZone,
-                deadlineOffsetSeconds = entity.deadlineOffsetSeconds,
-                reminderAnchorTime = entity.reminderAnchorTime,
-                deadlineAnchorEpochMs = entity.deadlineAnchorEpochMs,
-                deadlineOverdueEpochMs = entity.deadlineOverdueEpochMs,
-                reminderEnabled = entity.reminderEnabled,
-                reminderLeadMinutes = entity.reminderLeadMinutes,
-                reminderIntervalMinutes = entity.reminderIntervalMinutes,
-                reminderCount = entity.reminderCount,
-                scheduleToken = entity.scheduleToken,
-                parentTaskId = entity.parentTaskId
-            )
-        }
-
-        return StrictV3OperationDto(
-            opId = entity.opId,
-            epoch = entity.epoch,
-            tableName = entity.tableName,
-            rowId = entity.rowId,
-            kind = entity.kind,
-            expectedRevision = entity.expectedRevision,
-            data = dataDto
-        )
-    }
-
-    /**
-     * Marks in-flight operations as UNCERTAIN (e.g. after socket timeout or crash).
-     */
-    suspend fun markBatchUncertain(operations: List<OutboxEntity>, message: String) {
-        for (op in operations) {
-            val current = store.dao.getOutboxEntry(op.opId)
-            if (current != null && current.deliveryState == OutboxEntity.STATE_DISPATCHING) {
-                store.dao.upsertOutbox(
-                    current.copy(
-                        deliveryState = OutboxEntity.STATE_UNCERTAIN,
-                        errorMessage = message,
-                        consecutiveFailures = current.consecutiveFailures + 1
-                    )
-                )
-            }
-        }
-    }
-
-    /**
-     * Reconciles server push results with dispatched outbox operations.
-     */
-    suspend fun reconcilePushResults(
-        dispatched: List<OutboxEntity>,
-        response: StrictPushResponseDto
-    ) {
-        val resultsByOpId = response.results.associateBy { it.opId }
-
-        for (op in dispatched) {
-            val result = resultsByOpId[op.opId]
-            if (result == null) {
-                store.withMutationLock {
-                    store.dao.updateDeliveryState(
-                        opId = op.opId,
-                        state = OutboxEntity.STATE_UNCERTAIN,
-                        errorMessage = "Server omitted operation from push response"
-                    )
-                }
+            if (base != null && (!base.standardConfirmed || base.deleted || base.projectionError != null)) {
+                store.dao.updateDeliveryState(op.opId, OutboxEntity.STATE_REVIEW, "Remote row unavailable or incompatible; intent retained for review")
                 continue
             }
-
-            // Validate rowId matches
-            if (result.rowId != op.rowId) {
-                store.withMutationLock {
-                    store.dao.updateDeliveryState(
-                        opId = op.opId,
-                        state = OutboxEntity.STATE_UNCERTAIN,
-                        errorMessage = "Server response rowId ${result.rowId} mismatched request ${op.rowId}"
-                    )
-                }
+            if (base == null && op.kind != "create") {
+                store.dao.updateDeliveryState(op.opId, OutboxEntity.STATE_REVIEW, "Missing update/delete is not a new record")
                 continue
             }
-
-            if (result.status == StrictOperationStatus.ACCEPTED.wireName || result.status == StrictOperationStatus.REPLAYED.wireName) {
-                if (result.digest != op.digest) {
-                    store.withMutationLock {
-                        store.dao.updateDeliveryState(
-                            opId = op.opId,
-                            state = OutboxEntity.STATE_UNCERTAIN,
-                            errorMessage = "Server response digest mismatched request digest"
-                        )
-                    }
+            if (op.parentTaskId != null && op.kind != "delete") {
+                val parent = store.dao.getServerBase(op.parentTaskId)
+                if (parent == null || !parent.standardConfirmed || parent.deleted || parent.projectionError != null || parent.parentTaskId != null) continue
+                val parentOps = store.dao.getOutboxByRowId(op.parentTaskId)
+                if (parentOps.any { it.kind == "delete" }) continue
+            }
+            try {
+                val assumed = base?.serverRevision ?: 0L
+                check(assumed < MAX_EXACT_VERSION) { "Record version exhausted" }
+                val raw = base?.rawJson?.let { TaskJsonMerge.json.parseToJsonElement(it).jsonObject }
+                val data = when {
+                    op.kind == "delete" -> requireNotNull(raw)
+                    raw != null -> TaskJsonMerge.merge(raw, op.intentJson(), op.intentMask)
+                    else -> op.intentJson()
+                }
+                if (op.kind != "delete") TaskJsonMerge.decode(op.rowId, data)
+                val envelope = PushRecordDto(op.tableName, op.rowId, data, assumed + 1L, op.kind == "delete", assumed)
+                val encoded = syncWireJson.encodeToString(envelope)
+                val recordBytes = encoded.encodeToByteArray().size
+                if (recordBytes > MAX_SYNC_BODY_BYTES - emptyBytes) {
+                    store.dao.updateDeliveryState(op.opId, OutboxEntity.STATE_CONFLICT,
+                        "Task exceeds the 256 KiB sync limit; nothing sent. Reduce record data in a compatible client, or copy native fields as a new task")
                     continue
                 }
+                val addedBytes = recordBytes + if (frozen.isEmpty()) 0 else 1
+                if (addedBytes > MAX_SYNC_BODY_BYTES - bodyBytes) continue
+                val prepared = op.copy(envelopeJson = encoded, version = envelope.version,
+                    assumedServerVersion = assumed, deliveryState = OutboxEntity.STATE_DISPATCHING,
+                    dispatchHistory = "FROZEN_BEFORE_NETWORK", errorMessage = null)
+                if (store.dao.freezeOutboxAtomic(op.opId, op.localRevision, prepared)) {
+                    frozen.add(prepared)
+                    bodyBytes += addedBytes
+                }
+            } catch (_: IllegalArgumentException) {
+                store.dao.updateDeliveryState(op.opId, OutboxEntity.STATE_CONFLICT, "Task fields cannot be submitted; edit or copy retained draft")
+            } catch (_: IllegalStateException) {
+                store.dao.updateDeliveryState(op.opId, OutboxEntity.STATE_CONFLICT, "Record version unavailable or exhausted; intent retained")
             }
+        }
+        frozen
+    }
 
-            when (result.status) {
-                StrictOperationStatus.ACCEPTED.wireName,
-                StrictOperationStatus.REPLAYED.wireName -> {
-                    val acceptedRev = result.acceptedRevision
-                    val expectedNextRev = op.expectedRevision + 1L
+    fun toDto(op: OutboxEntity): PushRecordDto = TaskJsonMerge.json.decodeFromString(requireNotNull(op.envelopeJson))
 
-                    if (acceptedRev == null || acceptedRev != expectedNextRev) {
-                        store.withMutationLock {
-                            store.dao.updateDeliveryState(
-                                opId = op.opId,
-                                state = OutboxEntity.STATE_UNCERTAIN,
-                                errorMessage = "acceptedRevision $acceptedRev did not equal expected $expectedNextRev"
-                            )
-                        }
-                    } else {
-                        store.reconcileAccepted(
-                            opId = op.opId,
-                            serverRevision = acceptedRev
-                        )
-                    }
-                }
-
-                StrictOperationStatus.REVISION_CONFLICT.wireName,
-                StrictOperationStatus.MISSING_RECORD.wireName,
-                StrictOperationStatus.DELETED_RECORD.wireName -> {
-                    // Critical Invariant:
-                    // If operation was previously UNCERTAIN before this dispatch round,
-                    // the previous attempt might have committed and then been superseded by another client.
-                    val wasUncertain = op.deliveryState == OutboxEntity.STATE_UNCERTAIN ||
-                            op.consecutiveFailures > 0 ||
-                            op.dispatchHistory != null ||
-                            op.transitionCheckpoint != null
-                    if (wasUncertain) {
-                        store.withMutationLock {
-                            store.dao.updateDeliveryState(
-                                opId = op.opId,
-                                state = OutboxEntity.STATE_UNKNOWN_SUPERSEDED,
-                                errorMessage = "Superseded after uncertain delivery: ${result.status}"
-                            )
-                        }
-                    } else {
-                        store.withMutationLock {
-                            store.dao.updateDeliveryState(
-                                opId = op.opId,
-                                state = OutboxEntity.STATE_CONFLICT,
-                                errorMessage = "Server conflict: ${result.status}"
-                            )
-                        }
-                    }
-                }
-
-                StrictOperationStatus.RETRYABLE_FAILURE.wireName -> {
-                    store.withMutationLock {
-                        val current = store.dao.getOutboxEntry(op.opId) ?: return@withMutationLock
-                        if (current.deliveryState != OutboxEntity.STATE_DISPATCHING) {
-                            return@withMutationLock
-                        }
-                        val newFailures = current.consecutiveFailures + 1
-                        store.dao.upsertOutbox(
-                            current.copy(
-                                deliveryState = OutboxEntity.STATE_UNCERTAIN,
-                                errorMessage = "Server retryableFailure",
-                                consecutiveFailures = newFailures
-                            )
-                        )
-                    }
-                }
-
-                StrictOperationStatus.OP_ID_REUSE.wireName,
-                StrictOperationStatus.INVALID_RECORD.wireName -> {
-                    store.withMutationLock {
-                        store.dao.updateDeliveryState(
-                            opId = op.opId,
-                            state = OutboxEntity.STATE_CONFLICT,
-                            errorMessage = "Server rejected: ${result.status}"
-                        )
-                    }
-                }
-
-                else -> {
-                    store.withMutationLock {
-                        store.dao.updateDeliveryState(
-                            opId = op.opId,
-                            state = OutboxEntity.STATE_UNCERTAIN,
-                            errorMessage = "Unrecognized status: ${result.status}"
-                        )
-                    }
-                }
+    suspend fun markBatchUncertain(batch: List<OutboxEntity>, reason: String) = store.withMutationLock {
+        for (frozen in batch) {
+            val current = store.dao.getOutboxEntry(frozen.opId) ?: continue
+            if (current.deliveryState == OutboxEntity.STATE_DISPATCHING && current.envelopeJson == frozen.envelopeJson) {
+                store.dao.upsertOutbox(current.copy(deliveryState = OutboxEntity.STATE_UNCERTAIN, errorMessage = reason,
+                    dispatchHistory = "DELIVERY_UNCERTAIN"))
             }
+        }
+    }
+
+    suspend fun reconcilePushResults(batch: List<OutboxEntity>, response: PushResponseDto) {
+        store.withMutationLock {
+            val meta = store.dao.getMeta() ?: dev.tabbyrush.shared.data.AccountSyncMetaEntity()
+            store.dao.upsertMeta(meta.copy(hubSchemaVersion = maxOf(meta.hubSchemaVersion ?: 0L, response.schemaVersion)))
+        }
+        for (op in batch) {
+            val accepted = response.syncedRecords.any { it.tableName == op.tableName && it.rowId == op.rowId && it.version == op.version }
+            val conflict = response.conflicts.any { it.tableName == op.tableName && it.rowId == op.rowId }
+            val failed = response.failures.any { it.tableName == op.tableName && it.rowId == op.rowId }
+            when {
+                accepted && !conflict && !failed -> store.reconcileAccepted(op.opId, requireNotNull(op.version))
+                conflict || failed -> store.withMutationLock {
+                    store.dao.updateDeliveryState(op.opId, OutboxEntity.STATE_CONFLICT,
+                        if (conflict) "Remote task changed; refresh then explicitly reapply or discard" else "Schema validation or persistence failed; draft retained for correction")
+                }
+                else -> markBatchUncertain(listOf(op), "No unambiguous explicit acceptance tuple; pull before review")
+            }
+        }
+    }
+
+    /** A matching state is convergence, never proof that this particular operation executed. */
+    suspend fun reconcileUncertain() = store.withMutationLock {
+        for (op in store.dao.getAllOutbox().filter { it.deliveryState == OutboxEntity.STATE_UNCERTAIN }) {
+            val base = store.dao.getServerBase(op.rowId)
+            val envelope = op.envelopeJson?.let { TaskJsonMerge.json.decodeFromString<PushRecordDto>(it) }
+            val same = base?.standardConfirmed == true && base.projectionError == null && envelope != null &&
+                base.serverRevision == envelope.version && base.deleted == envelope.deleted &&
+                base.rawJson?.let { TaskJsonMerge.json.parseToJsonElement(it) } == envelope.data
+            if (same) store.dao.convergeAtomic(op.opId)
+            else store.dao.updateDeliveryState(op.opId, OutboxEntity.STATE_REVIEW,
+                "Delivery uncertain and remote state missing or changed; explicit review required, never replayed")
         }
     }
 }

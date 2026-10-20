@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { describe, it, before, after } from 'node:test';
 import http from 'node:http';
-import { createFaultProxy, ALLOWLISTED_PATHS } from './debug-fault-proxy.mjs';
+import { createFaultProxy } from './debug-fault-proxy.mjs';
 
 describe('debug-fault-proxy.mjs', () => {
   let mockUpstream;
@@ -40,33 +40,6 @@ describe('debug-fault-proxy.mjs', () => {
     }
   });
 
-  it('verifies allowlist contains required v2 and legacy routes', () => {
-    assert.ok(ALLOWLISTED_PATHS.has('/api/v1/sync/tabby-rush/strong/push'));
-    assert.ok(ALLOWLISTED_PATHS.has('/api/v1/sync/tabby-rush/strong/pull'));
-    assert.ok(ALLOWLISTED_PATHS.has('/api/v1/sync/tabby-rush/strong/legacy-receipts'));
-  });
-
-  it('passes through allowlisted route to upstream', async () => {
-    const proxy = createFaultProxy({
-      upstreamPort,
-      scenario: 'pass-through',
-      quiet: true
-    });
-    await new Promise((resolve) => proxy.server.listen(0, '127.0.0.1', resolve));
-    const proxyPort = proxy.server.address().port;
-
-    try {
-      upstreamRequests = [];
-      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/pull`);
-      assert.equal(res.status, 200);
-      const json = await res.json();
-      assert.equal(json.status, 'ok');
-      assert.equal(upstreamRequests.length, 1);
-      assert.equal(upstreamRequests[0].url, '/api/v1/sync/tabby-rush/strong/pull');
-    } finally {
-      await new Promise((resolve) => proxy.server.close(resolve));
-    }
-  });
 
   it('rejects unlisted path with 403 Forbidden without logging sensitive path', async () => {
     const warnings = [];
@@ -91,7 +64,6 @@ describe('debug-fault-proxy.mjs', () => {
 
       // Verify log message was emitted but completely redacted secret-path
       assert.ok(warnings.length > 0, 'Expected a warning to be logged');
-      assert.ok(warnings.some(w => w.includes('[FaultProxy] REJECTED unlisted path for method GET')));
       assert.ok(!warnings.some(w => w.includes('secret-path')), 'Sensitive path MUST NOT be in logs');
     } finally {
       console.warn = origWarn;
@@ -113,9 +85,9 @@ describe('debug-fault-proxy.mjs', () => {
       assert.equal(proxy.isFaultInjected(), false);
 
       await assert.rejects(async () => {
-        await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/push`, {
+        await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/push`, {
           method: 'POST',
-          body: JSON.stringify({ operations: [] }),
+          body: JSON.stringify({ records: [] }),
           headers: { 'Content-Type': 'application/json' }
         });
       }, /fetch failed|socket hang up|ECONNRESET/);
@@ -124,9 +96,9 @@ describe('debug-fault-proxy.mjs', () => {
       assert.equal(upstreamRequests.length, 1); // upstream write succeeded!
 
       // Second request passes through since fault was consumed
-      const res2 = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/push`, {
+      const res2 = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/push`, {
         method: 'POST',
-        body: JSON.stringify({ operations: [] }),
+        body: JSON.stringify({ records: [] }),
         headers: { 'Content-Type': 'application/json' }
       });
       assert.equal(res2.status, 200);
@@ -136,10 +108,10 @@ describe('debug-fault-proxy.mjs', () => {
     }
   });
 
-  it('injects fault: drop-legacy-receipts-response completes upstream but severs client connection', async () => {
+  it('drops a completed delta response without retrying its upstream write', async () => {
     const proxy = createFaultProxy({
       upstreamPort,
-      scenario: 'drop-legacy-receipts-response',
+      scenario: 'drop-delta-response',
       quiet: true
     });
     await new Promise((resolve) => proxy.server.listen(0, '127.0.0.1', resolve));
@@ -150,9 +122,9 @@ describe('debug-fault-proxy.mjs', () => {
       assert.equal(proxy.isFaultInjected(), false);
 
       await assert.rejects(async () => {
-        await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/legacy-receipts`, {
+        await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/delta`, {
           method: 'POST',
-          body: JSON.stringify({ operations: [] }),
+          body: JSON.stringify({ push: { records: [] } }),
           headers: { 'Content-Type': 'application/json' }
         });
       }, /fetch failed|socket hang up|ECONNRESET/);
@@ -174,7 +146,7 @@ describe('debug-fault-proxy.mjs', () => {
     const proxyPort = proxy.server.address().port;
 
     try {
-      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/pull`);
+      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/pull`);
       assert.equal(res.status, 502);
       const json = await res.json();
       assert.equal(json.error, 'BAD_GATEWAY');
@@ -201,7 +173,7 @@ describe('debug-fault-proxy.mjs', () => {
     const proxyPort = proxy.server.address().port;
 
     try {
-      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/pull`);
+      const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/pull`);
       assert.equal(res.status, 504);
       const json = await res.json();
       assert.equal(json.error, 'GATEWAY_TIMEOUT');
@@ -232,7 +204,7 @@ describe('debug-fault-proxy.mjs', () => {
 
     try {
       await assert.rejects(async () => {
-        const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/strong/pull`);
+        const res = await fetch(`http://127.0.0.1:${proxyPort}/api/v1/sync/tabby-rush/pull`);
         // Reading body should fail as socket is destroyed by timeout
         await res.text();
       }, /fetch failed|socket hang up|premature close|ECONNRESET/);

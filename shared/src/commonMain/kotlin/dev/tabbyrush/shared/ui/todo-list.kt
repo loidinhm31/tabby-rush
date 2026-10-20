@@ -64,7 +64,6 @@ fun TodoList(
     nowEpochMs: Long = 0L,
     hierarchicalItems: List<HierarchicalTodoItem> = emptyList(),
     deleteCandidateChildCount: Int = 0,
-    isAccountV3: Boolean = false,
     unresolvedChildren: List<Todo> = emptyList()
 ) {
     val displayItems = remember(items, filter, hierarchicalItems) {
@@ -136,7 +135,7 @@ fun TodoList(
                             onToggle = { onAction(TodoAction.ToggleCompleted(item.todo)) },
                             onEdit = { onAction(TodoAction.OpenEdit(item.todo)) },
                             onDelete = { onAction(TodoAction.RequestDelete(item.todo)) },
-                            onAddSubtask = if (isAccountV3 && item.depth == 0) {
+                            onAddSubtask = if (item.depth == 0) {
                                 { onAction(TodoAction.OpenCreate(parentTaskId = item.todo.id, parentTitle = item.todo.title)) }
                             } else null,
                             nowEpochMs = nowEpochMs

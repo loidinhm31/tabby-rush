@@ -9,6 +9,14 @@ import kotlin.test.assertTrue
 class AccountKeyTest {
 
     @Test
+    fun testExistingFramedIdentityBytesRemainStable() {
+        assertEquals("f667291ffdff085abda552a5eecf0be00042d83e6e38a0794b4f269b8f051edc",
+            AccountKey.create("https://hub.example.com", "user-1").value)
+        assertEquals("44a79eca6b566164e36585693fc70947d243748bb85e2bef95a0191d8ef30630",
+            AccountKey.create("https://hub.example.com", "người-dùng").value)
+    }
+
+    @Test
     fun testValidAccountKeyFormat() {
         val key = AccountKey.create("https://hub.example.com", "user-uuid-1234")
         assertEquals(64, key.value.length)

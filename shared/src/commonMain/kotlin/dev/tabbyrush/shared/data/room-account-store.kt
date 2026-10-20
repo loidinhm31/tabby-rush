@@ -2,15 +2,14 @@ package dev.tabbyrush.shared.data
 
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.AccountStore
-import dev.tabbyrush.shared.contract.StrictOperationKind
-import dev.tabbyrush.shared.contract.StrictSyncContract
-import dev.tabbyrush.shared.contract.StrictSyncDigest
-import dev.tabbyrush.shared.contract.StrictTodoData
+import dev.tabbyrush.shared.contract.TaskOperationKind
+import dev.tabbyrush.shared.contract.TaskDataContract
+import dev.tabbyrush.shared.sync.TaskJsonMerge
+import dev.tabbyrush.shared.sync.PushRecordDto
+import dev.tabbyrush.shared.sync.PullRecordDto
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.ReminderRule
-import dev.tabbyrush.shared.contract.toStrictV2TodoData
-import dev.tabbyrush.shared.contract.toStrictV3TodoData
 import dev.tabbyrush.shared.contract.PersistedScheduleProjector
 import dev.tabbyrush.shared.contract.PersistedTaskSchedule
 import dev.tabbyrush.shared.sync.ReminderDeliveryGate
@@ -39,8 +38,7 @@ class RoomAccountStore(
     val userId: String,
     val database: TabbyRushDatabase? = null,
     val appId: String = "tabby-rush",
-    daoOverride: TabbyRushDao? = null,
-    val defaultContractVersion: String = OutboxEntity.CONTRACT_VERSION_V1
+    daoOverride: TabbyRushDao? = null
 ) : AccountStore {
 
     val dao: TabbyRushDao = daoOverride ?: requireNotNull(database) {
@@ -114,8 +112,8 @@ class RoomAccountStore(
                 ops.isNotEmpty() &&
                 ops.all {
                     it.deliveryState == OutboxEntity.STATE_PENDING &&
-                            it.transitionCheckpoint == null &&
-                            it.kind == StrictOperationKind.CREATE.wireName
+                            it.envelopeJson == null && it.legacyEvidenceId == null && it.dispatchHistory == "NEVER_DISPATCHED" &&
+                            it.kind == TaskOperationKind.CREATE.wireName
                 }
     }
 
@@ -134,10 +132,11 @@ class RoomAccountStore(
     ): Todo? {
         val isDeletedLocally = when {
             draft?.isDeleted == true -> true
-            latestOp != null && latestOp.kind == StrictOperationKind.DELETE.wireName -> true
+            latestOp != null && latestOp.kind == TaskOperationKind.DELETE.wireName -> true
             draft == null && latestOp == null && base?.deleted == true -> true
             else -> false
         }
+        if (base?.projectionError != null && !base.deleted && draft == null && latestOp == null) return null
         if (draft == null && latestOp == null && base == null) {
             return null
         }
@@ -234,7 +233,9 @@ class RoomAccountStore(
     }
 
     override suspend fun loadTodos(): List<Todo> = mutex.withLock {
-        loadTodosLocked(includeDeleted = false)
+        val snapshot = loadTodosLocked(includeDeleted = true)
+        val deletedIds = snapshot.filter { it.isDeleted }.mapTo(mutableSetOf()) { it.id }
+        snapshot.filter { !it.isDeleted && it.parentTaskId !in deletedIds }
     }
 
     suspend fun loadAllTodos(includeDeleted: Boolean = true): List<Todo> = mutex.withLock {
@@ -243,34 +244,23 @@ class RoomAccountStore(
 
     /**
      * Saves a todo locally with atomic draft and outbox persistence before returning success.
-     * Enforces tombstone non-mutation, account contract version guard, and semantic scheduleToken rotation.
+     * Enforces deleted identity suppression, hierarchy invariants, and semantic scheduleToken rotation.
      */
-    private suspend fun saveTodoLocallyLocked(todo: Todo) {
+    private suspend fun saveTodoLocallyLocked(todo: Todo, copiedSource: Pair<String, Long>? = null) {
 
         val existingBase = dao.getServerBase(todo.id)
         if (existingBase != null && existingBase.deleted) {
-            throw IllegalStateException("Cannot mutate permanently deleted tombstone with rowId: ${todo.id}")
+            throw IllegalStateException("Cannot mutate a deleted or missing identity with rowId: ${todo.id}")
         }
 
         val meta = getOrCreateMeta()
-        val isReadyV3 = meta.syncStatus == "ready-v3" || meta.syncStatus == "READY_V3" || defaultContractVersion == OutboxEntity.CONTRACT_VERSION_V3
-        val isReadyV2 = meta.syncStatus == "ready-v2" || meta.syncStatus == "READY_V2" || isReadyV3 ||
-                meta.syncStatus.startsWith("TRANSITION:") || defaultContractVersion == OutboxEntity.CONTRACT_VERSION_V2
-        val opContractVersion = when {
-            isReadyV3 -> OutboxEntity.CONTRACT_VERSION_V3
-            isReadyV2 -> OutboxEntity.CONTRACT_VERSION_V2
-            else -> defaultContractVersion
-        }
-        if (opContractVersion == OutboxEntity.CONTRACT_VERSION_V1 && todo.deadline != null) {
-            throw IllegalArgumentException("Task deadlines and reminders require strict-v2 account contract")
-        }
 
-        val nextRev = meta.localRevisionCounter + 1L
+        val nextRev = nextRevision(meta.localRevisionCounter)
         val updatedMeta = meta.copy(localRevisionCounter = nextRev)
-        val activeEpoch = meta.activeEpoch ?: ""
         val existingDraft = dao.getDraft(todo.id)
         val existingOps = dao.getOutboxByRowId(todo.id)
         val latestExistingOp = existingOps.lastOrNull()
+        val precedingTodo = loadTodoLocked(todo.id)
 
         val existingParentTaskId = when {
             existingDraft != null -> existingDraft.parentTaskId
@@ -289,9 +279,6 @@ class RoomAccountStore(
         }
 
         if (todo.parentTaskId != null) {
-            if (!isReadyV3) {
-                throw IllegalArgumentException("Task parent-child relationships require strict-v3 account contract")
-            }
             val parentTodo = loadTodoLocked(todo.parentTaskId)
             requireNotNull(parentTodo) { "Parent task ${todo.parentTaskId} not found" }
             require(parentTodo.parentTaskId == null) { "Parent task ${todo.parentTaskId} cannot be a child (max 2 levels)" }
@@ -332,128 +319,22 @@ class RoomAccountStore(
         // Coalescing policy: only never-dispatched newly submitted pending ops (not historical/migrated)
         val pendingOp = existingOps.lastOrNull { it.deliveryState == OutboxEntity.STATE_PENDING }
         val canCoalesce = pendingOp != null &&
-                pendingOp.transitionCheckpoint == null &&
+                pendingOp.envelopeJson == null && pendingOp.legacyEvidenceId == null && pendingOp.dispatchHistory == "NEVER_DISPATCHED" &&
                 pendingOp.deliveryState == OutboxEntity.STATE_PENDING &&
-                pendingOp.kind != StrictOperationKind.DELETE.wireName
+                pendingOp.kind != TaskOperationKind.DELETE.wireName
 
-        val kind: StrictOperationKind
-        val expectedRev: Long
-        val opId: String
+        val kind = if (existingBase == null && (existingOps.isEmpty() || (canCoalesce && pendingOp?.kind == "create"))) TaskOperationKind.CREATE else TaskOperationKind.UPDATE
+        val opId = if (canCoalesce) requireNotNull(pendingOp).opId else generateUuid()
 
-        if (canCoalesce) {
-            val op = requireNotNull(pendingOp)
-            opId = op.opId
-            kind = StrictOperationKind.fromWireName(op.kind) ?: StrictOperationKind.UPDATE
-            expectedRev = op.expectedRevision
-        } else {
-            opId = generateUuid()
-            if (existingBase == null || existingBase.serverRevision == 0L || existingBase.deleted) {
-                kind = StrictOperationKind.CREATE
-                expectedRev = 0L
-            } else {
-                kind = StrictOperationKind.UPDATE
-                expectedRev = existingBase.serverRevision
-            }
-        }
-
-        // Derive intent mask
-        val intentMask: String = if (kind == StrictOperationKind.CREATE) {
-            val parts = mutableListOf(OutboxEntity.INTENT_TITLE, OutboxEntity.INTENT_COMPLETED)
-            if (validatedTodo.deadline != null) {
-                parts.add(OutboxEntity.INTENT_DEADLINE)
-                if (validatedTodo.reminderRule.enabled) {
-                    parts.add(OutboxEntity.INTENT_REMINDER)
-                }
-            }
-            if (validatedTodo.parentTaskId != null) {
-                parts.add(OutboxEntity.INTENT_PARENT)
-            }
-            if (canCoalesce && pendingOp?.intentMask?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true) {
-                parts.add(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION)
-            }
-            parts.joinToString("|")
-        } else {
-            val masks = mutableListOf<String>()
-            if (existingBase == null || existingBase.title != validatedTodo.title) {
-                masks.add(OutboxEntity.INTENT_TITLE)
-            }
-            if (existingBase == null || existingBase.completed != validatedTodo.completed) {
-                masks.add(OutboxEntity.INTENT_COMPLETED)
-            }
-            val deadlineChanged = existingBase == null ||
-                    existingBase.deadlineDate != validatedTodo.deadline?.date ||
-                    existingBase.deadlineTime != validatedTodo.deadline?.time ||
-                    existingBase.deadlineZone != validatedTodo.deadline?.zone ||
-                    existingBase.deadlineOffsetSeconds != validatedTodo.deadline?.offsetSeconds
-            if (deadlineChanged && (validatedTodo.deadline != null || existingBase?.deadlineDate != null)) {
-                masks.add(OutboxEntity.INTENT_DEADLINE)
-            }
-            val reminderChanged = existingBase == null ||
-                    existingBase.reminderEnabled != validatedTodo.reminderRule.enabled ||
-                    existingBase.reminderLeadMinutes != validatedTodo.reminderRule.leadMinutes ||
-                    existingBase.reminderIntervalMinutes != validatedTodo.reminderRule.intervalMinutes ||
-                    existingBase.reminderCount != validatedTodo.reminderRule.count
-            if (reminderChanged && (validatedTodo.reminderRule.enabled || existingBase?.reminderEnabled == true)) {
-                masks.add(OutboxEntity.INTENT_REMINDER)
-            }
-            if (existingBase == null || existingBase.parentTaskId != validatedTodo.parentTaskId) {
-                masks.add(OutboxEntity.INTENT_PARENT)
-            }
-            if (canCoalesce && pendingOp?.intentMask?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true) {
-                masks.add(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION)
-            }
-            if (masks.isEmpty()) OutboxEntity.INTENT_TITLE else masks.joinToString("|")
-        }
-        // Compute digest using version-appropriate algorithm
-        val digest = when (opContractVersion) {
-            OutboxEntity.CONTRACT_VERSION_V3 -> {
-                dev.tabbyrush.shared.contract.StrictSyncV3Digest.computeDigest(
-                    domain = dev.tabbyrush.shared.contract.StrictSyncV3Contract.PROTOCOL_VERSION,
-                    appId = appId,
-                    userId = userId,
-                    epoch = activeEpoch,
-                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                    rowId = validatedTodo.id,
-                    opId = opId,
-                    kind = kind,
-                    expectedRevision = expectedRev,
-                    data = validatedTodo.toStrictV3TodoData()
-                )
-            }
-            OutboxEntity.CONTRACT_VERSION_V2 -> {
-                dev.tabbyrush.shared.contract.StrictSyncV2Digest.computeDigest(
-                    domain = dev.tabbyrush.shared.contract.StrictSyncV2Contract.PROTOCOL_VERSION,
-                    appId = appId,
-                    userId = userId,
-                    epoch = activeEpoch,
-                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                    rowId = validatedTodo.id,
-                    opId = opId,
-                    kind = kind,
-                    expectedRevision = expectedRev,
-                    data = validatedTodo.toStrictV2TodoData()
-                )
-            }
-            else -> {
-                StrictSyncDigest.computeDigest(
-                    domain = StrictSyncContract.PROTOCOL_VERSION,
-                    appId = appId,
-                    userId = userId,
-                    epoch = activeEpoch,
-                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                    rowId = validatedTodo.id,
-                    opId = opId,
-                    kind = kind,
-                    expectedRevision = expectedRev,
-                    data = StrictTodoData(
-                        id = validatedTodo.id,
-                        title = validatedTodo.title,
-                        completed = validatedTodo.completed,
-                        createdAt = validatedTodo.createdAt
-                    )
-                )
-            }
-        }
+        val masks = linkedSetOf<String>()
+        if (canCoalesce) masks.addAll(requireNotNull(pendingOp?.intentMask).split('|'))
+        if (kind == TaskOperationKind.CREATE || precedingTodo?.title != validatedTodo.title) masks.add(OutboxEntity.INTENT_TITLE)
+        if (kind == TaskOperationKind.CREATE || precedingTodo?.completed != validatedTodo.completed) masks.add(OutboxEntity.INTENT_COMPLETED)
+        if (kind == TaskOperationKind.CREATE || precedingTodo?.deadline != validatedTodo.deadline) masks.add(OutboxEntity.INTENT_DEADLINE)
+        if (kind == TaskOperationKind.CREATE || precedingTodo?.reminderRule != validatedTodo.reminderRule) masks.add(OutboxEntity.INTENT_REMINDER)
+        if (kind == TaskOperationKind.CREATE || precedingTodo?.parentTaskId != validatedTodo.parentTaskId) masks.add(OutboxEntity.INTENT_PARENT)
+        if (masks.isEmpty()) return
+        val intentMask = masks.joinToString("|")
 
         val draftEntity = EditorDraftEntity(
             rowId = validatedTodo.id,
@@ -479,15 +360,12 @@ class RoomAccountStore(
 
         val outboxEntity = OutboxEntity(
             opId = opId,
-            epoch = activeEpoch,
-            tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+            tableName = TaskDataContract.DEFAULT_TABLE_NAME,
             rowId = validatedTodo.id,
             kind = kind.wireName,
-            expectedRevision = expectedRev,
             title = validatedTodo.title,
             completed = validatedTodo.completed,
             createdAt = validatedTodo.createdAt,
-            digest = digest,
             localRevision = nextRev,
             deliveryState = OutboxEntity.STATE_PENDING,
             createdAtEpochMs = validatedTodo.updatedAt,
@@ -503,17 +381,31 @@ class RoomAccountStore(
             reminderIntervalMinutes = validatedTodo.reminderRule.intervalMinutes,
             reminderCount = validatedTodo.reminderRule.count,
             scheduleToken = finalScheduleToken,
-            contractVersion = opContractVersion,
+            payloadJson = TaskJsonMerge.encode(validatedTodo).toString(),
             intentMask = intentMask,
             parentTaskId = validatedTodo.parentTaskId
         )
 
         // Atomic write (C1)
-        dao.saveTodoAtomic(updatedMeta, draftEntity, outboxEntity)
+        if (copiedSource == null) dao.saveTodoAtomic(updatedMeta, draftEntity, outboxEntity)
+        else dao.copyAsNewAtomic(updatedMeta, draftEntity, outboxEntity, copiedSource.first, copiedSource.second)
     }
 
     override suspend fun saveTodoLocally(todo: Todo): Unit = withMutationLock {
         saveTodoLocallyLocked(todo)
+    }
+
+    /** Uses the same latest draft/outbox projection as conflict presentation, under the mutation lock. */
+    suspend fun copyLatestConflictAsNew(rowId: String): Unit = withMutationLock {
+        val ops = dao.getOutboxByRowId(rowId)
+        val head = ops.firstOrNull() ?: return@withMutationLock
+        if (head.deliveryState != OutboxEntity.STATE_CONFLICT && head.deliveryState != OutboxEntity.STATE_REVIEW) return@withMutationLock
+        val latest = loadTodoLocked(rowId, includeDeleted = true) ?: return@withMutationLock
+        val representedRevision = maxOf(ops.maxOf { it.localRevision }, dao.getDraft(rowId)?.localRevision ?: 0L)
+        val now = System.currentTimeMillis()
+        saveTodoLocallyLocked(latest.copy(id = generateUuid(), parentTaskId = null, createdAt = now,
+            updatedAt = now, serverRevision = 0L, isDeleted = false, isPending = false,
+            scheduleToken = if (latest.deadline != null) generateUuid() else null), rowId to representedRevision)
     }
 
     override suspend fun setCompletedLocally(
@@ -546,9 +438,7 @@ class RoomAccountStore(
         rowId: String,
         parentTaskId: String?,
         localRev: Long,
-        existingBase: ServerBaseEntity?,
-        activeEpoch: String,
-        opContractVersion: String
+        existingBase: ServerBaseEntity?
     ): Pair<EditorDraftEntity, OutboxEntity> {
         val draftEntity = EditorDraftEntity(
             rowId = rowId,
@@ -561,68 +451,19 @@ class RoomAccountStore(
         )
 
         val opId = generateUuid()
-        val expectedRev = existingBase?.serverRevision ?: 0L
-        val kind = StrictOperationKind.DELETE
-        val digest = when (opContractVersion) {
-            OutboxEntity.CONTRACT_VERSION_V3 -> {
-                dev.tabbyrush.shared.contract.StrictSyncV3Digest.computeDigest(
-                    domain = dev.tabbyrush.shared.contract.StrictSyncV3Contract.PROTOCOL_VERSION,
-                    appId = appId,
-                    userId = userId,
-                    epoch = activeEpoch,
-                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                    rowId = rowId,
-                    opId = opId,
-                    kind = kind,
-                    expectedRevision = expectedRev,
-                    data = null
-                )
-            }
-            OutboxEntity.CONTRACT_VERSION_V2 -> {
-                dev.tabbyrush.shared.contract.StrictSyncV2Digest.computeDigest(
-                    domain = dev.tabbyrush.shared.contract.StrictSyncV2Contract.PROTOCOL_VERSION,
-                    appId = appId,
-                    userId = userId,
-                    epoch = activeEpoch,
-                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                    rowId = rowId,
-                    opId = opId,
-                    kind = kind,
-                    expectedRevision = expectedRev,
-                    data = null
-                )
-            }
-            else -> {
-                StrictSyncDigest.computeDigest(
-                    domain = StrictSyncContract.PROTOCOL_VERSION,
-                    appId = appId,
-                    userId = userId,
-                    epoch = activeEpoch,
-                    tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-                    rowId = rowId,
-                    opId = opId,
-                    kind = kind,
-                    expectedRevision = expectedRev,
-                    data = null
-                )
-            }
-        }
+        val kind = TaskOperationKind.DELETE
 
         val outboxEntity = OutboxEntity(
             opId = opId,
-            epoch = activeEpoch,
-            tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+            tableName = TaskDataContract.DEFAULT_TABLE_NAME,
             rowId = rowId,
             kind = kind.wireName,
-            expectedRevision = expectedRev,
             title = null,
             completed = null,
             createdAt = null,
-            digest = digest,
             localRevision = localRev,
             deliveryState = OutboxEntity.STATE_PENDING,
             createdAtEpochMs = System.currentTimeMillis(),
-            contractVersion = opContractVersion,
             intentMask = OutboxEntity.INTENT_DELETE,
             parentTaskId = parentTaskId
         )
@@ -635,7 +476,6 @@ class RoomAccountStore(
         parentBase: ServerBaseEntity?,
         capturedCompleted: Boolean,
         localRev: Long,
-        activeEpoch: String,
         pendingParentOp: OutboxEntity? = null
     ): Pair<EditorDraftEntity, OutboxEntity> {
         val draftEntity = EditorDraftEntity(
@@ -662,43 +502,13 @@ class RoomAccountStore(
 
         val canCoalesce = pendingParentOp != null &&
                 pendingParentOp.deliveryState == OutboxEntity.STATE_PENDING &&
-                pendingParentOp.transitionCheckpoint == null &&
-                pendingParentOp.kind != StrictOperationKind.DELETE.wireName
+                pendingParentOp.envelopeJson == null && pendingParentOp.legacyEvidenceId == null && pendingParentOp.dispatchHistory == "NEVER_DISPATCHED" &&
+                pendingParentOp.kind != TaskOperationKind.DELETE.wireName
 
-        val opId: String
-        val kind: StrictOperationKind
-        val expectedRev: Long
+        val opId = if (canCoalesce) requireNotNull(pendingParentOp).opId else generateUuid()
+        val kind = if (parentBase == null && pendingParentOp?.kind != "update") TaskOperationKind.CREATE else TaskOperationKind.UPDATE
 
-        if (canCoalesce) {
-            val op = requireNotNull(pendingParentOp)
-            opId = op.opId
-            kind = StrictOperationKind.fromWireName(op.kind) ?: StrictOperationKind.UPDATE
-            expectedRev = op.expectedRevision
-        } else {
-            opId = generateUuid()
-            expectedRev = parentBase?.serverRevision ?: 0L
-            kind = if (parentBase == null || parentBase.serverRevision == 0L || parentBase.deleted) {
-                StrictOperationKind.CREATE
-            } else {
-                StrictOperationKind.UPDATE
-            }
-        }
-
-        val v3Data = parent.copy(completed = capturedCompleted, parentTaskId = null).toStrictV3TodoData()
-        val digest = dev.tabbyrush.shared.contract.StrictSyncV3Digest.computeDigest(
-            domain = dev.tabbyrush.shared.contract.StrictSyncV3Contract.PROTOCOL_VERSION,
-            appId = appId,
-            userId = userId,
-            epoch = activeEpoch,
-            tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
-            rowId = parent.id,
-            opId = opId,
-            kind = kind,
-            expectedRevision = expectedRev,
-            data = v3Data
-        )
-
-        val intentMask = if (kind == StrictOperationKind.CREATE) {
+        val intentMask = if (kind == TaskOperationKind.CREATE) {
             val parts = mutableListOf(OutboxEntity.INTENT_TITLE, OutboxEntity.INTENT_COMPLETED)
             if (parent.deadline != null) {
                 parts.add(OutboxEntity.INTENT_DEADLINE)
@@ -725,15 +535,12 @@ class RoomAccountStore(
 
         val outboxEntity = OutboxEntity(
             opId = opId,
-            epoch = activeEpoch,
-            tableName = StrictSyncContract.DEFAULT_TABLE_NAME,
+            tableName = TaskDataContract.DEFAULT_TABLE_NAME,
             rowId = parent.id,
             kind = kind.wireName,
-            expectedRevision = expectedRev,
             title = parent.title,
             completed = capturedCompleted,
             createdAt = parent.createdAt,
-            digest = digest,
             localRevision = localRev,
             deliveryState = OutboxEntity.STATE_PENDING,
             createdAtEpochMs = pendingParentOp?.createdAtEpochMs ?: System.currentTimeMillis(),
@@ -749,7 +556,7 @@ class RoomAccountStore(
             reminderIntervalMinutes = parent.reminderRule.intervalMinutes,
             reminderCount = parent.reminderRule.count,
             scheduleToken = parent.scheduleToken,
-            contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+            payloadJson = TaskJsonMerge.encode(parent.copy(completed = capturedCompleted, parentTaskId = null)).toString(),
             intentMask = intentMask,
             parentTaskId = null
         )
@@ -793,23 +600,15 @@ class RoomAccountStore(
 
             val meta = getOrCreateMeta()
             var currentRev = meta.localRevisionCounter
-            val activeEpoch = meta.activeEpoch ?: ""
-            val isReadyV3 = meta.syncStatus == "ready-v3" || meta.syncStatus == "READY_V3" || defaultContractVersion == OutboxEntity.CONTRACT_VERSION_V3
-            val isReadyV2 = meta.syncStatus == "ready-v2" || meta.syncStatus == "READY_V2" || defaultContractVersion == OutboxEntity.CONTRACT_VERSION_V2
-            val opContractVersion = when {
-                isReadyV3 -> OutboxEntity.CONTRACT_VERSION_V3
-                isReadyV2 -> OutboxEntity.CONTRACT_VERSION_V2
-                else -> defaultContractVersion
-            }
 
             val drafts = mutableListOf<EditorDraftEntity>()
             val outboxes = mutableListOf<OutboxEntity>()
             val cancelledChildRowIds = mutableListOf<String>()
 
             // Parent delete
-            currentRev += 1L
+            currentRev = nextRevision(currentRev)
             val parentBase = dao.getServerBase(id)
-            val (pDraft, pOutbox) = buildDeleteEntities(id, null, currentRev, parentBase, activeEpoch, opContractVersion)
+            val (pDraft, pOutbox) = buildDeleteEntities(id, null, currentRev, parentBase)
             drafts.add(pDraft)
             outboxes.add(pOutbox)
 
@@ -821,8 +620,8 @@ class RoomAccountStore(
                 if (isProvablyUnsentLeaf) {
                     cancelledChildRowIds.add(child.id)
                 } else {
-                    currentRev += 1L
-                    val (cDraft, cOutbox) = buildDeleteEntities(child.id, id, currentRev, childBase, activeEpoch, opContractVersion)
+                    currentRev = nextRevision(currentRev)
+                    val (cDraft, cOutbox) = buildDeleteEntities(child.id, id, currentRev, childBase)
                     drafts.add(cDraft)
                     outboxes.add(cOutbox)
                 }
@@ -846,7 +645,6 @@ class RoomAccountStore(
 
                     val meta = getOrCreateMeta()
                     var currentRev = meta.localRevisionCounter
-                    val activeEpoch = meta.activeEpoch ?: ""
                     val childBase = dao.getServerBase(id)
                     val parentBase = dao.getServerBase(parentId)
 
@@ -856,9 +654,9 @@ class RoomAccountStore(
                     val (childDraft, childOutbox) = if (isChildProvablyUnsent) {
                         Pair(null, null)
                     } else {
-                        currentRev += 1L
+                        currentRev = nextRevision(currentRev)
                         buildDeleteEntities(
-                            id, parentId, currentRev, childBase, activeEpoch, OutboxEntity.CONTRACT_VERSION_V3
+                            id, parentId, currentRev, childBase
                         )
                     }
 
@@ -866,18 +664,18 @@ class RoomAccountStore(
                     val pendingParentOp = parentOps.lastOrNull { it.deliveryState == OutboxEntity.STATE_PENDING }
                     val canCoalesceParent = pendingParentOp != null &&
                             pendingParentOp.deliveryState == OutboxEntity.STATE_PENDING &&
-                            pendingParentOp.transitionCheckpoint == null &&
-                            pendingParentOp.kind != StrictOperationKind.DELETE.wireName
+                            pendingParentOp.envelopeJson == null && pendingParentOp.legacyEvidenceId == null &&
+                            pendingParentOp.kind != TaskOperationKind.DELETE.wireName
 
                     val parentRev = if (canCoalesceParent) {
                         requireNotNull(pendingParentOp).localRevision
                     } else {
-                        currentRev += 1L
+                        currentRev = nextRevision(currentRev)
                         currentRev
                     }
 
                     val (parentDraft, parentOutbox) = buildPreservationUpdateEntities(
-                        parent, parentBase, precedingEffectiveCompleted, parentRev, activeEpoch, pendingParentOp
+                        parent, parentBase, precedingEffectiveCompleted, parentRev, pendingParentOp
                     )
 
                     val updatedMeta = meta.copy(localRevisionCounter = maxOf(meta.localRevisionCounter, currentRev))
@@ -902,30 +700,16 @@ class RoomAccountStore(
         }
 
         val meta = getOrCreateMeta()
-        val nextRev = meta.localRevisionCounter + 1L
+        val nextRev = nextRevision(meta.localRevisionCounter)
         val updatedMeta = meta.copy(localRevisionCounter = nextRev)
-        val activeEpoch = meta.activeEpoch ?: ""
-        val isReadyV3 = meta.syncStatus == "ready-v3" || meta.syncStatus == "READY_V3" || defaultContractVersion == OutboxEntity.CONTRACT_VERSION_V3
-        val isReadyV2 = meta.syncStatus == "ready-v2" || meta.syncStatus == "READY_V2" || defaultContractVersion == OutboxEntity.CONTRACT_VERSION_V2
-        val opContractVersion = when {
-            isReadyV3 -> OutboxEntity.CONTRACT_VERSION_V3
-            isReadyV2 -> OutboxEntity.CONTRACT_VERSION_V2
-            else -> defaultContractVersion
-        }
 
         val (draftEntity, outboxEntity) = buildDeleteEntities(
-            id, existingParentTaskId, nextRev, existingBase, activeEpoch, opContractVersion
+            id, existingParentTaskId, nextRev, existingBase
         )
 
         dao.deleteTodoAtomic(updatedMeta, draftEntity, outboxEntity)
     }
 
-    /**
-     * Marks an operation as DISPATCHING prior to socket I/O.
-     */
-    override suspend fun markDispatching(opId: String): Unit = mutex.withLock {
-        dao.updateDeliveryState(opId, OutboxEntity.STATE_DISPATCHING)
-    }
 
     /**
      * Reconciles an accepted operation with the server base atomically.
@@ -933,91 +717,18 @@ class RoomAccountStore(
      */
     override suspend fun reconcileAccepted(opId: String, serverRevision: Long): Unit = withMutationLock {
         val op = dao.getOutboxEntry(opId) ?: return@withMutationLock
-        val currentBase = dao.getServerBase(op.rowId)
-
-        val currentDraft = dao.getDraft(op.rowId)
-        val clearDraft = currentDraft != null && currentDraft.localRevision <= op.localRevision
-
-        // Monotonic check: Never regress confirmed server base (W1, W-E)
-        if (currentBase != null && serverRevision < currentBase.serverRevision) {
-            dao.discardRegressiveReconcileAtomic(opId, op.rowId, clearDraft)
-            return@withMutationLock
-        }
-        val isV1Op = op.contractVersion == OutboxEntity.CONTRACT_VERSION_V1
-        val intentMasks = op.intentMask?.split("|")?.toSet() ?: emptySet()
-        val preservesRemoteDeadline = isV1Op || (intentMasks.isNotEmpty() &&
-                !intentMasks.contains(OutboxEntity.INTENT_DEADLINE) &&
-                !intentMasks.contains(OutboxEntity.INTENT_REMINDER))
-
-        val updatedBase = if (op.kind == StrictOperationKind.DELETE.wireName) {
-            ServerBaseEntity(
-                rowId = op.rowId,
-                serverRevision = serverRevision,
-                deleted = true,
-                title = "",
-                completed = false,
-                createdAt = op.createdAt ?: 0L,
-                updatedAt = System.currentTimeMillis(),
-                epoch = op.epoch,
-                deadlineDate = null,
-                deadlineTime = null,
-                deadlineZone = null,
-                deadlineOffsetSeconds = null,
-                reminderAnchorTime = null,
-                deadlineAnchorEpochMs = null,
-                deadlineOverdueEpochMs = null,
-                reminderEnabled = false,
-                reminderLeadMinutes = 0L,
-                reminderIntervalMinutes = null,
-                reminderCount = 1L,
-                scheduleToken = null,
-                parentTaskId = op.parentTaskId ?: currentBase?.parentTaskId
-            )
-        } else {
-            val resolvedTitle = if (intentMasks.isNotEmpty() && !intentMasks.contains(OutboxEntity.INTENT_TITLE) && currentBase != null) {
-                currentBase.title
-            } else {
-                op.title ?: currentBase?.title ?: ""
+        if (op.deliveryState != OutboxEntity.STATE_DISPATCHING || op.version != serverRevision || op.envelopeJson == null) return@withMutationLock
+        val envelope = TaskJsonMerge.json.decodeFromString<PushRecordDto>(op.envelopeJson)
+        if (envelope.version != serverRevision || envelope.rowId != op.rowId || envelope.tableName != op.tableName) return@withMutationLock
+        val current = dao.getServerBase(op.rowId)
+        val acceptedBase = TaskJsonMerge.project(PullRecordDto(envelope.tableName, envelope.rowId, envelope.data, envelope.version,
+            current?.syncedAt ?: "1970-01-01T00:00:00Z", envelope.deleted)).let { projected ->
+                if (envelope.deleted) projected.copy(parentTaskId = current?.parentTaskId ?: op.parentTaskId) else projected
             }
-
-            val resolvedCompleted = if (intentMasks.isNotEmpty() && !intentMasks.contains(OutboxEntity.INTENT_COMPLETED) && currentBase != null) {
-                currentBase.completed
-            } else {
-                op.completed ?: currentBase?.completed ?: false
-            }
-
-            val useBaseDeadline = preservesRemoteDeadline && currentBase != null
-            ServerBaseEntity(
-                rowId = op.rowId,
-                serverRevision = serverRevision,
-                deleted = false,
-                title = resolvedTitle,
-                completed = resolvedCompleted,
-                createdAt = op.createdAt ?: currentBase?.createdAt ?: System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis(),
-                epoch = op.epoch,
-                deadlineDate = if (useBaseDeadline) currentBase.deadlineDate else op.deadlineDate,
-                deadlineTime = if (useBaseDeadline) currentBase.deadlineTime else op.deadlineTime,
-                deadlineZone = if (useBaseDeadline) currentBase.deadlineZone else op.deadlineZone,
-                deadlineOffsetSeconds = if (useBaseDeadline) currentBase.deadlineOffsetSeconds else op.deadlineOffsetSeconds,
-                reminderAnchorTime = if (useBaseDeadline) currentBase.reminderAnchorTime else op.reminderAnchorTime,
-                deadlineAnchorEpochMs = if (useBaseDeadline) currentBase.deadlineAnchorEpochMs else op.deadlineAnchorEpochMs,
-                deadlineOverdueEpochMs = if (useBaseDeadline) currentBase.deadlineOverdueEpochMs else op.deadlineOverdueEpochMs,
-                reminderEnabled = if (useBaseDeadline) currentBase.reminderEnabled else op.reminderEnabled,
-                reminderLeadMinutes = if (useBaseDeadline) currentBase.reminderLeadMinutes else op.reminderLeadMinutes,
-                reminderIntervalMinutes = if (useBaseDeadline) currentBase.reminderIntervalMinutes else op.reminderIntervalMinutes,
-                reminderCount = if (useBaseDeadline) currentBase.reminderCount else op.reminderCount,
-                scheduleToken = if (useBaseDeadline) currentBase.scheduleToken else op.scheduleToken,
-                parentTaskId = op.parentTaskId ?: currentBase?.parentTaskId
-            )
-        }
-
-        // Atomic reconcile (C1)
         dao.reconcileAcceptedAtomic(
-            serverBase = updatedBase,
-            opId = opId,
-            draftRowId = op.rowId,
-            clearDraft = clearDraft
+            serverBase = if (current?.standardConfirmed == true && current.serverRevision > serverRevision) current else acceptedBase,
+            opId = opId, draftRowId = op.rowId,
+            clearDraft = dao.getDraft(op.rowId)?.localRevision == op.localRevision
         )
     }
 
@@ -1028,12 +739,6 @@ class RoomAccountStore(
         dao.recoverInterruptedDispatches()
     }
 
-    suspend fun allocateNextLocalRevision(): Long = mutex.withLock {
-        val meta = getOrCreateMeta()
-        val nextRev = meta.localRevisionCounter + 1L
-        dao.upsertMeta(meta.copy(localRevisionCounter = nextRev))
-        nextRev
-    }
 
     /**
      * Wipes all local database tables in the partition atomically.
@@ -1068,14 +773,6 @@ class RoomAccountStore(
         database?.close()
     }
 
-    suspend fun getActiveEpoch(): String? = mutex.withLock {
-        dao.getMeta()?.activeEpoch
-    }
-
-    suspend fun setActiveEpoch(epoch: String): Unit = mutex.withLock {
-        val meta = getOrCreateMeta()
-        dao.upsertMeta(meta.copy(activeEpoch = epoch))
-    }
 
     private suspend fun getOrCreateMeta(): AccountSyncMetaEntity {
         return dao.getMeta() ?: AccountSyncMetaEntity(id = AccountSyncMetaEntity.SINGLETON_ID).also {
@@ -1083,14 +780,9 @@ class RoomAccountStore(
         }
     }
 
-    suspend fun isAccountV2(): Boolean = mutex.withLock {
-        val s = getOrCreateMeta().syncStatus
-        s == "ready-v2" || s == "READY_V2" || s == "ready-v3" || s == "READY_V3" || s.startsWith("TRANSITION:")
-    }
-
-    suspend fun isAccountV3(): Boolean = mutex.withLock {
-        val s = getOrCreateMeta().syncStatus
-        s == "ready-v3" || s == "READY_V3" || defaultContractVersion == OutboxEntity.CONTRACT_VERSION_V3
+    private fun nextRevision(current: Long): Long {
+        check(current < dev.tabbyrush.shared.sync.MAX_EXACT_VERSION) { "Local revision exhausted; work retained" }
+        return current + 1L
     }
 
     private fun generateUuid(): String {
@@ -1137,7 +829,7 @@ class RoomAccountStore(
                 reminderCount = draft.reminderCount,
                 scheduleToken = draft.scheduleToken
             )
-            op != null && op.contractVersion != OutboxEntity.CONTRACT_VERSION_V1 -> TemporalProjection(
+            op != null -> TemporalProjection(
                 deadlineDate = op.deadlineDate,
                 deadlineTime = op.deadlineTime,
                 deadlineZone = op.deadlineZone,

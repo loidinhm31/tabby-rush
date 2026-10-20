@@ -63,12 +63,7 @@ fun SyncFeedback(
             TabbyRushThemeTokens.customColors.coralSurface
         )
         SyncStatus.PAUSED_PROTOCOL -> Triple(
-            "Protocol update required",
-            MaterialTheme.colorScheme.error,
-            TabbyRushThemeTokens.customColors.coralSurface
-        )
-        SyncStatus.RESET_REQUIRED -> Triple(
-            "Epoch reset required",
+            "Sync unavailable; local work retained",
             MaterialTheme.colorScheme.error,
             TabbyRushThemeTokens.customColors.coralSurface
         )

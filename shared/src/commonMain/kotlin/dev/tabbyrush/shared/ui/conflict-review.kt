@@ -74,12 +74,12 @@ fun ConflictReview(
             Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
 
             Text(
-                text = "A change was made on another client while you had pending offline edits. Review both versions and choose how to proceed.",
+                text = "Task rows synchronize independently, so a group cleanup can be partial or conflicted. Local work is retained. Refresh and review before choosing how to proceed.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            if (conflict.isUnknownSuperseded) {
+            if (conflict.requiresDeliveryReview) {
                 Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
                 Card(
                     colors = CardDefaults.cardColors(
@@ -90,7 +90,7 @@ fun ConflictReview(
                         .border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small)
                 ) {
                     Text(
-                        text = "Warning: This operation was in-flight and may have already been accepted on the server before being superseded by another client. Reapplying or copying as new may duplicate prior edits.",
+                        text = "Delivery history cannot establish whether these edits reached the server. Reapplying or copying as new may duplicate earlier edits; nothing is replayed automatically.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
@@ -200,7 +200,7 @@ fun ConflictReview(
                         shape = MaterialTheme.shapes.small
                     ) {
                         Text(
-                            text = "Overwrite Server with My Version",
+                            text = "Reapply My Changed Fields",
                             style = MaterialTheme.typography.labelLarge,
                             color = TabbyRushThemeTokens.customColors.primaryDeep
                         )

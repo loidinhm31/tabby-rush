@@ -17,7 +17,6 @@ data class ScanStagingEntity(
     val title: String,
     val completed: Boolean,
     val createdAt: Long,
-    val epoch: String,
     val deadlineDate: String? = null,
     val deadlineTime: String? = null,
     val deadlineZone: String? = null,
@@ -30,5 +29,9 @@ data class ScanStagingEntity(
     val reminderIntervalMinutes: Long? = null,
     val reminderCount: Long = 1L,
     val scheduleToken: String? = null,
-    val parentTaskId: String? = null
+    val parentTaskId: String? = null,
+    val rawJson: String? = null,
+    val syncedAt: String? = null,
+    val scanGeneration: Long = 0L,
+    val projectionError: String? = null
 )

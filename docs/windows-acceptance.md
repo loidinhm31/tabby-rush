@@ -2,7 +2,7 @@
 
 **Document Version**: 1.3.0
 **Phase**: Sticky Task Surfaces Phase 07 documentation and automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
-**Status**: Desktop sticky-window/tray implementation and automated tests delivered; native sticky-surface hardware acceptance remains pending Gate G2. The native WinRT/COM toast bridge is an unimplemented candidate stub; installed MSI acceptance and Gate G7 production cutover remain blocked.
+**Status**: Parent reports a standalone Windows runtime smoke passed against disposable loopback services. Interactive native UI acceptance remains unpassed; connected-Android acceptance was not run. Windows sticky-surface, installed-MSI, and other native acceptance remain distinct holds; release remains blocked and production migration unauthorized.
 **Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
 
 ---
@@ -41,7 +41,7 @@ Phase 10 implementation scope includes the desktop application module (`:desktop
 
 ## 2. Verification Evidence Matrix
 
-Status cells are transcribed from `docs/evidence/windows-test-summary.md`; commands in the matrix are suggested verification methods, not recorded invocations. The report records 121/121 combined desktop and shared JVM tests passing but does not record exact invocations or dependency-verification mode; no clean-user MSI installation is recorded.
+The following matrix is a historical evidence snapshot transcribed from `docs/evidence/windows-test-summary.md`; its old counts and statuses are not current acceptance results. The 149-unmatched-checksum hold shown below is a historical finding. Parent-reported validation of 50 official dependency checksum entries is separate evidence; the counts are not directly comparable, so do not infer current status from this old matrix. See the [current verification report](../plans/261020-1717-standard-sync-schema-version/reports/verification-final.md) for the parent-reported current evidence.
 
 | Gate | Requirement | Suggested Verification / Reported Result | Status |
 |---|---|---|---|

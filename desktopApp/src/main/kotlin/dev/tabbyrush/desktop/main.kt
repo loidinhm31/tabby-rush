@@ -501,11 +501,8 @@ class DesktopController(
     private suspend fun reloadTodos() {
         val r = activeRuntime ?: return
         try {
-            val isV2 = r.store.isAccountV2()
-            val isV3 = r.store.isAccountV3()
             allTodos = r.store.loadTodos()
             applyFilterAndCounts()
-            _uiState.value = _uiState.value.copy(isAccountV2 = isV2, isAccountV3 = isV3)
         } catch (ce: CancellationException) {
             throw ce
         } catch (_: Exception) {}
@@ -602,7 +599,6 @@ class DesktopController(
     private suspend fun openCreate(initialTitle: String, parentTaskId: String? = null, parentTitle: String? = null) {
         val runtime = activeRuntime
         val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
-        val isV2 = runtime?.store?.isAccountV2() ?: true
         val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
         _uiState.value = _uiState.value.copy(
             editor = EditorState(
@@ -618,7 +614,6 @@ class DesktopController(
                 reminderLeadMinutes = settings.defaultReminderLeadMinutes,
                 reminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
                 reminderCount = settings.defaultReminderCount,
-                isAccountV2 = isV2,
                 parentTaskId = parentTaskId,
                 parentTitle = parentTitle
             )
@@ -627,7 +622,6 @@ class DesktopController(
 
     private suspend fun openEdit(todo: Todo) {
         val runtime = activeRuntime
-        val isV2 = runtime?.store?.isAccountV2() ?: true
         val dl = todo.deadline
         val parentTitle = if (todo.parentTaskId != null) allTodos.firstOrNull { it.id == todo.parentTaskId }?.title else null
         val editor = if (dl != null) {
@@ -646,7 +640,6 @@ class DesktopController(
                 reminderIntervalMinutes = todo.reminderRule.intervalMinutes,
                 reminderCount = todo.reminderRule.count,
                 originalScheduleToken = todo.scheduleToken,
-                isAccountV2 = isV2,
                 parentTaskId = todo.parentTaskId,
                 parentTitle = parentTitle
             )
@@ -666,7 +659,6 @@ class DesktopController(
                 reminderIntervalMinutes = 15,
                 reminderCount = 1,
                 originalScheduleToken = null,
-                isAccountV2 = isV2,
                 parentTaskId = todo.parentTaskId,
                 parentTitle = parentTitle
             )
@@ -724,10 +716,6 @@ class DesktopController(
         val deadline: TaskDeadline?
         val rule: ReminderRule
         if (editor.hasDeadline) {
-            if (!editor.isAccountV2) {
-                _uiState.value = _uiState.value.copy(editor = editor.copy(error = "Strict-v2 account upgrade required to save deadlines or reminders."))
-                return
-            }
             when (val dRes = DeadlineCalculatorHelpers.validateAndComputeDeadline(editor)) {
                 is DeadlineValidationResult.Valid -> {
                     deadline = dRes.deadline
@@ -811,7 +799,7 @@ class DesktopController(
 
     private suspend fun inspectAndShowConflict(runtime: DesktopAccountRuntime) {
         val entry = runtime.store.dao.getAllOutbox().firstOrNull {
-            it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED
+            it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW
         } ?: return
         val base = runtime.store.dao.getServerBase(entry.rowId)
         val bDate = base?.deadlineDate
@@ -900,7 +888,7 @@ class DesktopController(
                 rowId = entry.rowId,
                 localTodo = localTodo,
                 remoteTodo = remoteTodo,
-                isUnknownSuperseded = entry.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED,
+                requiresDeliveryReview = entry.deliveryState == OutboxEntity.STATE_REVIEW,
                 isPreservationConflict = isPreservationConflict,
                 isSubtaskConflict = isSubtaskConflict,
                 isParentDeleted = isParentDeleted

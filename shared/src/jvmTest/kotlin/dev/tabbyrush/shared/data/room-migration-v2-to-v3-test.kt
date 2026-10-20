@@ -3,7 +3,7 @@ package dev.tabbyrush.shared.data
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import dev.tabbyrush.shared.contract.AccountKey
-import dev.tabbyrush.shared.contract.StrictOperationKind
+import dev.tabbyrush.shared.contract.TaskOperationKind
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -389,20 +389,21 @@ class RoomMigrationV2ToV3Test {
             assertEquals(3, dao.countOutbox())
             val opPending = dao.getOutboxEntry("op-v2-pending-1")
             assertNotNull(opPending)
-            assertEquals("strict-v2", opPending.contractVersion)
-            assertEquals("digest-v2-p1", opPending.digest)
+            val evidence = dao.getLegacyEvidence().associateBy { it.sourceOpId }
+            assertTrue(evidence.getValue("op-v2-pending-1").originalJson.contains("digest-v2-p1"))
+            assertTrue(evidence.getValue("op-v2-pending-1").originalJson.contains("strict-v2"))
             assertEquals("TITLE|COMPLETED|DEADLINE", opPending.intentMask)
             assertNull(opPending.parentTaskId)
 
             val opUnc = dao.getOutboxEntry("op-v2-unc-1")
             assertNotNull(opUnc)
-            assertEquals(OutboxEntity.STATE_UNCERTAIN, opUnc.deliveryState)
-            assertEquals("QUIESCED", opUnc.transitionCheckpoint)
+            assertEquals(OutboxEntity.STATE_REVIEW, opUnc.deliveryState)
+            assertTrue(evidence.getValue("op-v2-unc-1").originalJson.contains("QUIESCED"))
             assertNull(opUnc.parentTaskId)
 
             val opConf = dao.getOutboxEntry("op-v2-conf-1")
             assertNotNull(opConf)
-            assertEquals(OutboxEntity.STATE_CONFLICT, opConf.deliveryState)
+            assertEquals(OutboxEntity.STATE_REVIEW, opConf.deliveryState)
             assertNull(opConf.parentTaskId)
 
             // Verify ledger & settings preserved
@@ -457,7 +458,7 @@ class RoomMigrationV2ToV3Test {
             assertEquals(1, dao.countOutbox())
             val op = dao.getOutboxEntry("op-v1-1")
             assertNotNull(op)
-            assertEquals("digest-v1-1", op.digest)
+            assertTrue(dao.getLegacyEvidence().single().originalJson.contains("digest-v1-1"))
             assertNull(op.parentTaskId)
         } finally {
             db.close()

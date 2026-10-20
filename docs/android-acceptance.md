@@ -1,15 +1,15 @@
 # Android Composition, Reminder Alarms & Runtime Acceptance Specification
 
-**Document Version**: 1.3.0
-**Phase**: 12 — Coordinated Cutover, Recovery Runbook & Release Documentation
-**Status**: Logic & Native Adapters Implemented & Unit Verified (Physical Connected Device / Emulator & Doze Mode Acceptance Formally Held Pending Gate G2 / Hardware Testbed)
-**Related Documents**: [Project Overview PDR](./project-overview-pdr.md) · [System Architecture](./system-architecture.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Design Guidelines](./design-guidelines.md)
+**Document Version**: 1.4.0
+**Last Updated**: 2026-10-20
+**Status**: Android unit/package and offline evidence are reported; connected-device and interactive UI acceptance were not run. Native acceptance is not passed. Production migration is unauthorized.
+**Related Documents**: [Project Overview PDR](./project-overview-pdr.md) · [System Architecture](./system-architecture.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Design Guidelines](./design-guidelines.md) · [Release Acceptance](./release-acceptance.md)
 
 ---
 
 ## 1. Overview & Architectural Boundaries
 
-Phase 08 delivers the native Android reminder scheduling, private notification delivery, device restoration receivers, and account lifecycle coordination for the `:androidApp` module, building on the shared Room v2 storage, outbox sync coordinator, and shared scheduling ledger from Phases 05–07.
+The Android app integrates platform lifecycle, reminders, notifications, task surfaces, and account coordination with Room v4 local storage and the current standard Hub sync client. It does not use strict-v1/v2/v3 task-sync routes. Historical Android phase evidence below is dated and must not be treated as a fresh run or connected-device acceptance.
 
 ```
                       ┌──────────────────────────────────────────────┐
@@ -211,7 +211,7 @@ Phase 04 updates the native Android Glance launcher widget (`TabbyRushTaskWidget
 
 #### 4.2.1 Historical Phase 07 Automated Verification Evidence
 
-The following are recorded Phase 07 results, not fresh runs performed for this documentation update. The Phase 07 aggregate is 364 Gradle tests, 12 Node security auditor tests, 6 source diagnostics, 18 Hub fixture checks, and 8 strict-v2 rehearsal checks; build outputs are recorded separately.
+The following are historical Phase 07 results from earlier runs (2026-10-20 and prior), not fresh verification for this update. Their counts are snapshots only. The former strict-v2 rehearsal runner referenced below has been removed; its recorded result is not a current executable check.
 
 1. **Android Unit Test Suite (`:androidApp:testDebugUnitTest`)**:
    - Command: `./gradlew.bat :androidApp:testDebugUnitTest --rerun-tasks --dependency-verification=off`
@@ -246,7 +246,7 @@ The following are recorded Phase 07 results, not fresh runs performed for this d
    - Outcome: `BUILD SUCCESSFUL` (99/99 tests passed across 13 classes).
 9. **Cryptographic & Protocol Verification**:
    - `node scripts/hub-live-smoke.mjs --fixture-test`: 18/18 offline smoke-fixture self-checks PASS.
-   - `node scripts/strict-v2-cutover-rehearsal.mjs --self-test`: 8/8 in-process tooling rehearsal checks PASS.
+   - Historical report claim: 8/8 strict-v2 rehearsal checks passed. `strict-v2-cutover-rehearsal.mjs` has been removed; do not run or cite it as current verification.
 10. **Note on Unavailable Tools**:
    - `.omp/evcrate/scripts/validate-docs.cjs` is absent from repo environment and was not executed.
 
@@ -267,9 +267,8 @@ Recorded from QA validation report (`plans/reports/qa-261020-0053-phase-04-andro
      - No deadline inheritance between parent and child.
      - Read-only automatic parent progress and absence of toggle callback.
      - Request code determinism, action parameter serialization, and `SurfaceAccountToken` fence isolation.
-3. **Canonical Strict-v3 Vectors (`strict-v3-vector-runner.mjs`)**:
-   - Command: `node scripts/strict-v3-vector-runner.mjs`
-   - Outcome: **11 / 11 PASSED** (6 valid + 5 rejections; canonical fingerprint verified).
+3. **Historical Strict-v3 Vector Result**:
+   - Prior Phase report recorded 11/11 vector checks. `strict-v3-vector-runner.mjs` has been removed; this result is historical strict-protocol evidence, not current standard-sync verification.
 4. **Android Instrumentation Compilation (`:androidApp:compileDebugAndroidTestKotlin`)**:
    - Command: `JAVA_HOME=... ./gradlew :androidApp:compileDebugAndroidTestKotlin --dependency-verification=off`
    - Outcome: `BUILD SUCCESSFUL` (build succeeded with 47 executed Gradle tasks; instrumented test sources compile clean). Not counted as test assertions.
@@ -278,10 +277,9 @@ Recorded from QA validation report (`plans/reports/qa-261020-0053-phase-04-andro
    - Documentation link validation for this phase was executed via host path `/home/loidinh/.omp/agent/evcrate/scripts/validate-docs.cjs`, verifying 273 internal links (0 broken) and 47 code references.
    - *Overdue Refresh Limitation*: Overdue evaluation captures `nowEpochMs = System.currentTimeMillis()` at composition time without automatic midnight/boundary trigger refresh; periodic/boundary wake is tracked as an acceptance gap for Phase 06.
 ### 4.3 Gate G2 Physical Execution Status & Cutover Integration
-- **Current Position**: Android implementations and automated checks are recorded, including unit tests and debug APK assembly. These do not establish native launcher, shade, or device acceptance.
-- **Formal Hold**: Physical connected device/emulator execution, launcher interaction, Doze behavior, real lock-screen privacy, and reboot restoration remain formally held at Gate G2. The Android evidence PNGs are visual design baselines, not runtime captures.
-- **Phase 04 Technical Acceptance Qualifier**: Native launcher/device execution remains formally held at Gate G2, with execution tracked in the parent/child plan's Phase 06 acceptance gate. Interactive launcher rendering, responsive scaling (120×120 to 320×360dp), 200% font scaling, and TalkBack audio verification on physical hardware/emulator remain deferred to Phase 06.
-- **Phase 07 Record**: Credited 6h / 12h; overall progress 118h / 132h (89.4%). See the [Android sticky-surface evidence summary](./evidence/sticky-surfaces-android-summary.md) and [Phase 07 evidence report](../plans/261016-1409-sticky-task-surfaces/reports/phase-07-acceptance-evidence.md). Phase 08 Linux acceptance and production release gates G3, G6, and G7 remain pending; the 149 unmatched dependency checksums and separate Glance provenance hold remain open. Open Android safety findings (delivery-drain timeout, swallowed widget cleanup errors) remain active.
+- **Current Position**: UI provider approval timed out twice; connected Android device/emulator acceptance was not run. Unit/package and standalone runtime-harness evidence do not establish native launcher, notification shade, accessibility, Doze, reboot, or device acceptance.
+- **Production Boundary**: No live production database migration has been authorized. Any future operator conversion requires separate exact-target approval and its own safety gates.
+- **Historical Gate Notes**: Earlier Phase 07 reports, phase-hour totals, Gate labels, and claims about dependency checksums are dated snapshots. Retain them as history only; they do not establish current acceptance status.
 ---
 
 ## 5. UI Accessibility & Acceptance Checklist

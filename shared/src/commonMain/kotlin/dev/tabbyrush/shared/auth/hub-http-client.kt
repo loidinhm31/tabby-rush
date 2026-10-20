@@ -33,7 +33,7 @@ expect fun createPlatformHttpEngine(): HttpClientEngine
 enum class RouteClassification {
     AUTH_PUBLIC,      // /auth/register, /auth/login, /auth/refresh -> no auth headers
     BEARER_ONLY,      // /auth/me, /apps/access-requests* -> Bearer token only
-    DUAL_AUTH_STRICT  // /sync/{appId}/strong/* -> Bearer token + X-API-Key + X-App-Id
+    DUAL_AUTH_SYNC    // exact /sync/{appId}/{push,pull,delta} paths only
 }
 
 class HubHttpClient(
@@ -138,6 +138,9 @@ class HubHttpClient(
     }
 
     fun classifyRoute(path: String): RouteClassification? {
+        if (path.startsWith("api/v1/sync/")) return null
+        if (path.contains('#') || path.contains('\\') || path.contains("://")) return null
+        if (path.contains('?') && !path.startsWith("/api/v1/apps/${config.appId}/announcements/inbox?")) return null
         val normalizedPath = if (path.startsWith("/")) path else "/$path"
         val pathWithoutQuery = normalizedPath.substringBefore('?')
         val queryString = if (normalizedPath.contains('?')) normalizedPath.substringAfter('?') else ""
@@ -159,10 +162,9 @@ class HubHttpClient(
             "/api/v1/apps/access-requests",
             "/api/v1/apps/access-requests/me" -> RouteClassification.BEARER_ONLY
 
-            "/api/v1/sync/${config.appId}/strong/bootstrap",
-            "/api/v1/sync/${config.appId}/strong/push",
-            "/api/v1/sync/${config.appId}/strong/pull",
-            "/api/v1/sync/${config.appId}/strong/legacy-receipts" -> RouteClassification.DUAL_AUTH_STRICT
+            "/api/v1/sync/${config.appId}/push",
+            "/api/v1/sync/${config.appId}/pull",
+            "/api/v1/sync/${config.appId}/delta" -> RouteClassification.DUAL_AUTH_SYNC
 
             "/api/v1/apps/${config.appId}/announcements/inbox",
             "/api/v1/apps/${config.appId}/announcements/unread",
@@ -205,9 +207,12 @@ class HubHttpClient(
             ?: return ApiResult.Failure(
                 SafeError.ProtocolIncompatible(
                     code = "DISALLOWED_ENDPOINT",
-                    message = "Path '$path' is not in the TabbyRush strict endpoint allowlist"
+                    message = "Path is not in the TabbyRush endpoint allowlist"
                 )
             )
+        if (classification == RouteClassification.DUAL_AUTH_SYNC && method != HttpMethod.Post) {
+            return ApiResult.Failure(SafeError.ProtocolIncompatible("DISALLOWED_METHOD", "Sync requires POST"))
+        }
         if (installProof != null) {
             val normalizedPath = if (path.startsWith("/")) path else "/$path"
             val pathWithoutQuery = normalizedPath.substringBefore('?')
@@ -242,7 +247,7 @@ class HubHttpClient(
                             header(HttpHeaders.Authorization, "Bearer $accessToken")
                         }
                     }
-                    RouteClassification.DUAL_AUTH_STRICT -> {
+                    RouteClassification.DUAL_AUTH_SYNC -> {
                         if (accessToken != null) {
                             header(HttpHeaders.Authorization, "Bearer $accessToken")
                         }
@@ -317,9 +322,10 @@ class HubHttpClient(
                         message = serverMsg ?: "Operation conflict (HTTP 409)"
                     )
                 } else {
-                    SafeError.ResetRequired(
-                        code = "EPOCH_MISMATCH",
-                        message = "Server reported epoch conflict or reset required (HTTP 409)"
+                    SafeError.Conflict(
+                        code = serverCode ?: "SYNC_CONFLICT",
+                        message = "Server rejected this sync attempt; refresh before explicit review",
+                        rowId = ""
                     )
                 }
             }
@@ -330,10 +336,10 @@ class HubHttpClient(
             HttpStatusCode.NotFound -> {
                 val serverMsg = extractErrorMessage(rawBody)
                 val serverCode = extractErrorCode(rawBody)
-                if (path.contains("/strong/")) {
+                if (path.startsWith("/api/v1/sync/")) {
                     SafeError.ProtocolIncompatible(
-                        code = "STRICT_ROUTE_UNAVAILABLE",
-                        message = "Strict strong sync route unavailable on server (HTTP 404)"
+                        code = "SYNC_ROUTE_UNAVAILABLE",
+                        message = "Standard sync route unavailable; offline work retained (HTTP 404)"
                     )
                 } else {
                     SafeError.Validation(

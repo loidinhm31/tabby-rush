@@ -5,7 +5,7 @@ import androidx.room.PrimaryKey
 
 /**
  * ServerBaseEntity stores the confirmed authoritative server state for a record.
- * A deleted record is permanently marked with deleted = true and empty/tombstone data.
+ * Deleted/missing identities stay locally suppressed even after server tombstone retention expires.
  */
 @Entity(tableName = "server_base")
 data class ServerBaseEntity(
@@ -17,7 +17,6 @@ data class ServerBaseEntity(
     val completed: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
-    val epoch: String,
     val deadlineDate: String? = null,
     val deadlineTime: String? = null,
     val deadlineZone: String? = null,
@@ -30,5 +29,9 @@ data class ServerBaseEntity(
     val reminderIntervalMinutes: Long? = null,
     val reminderCount: Long = 1L,
     val scheduleToken: String? = null,
-    val parentTaskId: String? = null
+    val parentTaskId: String? = null,
+    val rawJson: String? = null,
+    val syncedAt: String? = null,
+    val standardConfirmed: Boolean = false,
+    val projectionError: String? = null
 )

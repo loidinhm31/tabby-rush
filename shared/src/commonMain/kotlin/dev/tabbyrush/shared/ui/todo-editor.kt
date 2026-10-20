@@ -67,8 +67,7 @@ fun TodoEditor(
     }
 
     val isDeadlineValid = !editor.hasDeadline || (deadlineValidation is DeadlineValidationResult.Valid)
-    val isUpgradeBlocked = editor.hasDeadline && !editor.isAccountV2
-    val canSubmit = isValid && isDeadlineValid && !isUpgradeBlocked
+    val canSubmit = isValid && isDeadlineValid
 
     val validationError = when (validation) {
         is ApiResult.Failure -> {

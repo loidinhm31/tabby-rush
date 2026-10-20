@@ -1,16 +1,21 @@
 package dev.tabbyrush.shared.contract
 
-object StrictSyncV2Contract {
-    const val PROTOCOL_VERSION = "strict-v2"
+object TaskDataContract {
     const val DEFAULT_TABLE_NAME = "todos"
-    const val SCHEMA_FINGERPRINT_V1 = "3361a80fdbc304a09d7847fad90841f82a3617b143a6a6eb8273d8c9d41fadec"
-    const val SCHEMA_FINGERPRINT_V2 = "5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4"
     const val MIN_REPEAT_INTERVAL_MINUTES = 15L
     const val MIN_REMINDER_COUNT = 1L
     const val MAX_REMINDER_COUNT = 10L
 }
 
-data class StrictV2TodoData(
+enum class TaskOperationKind(val wireName: String) {
+    CREATE("create"), UPDATE("update"), DELETE("delete");
+}
+
+// Keep validation implementation private without making the generated serialization companion private.
+private val UUID_PATTERN = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+@kotlinx.serialization.Serializable
+data class TaskData(
     val id: String,
     val title: String,
     val completed: Boolean,
@@ -26,13 +31,15 @@ data class StrictV2TodoData(
     val reminderLeadMinutes: Long = 0L,
     val reminderIntervalMinutes: Long? = null,
     val reminderCount: Long = 1L,
-    val scheduleToken: String? = null
+    val scheduleToken: String? = null,
+    val parentTaskId: String? = null
 ) {
     fun validate() {
         require(id.isNotEmpty()) { "id must not be empty" }
+        require(parentTaskId == null || (parentTaskId != id && UUID_PATTERN.matches(parentTaskId))) { "Invalid parentTaskId" }
         require(createdAt >= 0) { "createdAt must be non-negative" }
         require(reminderLeadMinutes >= 0) { "reminderLeadMinutes must be non-negative" }
-        require(reminderCount in StrictSyncV2Contract.MIN_REMINDER_COUNT..StrictSyncV2Contract.MAX_REMINDER_COUNT) {
+        require(reminderCount in TaskDataContract.MIN_REMINDER_COUNT..TaskDataContract.MAX_REMINDER_COUNT) {
             "reminderCount must be between 1 and 10"
         }
         if (reminderCount == 1L) {
@@ -40,7 +47,7 @@ data class StrictV2TodoData(
                 "reminderIntervalMinutes must be null when reminderCount is 1"
             }
         } else {
-            require(reminderIntervalMinutes != null && reminderIntervalMinutes >= StrictSyncV2Contract.MIN_REPEAT_INTERVAL_MINUTES) {
+            require(reminderIntervalMinutes != null && reminderIntervalMinutes >= TaskDataContract.MIN_REPEAT_INTERVAL_MINUTES) {
                 "repeating reminderIntervalMinutes must be >= 15"
             }
         }
@@ -82,29 +89,27 @@ data class StrictV2TodoData(
         }
     }
 
-    private companion object {
-        private fun safeMultiply(a: Long, b: Long): Long {
-            val r = a * b
-            if (a != 0L && (r / a != b || (a == -1L && b == Long.MIN_VALUE))) {
-                throw IllegalArgumentException("Multiplication overflow: $a * $b")
-            }
-            return r
+    private fun safeMultiply(a: Long, b: Long): Long {
+        val r = a * b
+        if (a != 0L && (r / a != b || (a == -1L && b == Long.MIN_VALUE))) {
+            throw IllegalArgumentException("Multiplication overflow: $a * $b")
         }
+        return r
+    }
 
-        private fun safeSubtract(a: Long, b: Long): Long {
-            val r = a - b
-            if (((a xor b) and (a xor r)) < 0) {
-                throw IllegalArgumentException("Subtraction overflow: $a - $b")
-            }
-            return r
+    private fun safeSubtract(a: Long, b: Long): Long {
+        val r = a - b
+        if (((a xor b) and (a xor r)) < 0) {
+            throw IllegalArgumentException("Subtraction overflow: $a - $b")
         }
+        return r
+    }
 
-        private fun safeAdd(a: Long, b: Long): Long {
-            val r = a + b
-            if (((a xor r) and (b xor r)) < 0) {
-                throw IllegalArgumentException("Addition overflow: $a + $b")
-            }
-            return r
+    private fun safeAdd(a: Long, b: Long): Long {
+        val r = a + b
+        if (((a xor r) and (b xor r)) < 0) {
+            throw IllegalArgumentException("Addition overflow: $a + $b")
         }
+        return r
     }
 }

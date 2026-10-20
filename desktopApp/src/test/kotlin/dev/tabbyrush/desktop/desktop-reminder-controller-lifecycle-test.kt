@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -25,7 +26,6 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -155,7 +155,7 @@ class DesktopReminderControllerLifecycleTest {
     }
 
     @Test
-    fun testRuntimeInitializationSetsUpReminderSubsystem() = runTest {
+    fun testQuitClosesReminderDeliveryGate() = runBlocking {
         val accountFiles = JvmAccountFiles(baseDir = tempDir)
         val lockFile = File(tempDir, "tabbyrush.lock")
         val instanceGuard = SingleInstanceGuard.tryAcquire(lockFile)!!
@@ -166,10 +166,6 @@ class DesktopReminderControllerLifecycleTest {
 
             val runtime = controller.getOrCreateAccountRuntime(accountKey)
 
-            assertNotNull(runtime.reminderCoordinator)
-            assertNotNull(runtime.deliveryGate)
-            assertNotNull(runtime.reminderScheduler)
-            assertNotNull(runtime.scheduleObserverJob)
             assertEquals(DeliveryGateState.OPEN, runtime.deliveryGate.getState())
 
             controller.disposeSuspend()

@@ -443,7 +443,6 @@ private fun AuthenticatedWorkspace(
                                     nowEpochMs = state.nowEpochMs,
                                     hierarchicalItems = state.hierarchicalItems,
                                     deleteCandidateChildCount = state.deleteCandidateChildCount,
-                                    isAccountV3 = state.isAccountV3,
                                     unresolvedChildren = state.unresolvedChildren
                                 )
                             }
@@ -646,7 +645,6 @@ private fun AuthenticatedWorkspace(
                                     nowEpochMs = state.nowEpochMs,
                                     hierarchicalItems = state.hierarchicalItems,
                                     deleteCandidateChildCount = state.deleteCandidateChildCount,
-                                    isAccountV3 = state.isAccountV3,
                                     unresolvedChildren = state.unresolvedChildren
                                 )
                             }
@@ -670,16 +668,13 @@ private fun SafeErrorBanner(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isReset = error is SafeError.ResetRequired
     val isProtocol = error is SafeError.ProtocolIncompatible
     val title = when {
-        isReset -> "Epoch Reset Required"
-        isProtocol -> "Protocol Update Required"
+        isProtocol -> "Sync Compatibility Review"
         else -> "Attention"
     }
     val guidance = when {
-        isReset -> " The server sync epoch rotated. Local drafts and operations are preserved but require manual review before re-syncing."
-        isProtocol -> " The client schema or wire version is incompatible with the server. Please update the application to resume sync."
+        isProtocol -> " Local tasks and drafts remain on this device. Check server availability and client compatibility before retrying; no data reset is required."
         else -> ""
     }
 

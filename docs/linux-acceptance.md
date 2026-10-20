@@ -2,14 +2,14 @@
 
 **Document Version**: 1.3.0
 **Phase**: 12 — Coordinated cutover, recovery runbook and release documentation
-**Status**: Desktop Multiplatform Implementation, Process-Scoped Scheduler, and D-Bus Adapter Delivered; Gate G2 Live Desktop Visual Display & Gate G7 Production Cutover Pending Operator/Testbed Prerequisites
+**Status**: The Linux implementation and historic package/test evidence below do not establish current native acceptance or release readiness. Interactive UI approval timed out twice, connected-Android acceptance was not run, and production migration is unauthorized. The announcements pilot note below is not approval for standard-sync release or cutover.
 **Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
 
 ---
 
 ## 1. Scope & Acceptance Criteria
 
-Phase 09 delivers the desktop application module (`:desktopApp`) configured for Linux x86_64 with Compose Multiplatform 1.7.3, hardware-backed credential custody via Secret Service, foreground sync coordination, single instance locking, and fail-closed account leave lifecycle.
+Phase 09 delivered the desktop application module (`:desktopApp`) configured for Linux x86_64 with Compose Multiplatform 1.7.3, OS Secret Service–backed credential custody, foreground sync coordination, single instance locking, and fail-closed account leave lifecycle.
 
 ### Acceptance Invariants
 1. **Target Isolation**:
@@ -36,7 +36,9 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 
 ---
 
-## 2. Verification Evidence Matrix
+## 2. Historical Verification Evidence Matrix
+
+The following results are retained as a historical snapshot; they do not establish current native, standard-sync, or production acceptance. See [Release Acceptance](./release-acceptance.md) for current status.
 
 | Gate | Requirement | Verification Method | Status |
 |---|---|---|---|
@@ -123,4 +125,4 @@ Reported verification: 127 `:desktopApp:test` unit tests passed (including 20 `D
 
 ### 4.2 Gate G4 Acceptance & Pilot Status
 - **Gate G4 Status**: **PASS**. Automated contract vectors, D-Bus session communication, and SSE handshake framing verified.
-- **Pilot Readiness**: Linux desktop runtime is approved for the restricted internal pilot along with Android. Historical reminder visual bubble hold (Gate G2) remains separately open for task reminders.
+- **Pilot Readiness**: The earlier restricted internal pilot statement applies only to the announcements scope. It is not current approval for standard-sync release or production migration; native acceptance remains unpassed and release remains blocked.

@@ -3,6 +3,29 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Native Standard Sync & API-Managed Schema Version / Phases 02–04] - 2026-10-20: Source Delivery, Integrated Verification and Isolated Smoke
+
+This cutover work is for the native TabbyRush Android/Desktop app, not a TabbyRush web client. Previously delivered strict-v3 work remains historical context; source delivery does not authorize live migration.
+
+### Delivered
+- **Versioned Hub schema writes:** Added server-managed `schemaVersion` with missing baseline 1, compare-and-set expected version, increment on effective schema changes, stable no-op/retry version, and structured 409 for stale distinct changes. Standard push/pull responses carry schema snapshot metadata; unknown record JSON remains accepted.
+- **Native standard-sync source:** Delivered Room4 migration, standard push/pull/delta transport, raw JSON base/merge and unknown-field preservation. Room4 migration and raw-JSON regressions passed in the integrated shared JVM run; native interactive/device acceptance remains open.
+- **Admin editor source:** Kept the existing schema builder and JSON editor. Added authoritative versioned save/readback and draft-safe conflict handling; no separate editor or version lock was introduced.
+
+### Reported Verification
+- **Disposable API/browser smoke:** Against local Mongo 27191, Hub 3100 and admin 3102, baseline 1 changed to 2; identical save/no-op remained 2; a stale distinct save returned 409. Actual JSON paste of nullable `customNotes` moved 1→2; stale 409 preserved the draft and latest inspection remained read-only; explicit discard/reload adopted version 2. Standard create/pull/delta/update/delete retained unknown JSON. Ordinary provisioning used private-DACL output. No live production data was migrated.
+- **Backend/operator:** Parent reports 83 affected Rust tests passed and 1 pre-existing strict-live-gate ignored (66 plugin, 5 schema Mongo, 7 operator Mongo, 4 client, 1 engine). The 7/7 operator suite covers concurrency, maintenance-deadline and recovery. `cargo check --workspace --all-targets` passed with existing unused warnings.
+- **Hub admin and Node:** Admin unit suite passed 22 and TypeScript/Vite production build passed; Node proxy/version/security suites passed 43.
+- **Native Gradle/runtime:** Shared JVM 264, Desktop 131 and Android unit 50 passed (445 total); `assembleDebug`, `assembleDebugAndroidTest` and Windows `createDistributable` succeeded. The isolated Android artifact manifest uses `dev.tabbyrush.android.standardsmoke`. A parent-reported standalone Windows runtime smoke passed using real DPAPI, HubAuthSession HTTP, Room offline restart and two stores/coordinators; schemaVersion 2, opaque nested JSON/`customNotes`, parent-child sync and group delete were exercised without mocks or JUnit. Android connected instrumentation and interactive UI were not run.
+- **Dependency/review:** 50 checksum entries were officially validated, including the AAPT Windows addition; strict integrated Gradle verification passed. The [native final review](../plans/261020-1717-standard-sync-schema-version/reports/review-native-final.md) and [Hub/operator final review](../plans/261020-1717-standard-sync-schema-version/reports/review-hub-ui-final.md) are source-only approvals with no actionable findings.
+
+All current execution results above are parent-reported for 2026-10-20; this changelog update did not rerun checks. The current evidence record is the [final integration verification report](../plans/261020-1717-standard-sync-schema-version/reports/verification-final.md), which supersedes pre-fix verification snapshots without closing the acceptance holds below.
+
+- Android connected instrumentation was not run. Interactive native UI acceptance remains held: computer-control grant timed out twice and no active grant was available. Automated builds/tests and the standalone Windows runtime smoke do not establish broader Android/Desktop UI acceptance.
+- Existing release holds remain open. No live production migration is authorized. The inherited strict-v3 restore procedure is **not approved for execution**: it targets an incorrect MongoDB namespace and omits `_schemas`/`_coordination`; do not use it for Option B. Any cutover requires exact-target approval, all-node/job maintenance isolation, a separately validated backup/restore, and explicit preservation/ownership of every user's data.
+- The actual browser proof is a smoke subset, not full acceptance. Remaining named cases are held in [phase04](../plans/261020-1717-standard-sync-schema-version/phase-04-admin-ui.md): stale-identical retry and ordering semantics; reload/readback and valid standard-record path; builder/JSON/sharing draft retention; readback failure/newer response; mode, registration, strict-panel and key-custody behavior; delayed route-change completion and remaining consumer-visible validation cases.
+---
+
 ## [Parent/Child Tasks & Deadline Surfaces / Phase 06] - 2026-10-20: Cross-Device Acceptance, Rollout & Documentation Reconciliation
 
 ### Delivered

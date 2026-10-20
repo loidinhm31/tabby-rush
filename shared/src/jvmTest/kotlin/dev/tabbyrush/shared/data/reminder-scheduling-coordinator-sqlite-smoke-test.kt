@@ -44,8 +44,7 @@ class ReminderSchedulingCoordinatorSqliteSmokeTest {
             accountKey = accountKey,
             userId = "user-smoke-test",
             database = database,
-            appId = "tabby-rush",
-            defaultContractVersion = OutboxEntity.CONTRACT_VERSION_V2
+            appId = "tabby-rush"
         )
 
         gate = ReminderDeliveryGate(

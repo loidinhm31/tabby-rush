@@ -435,6 +435,7 @@ class HubAuthSession(
      * after token refresh. Caller coordinator retains frozen operation intent.
      */
     suspend fun <T> authorizedRequest(
+        expectedAccountKey: AccountKey? = null,
         block: suspend (accessToken: String) -> ApiResult<T>
     ): ApiResult<T> {
         val (token, gen) = sessionMutex.withLock {
@@ -445,6 +446,9 @@ class HubAuthSession(
                         message = "Operation requires an authenticated session"
                     )
                 )
+            }
+            if (expectedAccountKey != null && _currentAccountKey.value != expectedAccountKey) {
+                return ApiResult.Failure(SafeError.Unauthorized("ACCOUNT_FENCED", "Request belongs to a different account"))
             }
             Pair(inMemoryBundle?.accessToken, currentGeneration)
         }
@@ -472,6 +476,10 @@ class HubAuthSession(
                 ) {
                     return firstAttempt
                 }
+                val admissionChanged = sessionMutex.withLock {
+                    currentGeneration != gen || (expectedAccountKey != null && _currentAccountKey.value != expectedAccountKey)
+                }
+                if (admissionChanged) return ApiResult.Failure(SafeError.Unauthorized("ACCOUNT_FENCED", "Account changed before refresh"))
 
                 // 401 is ambiguous: JWT expiry, missing grant, or bad key.
                 // Perform at most one single-flight refresh recovery:

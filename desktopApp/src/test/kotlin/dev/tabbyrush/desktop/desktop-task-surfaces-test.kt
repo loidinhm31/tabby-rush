@@ -54,8 +54,7 @@ class DesktopTaskSurfacesTest {
             accountKey = accountKey1,
             userId = "test-user",
             database = db,
-            appId = "tabbyrush-test",
-            defaultContractVersion = OutboxEntity.CONTRACT_VERSION_V3
+            appId = "tabbyrush-test"
         )
     }
 
@@ -929,8 +928,7 @@ class DesktopTaskSurfacesTest {
             accountKey = accountKey2,
             userId = "test-user-2",
             database = db2,
-            appId = "tabbyrush-test",
-            defaultContractVersion = OutboxEntity.CONTRACT_VERSION_V3
+            appId = "tabbyrush-test"
         )
 
         val testScope = CoroutineScope(Dispatchers.Default + SupervisorJob())

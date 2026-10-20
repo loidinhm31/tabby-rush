@@ -37,13 +37,13 @@ data class ReminderRule(
 ) {
     init {
         require(leadMinutes >= 0) { "leadMinutes must be non-negative" }
-        require(count in StrictSyncV2Contract.MIN_REMINDER_COUNT..StrictSyncV2Contract.MAX_REMINDER_COUNT) {
+        require(count in TaskDataContract.MIN_REMINDER_COUNT..TaskDataContract.MAX_REMINDER_COUNT) {
             "reminder count must be between 1 and 10"
         }
         if (count == 1L) {
             require(intervalMinutes == null) { "intervalMinutes must be null when count is 1" }
         } else {
-            require(intervalMinutes != null && intervalMinutes >= StrictSyncV2Contract.MIN_REPEAT_INTERVAL_MINUTES) {
+            require(intervalMinutes != null && intervalMinutes >= TaskDataContract.MIN_REPEAT_INTERVAL_MINUTES) {
                 "repeating intervalMinutes must be >= 15"
             }
         }
@@ -126,29 +126,8 @@ data class Todo(
     }
 }
 
-fun Todo.toStrictV2TodoData(): StrictV2TodoData {
-    return StrictV2TodoData(
-        id = id,
-        title = title,
-        completed = completed,
-        createdAt = createdAt,
-        deadlineDate = deadline?.date,
-        deadlineTime = deadline?.time,
-        deadlineZone = deadline?.zone,
-        deadlineOffsetSeconds = deadline?.offsetSeconds,
-        reminderAnchorTime = deadline?.reminderAnchorTime,
-        deadlineAnchorEpochMs = deadline?.anchorEpochMs,
-        deadlineOverdueEpochMs = deadline?.overdueEpochMs,
-        reminderEnabled = reminderRule.enabled,
-        reminderLeadMinutes = reminderRule.leadMinutes,
-        reminderIntervalMinutes = reminderRule.intervalMinutes,
-        reminderCount = reminderRule.count,
-        scheduleToken = scheduleToken
-    )
-}
-
-fun Todo.toStrictV3TodoData(): StrictV3TodoData {
-    return StrictV3TodoData(
+fun Todo.toTaskData(): TaskData {
+    return TaskData(
         id = id,
         title = title,
         completed = completed,
@@ -169,7 +148,7 @@ fun Todo.toStrictV3TodoData(): StrictV3TodoData {
     )
 }
 
-fun StrictV3TodoData.toDeadline(): TaskDeadline? {
+fun TaskData.toDeadline(): TaskDeadline? {
     val date = deadlineDate ?: return null
     return TaskDeadline(
         date = date,
@@ -182,7 +161,7 @@ fun StrictV3TodoData.toDeadline(): TaskDeadline? {
     )
 }
 
-fun StrictV3TodoData.toReminderRule(): ReminderRule {
+fun TaskData.toReminderRule(): ReminderRule {
     return ReminderRule(
         enabled = reminderEnabled,
         leadMinutes = reminderLeadMinutes,
@@ -191,27 +170,6 @@ fun StrictV3TodoData.toReminderRule(): ReminderRule {
     )
 }
 
-fun StrictV2TodoData.toDeadline(): TaskDeadline? {
-    val date = deadlineDate ?: return null
-    return TaskDeadline(
-        date = date,
-        time = deadlineTime,
-        zone = requireNotNull(deadlineZone) { "deadlineZone required when deadlineDate is present" },
-        offsetSeconds = requireNotNull(deadlineOffsetSeconds) { "deadlineOffsetSeconds required when deadlineDate is present" },
-        reminderAnchorTime = reminderAnchorTime,
-        anchorEpochMs = requireNotNull(deadlineAnchorEpochMs) { "deadlineAnchorEpochMs required when deadlineDate is present" },
-        overdueEpochMs = requireNotNull(deadlineOverdueEpochMs) { "deadlineOverdueEpochMs required when deadlineDate is present" }
-    )
-}
-
-fun StrictV2TodoData.toReminderRule(): ReminderRule {
-    return ReminderRule(
-        enabled = reminderEnabled,
-        leadMinutes = reminderLeadMinutes,
-        intervalMinutes = reminderIntervalMinutes,
-        count = reminderCount
-    )
-}
 
 fun hasScheduleSemanticChange(
     oldDeadline: TaskDeadline?,

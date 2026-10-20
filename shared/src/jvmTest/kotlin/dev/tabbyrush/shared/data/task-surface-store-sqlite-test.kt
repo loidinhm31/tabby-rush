@@ -2,7 +2,7 @@ package dev.tabbyrush.shared.data
 
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.CompletionChange
-import dev.tabbyrush.shared.contract.StrictOperationKind
+import dev.tabbyrush.shared.contract.TaskOperationKind
 import dev.tabbyrush.shared.contract.ReminderRule
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.Todo
@@ -171,8 +171,7 @@ class TaskSurfaceStoreSqliteTest {
             title = "Deleted task",
             completed = false,
             createdAt = 1000L,
-            updatedAt = 2000L,
-            epoch = "ep-1"
+            updatedAt = 2000L
         )
         store.dao.upsertServerBase(tombstone)
 
@@ -191,8 +190,7 @@ class TaskSurfaceStoreSqliteTest {
             title = "Deleted on server",
             completed = false,
             createdAt = 1000L,
-            updatedAt = 2000L,
-            epoch = "ep-1"
+            updatedAt = 2000L
         )
         store.dao.upsertServerBase(tombstone)
 
@@ -224,27 +222,18 @@ class TaskSurfaceStoreSqliteTest {
             title = "Deleted on server",
             completed = false,
             createdAt = 1000L,
-            updatedAt = 2000L,
-            epoch = "ep-1"
+            updatedAt = 2000L
         )
         store.dao.upsertServerBase(tombstone)
 
         // Insert residual outbox operation
-        val outboxOp = OutboxEntity(
-            opId = "op-residual",
-            epoch = "ep-1",
-            tableName = "todos",
-            rowId = "tombstone-outbox",
-            kind = StrictOperationKind.UPDATE.wireName,
-            expectedRevision = 4L,
-            title = "Stale outbox title",
-            completed = false,
-            createdAt = 1000L,
-            digest = "digest-hex",
-            localRevision = 1L,
-            deliveryState = OutboxEntity.STATE_PENDING,
-            createdAtEpochMs = 2000L
-        )
+        val outboxOp = OutboxEntity(opId = "op-residual", tableName = "todos",
+        rowId = "tombstone-outbox",
+        kind = TaskOperationKind.UPDATE.wireName, title = "Stale outbox title",
+        completed = false,
+        createdAt = 1000L, localRevision = 1L,
+        deliveryState = OutboxEntity.STATE_PENDING,
+        createdAtEpochMs = 2000L)
         store.dao.upsertOutbox(outboxOp)
 
         // Calling setCompletedLocally must return Missing without throwing and not enqueue new outbox operations
@@ -260,31 +249,26 @@ class TaskSurfaceStoreSqliteTest {
         val dl = createTimedDeadline(overdueEpochMs = 50_000L)
         val meta = AccountSyncMetaEntity(
             id = "singleton",
-            activeEpoch = "ep-1",
             syncStatus = "ready-v2"
         )
         store.dao.upsertMeta(meta)
 
-        val base = ServerBaseEntity(
-            rowId = "t1",
-            serverRevision = 2L,
-            deleted = false,
-            title = "Original Title",
-            completed = false,
-            createdAt = 1000L,
-            updatedAt = 1000L,
-            epoch = "ep-1",
-            deadlineDate = dl.date,
-            deadlineTime = dl.time,
-            deadlineZone = dl.zone,
-            deadlineOffsetSeconds = dl.offsetSeconds,
-            deadlineAnchorEpochMs = dl.anchorEpochMs,
-            deadlineOverdueEpochMs = dl.overdueEpochMs,
-            reminderEnabled = true,
-            reminderLeadMinutes = 15L,
-            reminderCount = 1L,
-            scheduleToken = "token-preserved"
-        )
+        val base = ServerBaseEntity(rowId = "t1",
+        serverRevision = 2L,
+        deleted = false,
+        title = "Original Title",
+        completed = false,
+        createdAt = 1000L,
+        updatedAt = 1000L, deadlineDate = dl.date,
+        deadlineTime = dl.time,
+        deadlineZone = dl.zone,
+        deadlineOffsetSeconds = dl.offsetSeconds,
+        deadlineAnchorEpochMs = dl.anchorEpochMs,
+        deadlineOverdueEpochMs = dl.overdueEpochMs,
+        reminderEnabled = true,
+        reminderLeadMinutes = 15L,
+        reminderCount = 1L,
+        scheduleToken = "token-preserved")
         store.dao.upsertServerBase(base)
 
         // Perform completion

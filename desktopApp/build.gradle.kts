@@ -122,6 +122,9 @@ tasks.withType<Test> {
     if (providers.gradleProperty("isolatedTestConfig").orNull == "true") {
         systemProperty("tabbyrush.isolatedTestConfig", "true")
     }
+    // Sanitize host credentials so unit tests run in clean hermetic test sandbox
+    environment("APPROVED_HUB_ORIGIN", "")
+    environment("TABBYRUSH_API_KEY", "")
     testLogging {
         events("passed", "skipped", "failed")
     }

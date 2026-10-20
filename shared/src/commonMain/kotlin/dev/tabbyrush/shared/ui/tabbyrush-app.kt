@@ -430,7 +430,8 @@ private fun AuthenticatedWorkspace(
                                     nowEpochMs = state.nowEpochMs,
                                     hierarchicalItems = state.hierarchicalItems,
                                     deleteCandidateChildCount = state.deleteCandidateChildCount,
-                                    isAccountV3 = state.isAccountV3
+                                    isAccountV3 = state.isAccountV3,
+                                    unresolvedChildren = state.unresolvedChildren
                                 )
                             }
                         }
@@ -632,7 +633,8 @@ private fun AuthenticatedWorkspace(
                                     nowEpochMs = state.nowEpochMs,
                                     hierarchicalItems = state.hierarchicalItems,
                                     deleteCandidateChildCount = state.deleteCandidateChildCount,
-                                    isAccountV3 = state.isAccountV3
+                                    isAccountV3 = state.isAccountV3,
+                                    unresolvedChildren = state.unresolvedChildren
                                 )
                             }
                         }

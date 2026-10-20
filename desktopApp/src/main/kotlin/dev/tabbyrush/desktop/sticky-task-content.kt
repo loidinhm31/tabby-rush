@@ -521,9 +521,6 @@ private fun CompactTaskRow(
                                         MaterialTheme.shapes.small
                                     )
                                     .padding(horizontal = TabbyRushThemeTokens.SpacingXSmall, vertical = 2.dp)
-                                    .semantics {
-                                        contentDescription = "Task is overdue"
-                                    }
                             )
                         }
                     }

@@ -1389,19 +1389,25 @@ class RoomAccountStoreTest {
         val c1Id = "70000000-0000-4000-8000-000000000002"
         val c2Id = "70000000-0000-4000-8000-000000000003"
 
-        database.tabbyRushDao().upsertServerBase(
-            ServerBaseEntity(
-                rowId = rootId,
-                serverRevision = 1L,
-                deleted = false,
-                title = "Root Group",
-                completed = false,
-                createdAt = now,
-                updatedAt = now,
-                epoch = "epoch-1"
+        for (row in listOf(
+            Triple(rootId, null, false),
+            Triple(c1Id, rootId, false),
+            Triple(c2Id, rootId, true)
+        )) {
+            database.tabbyRushDao().upsertServerBase(
+                ServerBaseEntity(
+                    rowId = row.first,
+                    parentTaskId = row.second,
+                    serverRevision = 1L,
+                    deleted = false,
+                    title = "Task ${row.first.takeLast(4)}",
+                    completed = row.third,
+                    createdAt = now,
+                    updatedAt = now,
+                    epoch = "epoch-1"
+                )
             )
-        )
-
+        }
         store.saveTodoLocally(Todo(id = rootId, title = "Root Group", completed = false, createdAt = now, serverRevision = 1L))
         store.saveTodoLocally(Todo(id = c1Id, title = "C1", completed = false, createdAt = now + 10L, parentTaskId = rootId))
         store.saveTodoLocally(Todo(id = c2Id, title = "C2", completed = true, createdAt = now + 20L, parentTaskId = rootId))
@@ -1438,12 +1444,35 @@ class RoomAccountStoreTest {
         val now = 10_000L
         val rootId = "70000000-0000-4000-8000-000000000011"
         val childId = "70000000-0000-4000-8000-000000000012"
-
+        // Both root and child exist on server base
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootId,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Preserved Root",
+                completed = false,
+                createdAt = now,
+                updatedAt = now,
+                epoch = "epoch-1"
+            )
+        )
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = childId,
+                parentTaskId = rootId,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Done Child",
+                completed = true,
+                createdAt = now + 10L,
+                updatedAt = now + 10L,
+                epoch = "epoch-1"
+            )
+        )
         // Raw root is false, but child is true -> preceding effective completion was true
-        store.saveTodoLocally(Todo(id = rootId, title = "Preserved Root", completed = false, createdAt = now))
-        store.saveTodoLocally(Todo(id = childId, title = "Done Child", completed = true, createdAt = now + 10L, parentTaskId = rootId))
-
-        // Delete last child
+        store.saveTodoLocally(Todo(id = rootId, title = "Preserved Root", completed = false, createdAt = now, serverRevision = 1L))
+        store.saveTodoLocally(Todo(id = childId, title = "Done Child", completed = true, createdAt = now + 10L, parentTaskId = rootId, serverRevision = 1L))
         store.deleteTodoLocally(childId)
 
         // Parent outbox must have UPDATE with completed = true and INTENT_LAST_CHILD_PRESERVATION
@@ -1477,12 +1506,35 @@ class RoomAccountStoreTest {
         val now = 10_000L
         val rootId = "70000000-0000-4000-8000-000000000021"
         val childId = "70000000-0000-4000-8000-000000000022"
-
+        // Both root and child exist on server base
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootId,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Active Preserved Root",
+                completed = true,
+                createdAt = now,
+                updatedAt = now,
+                epoch = "epoch-1"
+            )
+        )
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = childId,
+                parentTaskId = rootId,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Active Child",
+                completed = false,
+                createdAt = now + 10L,
+                updatedAt = now + 10L,
+                epoch = "epoch-1"
+            )
+        )
         // Raw root is true, but child is false -> preceding effective completion was false
-        store.saveTodoLocally(Todo(id = rootId, title = "Active Preserved Root", completed = true, createdAt = now))
-        store.saveTodoLocally(Todo(id = childId, title = "Active Child", completed = false, createdAt = now + 10L, parentTaskId = rootId))
-
-        // Delete last child
+        store.saveTodoLocally(Todo(id = rootId, title = "Active Preserved Root", completed = true, createdAt = now, serverRevision = 1L))
+        store.saveTodoLocally(Todo(id = childId, title = "Active Child", completed = false, createdAt = now + 10L, parentTaskId = rootId, serverRevision = 1L))
         store.deleteTodoLocally(childId)
 
         // Parent outbox must have UPDATE with completed = false
@@ -1593,5 +1645,241 @@ class RoomAccountStoreTest {
 
         val parentOpsCountAfterSecond = database.tabbyRushDao().getOutboxByRowId(rootId).size
         assertEquals(parentOpsCountAfterFirst, parentOpsCountAfterSecond, "No extra parent ops should be stacked")
+    }
+
+    @Test
+    fun testMixedGroupDeleteCancelsUnsentLeafChildAndStagesSyncedRows() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        val now = 10_000L
+        val rootId = "70000000-0000-4000-8000-000000000061"
+        val syncedChildId = "70000000-0000-4000-8000-000000000062"
+        val unsentChildId = "70000000-0000-4000-8000-000000000063"
+
+        // Root is confirmed on server at revision 2
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootId,
+                title = "Synced Root",
+                completed = false,
+                deleted = false,
+                createdAt = now,
+                updatedAt = now,
+                epoch = "epoch-1",
+                serverRevision = 2L
+            )
+        )
+        // Synced child is confirmed on server at revision 1
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = syncedChildId,
+                parentTaskId = rootId,
+                title = "Synced Child",
+                completed = true,
+                deleted = false,
+                createdAt = now + 10L,
+                updatedAt = now + 10L,
+                epoch = "epoch-1",
+                serverRevision = 1L
+            )
+        )
+        // Unsent child was created offline (base is null, pending CREATE op)
+        store.saveTodoLocally(
+            Todo(
+                id = unsentChildId,
+                title = "Unsent Leaf Child",
+                completed = false,
+                createdAt = now + 20L,
+                parentTaskId = rootId
+            )
+        )
+
+        // Verify unsent child is initially in outbox with CREATE
+        val childOpsBefore = database.tabbyRushDao().getOutboxByRowId(unsentChildId)
+        assertEquals(1, childOpsBefore.size)
+        assertEquals(StrictOperationKind.CREATE.wireName, childOpsBefore[0].kind)
+
+        // Delete the root (group deletion)
+        store.deleteTodoLocally(rootId)
+
+        // Unsent leaf child must be cancelled locally (outbox & draft deleted, NO stranded [create, delete])
+        val unsentChildOpsAfter = database.tabbyRushDao().getOutboxByRowId(unsentChildId)
+        assertTrue(unsentChildOpsAfter.isEmpty(), "Unsent leaf child outbox ops must be cancelled locally")
+        assertNull(database.tabbyRushDao().getDraft(unsentChildId), "Unsent leaf child draft must be cancelled")
+
+        // Synced child must have staged a DELETE outbox entity with expectedRevision = 1L
+        val syncedChildOpsAfter = database.tabbyRushDao().getOutboxByRowId(syncedChildId)
+        assertEquals(1, syncedChildOpsAfter.size)
+        assertEquals(StrictOperationKind.DELETE.wireName, syncedChildOpsAfter[0].kind)
+        assertEquals(1L, syncedChildOpsAfter[0].expectedRevision)
+
+        // Synced root must have staged a DELETE outbox entity with expectedRevision = 2L
+        val rootOpsAfter = database.tabbyRushDao().getOutboxByRowId(rootId)
+        assertEquals(1, rootOpsAfter.size)
+        assertEquals(StrictOperationKind.DELETE.wireName, rootOpsAfter[0].kind)
+        assertEquals(2L, rootOpsAfter[0].expectedRevision)
+    }
+
+    @Test
+    fun testPreservationCoalescingUnsentParentAndChild() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        val now = 10_000L
+        val rootId = "70000000-0000-4000-8000-000000000071"
+        val childId = "70000000-0000-4000-8000-000000000072"
+
+        // Parent and child are both newly created offline (unsent CREATEs)
+        store.saveTodoLocally(Todo(id = rootId, title = "Unsent Root", completed = false, createdAt = now))
+        store.saveTodoLocally(Todo(id = childId, title = "Completed Child", completed = true, createdAt = now + 10L, parentTaskId = rootId))
+
+        // Delete child
+        store.deleteTodoLocally(childId)
+
+        // Child must be cancelled locally
+        assertTrue(database.tabbyRushDao().getOutboxByRowId(childId).isEmpty())
+
+        // Parent outbox must coalesce into the single existing CREATE op without second stacked op or extraneous barrier
+        val parentOps = database.tabbyRushDao().getOutboxByRowId(rootId)
+        assertEquals(1, parentOps.size, "Parent must have exactly 1 coalesced outbox op")
+        assertEquals(StrictOperationKind.CREATE.wireName, parentOps[0].kind)
+        assertEquals(true, parentOps[0].completed, "Parent completed must coalesce preceding effective completed")
+        assertFalse(parentOps[0].intentMask?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true,
+            "Unsent parent should not acquire unnecessary LAST_CHILD_PRESERVATION barrier")
+    }
+
+    @Test
+    fun testPreservationCoalescingSyncedParentPendingUpdate() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        val now = 10_000L
+        val rootId = "70000000-0000-4000-8000-000000000081"
+        val childId = "70000000-0000-4000-8000-000000000082"
+
+        // Parent is confirmed on server at revision 1
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootId,
+                title = "Original Title",
+                completed = false,
+                deleted = false,
+                createdAt = now,
+                updatedAt = now,
+                epoch = "epoch-1",
+                serverRevision = 1L
+            )
+        )
+        // Child is confirmed on server at revision 1
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = childId,
+                parentTaskId = rootId,
+                title = "Child",
+                completed = true,
+                deleted = false,
+                createdAt = now + 10L,
+                updatedAt = now + 10L,
+                epoch = "epoch-1",
+                serverRevision = 1L
+            )
+        )
+
+        // User edits parent title while offline -> stages pending UPDATE
+        val rootTodo = store.loadTodos().first { it.id == rootId }
+        store.saveTodoLocally(rootTodo.copy(title = "Edited Title"))
+
+        val parentOpsBefore = database.tabbyRushDao().getOutboxByRowId(rootId)
+        assertEquals(1, parentOpsBefore.size)
+        assertEquals(StrictOperationKind.UPDATE.wireName, parentOpsBefore[0].kind)
+
+        // Now user deletes the last child
+        store.deleteTodoLocally(childId)
+
+        // Parent outbox must coalesce into the pending UPDATE: exactly 1 op, contains both TITLE and LAST_CHILD_PRESERVATION
+        val parentOpsAfter = database.tabbyRushDao().getOutboxByRowId(rootId)
+        assertEquals(1, parentOpsAfter.size, "Parent must have exactly 1 coalesced UPDATE op")
+        assertEquals(StrictOperationKind.UPDATE.wireName, parentOpsAfter[0].kind)
+        assertEquals("Edited Title", parentOpsAfter[0].title)
+        assertEquals(true, parentOpsAfter[0].completed)
+        val mask = parentOpsAfter[0].intentMask ?: ""
+        assertTrue(mask.contains(OutboxEntity.INTENT_TITLE), "Mask must retain TITLE")
+        assertTrue(mask.contains(OutboxEntity.INTENT_COMPLETED), "Mask must retain COMPLETED")
+        assertTrue(mask.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION), "Mask must contain LAST_CHILD_PRESERVATION")
+    }
+
+    @Test
+    fun testManualEditAfterPreservationRetainsPreservationMarker() = runTest {
+        database.tabbyRushDao().upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-1",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        val now = 10_000L
+        val rootId = "70000000-0000-4000-8000-000000000091"
+        val childId = "70000000-0000-4000-8000-000000000092"
+
+        // Parent and child confirmed on server
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = rootId,
+                title = "Base Root",
+                completed = false,
+                deleted = false,
+                createdAt = now,
+                updatedAt = now,
+                epoch = "epoch-1",
+                serverRevision = 1L
+            )
+        )
+        database.tabbyRushDao().upsertServerBase(
+            ServerBaseEntity(
+                rowId = childId,
+                parentTaskId = rootId,
+                title = "Child",
+                completed = true,
+                deleted = false,
+                createdAt = now + 10L,
+                updatedAt = now + 10L,
+                epoch = "epoch-1",
+                serverRevision = 1L
+            )
+        )
+
+        // Delete last child -> creates preservation UPDATE with LAST_CHILD_PRESERVATION
+        store.deleteTodoLocally(childId)
+
+        val opAfterDelete = database.tabbyRushDao().getOutboxByRowId(rootId).single()
+        assertTrue(opAfterDelete.intentMask?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true)
+
+        // Subsequent manual title edit coalescing into the pending preservation op
+        val loadedRoot = store.loadTodos().first { it.id == rootId }
+        store.saveTodoLocally(loadedRoot.copy(title = "Manual Edit After Preservation"))
+
+        // The coalesced op MUST still retain INTENT_LAST_CHILD_PRESERVATION!
+        val opAfterEdit = database.tabbyRushDao().getOutboxByRowId(rootId).single()
+        assertEquals("Manual Edit After Preservation", opAfterEdit.title)
+        val updatedMask = opAfterEdit.intentMask ?: ""
+        assertTrue(updatedMask.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION),
+            "Coalesced manual edit must retain LAST_CHILD_PRESERVATION intent mask and scheduling barrier")
     }
 }

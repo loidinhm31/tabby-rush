@@ -293,27 +293,41 @@ class DesktopStickyTaskController(
     private var activeObserverJob: Job? = null
     @kotlin.jvm.Volatile
     private var activeToken: SurfaceAccountToken? = null
-
+    private val lifecycleLock = Any()
     init {
         scope.launch {
             access.readiness.collect { r ->
-                val prevReadyToken = (stickyState.value.readiness as? SurfaceReadiness.Ready)?.token
-                val newReadyToken = (r as? SurfaceReadiness.Ready)?.token
-                val tokenChanged = prevReadyToken != null && newReadyToken != null && prevReadyToken != newReadyToken
-                if (r !is SurfaceReadiness.Ready || tokenChanged) {
-                    _stickyState.value = StickyTaskState(
-                        readiness = r,
-                        sections = TaskSections(emptyList(), emptyList()),
-                        quickAdd = StickyQuickAddState(),
-                        projectedSections = StickyTaskSections(emptyList(), emptyList())
-                    )
-                    activeToken = newReadyToken
-                    if (tokenChanged) {
-                        activeObserverJob?.cancel()
-                        activeObserverJob = null
+                when (r) {
+                    is SurfaceReadiness.Ready -> {
+                        _stickyState.update { current ->
+                            val prevReadyToken = (current.readiness as? SurfaceReadiness.Ready)?.token
+                            if (prevReadyToken != null && prevReadyToken != r.token && activeToken != r.token) {
+                                StickyTaskState(
+                                    readiness = r,
+                                    sections = TaskSections(emptyList(), emptyList()),
+                                    quickAdd = StickyQuickAddState(),
+                                    projectedSections = StickyTaskSections(emptyList(), emptyList())
+                                )
+                            } else {
+                                current.copy(readiness = r)
+                            }
+                        }
                     }
-                } else {
-                    _stickyState.value = _stickyState.value.copy(readiness = r)
+                    else -> {
+                        val currentToken = access.getCurrentToken()
+                        if (currentToken == null) {
+                            _stickyState.update {
+                                StickyTaskState(
+                                    readiness = r,
+                                    sections = TaskSections(emptyList(), emptyList()),
+                                    quickAdd = StickyQuickAddState(),
+                                    projectedSections = StickyTaskSections(emptyList(), emptyList())
+                                )
+                            }
+                        } else {
+                            _stickyState.update { it.copy(readiness = r) }
+                        }
+                    }
                 }
             }
         }
@@ -324,26 +338,33 @@ class DesktopStickyTaskController(
      * Unfiltered tasks are partitioned into [TaskSections] via [partitionSurfaceTodos]
      * and projected into whole compact groups via [projectStickySections].
      */
-    fun startObserving(token: SurfaceAccountToken, store: RoomAccountStore): Job {
+    fun startObserving(token: SurfaceAccountToken, store: RoomAccountStore): Job = synchronized(lifecycleLock) {
         activeObserverJob?.cancel()
         val prev = activeToken
         activeToken = token
         if (prev != null && prev != token) {
-            _stickyState.value = _stickyState.value.copy(
-                sections = TaskSections(emptyList(), emptyList()),
-                projectedSections = StickyTaskSections(emptyList(), emptyList()),
-                quickAdd = StickyQuickAddState()
-            )
+            _stickyState.update {
+                it.copy(
+                    sections = TaskSections(emptyList(), emptyList()),
+                    projectedSections = StickyTaskSections(emptyList(), emptyList()),
+                    quickAdd = StickyQuickAddState()
+                )
+            }
         }
         val job = scope.launch {
             try {
                 store.observeTodos().collect { todos ->
-                    // Token check prevents stale emissions from previous account/generation
                     if (activeToken == token && access.getCurrentToken() == token) {
                         val sections = partitionSurfaceTodos(todos)
                         val now = clock()
                         val projected = projectStickySections(sections, now)
-                        _stickyState.update { it.copy(sections = sections, projectedSections = projected) }
+                        _stickyState.update { current ->
+                            if (activeToken == token && access.getCurrentToken() == token) {
+                                current.copy(sections = sections, projectedSections = projected)
+                            } else {
+                                current
+                            }
+                        }
                     }
                 }
             } catch (ce: CancellationException) {
@@ -353,7 +374,7 @@ class DesktopStickyTaskController(
             }
         }
         activeObserverJob = job
-        return job
+        job
     }
 
     fun refreshDeadlines(nowEpochMs: Long = clock()) {
@@ -367,10 +388,18 @@ class DesktopStickyTaskController(
         }
     }
 
-    fun stopObserving() {
+    fun stopObserving(): Unit = synchronized(lifecycleLock) {
         activeObserverJob?.cancel()
         activeObserverJob = null
         activeToken = null
+        _stickyState.update {
+            StickyTaskState(
+                readiness = access.readiness.value,
+                sections = TaskSections(emptyList(), emptyList()),
+                quickAdd = StickyQuickAddState(),
+                projectedSections = StickyTaskSections(emptyList(), emptyList())
+            )
+        }
     }
 
     fun onAction(action: StickyTaskAction) {
@@ -382,12 +411,18 @@ class DesktopStickyTaskController(
                 val err = (res as? ApiResult.Failure)?.let {
                     (it.error as? SafeError.Validation)?.message ?: "Invalid title"
                 }
-                _stickyState.value = _stickyState.value.copy(
-                    quickAdd = _stickyState.value.quickAdd.copy(
-                        rawTitle = action.rawTitle,
-                        error = err
-                    )
-                )
+                _stickyState.update { current ->
+                    if (activeToken == action.token && access.getCurrentToken() == action.token) {
+                        current.copy(
+                            quickAdd = current.quickAdd.copy(
+                                rawTitle = action.rawTitle,
+                                error = err
+                            )
+                        )
+                    } else {
+                        current
+                    }
+                }
             }
             is StickyTaskAction.Submit -> {
                 val current = activeToken
@@ -399,16 +434,16 @@ class DesktopStickyTaskController(
                 val validation = TitlePolicy.normalizeAndValidate(raw)
                 if (validation is ApiResult.Failure) {
                     val err = (validation.error as? SafeError.Validation)?.message ?: "Invalid title"
-                    _stickyState.value = _stickyState.value.copy(
-                        quickAdd = currentQuickAdd.copy(error = err, submitting = false)
-                    )
+                    _stickyState.update {
+                        it.copy(quickAdd = it.quickAdd.copy(error = err, submitting = false))
+                    }
                     return
                 }
 
                 val title = (validation as ApiResult.Success).value
-                _stickyState.value = _stickyState.value.copy(
-                    quickAdd = currentQuickAdd.copy(submitting = true, error = null)
-                )
+                _stickyState.update {
+                    it.copy(quickAdd = it.quickAdd.copy(submitting = true, error = null))
+                }
 
                 scope.launch {
                     val result = access.withSurfaceAdmission(action.token) { store ->
@@ -418,10 +453,12 @@ class DesktopStickyTaskController(
 
                     // Strengthened account fencing: ensure controller activeToken and access token still match action.token
                     if (activeToken != action.token || access.getCurrentToken() != action.token) {
-                        if (activeToken == action.token) {
-                            _stickyState.value = _stickyState.value.copy(
-                                quickAdd = _stickyState.value.quickAdd.copy(submitting = false)
-                            )
+                        _stickyState.update { current ->
+                            if (activeToken == action.token) {
+                                current.copy(quickAdd = current.quickAdd.copy(submitting = false))
+                            } else {
+                                current
+                            }
                         }
                         return@launch
                     }
@@ -429,25 +466,37 @@ class DesktopStickyTaskController(
                     when (result) {
                         is SurfaceResult.Value -> {
                             // Clear only if the user hasn't typed new text during the async submit
-                            if (_stickyState.value.quickAdd.rawTitle == raw) {
-                                _stickyState.value = _stickyState.value.copy(
-                                    quickAdd = StickyQuickAddState(rawTitle = "", error = null, submitting = false)
-                                )
-                            } else {
-                                _stickyState.value = _stickyState.value.copy(
-                                    quickAdd = _stickyState.value.quickAdd.copy(submitting = false, error = null)
-                                )
+                            _stickyState.update { current ->
+                                if (activeToken == action.token && access.getCurrentToken() == action.token) {
+                                    if (current.quickAdd.rawTitle == raw) {
+                                        current.copy(
+                                            quickAdd = StickyQuickAddState(rawTitle = "", error = null, submitting = false)
+                                        )
+                                    } else {
+                                        current.copy(
+                                            quickAdd = current.quickAdd.copy(submitting = false, error = null)
+                                        )
+                                    }
+                                } else {
+                                    current
+                                }
                             }
                             onTriggerSync()
                         }
                         is SurfaceResult.Rejected,
                         is SurfaceResult.Unavailable -> {
-                            _stickyState.value = _stickyState.value.copy(
-                                quickAdd = _stickyState.value.quickAdd.copy(
-                                    submitting = false,
-                                    error = "Failed to save task"
-                                )
-                            )
+                            _stickyState.update { current ->
+                                if (activeToken == action.token) {
+                                    current.copy(
+                                        quickAdd = current.quickAdd.copy(
+                                            submitting = false,
+                                            error = "Failed to save task"
+                                        )
+                                    )
+                                } else {
+                                    current
+                                }
+                            }
                         }
                     }
                 }

@@ -22,6 +22,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilterChip
@@ -36,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextDecoration
@@ -61,7 +64,8 @@ fun TodoList(
     nowEpochMs: Long = 0L,
     hierarchicalItems: List<HierarchicalTodoItem> = emptyList(),
     deleteCandidateChildCount: Int = 0,
-    isAccountV3: Boolean = true
+    isAccountV3: Boolean = false,
+    unresolvedChildren: List<Todo> = emptyList()
 ) {
     val displayItems = remember(items, filter, hierarchicalItems) {
         if (hierarchicalItems.isNotEmpty()) {
@@ -86,7 +90,7 @@ fun TodoList(
 
         HorizontalDivider(color = TabbyRushThemeTokens.customColors.line)
 
-        if (displayItems.isEmpty()) {
+        if (displayItems.isEmpty() && unresolvedChildren.isEmpty()) {
             EmptyListPlaceholder(
                 filter = filter,
                 modifier = Modifier
@@ -104,20 +108,40 @@ fun TodoList(
                 ),
                 verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall)
             ) {
-                items(
-                    items = displayItems,
-                    key = { it.todo.id }
-                ) { item ->
-                    TodoRow(
-                        item = item,
-                        onToggle = { onAction(TodoAction.ToggleCompleted(item.todo)) },
-                        onEdit = { onAction(TodoAction.OpenEdit(item.todo)) },
-                        onDelete = { onAction(TodoAction.RequestDelete(item.todo)) },
-                        onAddSubtask = if (isAccountV3 && item.depth == 0) {
-                            { onAction(TodoAction.OpenCreate(parentTaskId = item.todo.id, parentTitle = item.todo.title)) }
-                        } else null,
-                        nowEpochMs = nowEpochMs
-                    )
+                if (unresolvedChildren.isNotEmpty()) {
+                    item(key = "unresolved_section") {
+                        UnresolvedSubtaskSection(
+                            unresolvedChildren = unresolvedChildren,
+                            onAction = onAction,
+                            nowEpochMs = nowEpochMs
+                        )
+                    }
+                }
+                if (displayItems.isEmpty()) {
+                    item(key = "empty_placeholder") {
+                        EmptyListPlaceholder(
+                            filter = filter,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = TabbyRushThemeTokens.SpacingLarge)
+                        )
+                    }
+                } else {
+                    items(
+                        items = displayItems,
+                        key = { it.todo.id }
+                    ) { item ->
+                        TodoRow(
+                            item = item,
+                            onToggle = { onAction(TodoAction.ToggleCompleted(item.todo)) },
+                            onEdit = { onAction(TodoAction.OpenEdit(item.todo)) },
+                            onDelete = { onAction(TodoAction.RequestDelete(item.todo)) },
+                            onAddSubtask = if (isAccountV3 && item.depth == 0) {
+                                { onAction(TodoAction.OpenCreate(parentTaskId = item.todo.id, parentTitle = item.todo.title)) }
+                            } else null,
+                            nowEpochMs = nowEpochMs
+                        )
+                    }
                 }
             }
         }
@@ -133,6 +157,56 @@ fun TodoList(
         )
     }
 }
+@Composable
+private fun UnresolvedSubtaskSection(
+    unresolvedChildren: List<Todo>,
+    onAction: (TodoAction) -> Unit,
+    nowEpochMs: Long
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = TabbyRushThemeTokens.SpacingSmall),
+        colors = CardDefaults.cardColors(
+            containerColor = TabbyRushThemeTokens.customColors.coralSurface
+        ),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)) {
+            Text(
+                text = "Unresolved Subtasks (${unresolvedChildren.size})",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { heading() }
+            )
+            Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
+            Text(
+                text = "These subtasks reference a parent task that is missing from local storage. They are isolated from normal lists and schedules until resolved or deleted.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingMedium))
+            Column(verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall)) {
+                unresolvedChildren.forEach { child ->
+                    TodoRow(
+                        item = HierarchicalTodoItem(
+                            todo = child,
+                            effectiveCompleted = child.completed,
+                            hasLiveChildren = false,
+                            depth = 0
+                        ),
+                        onToggle = { onAction(TodoAction.ToggleCompleted(child)) },
+                        onEdit = { onAction(TodoAction.OpenEdit(child)) },
+                        onDelete = { onAction(TodoAction.RequestDelete(child)) },
+                        onAddSubtask = null,
+                        nowEpochMs = nowEpochMs
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 private fun FilterRow(

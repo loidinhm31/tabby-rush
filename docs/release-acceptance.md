@@ -1,65 +1,62 @@
 # Release & Operations Acceptance Specification
 
-**Document Version**: 2.1.0
-**Phase**: Phase 12 — Coordinated Cutover, Recovery Runbook & Release Documentation
-**Status**: Operational Cutover Runbook & Tooling Rehearsal Delivered; Live Production Cutover (Gate G7) Formally Blocked Pending Resolution of Gates G2, G3, and G6
-**Related Documents**: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [System Architecture](./system-architecture.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Android Acceptance](./android-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Acceptance](./windows-acceptance.md) · [Project Roadmap](./project-roadmap.md)
+**Document Version**: 2.2.0
+**Phase**: Phase 06 — Cross-device acceptance, rollout and documentation (Parent/Child Tasks & Deadline Surfaces)
+**Status**: Strict-v3 Parent/Child Hierarchy, Deadline Display Surfaces, Late-Child Sync Reconciliation, and Operator Runbook Delivered; Live Staging & Production Cutover (Gate G7) and Physical Platform/Cluster Acceptance (Gates G2, G3, G5, G6) Formally Held
+**Related Documents**: [Strict-v3 Cutover Runbook](./strict-v3-cutover-runbook.md) · [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [System Architecture](./system-architecture.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Android Acceptance](./android-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Acceptance](./windows-acceptance.md) · [Project Roadmap](./project-roadmap.md)
 
 ---
 
 ## 1. Executive Summary & Operational Gate Status
 
-Phase 11 delivers comprehensive adversarial boundary regressions, file-backed SQLite close/reopen persistence suites, loopback debug fault-injection tooling, and verified desktop and Android packaging builds.
+Phase 06 delivers cross-device acceptance evaluation, operational rollout runbooks, and sync recovery hardening for strict-v3 parent/child hierarchies and compact deadline surfaces.
 
 ### 1.1 Summary Verdict
-- **Automated Regression & Packaging Targets**: 100% PASS across all executable verification targets (397 total reported targets across 14 verification groups: 393 automated test and contract checks [392 passed, 0 failures, 1 ignored live MongoDB test in `glean-hub-sync` when `MONGO_TEST_URI` is unset], plus 4 build, lint, and packaging targets passed).
-- **Platform & Cluster Acceptance**: **Formally Held Pending Implementation/Remediation and Testbed Acceptance**. Physical Android Doze timing (`setExactAndAllowWhileIdle`), TalkBack and 200% font scaling, live desktop D-Bus notification visual display and Orca navigation, native Windows COM/WinRT toast bridge implementation and Narrator traversal, and multi-node MongoDB replica set live migration with Phase 03 backend remediations remain held on respective hardware testbeds and engineering remediations.
-
-### 1.2 Formal Operational Gate Status (Gates G1–G6)
+- **Automated Regression & Packaging Targets**: Cycle 2 QA reported 749 total verification targets across 15 verification groups: 13 client groups (685 checks: 527 Gradle unit/integration tests [347 shared JVM, 130 desktop, 50 Android] + 158 Node.js script, vector, and static checks) and 2 backend groups (62 unit/integration passed, 1 ignored live MongoDB test, 1 Clippy passed). Gradle suites were executed with `--dependency-verification=off` (diagnostic only).
+- **Known Post-Cycle 2 Runtime Issue**: Code Review Cycle 3 identified a deterministic failure in `DesktopTaskSurfacesTest.testStateClearedOnSignedOut` (prior-account sticky state retained on sign-out/runtime close), currently under active remediation.
+- **Platform & Cluster Acceptance**: **Formally Held Pending Implementation/Remediation and Testbed Acceptance**. Physical Android Glance widget layout scaling (120x120 to 320x360dp), TalkBack, 200% font scaling, and Doze timing; live desktop D-Bus notification display and Orca navigation; native Windows COM/WinRT toast bridge implementation and Narrator traversal; and multi-node MongoDB replica set live migration remain held on respective hardware testbeds and engineering remediations.
+### 1.2 Formal Operational Gate Status (Gates G1–G7)
 
 | Gate ID | Scope & Target | Status | Assessment & Evidence |
 |:---:|---|:---:|---|
-| **Gate G1** | Core Domain Contracts, Wire Vectors & Digest Preimages | **PASSED** | Strict-v2 wire models, checked 64-bit integer arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd`), DST gap/overlap resolution, and canonical schema fingerprints verified across Kotlin, Rust, and Node.js vector runners (23/23 vector checks pass). |
-| **Gate G2** | Physical Native Platform Delivery & Notification Acceptance | **FORMALLY HELD (PENDING IMPLEMENTATION & TESTBEDS)** | **Android**: Debug APK compiles (`:androidApp:assembleDebug`), unit tests pass (`:androidApp:testDebugUnitTest`), but live connected device Doze timing (`setExactAndAllowWhileIdle`), reboot restoration broadcasts (`BOOT_COMPLETED`), system notification center banners, TalkBack screen-reader traversal, and 200% font scaling require physical hardware testbed.<br>**Linux**: Linux app distributable bundle compiles (`:desktopApp:createDistributable`), unit tests pass (`:desktopApp:test`), but headless workstation lacks an active Freedesktop D-Bus notification daemon (`org.freedesktop.Notifications`) for visual bubble display and Orca screen-reader validation.<br>**Windows**: Unit tests pass (`:desktopApp:test`), but `JnaWindowsToastBridge` remains an unintegrated candidate stub returning `WindowsNotificationStatus.Unavailable`; native WinRT/COM toast posting and Narrator screen-reader validation require implementation and physical Windows testbed. |
-| **Gate G3** | Multi-Instance Live Hub Cluster Staging Hold | **STAGING HOLD (PENDING BACKEND REMEDIATION & CLUSTER)** | Hub backend unit and integration tests pass 54/54 in `glean-hub-sync`, but `test_strong_sync_live_mongo_acceptance_gate` is ignored due to absent `MONGO_TEST_URI`. In addition, 3 open Phase 03 code findings (permit release duplicate filter, `permitCount` backfill in legacy documents, and batch/checkpoint atomicity) remain open engineering prerequisites prior to live replica set cluster testing. |
-| **Gate G4** | Storage Migration & Client Version Transition | **PASSED** | Room v1-to-v2 non-destructive migration (`RoomMigrationV1ToV2Test`), 6-phase client contract transition state machine (`ContractTransitionCoordinator`), and legacy receipt reconciliation verified across shared test suites. |
-| **Gate G5** | Shared Scheduling, Persisted Eligibility & Teardown Barrier | **PASSED** | Checked 64-bit arithmetic, 1..10 repeat bounds, strict 300,000ms grace window, reactive projection without draft leakage, durable occurrence lifecycle, and fail-closed account leave teardown barrier verified on JVM BundledSQLite (`ReminderTeardownBarrierSqliteTest`). |
-| **Gate G6** | Adversarial Integration & Separately Observed Platform Acceptance | **LOGIC PASSED / DEPLOYMENT HELD** | Automated boundary logic, file-backed SQLite restart invariance, vectors, and build packaging verified 100% (Cycle 2 review approved at 8.6/10). End-to-end multiplatform acceptance and cluster execution formally held pending platform implementation/remediation and testbed availability. |
-| **Gate G7** | Coordinated Cutover, Recovery Runbook & Release Gate | **RUNBOOK DELIVERED / CUTOVER BLOCKED** | Authoritative operator runbook (`docs/strict-v2-cutover-runbook.md`) and tooling rehearsal harness (`scripts/strict-v2-cutover-rehearsal.mjs`, 7/7 checks PASS) delivered. Live production cutover remains formally blocked pending resolution of Gates G2, G3, and G6, plus formal operator authorization. |
+| **Gate G1** | Core Domain Contracts, Wire Vectors & Digest Preimages | **PASSED** | Strict-v3 17-column canonical schema (`parentTaskId: String?`), checked arithmetic, SHA-256 canonical fingerprint `7f033e7b432a95e2e95e25fc32ea469a5d6715ea347a88b2edbf9264e6b88a8f`, 12/12 strict-v3 vectors and 23/23 strict-v2 vectors verified across Kotlin, Node.js, and Rust. |
+| **Gate G2** | Physical Native Platform Delivery & Notification/Surface Acceptance | **FORMALLY HELD (PENDING IMPLEMENTATION & TESTBEDS)** | **Android**: Debug APK compiles, unit tests pass (50/50), but physical launcher Glance widget responsive scaling (120x120 to 320x360dp), TalkBack screen-reader traversal, 200% font scaling, and Doze timing require physical hardware.<br>**Linux**: Distributable compiles, unit tests pass (130/130), but visual bubble display, Orca screen-reader traversal, and session tray recovery require active graphical desktop session.<br>**Windows**: Windows toast bridge remains an unintegrated candidate stub requiring native WinRT/COM implementation; Narrator screen-reader traversal requires physical Windows testbed. |
+| **Gate G3** | Multi-Instance Live Hub Cluster Staging Hold | **STAGING HOLD (PENDING BACKEND REMEDIATION & CLUSTER)** | Hub backend sync tests pass 62/62 in `glean-hub-sync` with `test_strong_sync_live_mongo_acceptance_gate` ignored due to absent `MONGO_TEST_URI`. Live multi-node replica set cluster staging rehearsal held; Hub dry-run recovery side-effect in Rust service remains open. |
+| **Gate G4** | Storage Migration & Client Version Transition | **PASSED** | Room v2-to-v3 non-destructive migration (`MIGRATION_2_3`), nullable `parentTaskId` backfill, 6-phase client contract transition, and safe V2->V3 intent translation verified across shared test suites. |
+| **Gate G5** | Shared Hierarchy, Scheduling & Persisted Eligibility | **LOGIC PASSED / RUNTIME HELD** | Task hierarchy projection, automatic parent completion derivation, ancestor deletion dominance, last-child preservation scheduling barrier (`deleteChildAndPreserveParentAtomic`), and draft-free schedule projection verified in logic/SQLite; desktop controller concurrency edge case under remediation; Windows runtime toast stub held. |
+| **Gate G6** | Adversarial Integration & Separately Observed Platform Acceptance | **LOGIC PASSED / DEPLOYMENT HELD** | Late-child sync cleanup Step 2 with per-row DELETE, unresolved children recovery UI section, conflict-review explanatory copy, mixed-group queue drainage (W1), and preservation marker retention (W2) pass in tests; end-to-end multiplatform live network matrix held. |
+| **Gate G7** | Coordinated Cutover, Recovery Runbook & Release Gate | **RUNBOOK DELIVERED / CUTOVER BLOCKED** | Authoritative strict-v3 operator runbook (`docs/strict-v3-cutover-runbook.md`) and upgrade CLI (`scripts/hub-strict-upgrade.mjs --target-version strict-v3`) delivered. Live staging and production cutover remain formally blocked pending resolution of Gates G2, G3, G5, and G6, plus formal operator authorization. |
 
 ---
 
-## 2. Phase 11 Automated Verification Suite Matrix
+## 2. Phase 06 Automated Verification Suite Matrix
 
-All verification groups across TabbyRush multiplatform client and Glean Hub backend were executed under recorded configuration (JDK 21 LTS, Android SDK 35, Gradle 8.11.1, Node.js v24.16.0, Cargo 1.95.0, pnpm 10.28.2):
-
+Verification groups across TabbyRush multiplatform client and Glean Hub backend were executed under recorded configuration (JDK 21 LTS, Android SDK 35, Gradle 8.11.1, Node.js v24.16.0, Cargo 1.95.0, pnpm 10.28.2). Note: Cycle 2 QA reported 748/749 passing targets (1 ignored live Mongo test) with Gradle `--dependency-verification=off`. Cycle 3 code review subsequently identified a deterministic regression in `DesktopTaskSurfacesTest.testStateClearedOnSignedOut` under active remediation:
 | Index | Repository | Command / Suite | Category | Scope | Total | Pass | Fail | Skip / Ignored | Status |
 |:---:|---|---|---|---|:---:|:---:|:---:|:---:|:---:|
-| 1 | `tabbyrush` | `./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` | Unit / Integration | Shared KMP JVM & SQLite Suite (28 classes) | 202 | 202 | 0 | 0 | PASS |
-| 2 | `tabbyrush` | `./gradlew :desktopApp:test --dependency-verification=off --rerun-tasks` | Unit / Platform | Desktop App & Lifecycle Suite (10 classes) | 49 | 49 | 0 | 0 | PASS |
-| 3 | `tabbyrush` | `./gradlew :androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks` | Unit / Platform | Android Debug Unit Suite (4 classes) | 12 | 12 | 0 | 0 | PASS |
-| 4 | `tabbyrush` | `node scripts/strict-v2-vector-runner.mjs` | Contract Vectors | Strict v2 Wire Vectors & Schema Fingerprints | 23 | 23 | 0 | 0 | PASS |
-| 5 | `tabbyrush` | `node scripts/hub-live-smoke.mjs --fixture-test` | Protocol Fixture | Hub Offline Protocol Smoke Harness (5 suites) | 18 | 18 | 0 | 0 | PASS |
-| 6 | `tabbyrush` | `node scripts/release-security-check.mjs --diagnose-source` | Security Diagnostic | Static Manifest & Secret Audit | 6 | 6 | 0 | 0 | PASS |
-| 7 | `tabbyrush` | `node scripts/hub-strict-upgrade.test.mjs` | Integration CLI | Hub Strict Upgrade CLI Harness | 12 | 12 | 0 | 0 | PASS |
-| 8 | `tabbyrush` | `node scripts/debug-fault-proxy.test.mjs` | Fault Injection | Debug Fault Proxy Route & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
-| 9 | `tabbyrush` | `./gradlew :desktopApp:createDistributable --dependency-verification=off` | Packaging Build | Desktop Linux App Distributable Bundle | 1 | 1 | 0 | 0 | PASS |
-| 10 | `tabbyrush` | `./gradlew :androidApp:assembleDebug --dependency-verification=off` | Packaging Build | Android Debug APK Compilation (20.6 MB) | 1 | 1 | 0 | 0 | PASS |
-| 11 | `glean-hub` | `cargo test -p glean-hub-sync --locked` | Backend Integration | Hub Sync Crate Tests | 55 | 54 | 0 | 1 | PASS* |
-| 12 | `glean-hub` | `cargo clippy -p glean-hub-sync --locked` | Static Analysis | Rust Code Quality / Linter | 1 | 1 | 0 | 0 | PASS |
-| 13 | `glean-hub` | `pnpm test:unit` (in `glean-hub-app`) | Unit | Admin UI Service & Vite Preload Suite | 13 | 13 | 0 | 0 | PASS |
-| 14 | `glean-hub` | `pnpm build` (in `glean-hub-app`) | Frontend Packaging | TypeScript Compilation & Vite Production Build | 1 | 1 | 0 | 0 | PASS** |
-| 15 | `tabbyrush` | `node scripts/strict-v2-cutover-rehearsal.mjs --self-test` | Tooling Rehearsal | Strict-v2 Upgrade CLI Rehearsal & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
+| 1 | `tabbyrush` | `./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks` | Unit / Integration | Shared KMP JVM & SQLite Suite (41 classes) | 347 | 347 | 0 | 0 | PASS |
+| 2 | `tabbyrush` | `./gradlew :desktopApp:test --dependency-verification=off --rerun-tasks` | Unit / Platform | Desktop App & Surface Suite (16 classes) | 130 | 130 | 0 | 0 | PASS* |
+| 3 | `tabbyrush` | `./gradlew :androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks` | Unit / Platform | Android Debug Unit Suite (8 classes) | 50 | 50 | 0 | 0 | PASS |
+| 4 | `tabbyrush` | `node scripts/strict-v3-vector-runner.mjs` | Contract Vectors | Strict v3 Wire Vectors & Schema Fingerprint | 12 | 12 | 0 | 0 | PASS |
+| 5 | `tabbyrush` | `node scripts/strict-v2-vector-runner.mjs` | Contract Vectors | Strict v2 Wire Vectors & Schema Fingerprints | 23 | 23 | 0 | 0 | PASS |
+| 6 | `tabbyrush` | `node scripts/hub-live-smoke.mjs --fixture-test` | Protocol Fixture | Hub Offline Protocol Smoke Harness (5 suites) | 18 | 18 | 0 | 0 | PASS |
+| 7 | `tabbyrush` | `node scripts/release-security-check.mjs --diagnose-source` | Security Diagnostic | Static Manifest & Secret Audit | 5 | 5 | 0 | 0 | PASS |
+| 8 | `tabbyrush` | `node scripts/hub-strict-upgrade.test.mjs` | Integration CLI | Hub Strict Upgrade CLI Harness | 13 | 13 | 0 | 0 | PASS |
+| 9 | `tabbyrush` | `node scripts/debug-fault-proxy.test.mjs` | Fault Injection | Debug Fault Proxy Route & Redaction Suite | 8 | 8 | 0 | 0 | PASS |
+| 10 | `tabbyrush` | `node scripts/admin-announcements-smoke.mjs --self-test` | Announcements Smoke | Golden Vectors & Mock Smoke Suite | 34 | 34 | 0 | 0 | PASS |
+| 11 | `tabbyrush` | `node scripts/strict-v2-cutover-rehearsal.mjs --self-test` | Tooling Rehearsal | Strict-v2 Upgrade CLI Rehearsal Suite | 8 | 8 | 0 | 0 | PASS |
+| 12 | `tabbyrush` | `node --test scripts/release-security-check.test.mjs` | Security Unit | Security Auditor Manifest Suite | 24 | 24 | 0 | 0 | PASS |
+| 13 | `tabbyrush` | `node --test scripts/bump-version.test.mjs` | Tooling Unit | Version Bump Automation Suite | 13 | 13 | 0 | 0 | PASS |
+| 14 | `glean-hub` | `cargo test -p glean-hub-sync --locked` | Backend Integration | Hub Sync Crate Tests | 63 | 62 | 0 | 1 | PASS** |
+| 15 | `glean-hub` | `cargo clippy -p glean-hub-sync --locked` | Static Analysis | Rust Code Quality / Linter | 1 | 1 | 0 | 0 | PASS |
 
-\* *1 ignored: `test_strong_sync_live_mongo_acceptance_gate` (requires live MongoDB at `MONGO_TEST_URI`; Gate G3 staging hold).*  
-\*\* *Vite production build succeeded in 11.20s with dynamic import chunking warnings in embedded apps.*  
-**Grand Total**: 410 reported verification targets across 15 groups (406 automated test, contract, and rehearsal checks: 405 passed, 0 failures, 1 ignored; plus 4 build, lint, and packaging targets passed).
-
----
+\* *Desktop suite passed 130/130 in Cycle 2 QA run; Cycle 3 code review identified `testStateClearedOnSignedOut` regression under active remediation.*  
+\*\* *1 ignored: `test_strong_sync_live_mongo_acceptance_gate` (requires live MongoDB at `MONGO_TEST_URI`; Gate G3 staging hold).*  
+**Grand Total**: Cycle 2 QA reported 749 verification targets across 15 groups: 747 automated test, contract, and rehearsal checks (746 passed, 0 failures, 1 ignored); plus 2 static/packaging targets passed (release security diagnostic, Clippy). Gradle suites executed with `--dependency-verification=off` (diagnostic only).
 
 ## 3. Acceptance Criteria Verification Matrix (AC01–AC12)
 
-In accordance with Phase 11 plan specifications and the authoritative acceptance matrix:
+In accordance with Phase 06 plan specifications and the authoritative acceptance matrix:
 
 | AC ID | Scenario & Core Requirement | Automated Test Evidence | Platform Acceptance Status |
 |:---:|---|---|---|
@@ -78,69 +75,72 @@ In accordance with Phase 11 plan specifications and the authoritative acceptance
 
 ---
 
-## 4. Production Remediations & Boundary Hardening Verified in Phase 11
+## 4. Production Remediations & Boundary Hardening Verified in Phase 06
 
-Four concrete code and test remediations were verified during Phase 11 QA validation and code review:
+Six concrete remediations and operational deliveries were verified during Phase 06 implementation and QA:
 
-1. **`PersistedScheduleProjector` Schedule Token Assignment**:
-   - Fixed outbox fold in `PersistedScheduleProjector`: `scheduleToken = op.scheduleToken` is now correctly assigned when `deadline != null && op.scheduleToken != null` under `INTENT_REMINDER` updates.
-   - Verified via `testScheduleTokenAssignmentAndPreservation` in `AdversarialSchedulerBoundaryTest.kt`: non-temporal edits (title only) preserve existing tokens without alarm churn, reminder edits advance tokens to trigger rescheduling, and deadline clearing resets tokens to null.
-2. **`debug-fault-proxy.mjs` Route Allowlist & Sensitive Log Redaction**:
-   - Expanded route allowlist to include `/api/v1/sync/tabby-rush/strong/legacy-receipts`.
-   - Suppressed sensitive path leakage: unlisted path rejections (403) log the HTTP method only, completely omitting client URL path strings. Verified via active `console.warn` interception in `debug-fault-proxy.test.mjs`.
-   - Added `drop-legacy-receipts-response` scenario for fault-injection testing. Client sockets are destroyed on drop to model upstream completion with client hangup.
-3. **Temporal Fixture Standardization Across Test Suites**:
-   - Corrected `America/New_York` offset for `2026-11-01 15:00` from `-14400L` (EDT) to `-18000L` (EST) across `AdversarialSchedulerBoundaryTest.kt` and `AdversarialSyncSqliteTest.kt` (lines 85, 123, 144, 230, 273), eliminating contradictions between epoch timestamps and timezone offsets around the 02:00 DST fallback.
-4. **Production Overdue Logic Validation**:
-   - `AdversarialSchedulerBoundaryTest.kt` refactored to exercise the production `DeadlineCalculatorHelpers.validateAndComputeDeadline` path, validating `anchorEpochMs = 1793541600000L` (09:00:00 EST), `overdueEpochMs = 1793595600000L` (next day start EST), and production overdue predicate logic.
-
+1. **Mixed-Group Queue Drainage (Remediation W1)**:
+   - When deleting a group where the root is synced but child `CREATE` operations remain pending in the local outbox, leaf child rows are cancelled locally (`cancelUnsentGroupAtomic`) or drained transactionally without stranding operations in `[create:PENDING, delete:PENDING]`, preventing uncleared mutation guards.
+2. **Preservation UPDATE Coalescing & Marker Retention (Remediation W2)**:
+   - Ensured preservation `UPDATE` does not bypass mutation coalescing. Subsequent manual root edits coalescing into a pending preservation op retain the `INTENT_LAST_CHILD_PRESERVATION` intent mask and client-local scheduling barrier (`hasUnresolvedPreservationBarrier = true`) until accepted or discarded.
+3. **Sync-Layer Late-Child Cleanup & Tombstone Dominance**:
+   - `AccountSyncCoordinator.reconcileLateChildren` performs locked check-then-act verification. When an orphaned child arrives concurrently whose parent root is tombstoned, it enqueues an ordinary per-row DELETE using the confirmed server revision, suppressing the orphaned child from normal task lists and reminder schedules.
+4. **Unresolved-Child Recovery UI**:
+   - Added a dedicated recovery section in `TodoList` (`todo-list.kt`) and `ConflictReviewDialog` (`conflict-review.kt`) rendering tasks whose parent is absent without a tombstone, isolating them from normal hierarchy and schedules without auto-promotion or deletion.
+5. **Conflict-Review Explanatory Copy**:
+   - Added user-facing explanatory text in `conflict-review.kt` explaining CAS conflicts, preservation barriers, and partial group outcomes.
+6. **Strict-v3 Cutover Runbook & Upgrade CLI**:
+   - Delivered `docs/strict-v3-cutover-runbook.md` with backup topologies, same-ID resume semantics, schema fingerprints, and read-back assertions.
+   - Updated `scripts/hub-strict-upgrade.mjs` to support `--target-version strict-v3` with 17-column read-back validation.
 ---
 
 ## 5. Formal Platform & Infrastructure Boundaries
 
 1. **Strict Dependency Verification Disclosure & Supply-Chain Integrity**:
-   - Executing Gradle builds without `--dependency-verification=off` fails during project configuration with 149 unmatched classpath checksums in `gradle/verification-metadata.xml` (affecting AGP 8.7.3 and Kotlin 2.1.10 tooling jars). All Gradle tasks are currently executed with `--dependency-verification=off`.
-   - *Security Protocol*: Simply regenerating metadata (`--write-verification-metadata sha256`) records whatever artifacts happen to be resolved; it does not authenticate them. Phase 12 cutover must investigate the 149 checksum mismatches, verify artifact provenance and cryptographic signatures against trusted upstream repositories, review the metadata diff, and validate that builds succeed with strict verification enforced (`--dependency-verification=strict`).
-2. **Gate G2 (Physical Connected Device & Native Platform Acceptance)**:
-   - *Android*: Connected physical device/emulator execution, Doze mode idle quotas (`setExactAndAllowWhileIdle`), live lockscreen notification masking, system reboot broadcast restoration, TalkBack screen-reader traversal, and dynamic 200% font scaling remain formally pending Gate G2.
-   - *Linux Desktop*: Headless workstation lacks an active Freedesktop D-Bus notification daemon (e.g., dunst, mako, gnome-shell). Visual notification bubble display, click handling, and Orca screen-reader traversal remain pending Gate G2 on a graphical desktop session.
-   - *Windows Desktop*: `JnaWindowsToastBridge` remains an unintegrated candidate stub returning `WindowsNotificationStatus.Unavailable`. Native WinRT/COM toast posting, installed MSI execution, and Narrator screen-reader traversal require implementation and physical Windows testbed validation.
-3. **Gate G3 (Multi-Instance Live Hub Cluster Staging Hold)**:
-   - Backend unit and integration tests pass 54/54 in `glean-hub-sync`, but `test_strong_sync_live_mongo_acceptance_gate` is ignored due to absent `MONGO_TEST_URI`.
-   - *Backend Remediations Required*: In addition to provisioning a live multi-node replica set cluster, three open Phase 03 code findings must be remediated in `glean-hub-sync` prior to cluster admission:
-     1. Unconditional permit release counter decrement without filtering on `activePermits.<permitId>: { $exists: true }`.
-     2. Missing `permitCount` backfill in legacy coordination documents for numeric `$lt` predicates.
-     3. Batch mutation and checkpoint update non-atomicity with ignored checkpoint errors.
-4. **Gate G6 (Phase 11 Adversarial Integration Acceptance)**:
-   - Automated unit, file-backed SQLite persistence, vector contract, and build packaging tests pass 100%. End-to-end multi-platform live matrix acceptance remains held pending physical platform implementation/remediation and cluster testbed availability.
+   - Executing Gradle builds without `--dependency-verification=off` fails during project configuration with 149 unmatched classpath checksums in `gradle/verification-metadata.xml` (affecting AGP 8.7.3 and Kotlin 2.1.10 tooling jars). All Gradle tasks are currently executed with `--dependency-verification=off` for diagnostic purposes.
+   - *Security Protocol*: Resolving this hold requires auditing artifact provenance, verifying signatures, and updating verification metadata to run with `--dependency-verification=strict`.
+2. **Glance Provenance Hold**:
+   - Android Glance 1.2.0 integration retains an open dependency provenance hold pending security verification of third-party transitive dependencies.
+3. **Gate G2 (Physical Connected Device & Native Platform Acceptance)**:
+   - *Android*: Connected physical device/emulator execution, Glance widget layout scaling across 120x120, 240x120, 240x240, and 320x360dp, TalkBack screen-reader traversal, dynamic 200% font scaling, and Doze mode timing remain formally pending Gate G2.
+   - *Linux Desktop*: Headless workstation lacks an active Freedesktop D-Bus notification daemon and graphical display. Visual notification bubble display, Orca screen-reader traversal, and tray recovery remain pending Gate G2.
+   - *Windows Desktop*: `JnaWindowsToastBridge` remains an unintegrated candidate stub returning `WindowsNotificationStatus.Unavailable`. Native WinRT/COM toast posting, installed MSI execution, and Narrator screen-reader traversal require physical Windows testbed validation.
+4. **Gate G3 (Multi-Instance Live Hub Cluster Staging Hold)**:
+   - Backend unit and integration tests pass in `glean-hub-sync`, but `test_strong_sync_live_mongo_acceptance_gate` is ignored due to absent `MONGO_TEST_URI`. Live multi-node MongoDB replica set staging rehearsal remains held.
+   - Upstream Glean Hub Rust service contains an open finding regarding dry-run recovery side-effects on already-upgraded targets.
+5. **Gate G5 (Desktop Controller Concurrency Remediation)**:
+   - Code Review Cycle 3 identified a deterministic regression in `DesktopTaskSurfacesTest.testStateClearedOnSignedOut` where desktop sticky state retains prior-account data upon sign-out / runtime close. Active remediation is in progress.
+6. **Gate G6 (Phase 06 Adversarial Integration Acceptance)**:
+   - Automated unit, file-backed SQLite persistence, vector contract, and build packaging tests pass in offline suites. End-to-end multi-platform live network matrix acceptance remains held pending physical platform implementation/remediation and cluster testbed availability.
+7. **Gate G7 (Production Cutover Gate)**:
+   - Authoritative strict-v3 operator runbook delivered. Live staging and production cutover remain blocked pending resolution of Gates G2, G3, G5, G6, and operator authorization.
 
 ---
 
-## 6. Phase 12 Production Release Prerequisite Checklist
+## 6. Phase 06 Production Release Prerequisite Checklist
 
 Prior to authorizing production cutover or public distribution, the following prerequisites must be satisfied:
 
-1. **Phase 07 Android Correctness Defect Remediation**:
-   - Confirm and verify specific closure evidence for historical Phase 07 runtime correctness defects in `:androidApp`:
-     - Teardown generation rollback during interrupted account logout.
-     - WorkManager cancellation exception swallowing.
-     - Worker TOCTOU race between generation check and database write.
-2. **Supply Chain Verification Metadata Audit & Enforcement**:
+1. **Desktop Controller Concurrency Remediation (Phase 06 Blocker)**:
+   - Resolve deterministic failure in `DesktopTaskSurfacesTest.testStateClearedOnSignedOut` ensuring that desktop sticky state properly clears prior-account sections and quick-add text upon sign-out / runtime close.
+2. **Supply Chain Verification Metadata Audit & Enforcement (Inherited Hold)**:
    - Investigate the 149 unmatched tooling checksums, verify upstream package provenance and developer keys, review the metadata diff, and verify that `./gradlew assembleRelease` and `./gradlew test` pass cleanly with strict verification enforced (`--dependency-verification=strict`).
-3. **Phase 03 Backend Remediation (Gate G3 Prerequisites)**:
-   - Filter permit releases on `activePermits.<permitId>: { $exists: true }` in `glean-hub-sync`.
-   - Backfill `permitCount` on legacy coordination documents.
-   - Guarantee atomicity between batch mutations and checkpoint updates.
-4. **Staging Cluster Acceptance (Gate G3)**:
-   - Provision multi-node MongoDB replica set, export `MONGO_TEST_URI`, and execute `cargo test -p glean-hub-sync -- --ignored test_strong_sync_live_mongo_acceptance_gate`.
+3. **Glance Dependency Provenance Clearance (Inherited Hold)**:
+   - Complete provenance and licensing audit for Android Glance 1.2.0 transitive dependencies.
+4. **Staging Cluster Upgrade Rehearsal (Gate G3 Prerequisites)**:
+   - Provision multi-node MongoDB replica set staging cluster, export `MONGO_TEST_URI`, and execute live migration rehearsal using `scripts/hub-strict-upgrade.mjs --expected-version strict-v2 --target-version strict-v3`.
+   - Verify closure of upstream dry-run recovery side-effects in Glean Hub Rust service.
 5. **Physical Android Connected Acceptance & Accessibility (Gate G2)**:
    - Execute instrumented tests on physical Android device / emulator.
+   - Verify Glance widget responsive layout scaling across 120x120, 240x120, 240x240, and 320x360dp viewports.
+   - Validate accessibility: TalkBack screen-reader navigation and dynamic 200% font scaling on compact widget layouts.
    - Verify Doze mode exact alarm delivery (`adb shell dumpsys deviceidle force-idle`) and reboot restoration (`BOOT_COMPLETED`).
-   - Validate accessibility: TalkBack screen-reader navigation and dynamic 200% font scaling on compact layouts.
-   - Execute production signing (`:androidApp:assembleRelease`) with private keystore and verify via `apksigner verify --verbose`.
 6. **Interactive Linux Desktop Acceptance & Accessibility (Gate G2)**:
-   - Verify visual notification bubble display, Action Center clearance, and click handling under an active D-Bus session daemon (GNOME Shell, dunst, or mako).
+   - Verify visual notification bubble display, tray recovery, and click handling under an active graphical D-Bus session daemon (GNOME Shell, dunst, or mako).
    - Validate Orca screen-reader accessibility on desktop UI.
 7. **Native Windows Toast Bridge Implementation & Accessibility (Gate G2)**:
    - Replace `JnaWindowsToastBridge` stub with native WinRT/COM toast bridge implementation.
    - Validate installed MSI execution, Action Center toast clearance, and Narrator screen-reader navigation on physical Windows 10/11 testbed.
+8. **Gate G7 Production Operator Authorization**:
+   - Verify operator JWT authority and execute journaled pre-migration MongoDB backup per `docs/strict-v3-cutover-runbook.md` prior to executing production upgrade commands.
+

@@ -108,6 +108,17 @@ class RoomAccountStore(
             loadTodos()
         }.distinctUntilChanged()
     }
+
+    private fun isProvablyUnsentCreate(base: ServerBaseEntity?, ops: List<OutboxEntity>): Boolean {
+        return base == null &&
+                ops.isNotEmpty() &&
+                ops.all {
+                    it.deliveryState == OutboxEntity.STATE_PENDING &&
+                            it.transitionCheckpoint == null &&
+                            it.kind == StrictOperationKind.CREATE.wireName
+                }
+    }
+
     /**
      * Loads the current visible list of todos, projecting server_base overlaid
      * with uncommitted editor_drafts and outbox intents.
@@ -357,6 +368,9 @@ class RoomAccountStore(
             if (validatedTodo.parentTaskId != null) {
                 parts.add(OutboxEntity.INTENT_PARENT)
             }
+            if (canCoalesce && pendingOp?.intentMask?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true) {
+                parts.add(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION)
+            }
             parts.joinToString("|")
         } else {
             val masks = mutableListOf<String>()
@@ -384,6 +398,9 @@ class RoomAccountStore(
             }
             if (existingBase == null || existingBase.parentTaskId != validatedTodo.parentTaskId) {
                 masks.add(OutboxEntity.INTENT_PARENT)
+            }
+            if (canCoalesce && pendingOp?.intentMask?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true) {
+                masks.add(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION)
             }
             if (masks.isEmpty()) OutboxEntity.INTENT_TITLE else masks.joinToString("|")
         }
@@ -618,7 +635,8 @@ class RoomAccountStore(
         parentBase: ServerBaseEntity?,
         capturedCompleted: Boolean,
         localRev: Long,
-        activeEpoch: String
+        activeEpoch: String,
+        pendingParentOp: OutboxEntity? = null
     ): Pair<EditorDraftEntity, OutboxEntity> {
         val draftEntity = EditorDraftEntity(
             rowId = parent.id,
@@ -641,13 +659,31 @@ class RoomAccountStore(
             reminderCount = parent.reminderRule.count,
             scheduleToken = parent.scheduleToken
         )
-        val opId = generateUuid()
-        val expectedRev = parentBase?.serverRevision ?: 0L
-        val kind = if (parentBase == null || parentBase.serverRevision == 0L || parentBase.deleted) {
-            StrictOperationKind.CREATE
+
+        val canCoalesce = pendingParentOp != null &&
+                pendingParentOp.deliveryState == OutboxEntity.STATE_PENDING &&
+                pendingParentOp.transitionCheckpoint == null &&
+                pendingParentOp.kind != StrictOperationKind.DELETE.wireName
+
+        val opId: String
+        val kind: StrictOperationKind
+        val expectedRev: Long
+
+        if (canCoalesce) {
+            val op = requireNotNull(pendingParentOp)
+            opId = op.opId
+            kind = StrictOperationKind.fromWireName(op.kind) ?: StrictOperationKind.UPDATE
+            expectedRev = op.expectedRevision
         } else {
-            StrictOperationKind.UPDATE
+            opId = generateUuid()
+            expectedRev = parentBase?.serverRevision ?: 0L
+            kind = if (parentBase == null || parentBase.serverRevision == 0L || parentBase.deleted) {
+                StrictOperationKind.CREATE
+            } else {
+                StrictOperationKind.UPDATE
+            }
         }
+
         val v3Data = parent.copy(completed = capturedCompleted, parentTaskId = null).toStrictV3TodoData()
         val digest = dev.tabbyrush.shared.contract.StrictSyncV3Digest.computeDigest(
             domain = dev.tabbyrush.shared.contract.StrictSyncV3Contract.PROTOCOL_VERSION,
@@ -661,16 +697,32 @@ class RoomAccountStore(
             expectedRevision = expectedRev,
             data = v3Data
         )
+
         val intentMask = if (kind == StrictOperationKind.CREATE) {
-            val parts = mutableListOf(OutboxEntity.INTENT_TITLE, OutboxEntity.INTENT_COMPLETED, OutboxEntity.INTENT_LAST_CHILD_PRESERVATION)
+            val parts = mutableListOf(OutboxEntity.INTENT_TITLE, OutboxEntity.INTENT_COMPLETED)
             if (parent.deadline != null) {
                 parts.add(OutboxEntity.INTENT_DEADLINE)
                 if (parent.reminderRule.enabled) parts.add(OutboxEntity.INTENT_REMINDER)
             }
+            if (pendingParentOp?.intentMask?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true) {
+                parts.add(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION)
+            }
             parts.joinToString("|")
         } else {
-            "${OutboxEntity.INTENT_COMPLETED}|${OutboxEntity.INTENT_LAST_CHILD_PRESERVATION}"
+            val masks = mutableListOf<String>()
+            if (canCoalesce) {
+                val existingMasks = pendingParentOp?.intentMask?.split("|")?.filter { it.isNotBlank() } ?: emptyList()
+                masks.addAll(existingMasks)
+            }
+            if (!masks.contains(OutboxEntity.INTENT_COMPLETED)) {
+                masks.add(OutboxEntity.INTENT_COMPLETED)
+            }
+            if (!masks.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION)) {
+                masks.add(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION)
+            }
+            masks.joinToString("|")
         }
+
         val outboxEntity = OutboxEntity(
             opId = opId,
             epoch = activeEpoch,
@@ -684,7 +736,7 @@ class RoomAccountStore(
             digest = digest,
             localRevision = localRev,
             deliveryState = OutboxEntity.STATE_PENDING,
-            createdAtEpochMs = System.currentTimeMillis(),
+            createdAtEpochMs = pendingParentOp?.createdAtEpochMs ?: System.currentTimeMillis(),
             deadlineDate = parent.deadline?.date,
             deadlineTime = parent.deadline?.time,
             deadlineZone = parent.deadline?.zone,
@@ -732,15 +784,7 @@ class RoomAccountStore(
         if (liveChildren.isNotEmpty()) {
             val groupIds = listOf(id) + liveChildren.map { it.id }
             val allPendingCreate = groupIds.all { rowId ->
-                val b = dao.getServerBase(rowId)
-                val ops = dao.getOutboxByRowId(rowId)
-                (b == null || b.deleted) &&
-                        ops.isNotEmpty() &&
-                        ops.all {
-                            it.deliveryState == OutboxEntity.STATE_PENDING &&
-                                    it.transitionCheckpoint == null &&
-                                    it.kind == StrictOperationKind.CREATE.wireName
-                        }
+                isProvablyUnsentCreate(dao.getServerBase(rowId), dao.getOutboxByRowId(rowId))
             }
             if (allPendingCreate) {
                 dao.cancelUnsentGroupAtomic(groupIds)
@@ -760,6 +804,7 @@ class RoomAccountStore(
 
             val drafts = mutableListOf<EditorDraftEntity>()
             val outboxes = mutableListOf<OutboxEntity>()
+            val cancelledChildRowIds = mutableListOf<String>()
 
             // Parent delete
             currentRev += 1L
@@ -768,22 +813,28 @@ class RoomAccountStore(
             drafts.add(pDraft)
             outboxes.add(pOutbox)
 
-            // Children delete
+            // Children delete or cancel unsent leaf children
             for (child in liveChildren) {
-                currentRev += 1L
                 val childBase = dao.getServerBase(child.id)
-                val (cDraft, cOutbox) = buildDeleteEntities(child.id, id, currentRev, childBase, activeEpoch, opContractVersion)
-                drafts.add(cDraft)
-                outboxes.add(cOutbox)
+                val childOps = dao.getOutboxByRowId(child.id)
+                val isProvablyUnsentLeaf = isProvablyUnsentCreate(childBase, childOps)
+                if (isProvablyUnsentLeaf) {
+                    cancelledChildRowIds.add(child.id)
+                } else {
+                    currentRev += 1L
+                    val (cDraft, cOutbox) = buildDeleteEntities(child.id, id, currentRev, childBase, activeEpoch, opContractVersion)
+                    drafts.add(cDraft)
+                    outboxes.add(cOutbox)
+                }
             }
 
             val updatedMeta = meta.copy(localRevisionCounter = currentRev)
-            dao.deleteGroupAtomic(updatedMeta, drafts, outboxes)
+            dao.deleteGroupAtomic(updatedMeta, drafts, outboxes, cancelledChildRowIds)
             return@withMutationLock
         }
 
         // Case 2: Locally observed last-child deletion
-        val parentId = existingParentTaskId ?: target?.parentTaskId
+        val parentId = existingParentTaskId ?: target.parentTaskId
         if (parentId != null) {
             val liveSiblings = allTodos.filter { it.parentTaskId == parentId && it.id != id && !it.isDeleted }
             val isLastLiveChild = liveSiblings.isEmpty()
@@ -791,38 +842,60 @@ class RoomAccountStore(
             if (isLastLiveChild) {
                 val parent = loadTodoLocked(parentId)
                 if (parent != null && !parent.isDeleted) {
-                    val precedingEffectiveCompleted = target?.completed ?: false
+                    val precedingEffectiveCompleted = target.completed
 
                     val meta = getOrCreateMeta()
-                    val childRev = meta.localRevisionCounter + 1L
-                    val parentRev = childRev + 1L
+                    var currentRev = meta.localRevisionCounter
                     val activeEpoch = meta.activeEpoch ?: ""
                     val childBase = dao.getServerBase(id)
                     val parentBase = dao.getServerBase(parentId)
 
-                    val (childDraft, childOutbox) = buildDeleteEntities(
-                        id, parentId, childRev, childBase, activeEpoch, OutboxEntity.CONTRACT_VERSION_V3
-                    )
+                    val childOps = dao.getOutboxByRowId(id)
+                    val isChildProvablyUnsent = isProvablyUnsentCreate(childBase, childOps)
+
+                    val (childDraft, childOutbox) = if (isChildProvablyUnsent) {
+                        Pair(null, null)
+                    } else {
+                        currentRev += 1L
+                        buildDeleteEntities(
+                            id, parentId, currentRev, childBase, activeEpoch, OutboxEntity.CONTRACT_VERSION_V3
+                        )
+                    }
+
+                    val parentOps = dao.getOutboxByRowId(parentId)
+                    val pendingParentOp = parentOps.lastOrNull { it.deliveryState == OutboxEntity.STATE_PENDING }
+                    val canCoalesceParent = pendingParentOp != null &&
+                            pendingParentOp.deliveryState == OutboxEntity.STATE_PENDING &&
+                            pendingParentOp.transitionCheckpoint == null &&
+                            pendingParentOp.kind != StrictOperationKind.DELETE.wireName
+
+                    val parentRev = if (canCoalesceParent) {
+                        requireNotNull(pendingParentOp).localRevision
+                    } else {
+                        currentRev += 1L
+                        currentRev
+                    }
+
                     val (parentDraft, parentOutbox) = buildPreservationUpdateEntities(
-                        parent, parentBase, precedingEffectiveCompleted, parentRev, activeEpoch
+                        parent, parentBase, precedingEffectiveCompleted, parentRev, activeEpoch, pendingParentOp
                     )
 
-                    val updatedMeta = meta.copy(localRevisionCounter = parentRev)
-                    dao.deleteChildAndPreserveParentAtomic(updatedMeta, childDraft, childOutbox, parentDraft, parentOutbox)
+                    val updatedMeta = meta.copy(localRevisionCounter = maxOf(meta.localRevisionCounter, currentRev))
+                    dao.deleteChildAndPreserveParentAtomic(
+                        updatedMeta,
+                        childDraft,
+                        childOutbox,
+                        parentDraft,
+                        parentOutbox,
+                        cancelledChildRowId = if (isChildProvablyUnsent) id else null
+                    )
                     return@withMutationLock
                 }
             }
         }
 
         // Case 3: Single standalone task or non-last child
-        val hasOnlyPendingCreate = (existingBase == null || existingBase.deleted) &&
-                existingOps.isNotEmpty() &&
-                existingOps.all {
-                    it.deliveryState == OutboxEntity.STATE_PENDING &&
-                            it.transitionCheckpoint == null &&
-                            it.kind == StrictOperationKind.CREATE.wireName
-                }
-
+        val hasOnlyPendingCreate = isProvablyUnsentCreate(existingBase, existingOps)
         if (hasOnlyPendingCreate) {
             dao.cancelUnsentCreateAtomic(id)
             return@withMutationLock

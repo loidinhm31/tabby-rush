@@ -38,7 +38,10 @@ data class ConflictState(
     val rowId: String,
     val localTodo: Todo?,
     val remoteTodo: Todo?,
-    val isUnknownSuperseded: Boolean = false
+    val isUnknownSuperseded: Boolean = false,
+    val isPreservationConflict: Boolean = false,
+    val isSubtaskConflict: Boolean = false,
+    val isParentDeleted: Boolean = false
 )
 
 data class LeaveGuardState(
@@ -53,6 +56,7 @@ data class TodoUiState(
     val accessRequest: AccessRequestInfo? = null,
     val items: List<Todo> = emptyList(),
     val hierarchicalItems: List<HierarchicalTodoItem> = emptyList(),
+    val unresolvedChildren: List<Todo> = emptyList(),
     val counts: TodoCounts = TodoCounts(0, 0, 0),
     val filter: TodoFilter = TodoFilter.ALL,
     val loading: Boolean = false,
@@ -65,6 +69,6 @@ data class TodoUiState(
     val leaveGuard: LeaveGuardState? = null,
     val safeError: SafeError? = null,
     val isAccountV2: Boolean = true,
-    val isAccountV3: Boolean = true,
+    val isAccountV3: Boolean = false,
     val nowEpochMs: Long = 0L
 )

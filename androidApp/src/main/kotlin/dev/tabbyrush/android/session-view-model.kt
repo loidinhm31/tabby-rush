@@ -151,7 +151,8 @@ class SessionViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(
             items = projection.items.map { it.todo },
             hierarchicalItems = projection.items,
-            counts = projection.counts
+            counts = projection.counts,
+            unresolvedChildren = projection.unresolvedChildren
         )
     }
 
@@ -519,14 +520,23 @@ class SessionViewModel : ViewModel() {
             updatedAt = entry.createdAt ?: 0L,
             deadline = localDeadline,
             reminderRule = localRule,
-            scheduleToken = entry.scheduleToken
+            scheduleToken = entry.scheduleToken,
+            parentTaskId = entry.parentTaskId
         )
+        val isPreservationConflict = entry.intentMask?.split("|")?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true
+        val isSubtaskConflict = entry.parentTaskId != null || localTodo.parentTaskId != null
+        val targetParentId = entry.parentTaskId ?: localTodo.parentTaskId
+        val parentBase = targetParentId?.let { runtime.store.dao.getServerBase(it) }
+        val isParentDeleted = isSubtaskConflict && (parentBase == null || parentBase.deleted)
         _uiState.value = _uiState.value.copy(
             conflict = ConflictState(
                 rowId = entry.rowId,
                 localTodo = localTodo,
                 remoteTodo = remoteTodo,
-                isUnknownSuperseded = entry.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED
+                isUnknownSuperseded = entry.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED,
+                isPreservationConflict = isPreservationConflict,
+                isSubtaskConflict = isSubtaskConflict,
+                isParentDeleted = isParentDeleted
             )
         )
     }

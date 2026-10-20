@@ -2,23 +2,22 @@
 
 TabbyRush is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization.
 
-The application reuses the **Glean Hub** backend infrastructure with an opt-in, strict per-record synchronization protocol (`strict-v1`), ensuring complete data isolation from legacy Hub clients while delivering native offline capability, durable Room KMP persistence, and an accessible light theme.
+The application reuses the **Glean Hub** backend infrastructure with an opt-in, strict per-record synchronization protocol (`strict-v3`, with strict contract transition and legacy receipt reconciliation for accounts previously synchronized under `strict-v2` or `strict-v1`; mixed-version concurrent writes are rejected via fail-closed protocol fencing), ensuring complete data isolation from legacy Hub clients while delivering native offline capability, durable Room KMP persistence, and an accessible light theme.
 
 ---
 
 ## Key Features
 
 - **Offline-First Task Management**: Full task lifecycle (create, toggle completion, edit title, filter, delete) operating against local Room SQLite database with BundledSQLiteDriver.
-- **Strict-v1 Sync Protocol**: Opt-in strong per-record sync protocol featuring insert-only create, explicit revision Compare-And-Swap (CAS), structured per-operation acknowledgements, stable cursor scans, and permanent empty tombstones.
+- **Parent/Child Task Hierarchy**: Two-level task hierarchy supporting standalone roots and child subtasks with strict prevention of reparenting, grandchildren, or self-references. Automatic parent completion progress derived from live children (`all { it.completed }`) with read-only parent checkboxes in main and compact views. Atomic local group deletion and last-child deletion capturing preceding parent effective completion (`deleteChildAndPreserveParentAtomic`) with client-local scheduling barriers. Dedicated recovery UI section isolates unresolved children whose parent is absent without a tombstone.
+- **Strict-v3 Sync Protocol**: Opt-in strong per-record sync protocol (`strict-v3`) featuring 17 canonical columns (incorporating nullable `parentTaskId`), SHA-256 canonical schema fingerprint `7f033e7b432a95e2e95e25fc32ea469a5d6715ea347a88b2edbf9264e6b88a8f`, insert-only create, explicit revision Compare-And-Swap (CAS), structured per-operation acknowledgements, stable cursor scans, first-dispatch root gating, frozen uncertain replay, late-child sync reconciliation with per-row DELETE cleanup, and permanent empty tombstones.
 - **Hardware-Backed Credential Vault**: Token storage backed by platform security primitives (Android KeyStore with AES-256 GCM on mobile; Secret Service on Linux; DPAPI on Windows).
 - **Single-Flight Refresh & Token Fencing**: Concurrent network operations coalesce behind a single mutex-protected token refresh coordinator.
 - **Account Lifecycle**: Account leave coordinates local database/credential cleanup with sync, reminder, and task-surface cancellation. Android OS-retained widget and notification content is cleared on a best-effort basis; see [Security & Recovery](docs/security-and-recovery.md) for the lifecycle caveats.
 - **Accessible Light UI**: Clean, high-contrast light theme conforming to WCAG 2.1 AA contrast requirements and ForumFlash design guidelines.
-- **Sticky Task Surfaces**: Android provides a native Glance task widget and an opt-in, quiet deadline notification; Desktop provides a compact Compose Multiplatform sticky window with tray controls when the host session supports a usable tray.
+- **Sticky Task Surfaces & Absolute Own Deadlines**: Android provides a native Glance task widget; Desktop provides a compact Compose Multiplatform sticky window with tray controls when supported. Surfaces preserve whole compact groups without section fragmentation, render absolute own deadlines (`Due YYYY-MM-DD` or timed with timezone) with zero parent/child deadline inheritance, display overdue decorations without obscuring the absolute date, and fence mutations using `SurfaceAccountToken`.
 - **Server Admin Announcements**: Secure, unidirectional administrator broadcasts via Glean Hub. Features 90-day retention backed by MongoDB BSON DateTime TTL indexes, FCM HTTP v1 generic notifications for Android with channel `tabbyrush.remote.announcements` and tag `remote:<messageId>`, streaming SSE broker with `streamEpoch`, monotonic `acceptanceOrdinal`, and ready baseline, in-memory 200-item sliding cache, no persistent offline content or read outbox, Keystore-backed install proof fencing, and restricted pilot staged rollout (Android & Linux verified; Windows desktop runtime held at Gate G5).
-- **Hardened Packaging & Release Audits**: Current release baseline `1.0.17` (versionCode `18`). Windows MSI packaging eliminates UTF-8 BOM in launcher and environment configurations (`scripts/build-windows-remote-msi.ps1`). Release security audit (`scripts/release-security-check.mjs`) enforces Fail-Closed APK verification, strict exported component boundaries, and widget metadata resource format validation (`@xml/` and `@ref/0x` patterns).
-
-Server Admin Announcements delivery is recorded with 566 passing verifications in QA regression testing (`qa-261018-1548-c1-c6-regression-verification.md`); standalone smoke verification records 21/21 mock assertions and 13 golden vectors passing (`node scripts/admin-announcements-smoke.mjs --self-test`). Restricted pilot is approved as recorded in acceptance evidence for Android, Linux, and Web Admin; Windows desktop runtime remains held at Gate G5, and inherited release holds G2/G3/G6/G7 and checksum verification baseline remain open.
+- **Hardened Packaging, Operator Runbooks & Operational Holds**: Current release baseline `1.0.17` (versionCode `18`). Strict-v3 cutover runbook (`docs/strict-v3-cutover-runbook.md`) and CLI runner (`scripts/hub-strict-upgrade.mjs --target-version strict-v3`) delivered. Production cutover (Gate G7) remains formally held pending resolution of physical surface verifications on connected hardware (Gate G2/G5), live replica set staging rehearsal (Gate G3), live network matrix acceptance (Gate G6), and desktop controller concurrency remediation. The 149-checksum dependency verification baseline (`gradle/verification-metadata.xml`) and Glance dependency provenance hold remain active open boundaries.
 ---
 
 ## Architecture & Directory Structure
@@ -34,7 +33,8 @@ Server Admin Announcements delivery is recorded with 566 passing verifications i
 │   ├── src/commonMain/  # Domain, sync, Room, Compose UI and account-token-fenced task-surface contracts
 │   └── src/commonTest/  # Unit tests, digest vectors and in-memory SQLite integration tests
 ├── scripts/             # Host tooling, emulator orchestration, Hub smoke runners, and recovery scripts
-│   ├── hub-strict-upgrade.mjs          # Strict-v2 Hub migration CLI runner
+│   ├── hub-strict-upgrade.mjs          # Strict Hub migration CLI runner (strict-v2 and strict-v3)
+│   ├── strict-v3-vector-runner.mjs     # Strict-v3 wire vector and schema fingerprint runner
 │   ├── strict-v2-cutover-rehearsal.mjs # Strict-v2 operator tooling rehearsal and self-test harness
 │   ├── hub-live-smoke.mjs              # Live Hub strict-v1 verification harness
 │   ├── release-security-check.mjs      # Release APK security and manifest auditor
@@ -96,18 +96,24 @@ Run the automated in-process mock self-test verifying CLI upgrade workflows, sam
 node scripts/strict-v2-cutover-rehearsal.mjs --self-test
 ```
 
-### 6. Run Server Admin Announcements Smoke & Vector Verification
+### 6. Run Strict-v3 Vector & Fingerprint Verification
+Verify strict-v3 canonical schema fingerprint, valid preimage vectors, and rejection rules across wire models:
+```bash
+node scripts/strict-v3-vector-runner.mjs
+```
+
+### 7. Run Server Admin Announcements Smoke & Vector Verification
 Execute the standalone Node.js smoke runner and golden vector assertions:
 ```bash
 node scripts/admin-announcements-smoke.mjs --self-test
 ```
 
-### 7. GitHub Flow CI & Multiplatform Releases
+### 8. GitHub Flow CI & Multiplatform Releases
 - **Pull Request CI (`.github/workflows/pr-test.yml`)**: Runs shared, Android, and Desktop unit tests only (fast verification without packaging overhead).
 - **End-User Releases (`.github/workflows/release.yml`)**: Triggered by pushing a version tag (e.g. `git tag v1.0.17 && git push origin v1.0.17`) after bumping `appVersion` in `gradle.properties`. Builds and publishes 5 installable release assets (Android APK, Linux RPM + tarball, Windows MSI + ZIP) to GitHub Releases. When release signing credentials are not configured in repository secrets, Android builds fall back to a debug APK with an explicit workflow warning.
 See [Deployment Guide](docs/deployment-guide.md#12-github-flow-cicd-pipeline--multiplatform-releases) for version bump instructions and artifact details.
 
-### 8. Bump Application Version
+### 9. Bump Application Version
 Bump version and Android versionCode centrally via JavaScript runner or Just task:
 ```bash
 just bump patch       # Increment patch: 1.0.17 -> 1.0.18 (versionCode: 19)
@@ -133,8 +139,10 @@ just bump-tag patch   # Bump and create git tag v1.0.18
 - [Windows Desktop Guide](docs/windows-desktop-guide.md)
 - [Deployment Guide](docs/deployment-guide.md)
 - [Toolchain Versions](docs/toolchain-versions.md)
+- [Strict-v3 Cutover Runbook](docs/strict-v3-cutover-runbook.md)
 - [Strict-v2 Cutover Runbook](docs/strict-v2-cutover-runbook.md)
 - [Release Acceptance](docs/release-acceptance.md)
+
 - [Project Roadmap](docs/project-roadmap.md)
 - [Development Roadmap](docs/development-roadmap.md)
 - [Project Changelog](docs/project-changelog.md)

@@ -3,6 +3,26 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Parent/Child Tasks & Deadline Surfaces / Phase 06] - 2026-10-20: Cross-Device Acceptance, Rollout & Documentation Reconciliation
+
+### Delivered
+- **Sync-Layer Late-Child Cleanup & Tombstone Dominance**: Added Step 2 late-child cleanup in `AccountSyncCoordinator.reconcileLateChildren` executing locked check-then-act verification under mutation lock. When an orphaned child task arrives concurrently whose parent root is tombstoned, the coordinator enqueues an ordinary per-row DELETE using the confirmed server revision. Tombstones dominate to suppress late children from normal task lists and reminder schedules, preventing orphan leaks.
+- **Unresolved-Child Recovery UI**: Delivered a dedicated recovery section in `TodoList` (`todo-list.kt`) and `ConflictReviewDialog` (`conflict-review.kt`) that renders tasks whose parent is absent without a tombstone (`isUnresolvedChild = true`), isolating them from normal hierarchy and reminder schedules without accidental promotion or silent deletion.
+- **Conflict Review Explanatory Copy**: Added explanatory messaging in `ConflictReviewDialog` (`conflict-review.kt`) describing CAS conflict reasons, last-child preservation barriers, and partial group outcomes.
+- **Queue Drainage & Marker Retention Remediations**: Remediated mixed-group deletion (W1) in `RoomAccountStore.deleteTodoLocally` by transactionally cancelling unsent child operations (`cancelUnsentGroupAtomic`) when a synced parent root is deleted. Remediated preservation marker retention (W2) so subsequent manual root edits coalescing into a pending preservation op retain the `INTENT_LAST_CHILD_PRESERVATION` intent mask and client-local scheduling barrier.
+- **Authoritative Strict-v3 Operator Runbook & Upgrade CLI**: Created `docs/strict-v3-cutover-runbook.md` with in-place upgrade invariants, backup topologies (whole-instance oplog dump and quiesced database dump), same-ID resume semantics, canonical schema fingerprints (`7f033e7b...`), and post-cutover verification. Updated `scripts/hub-strict-upgrade.mjs` to support `--target-version strict-v3` with 17-column read-back validation.
+- **Shared Documentation Reconciliation**: Reconciled `README.md`, `docs/release-acceptance.md`, `docs/strict-v3-cutover-runbook.md`, and `docs/project-changelog.md` to reflect strict-v3 parent/child hierarchy, compact deadline display surfaces, late-child cleanup, and operator procedures.
+
+### Reported Verification Evidence & Post-Cycle Caveats
+- **Reported Verification Totals**: Cycle 2 QA report ([qa-261020-0747-phase-06-cycle-2-test-validation.md](../plans/reports/qa-261020-0747-phase-06-cycle-2-test-validation.md)) records 685 passing tests/checks across 15 verification groups (527 Gradle unit/integration tests across shared JVM [347], desktop [130], and Android [50]; 158 Node.js script, vector, and static checks; executed with `--dependency-verification=off`).
+- **Post-Cycle 2 Runtime Issue (Active Remediation)**: Cycle 3 code review ([code-reviewer-261020-0800-phase-06-cycle-3.md](../plans/reports/code-reviewer-261020-0800-phase-06-cycle-3.md)) identified a deterministic failure in `DesktopTaskSurfacesTest.testStateClearedOnSignedOut` where non-Ready branch condition `currentToken == null && activeToken == null` left previous-account sticky state unblanked after sign-out/runtime close. Remediation is active.
+- **Operational Holds & Deferred Acceptance**:
+  - *Gate G2 (Physical Connected Device & Native Display)*: Physical Glance widget responsive layouts (120×120 to 320×360dp), TalkBack, 200% font scaling, and Doze timing on Android; graphical D-Bus notifications and Orca on Linux; and native Windows toast bridge and Narrator traversal remain formally held pending hardware testbeds.
+  - *Gate G3 (Multi-Instance Hub Staging Cluster)*: Live multi-node MongoDB replica set staging rehearsal remains held; Hub dry-run recovery side-effect in Rust service remains open.
+  - *Gate G7 (Production Cutover Gate)*: Production cutover is held pending operator authorization and resolution of operational release gates.
+  - *Supply-Chain Integrity*: The 149-checksum dependency verification baseline (`gradle/verification-metadata.xml`) and separate Glance dependency provenance hold remain open.
+
+---
 ## [Parent/Child Tasks & Deadline Surfaces / Phase 05] - 2026-10-20: Linux/Windows Grouped Sticky Mode & Deadlines
 
 ### Delivered

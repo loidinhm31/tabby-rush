@@ -23,6 +23,7 @@ import dev.tabbyrush.shared.contract.StrictV3TodoData
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.ReminderRule
 import dev.tabbyrush.shared.data.AccountSyncMetaEntity
+import dev.tabbyrush.shared.data.EditorDraftEntity
 import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.RoomAccountStore
 import dev.tabbyrush.shared.data.ServerBaseEntity
@@ -30,6 +31,7 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -848,5 +850,354 @@ class AccountSyncCoordinatorTest {
             )
         )
         assertEquals(expectedDigest, newOp.digest)
+    }
+
+    @Test
+    fun testReapplyConflictRejectedWhenParentDeletedOnServer() = runTest {
+        val engine = TestHttpEngine { Pair(HttpStatusCode.OK, "{}") }
+        val (coordinator, store, dao) = createTestSetup(engine)
+
+        val parentUuid = "50000000-0000-4000-8000-000000000091"
+        val childUuid = "50000000-0000-4000-8000-000000000092"
+
+        store.setActiveEpoch("epoch-v3-reject")
+        dao.upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-v3-reject",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        // Parent was confirmed deleted on server (tombstone)
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = parentUuid,
+                serverRevision = 3L,
+                deleted = true,
+                title = "Deleted Parent",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1500L,
+                epoch = "epoch-v3-reject"
+            )
+        )
+
+        // Child has confirmed server base at revision 1L
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = childUuid,
+                parentTaskId = parentUuid,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Child Task",
+                completed = false,
+                createdAt = 1100L,
+                updatedAt = 1100L,
+                epoch = "epoch-v3-reject"
+            )
+        )
+
+        // Child has a conflict operation in outbox
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-child-conflict-orphan",
+                epoch = "epoch-v3-reject",
+                tableName = "todos",
+                rowId = childUuid,
+                kind = StrictOperationKind.UPDATE.wireName,
+                expectedRevision = 1L,
+                title = "Conflicted Child Edit",
+                completed = true,
+                createdAt = 1100L,
+                digest = "digest-placeholder",
+                localRevision = 5L,
+                deliveryState = OutboxEntity.STATE_CONFLICT,
+                createdAtEpochMs = 1200L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = parentUuid
+            )
+        )
+
+        coordinator.reapplyConflict(childUuid)
+
+        // Reapply must be rejected because parent is deleted on server
+        val error = coordinator.progress.value.safeError
+        assertNotNull(error)
+        assertIs<SafeError.Validation>(error)
+        assertEquals("PARENT_DELETED", error.code)
+        assertEquals("parentTaskId", error.field)
+
+        // Conflict op must not be replaced
+        assertNotNull(dao.getOutboxEntry("op-child-conflict-orphan"))
+    }
+
+    @Test
+    fun testLateChildCleanedUpWhenParentTombstoned() = runTest {
+        val parentUuid = "50000000-0000-4000-8000-000000000081"
+        val childUuid = "50000000-0000-4000-8000-000000000082"
+
+        var pushAccepted = false
+        var pushedKind: String? = null
+        val engine = TestHttpEngine { request ->
+            val url = request.url.encodedPath
+            when {
+                url.endsWith("/bootstrap") -> Pair(
+                    HttpStatusCode.OK,
+                    """{"protocol":"strict-v3","appId":"tabby-rush","epoch":"epoch-v3-late","tables":["todos"],"syncMode":"strict-v3"}"""
+                )
+                url.endsWith("/pull") || url.endsWith("/strong/pull") -> {
+                    val recordsJson = if (!pushAccepted) {
+                        """[{"tableName":"todos","rowId":"$parentUuid","revision":3,"deleted":true},{"tableName":"todos","rowId":"$childUuid","revision":1,"deleted":false,"data":{"id":"$childUuid","title":"Late Child","completed":false,"createdAt":1100,"parentTaskId":"$parentUuid"}}]"""
+                    } else {
+                        """[{"tableName":"todos","rowId":"$parentUuid","revision":3,"deleted":true},{"tableName":"todos","rowId":"$childUuid","revision":2,"deleted":true}]"""
+                    }
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v3","epoch":"epoch-v3-late","records":$recordsJson,"hasMore":false,"cursor":null}"""
+                    )
+                }
+                url.endsWith("/push") || url.endsWith("/strong/push") -> {
+                    pushAccepted = true
+                    val bodyText = (request.body as? io.ktor.http.content.TextContent)?.text ?: ""
+                    val match = Regex(""""opId"\s*:\s*"([^"]+)"""").find(bodyText)
+                    val pushedOpId = match?.groupValues?.get(1) ?: "test-op"
+                    val digestMatch = Regex(""""digest"\s*:\s*"([^"]+)"""").find(bodyText)
+                    val pushedDigest = digestMatch?.groupValues?.get(1) ?: "test-digest"
+                    val kindMatch = Regex(""""kind"\s*:\s*"([^"]+)"""").find(bodyText)
+                    pushedKind = kindMatch?.groupValues?.get(1)
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v3","epoch":"epoch-v3-late","results":[{"opId":"$pushedOpId","rowId":"$childUuid","digest":"$pushedDigest","status":"accepted","acceptedRevision":2}]}"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.OK, "{}")
+            }
+        }
+        val (coordinator, store, dao) = createTestSetup(engine)
+
+        store.setActiveEpoch("epoch-v3-late")
+        dao.upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-v3-late",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        // Parent is confirmed tombstone in server base
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = parentUuid,
+                serverRevision = 3L,
+                deleted = true,
+                title = "Tombstoned Parent",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1500L,
+                epoch = "epoch-v3-late"
+            )
+        )
+
+        // Child is active in server base with parentTaskId pointing to tombstone
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = childUuid,
+                parentTaskId = parentUuid,
+                serverRevision = 1L,
+                deleted = false,
+                title = "Late Child",
+                completed = false,
+                createdAt = 1100L,
+                updatedAt = 1100L,
+                epoch = "epoch-v3-late"
+            )
+        )
+
+        // Trigger sync
+        coordinator.triggerSync()
+        assertEquals(null, coordinator.progress.value.safeError?.let { "${it.code}: ${it.message}" })
+        val base = dao.getServerBase(childUuid)
+        assertNotNull(base)
+        assertTrue(base.deleted, "Late child must be confirmed deleted in server base")
+        assertEquals(2L, base.serverRevision)
+        assertEquals("delete", pushedKind, "Late child cleanup must enqueue a DELETE operation")
+
+        // Child must be deleted in store view
+        val todos = store.loadTodos()
+        assertTrue(todos.none { it.id == childUuid }, "Late child must be deleted from store view")
+    }
+
+    @Test
+    fun testLateChildCleanupSkipsUncertainAndConflictAndCancelsDraft() = runTest {
+        val parentUuid = "50000000-0000-4000-8000-000000000091"
+        val draftChildUuid = "50000000-0000-4000-8000-000000000092"
+        val uncertainChildUuid = "50000000-0000-4000-8000-000000000093"
+        val conflictChildUuid = "50000000-0000-4000-8000-000000000094"
+
+        val engine = TestHttpEngine { request ->
+            val url = request.url.encodedPath
+            when {
+                url.endsWith("/bootstrap") -> Pair(
+                    HttpStatusCode.OK,
+                    """{"protocol":"strict-v3","appId":"tabby-rush","epoch":"epoch-v3-late","tables":["todos"],"syncMode":"strict-v3"}"""
+                )
+                url.endsWith("/pull") || url.endsWith("/strong/pull") -> {
+                    val recordsJson = """[{"tableName":"todos","rowId":"$parentUuid","revision":5,"deleted":true},{"tableName":"todos","rowId":"$uncertainChildUuid","revision":2,"deleted":false,"data":{"id":"$uncertainChildUuid","title":"Uncertain Child","completed":false,"createdAt":1100,"parentTaskId":"$parentUuid"}},{"tableName":"todos","rowId":"$conflictChildUuid","revision":2,"deleted":false,"data":{"id":"$conflictChildUuid","title":"Conflict Child","completed":false,"createdAt":1150,"parentTaskId":"$parentUuid"}}]"""
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v3","epoch":"epoch-v3-late","records":$recordsJson,"hasMore":false,"cursor":null}"""
+                    )
+                }
+                url.endsWith("/push") || url.endsWith("/strong/push") -> {
+                    Pair(
+                        HttpStatusCode.OK,
+                        """{"protocol":"strict-v3","epoch":"epoch-v3-late","results":[]}"""
+                    )
+                }
+                else -> Pair(HttpStatusCode.OK, "{}")
+            }
+        }
+        val (coordinator, store, dao) = createTestSetup(engine)
+
+        store.setActiveEpoch("epoch-v3-late")
+        dao.upsertMeta(
+            AccountSyncMetaEntity(
+                id = AccountSyncMetaEntity.SINGLETON_ID,
+                activeEpoch = "epoch-v3-late",
+                syncStatus = "ready-v3"
+            )
+        )
+
+        // Parent is confirmed tombstone in active epoch
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = parentUuid,
+                serverRevision = 5L,
+                deleted = true,
+                title = "Tombstoned Parent",
+                completed = false,
+                createdAt = 1000L,
+                updatedAt = 1500L,
+                epoch = "epoch-v3-late"
+            )
+        )
+
+        // 1. Unsent draft child under tombstoned parent (no server base, pending CREATE)
+        dao.upsertDraft(
+            EditorDraftEntity(
+                rowId = draftChildUuid,
+                draftTitle = "Offline Draft Child",
+                draftCompleted = false,
+                localRevision = 1L,
+                updatedAt = 1200L,
+                parentTaskId = parentUuid
+            )
+        )
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-draft-create",
+                epoch = "epoch-v3-late",
+                tableName = "todos",
+                rowId = draftChildUuid,
+                kind = StrictOperationKind.CREATE.wireName,
+                expectedRevision = 0L,
+                title = "Offline Draft Child",
+                completed = false,
+                createdAt = 1200L,
+                digest = "d-draft-create",
+                localRevision = 1L,
+                deliveryState = OutboxEntity.STATE_PENDING,
+                createdAtEpochMs = 1200L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = parentUuid
+            )
+        )
+
+        // 2. Child with UNCERTAIN op under tombstoned parent (must NOT be touched)
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = uncertainChildUuid,
+                parentTaskId = parentUuid,
+                serverRevision = 2L,
+                deleted = false,
+                title = "Uncertain Child",
+                completed = false,
+                createdAt = 1100L,
+                updatedAt = 1100L,
+                epoch = "epoch-v3-late"
+            )
+        )
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-uncertain",
+                epoch = "epoch-v3-late",
+                tableName = "todos",
+                rowId = uncertainChildUuid,
+                kind = StrictOperationKind.UPDATE.wireName,
+                expectedRevision = 2L,
+                title = "Uncertain Child",
+                completed = false,
+                createdAt = 1100L,
+                digest = "d-uncertain",
+                localRevision = 2L,
+                deliveryState = OutboxEntity.STATE_UNCERTAIN,
+                createdAtEpochMs = 1100L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = parentUuid
+            )
+        )
+
+        // 3. Child with CONFLICT (deliveryState = STATE_CONFLICT) under tombstoned parent (must NOT be touched)
+        dao.upsertServerBase(
+            ServerBaseEntity(
+                rowId = conflictChildUuid,
+                parentTaskId = parentUuid,
+                serverRevision = 2L,
+                deleted = false,
+                title = "Conflict Child",
+                completed = false,
+                createdAt = 1150L,
+                updatedAt = 1150L,
+                epoch = "epoch-v3-late"
+            )
+        )
+        dao.upsertOutbox(
+            OutboxEntity(
+                opId = "op-conflict",
+                epoch = "epoch-v3-late",
+                tableName = "todos",
+                rowId = conflictChildUuid,
+                kind = StrictOperationKind.UPDATE.wireName,
+                expectedRevision = 1L,
+                title = "Conflict Child Local",
+                completed = false,
+                createdAt = 1150L,
+                digest = "d-conflict",
+                localRevision = 2L,
+                deliveryState = OutboxEntity.STATE_CONFLICT,
+                createdAtEpochMs = 1150L,
+                contractVersion = OutboxEntity.CONTRACT_VERSION_V3,
+                parentTaskId = parentUuid
+            )
+        )
+
+        // Execute sync
+        coordinator.triggerSync()
+        assertEquals(null, coordinator.progress.value.safeError?.let { "${it.code}: ${it.message}" })
+        // Verify:
+        // 1. Draft child was cancelled atomically (draft removed, outbox removed)
+        assertNull(dao.getDraft(draftChildUuid), "Unsent draft child under tombstoned parent must be cancelled")
+        assertTrue(dao.getOutboxByRowId(draftChildUuid).isEmpty(), "Unsent draft outbox must be cancelled")
+
+        // 2. Uncertain child was NOT deleted or mutated
+        val uncertainBase = dao.getServerBase(uncertainChildUuid)
+        assertNotNull(uncertainBase)
+        assertFalse(uncertainBase.deleted, "Child with uncertain op must not be touched")
+
+        // 3. Conflict child was NOT deleted or mutated
+        val conflictBase = dao.getServerBase(conflictChildUuid)
+        assertNotNull(conflictBase)
+        assertFalse(conflictBase.deleted, "Child with conflict op must not be touched")
     }
 }

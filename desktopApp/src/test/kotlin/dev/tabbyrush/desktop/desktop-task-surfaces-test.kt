@@ -15,9 +15,11 @@ import dev.tabbyrush.shared.data.JvmAccountFiles
 import dev.tabbyrush.shared.data.RoomAccountStore
 import dev.tabbyrush.shared.data.createInMemoryJvmDatabaseBuilder
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -879,8 +881,112 @@ class DesktopTaskSurfacesTest {
 
     @Test
     fun testStartupOrderControllerConstructedBeforeAccountAuthentication() = runTest {
+        val testScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        try {
+            for (i in 0 until 10) {
+                val access = DesktopTaskSurfaceAccess()
+                val controller = DesktopStickyTaskController(
+                    access = access,
+                    scope = testScope,
+                    onOpenApp = {},
+                    onQuit = {},
+                    onTriggerSync = {}
+                )
+
+                val task = createDefaultTodo(title = "Startup Task $i", nowEpochMs = 1000L + i)
+                store.saveTodoLocally(task)
+
+                // Interleave authentication and observation on Default dispatcher
+                access.onAccountAuthenticated(token1, store)
+                controller.startObserving(token1, store)
+
+                withContext(Dispatchers.Default) {
+                    withTimeout(5000L) {
+                        while (controller.stickyState.value.projectedSections.incomplete.isEmpty()) {
+                            delay(10)
+                        }
+                    }
+                }
+
+                val state = controller.stickyState.value
+                assertEquals(SurfaceReadiness.Ready(token1), state.readiness)
+                assertEquals(1, state.projectedSections.incomplete.size)
+                assertEquals("Startup Task $i", state.projectedSections.incomplete[0].todo.title)
+                controller.stopObserving()
+                store.deleteTodoLocally(task.id)
+            }
+        } finally {
+            testScope.cancel()
+        }
+    }
+
+    @Test
+    fun testRapidAccountSwitchReadyInterleavingUnderMultiThreadedDispatcher() = runTest {
+        val accountKey2 = AccountKey("2222222222222222222222222222222222222222222222222222222222222222")
+        val token2 = SurfaceAccountToken(accountKey2, 1L)
+        val db2 = createInMemoryJvmDatabaseBuilder().build()
+        val store2 = RoomAccountStore(
+            accountKey = accountKey2,
+            userId = "test-user-2",
+            database = db2,
+            appId = "tabbyrush-test",
+            defaultContractVersion = OutboxEntity.CONTRACT_VERSION_V3
+        )
+
+        val testScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        try {
+            store.saveTodoLocally(createDefaultTodo(title = "Account 1 Task", nowEpochMs = 1000L))
+            store2.saveTodoLocally(createDefaultTodo(title = "Account 2 Task", nowEpochMs = 2000L))
+
+            val access = DesktopTaskSurfaceAccess()
+            val controller = DesktopStickyTaskController(
+                access = access,
+                scope = testScope,
+                onOpenApp = {},
+                onQuit = {},
+                onTriggerSync = {}
+            )
+
+            // 1. Account 1 is active
+            access.onAccountAuthenticated(token1, store)
+            controller.startObserving(token1, store)
+
+            withContext(Dispatchers.Default) {
+                withTimeout(5000L) {
+                    while (controller.stickyState.value.projectedSections.incomplete.isEmpty()) {
+                        delay(10)
+                    }
+                }
+            }
+            assertEquals("Account 1 Task", controller.stickyState.value.projectedSections.incomplete[0].todo.title)
+
+            // 2. Rapid switch to Account 2: startObserving(token2) runs BEFORE onAccountAuthenticated(token2)
+            controller.startObserving(token2, store2)
+            access.onAccountAuthenticated(token2, store2)
+
+            withContext(Dispatchers.Default) {
+                withTimeout(5000L) {
+                    while (controller.stickyState.value.readiness != SurfaceReadiness.Ready(token2) ||
+                        controller.stickyState.value.projectedSections.incomplete.isEmpty()) {
+                        delay(10)
+                    }
+                }
+            }
+
+            val finalState = controller.stickyState.value
+            assertEquals(SurfaceReadiness.Ready(token2), finalState.readiness)
+            assertEquals(1, finalState.projectedSections.incomplete.size)
+            assertEquals("Account 2 Task", finalState.projectedSections.incomplete[0].todo.title)
+            // Verify Account 1 task was NOT leaked
+            assertTrue(finalState.projectedSections.incomplete.none { it.todo.title == "Account 1 Task" })
+        } finally {
+            testScope.cancel()
+            try { db2.close() } catch (_: Exception) {}
+        }
+    }
+    @Test
+    fun testInitialSnapshotProcessedBeforeReadinessCollectorRuns() = runTest {
         val access = DesktopTaskSurfaceAccess()
-        // Construct controller while access is still Restoring (production startup order in main.kt)
         val controller = DesktopStickyTaskController(
             access = access,
             scope = backgroundScope,
@@ -888,27 +994,49 @@ class DesktopTaskSurfacesTest {
             onQuit = {},
             onTriggerSync = {}
         )
+        assertEquals(SurfaceReadiness.Restoring, controller.stickyState.value.readiness)
 
-        // Pre-populate tasks in store
-        val task = createDefaultTodo(title = "Startup Task", nowEpochMs = 1000L)
+        val task = createDefaultTodo(title = "Immediate Task", nowEpochMs = 1000L)
         store.saveTodoLocally(task)
 
-        // Then authenticate account and start observing
         access.onAccountAuthenticated(token1, store)
         controller.startObserving(token1, store)
 
-        // Controller must populate tasks and stay populated (never canceled or wiped by readiness race)
         withContext(Dispatchers.Default) {
             withTimeout(5000L) {
                 while (controller.stickyState.value.projectedSections.incomplete.isEmpty()) {
-                    delay(20)
+                    delay(10)
                 }
             }
         }
 
-        val state = controller.stickyState.value
-        assertEquals(SurfaceReadiness.Ready(token1), state.readiness)
-        assertEquals(1, state.projectedSections.incomplete.size)
-        assertEquals("Startup Task", state.projectedSections.incomplete[0].todo.title)
+        // The initial snapshot must be present and not dropped by readiness gating
+        assertEquals(1, controller.stickyState.value.projectedSections.incomplete.size)
+        assertEquals("Immediate Task", controller.stickyState.value.projectedSections.incomplete[0].todo.title)
+    }
+
+    @Test
+    fun testQuickAddWithMismatchedTokenIsFenced() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        access.onAccountAuthenticated(token1, store)
+
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = {}
+        )
+        controller.startObserving(token1, store)
+
+        // Submit with stale/mismatched token
+        controller.onAction(StickyTaskAction.ChangeTitle(staleToken, "Stale Token Task"))
+        // The rawTitle must not update because token doesn't match
+        assertEquals("", controller.stickyState.value.quickAdd.rawTitle)
+
+        controller.onAction(StickyTaskAction.Submit(staleToken))
+        // No task must be saved in store
+        val todos = store.loadTodos()
+        assertTrue(todos.isEmpty())
     }
 }

@@ -97,6 +97,48 @@ fun ConflictReview(
                     )
                 }
             }
+
+            if (conflict.isPreservationConflict) {
+                Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = TabbyRushThemeTokens.customColors.mintSurface
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, TabbyRushThemeTokens.customColors.primaryDeep, MaterialTheme.shapes.small)
+                ) {
+                    Text(
+                        text = "Subtask Completion Conflict: This parent task has an automatic completion state derived from subtasks that conflicted with an update on the server. Discarding will clear the local completion barrier and adopt the server version without undoing accepted subtask deletions. Overwriting will push your local completion state to the server.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TabbyRushThemeTokens.customColors.primaryDeep,
+                        modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
+                    )
+                }
+            }
+
+            if (conflict.isSubtaskConflict) {
+                Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = TabbyRushThemeTokens.customColors.coralSurface
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small)
+                ) {
+                    Text(
+                        text = if (conflict.isParentDeleted) {
+                            "Orphaned Subtask Notice: The parent task for this subtask was deleted on the server. Because subtasks cannot exist without a live parent, you cannot overwrite the server version. You can keep your work as a new independent root task, or discard these edits."
+                        } else {
+                            "Subtask Outcome Notice: Subtask operations synchronize independently from their parent. Overwriting will apply this subtask version to the server, while discarding will adopt the server version."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingLarge))
 
             // Local Draft Card
@@ -128,7 +170,7 @@ fun ConflictReview(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall)
             ) {
-                // Copy As New: retains local edits as a fresh task UUID
+                // Copy As New: retains local edits as a fresh root task UUID
                 Button(
                     onClick = { onAction(TodoAction.CopyAsNew(conflict.rowId)) },
                     modifier = Modifier
@@ -141,14 +183,15 @@ fun ConflictReview(
                     shape = MaterialTheme.shapes.small
                 ) {
                     Text(
-                        text = "Keep Both (Copy Local as New Task)",
+                        text = "Keep Both (Copy Local as New Root Task)",
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
 
-                // Reapply: if remote item is not deleted
+                // Reapply: if remote item is not deleted AND parent is not deleted
                 val remoteIsDeleted = conflict.remoteTodo == null || conflict.remoteTodo.isDeleted
-                if (!remoteIsDeleted) {
+                val canReapply = !remoteIsDeleted && !conflict.isParentDeleted
+                if (canReapply) {
                     OutlinedButton(
                         onClick = { onAction(TodoAction.ReapplyConflict(conflict.rowId)) },
                         modifier = Modifier
@@ -164,7 +207,7 @@ fun ConflictReview(
                     }
                 }
 
-                // Discard: accepts remote server version, drops local edits
+                // Discard: accepts remote server version, drops local edits / clears preservation barrier
                 OutlinedButton(
                     onClick = { onAction(TodoAction.DiscardConflict(conflict.rowId)) },
                     modifier = Modifier
@@ -173,12 +216,11 @@ fun ConflictReview(
                     shape = MaterialTheme.shapes.small
                 ) {
                     Text(
-                        text = "Discard My Edits (Accept Server)",
+                        text = if (conflict.isPreservationConflict) "Discard Local Barrier (Accept Server)" else "Discard My Edits (Accept Server)",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
-
                 // Close / Decide Later
                 OutlinedButton(
                     onClick = { onAction(TodoAction.DismissError) },

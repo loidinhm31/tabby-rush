@@ -355,9 +355,14 @@ interface TabbyRushDao {
     suspend fun deleteGroupAtomic(
         meta: AccountSyncMetaEntity,
         drafts: List<EditorDraftEntity>,
-        outboxes: List<OutboxEntity>
+        outboxes: List<OutboxEntity>,
+        cancelledChildRowIds: List<String> = emptyList()
     ) {
         upsertMeta(meta)
+        for (rowId in cancelledChildRowIds) {
+            deleteDraft(rowId)
+            deleteOutboxByRowId(rowId)
+        }
         for (draft in drafts) {
             upsertDraft(draft)
         }
@@ -375,14 +380,23 @@ interface TabbyRushDao {
     @Transaction
     suspend fun deleteChildAndPreserveParentAtomic(
         meta: AccountSyncMetaEntity,
-        childDraft: EditorDraftEntity,
-        childOutbox: OutboxEntity,
+        childDraft: EditorDraftEntity?,
+        childOutbox: OutboxEntity?,
         parentDraft: EditorDraftEntity,
-        parentOutbox: OutboxEntity
+        parentOutbox: OutboxEntity,
+        cancelledChildRowId: String? = null
     ) {
         upsertMeta(meta)
-        upsertDraft(childDraft)
-        upsertOutbox(childOutbox)
+        if (cancelledChildRowId != null) {
+            deleteDraft(cancelledChildRowId)
+            deleteOutboxByRowId(cancelledChildRowId)
+        }
+        if (childDraft != null) {
+            upsertDraft(childDraft)
+        }
+        if (childOutbox != null) {
+            upsertOutbox(childOutbox)
+        }
         upsertDraft(parentDraft)
         upsertOutbox(parentOutbox)
     }

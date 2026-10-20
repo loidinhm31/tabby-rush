@@ -124,36 +124,40 @@ function parseArgs() {
     help: false,
   };
 
+  const valueOptions = [
+    '--origin', '--app-id', '--token', '--expected-version',
+    '--expected-fingerprint', '--target-version', '--target-fingerprint',
+    '--expected-epoch', '--migration-id', '--poll-interval', '--timeout'
+  ];
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === '--origin' && args[i + 1]) {
-      options.origin = args[++i];
-    } else if (arg === '--app-id' && args[i + 1]) {
-      options.appId = args[++i];
-    } else if (arg === '--token' && args[i + 1]) {
-      options.token = args[++i];
-    } else if (arg === '--expected-version' && args[i + 1]) {
-      options.expectedVersion = args[++i];
-    } else if (arg === '--expected-fingerprint' && args[i + 1]) {
-      options.expectedFingerprint = args[++i];
-    } else if (arg === '--target-version' && args[i + 1]) {
-      options.targetVersion = args[++i];
-    } else if (arg === '--target-fingerprint' && args[i + 1]) {
-      options.targetFingerprint = args[++i];
-    } else if (arg === '--expected-epoch' && args[i + 1]) {
-      options.expectedEpoch = args[++i];
-    } else if (arg === '--migration-id' && args[i + 1]) {
-      options.migrationId = args[++i];
-    } else if (arg === '--poll-interval' && args[i + 1]) {
-      options.pollIntervalMs = parseInt(args[++i], 10);
-    } else if (arg === '--timeout' && args[i + 1]) {
-      options.timeoutMs = parseInt(args[++i], 10);
+    if (valueOptions.includes(arg)) {
+      if (i + 1 >= args.length) {
+        console.error(`[Upgrade] ERROR: Option '${arg}' requires a value.`);
+        process.exit(1);
+      }
+      const val = args[++i];
+      if (arg === '--origin') options.origin = val;
+      else if (arg === '--app-id') options.appId = val;
+      else if (arg === '--token') options.token = val;
+      else if (arg === '--expected-version') options.expectedVersion = val;
+      else if (arg === '--expected-fingerprint') options.expectedFingerprint = val;
+      else if (arg === '--target-version') options.targetVersion = val;
+      else if (arg === '--target-fingerprint') options.targetFingerprint = val;
+      else if (arg === '--expected-epoch') options.expectedEpoch = val;
+      else if (arg === '--migration-id') options.migrationId = val;
+      else if (arg === '--poll-interval') options.pollIntervalMs = parseInt(val, 10);
+      else if (arg === '--timeout') options.timeoutMs = parseInt(val, 10);
     } else if (arg === '--dry-run') {
       options.dryRun = true;
     } else if (arg === '--status-only') {
       options.statusOnly = true;
     } else if (arg === '--help' || arg === '-h') {
       options.help = true;
+    } else {
+      console.error(`[Upgrade] ERROR: Unrecognized command line option '${arg}'. Use --help for usage.`);
+      process.exit(1);
     }
   }
 

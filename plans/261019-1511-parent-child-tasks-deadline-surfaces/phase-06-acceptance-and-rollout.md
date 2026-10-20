@@ -5,7 +5,7 @@
 [Existing release gates](../../docs/release-acceptance.md), [v2 cutover precedent](../../docs/strict-v2-cutover-runbook.md).
 
 ## Overview
-Date: 2026-10-20. Priority: P2. Implementation: pending. Review: pending. Provisional effort: 24h (subtotal 48h for surface & rollout phases 4–6). Prove integrated behavior, safely activate v3 on staging/production, remediate tracked Phase 01/02/03 review findings, and reconcile documentation with actual delivery.
+Date: 2026-10-20. Priority: P2. Status: DONE (2026-10-20) / 100% credited planned effort (24h credited). Implementation: Complete (administratively closed per user approval with findings tracked). Review: Cycle 3 completed (score 6/10, not approved; user authorized proceeding to finalize documentation and plan status with release blockers tracked). Credited effort: 24h (subtotal 48h for surface & rollout phases 4–6; 120h / 120h total plan roll-up, 100.0%). Note: Technical acceptance is NOT APPROVED and production cutover remains BLOCKED on open release gates.
 
 ## Key Insights
 - Tests alone cannot prove Glance launcher/desktop sticky behavior. Runtime screenshots and interactions are required on Android, Linux and Windows.
@@ -61,17 +61,17 @@ Prefix `S` = `/home/loidinh/WS/tabby-rush`.
 8. Update docs/changelog/roadmaps and replace the architecture's proposed status with accurate delivered/held status only after evidence. Record remaining runtime/supply-chain gates rather than copying historical counts as fresh results.
 
 ## Todo list
-- [ ] Run integrated behavioral regression and production-path smoke.
-- [ ] Prove live staging upgrade/receipts/fencing and adversarial convergence.
-- [ ] Capture Android, Linux and Windows actual surface acceptance.
-- [ ] Remediate Phase 03 W1: mixed-group queue drainage and unsent child op cancellation.
-- [ ] Remediate Phase 03 W2: preservation-marker retention during edit coalescing and preservation bypass.
-- [ ] Deliver Phase 03 deferred recovery items: late-child sync cleanup, unresolved-section UI, and conflict-review copy.
-- [ ] Execute Phase 04 physical launcher acceptance: responsive sizes (120×120 to 320×360dp), 200% font scale, physical touch targets, deadline wrapping, and lifecycle refresh.
-- [ ] Remediate Phase 05 controller concurrency: serialize observer replacement in `startObserving`, remove async job cancellation from readiness collector, and add deterministic multi-threaded interleaving tests.
-- [ ] Execute Phase 05 native desktop sticky verification: physical Linux/Windows display, high-DPI scaling, always-on-top, and tray recovery.
-- [ ] Complete authorized rollout/read-back or report exact operational hold.
-- [ ] Reconcile docs/changelog/phase status with exercised evidence.
+- [~] Run integrated behavioral regression and production-path smoke. (QA Cycle 2 reported 685 passing automated checks under --dependency-verification=off; later Cycle 3 changes introduced desktop regression; production-path smoke and live staging not run.)
+- [ ] Prove live staging upgrade/receipts/fencing and adversarial convergence. (OPERATIONAL HOLD: live staging MongoDB replica-set required before production cutover.)
+- [ ] Capture Android, Linux and Windows actual surface acceptance. (OPERATIONAL HOLD: no runtime evidence.)
+- [x] Remediate Phase 03 W1: mixed-group queue drainage and unsent child op cancellation. (code + tests; review: OK)
+- [x] Remediate Phase 03 W2: preservation-marker retention during edit coalescing and preservation bypass. (code + tests; review: OK)
+- [~] Deliver Phase 03 deferred recovery items: late-child sync cleanup, unresolved-section UI, and conflict-review copy. (delivered; review warnings W3-W6 tracked for operational follow-up: lock bypass, untested draft-cancel/uncertain-skip paths)
+- [ ] Execute Phase 04 physical launcher acceptance: responsive sizes (120×120 to 320×360dp), 200% font scale, physical touch targets, deadline wrapping, and lifecycle refresh. (OPERATIONAL HOLD)
+- [~] Remediate Phase 05 controller concurrency: serialize observer replacement in `startObserving`, remove async job cancellation from readiness collector, and add deterministic multi-threaded interleaving tests. (Cycle 3: collector teardown removed + `lifecycleLock` added; RELEASE BLOCKER: collector blank condition `currentToken == null && activeToken == null` leaves prior-account state after sign-out/close → `testStateClearedOnSignedOut` FAILS; interleaving tests still non-deterministic. See code-reviewer-261020-0800 C1.)
+- [ ] Execute Phase 05 native desktop sticky verification: physical Linux/Windows display, high-DPI scaling, always-on-top, and tray recovery. (OPERATIONAL HOLD)
+- [~] Complete authorized rollout/read-back or report exact operational hold. (Cycle 3: `--status-only --target-version strict-v3`, routes, epoch fixed; RELEASE BLOCKER: §6.1 `--nsInclude="appTabbyRush.*"` wrong namespace (collection not DB; `_schemas`/`_coordination` omitted), §3.2 mongodump has no target; recovery procedure NOT APPROVED for execution until corrected and rehearsed. See code-reviewer-261020-0800 C2-R2.)
+- [x] Reconcile docs/changelog/phase status with exercised evidence. (README.md, release-acceptance.md, strict-v3-cutover-runbook.md, project-changelog.md, project-roadmap.md, development-roadmap.md reconciled with delivered strict-v3 hierarchy, deadline surfaces, and held gates.)
 
 ## Success Criteria
 | Scenario | Required observable outcome |

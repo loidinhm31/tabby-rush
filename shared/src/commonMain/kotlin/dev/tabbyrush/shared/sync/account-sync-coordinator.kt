@@ -250,6 +250,9 @@ class AccountSyncCoordinator(
             is ApiResult.Success -> { /* Completed initial scan */ }
         }
 
+        // 3.5. Late-child sync cleanup: reconcile surviving children whose parent has confirmed tombstone
+        reconcileLateChildren(activeEpoch)
+
         // 4. Stage 2: Push Eligible Outbox Mutations
         val reconciliation = OutboxReconciliation(store, activeEpoch)
         val eligibleBatch = reconciliation.getEligibleDispatchBatch(maxCount = 100)
@@ -312,10 +315,70 @@ class AccountSyncCoordinator(
                 handleSyncFailure(finalScan.error)
                 return
             }
+            // Reconcile any late children discovered after final scan
+            reconcileLateChildren(activeEpoch)
         }
 
         // 6. Refresh and publish progress state
         refreshProgressState()
+    }
+    private suspend fun reconcileLateChildren(activeEpoch: String) {
+        val allBases = store.dao.getAllServerBase()
+        val tombstoneRootIds = allBases
+            .filter { it.parentTaskId == null && it.deleted && it.epoch == activeEpoch }
+            .map { it.rowId }
+            .toSet()
+
+        if (tombstoneRootIds.isEmpty()) return
+
+        // 1. Surviving children confirmed in server_base whose parent has a confirmed tombstone
+        val survivingLateChildren = allBases.filter {
+            it.parentTaskId != null && !it.deleted && it.epoch == activeEpoch && tombstoneRootIds.contains(it.parentTaskId)
+        }
+        for (childBase in survivingLateChildren) {
+            val childOps = store.dao.getOutboxByRowId(childBase.rowId)
+            val hasUncertainOrInFlight = childOps.any {
+                it.deliveryState == OutboxEntity.STATE_UNCERTAIN || it.deliveryState == OutboxEntity.STATE_DISPATCHING
+            }
+            if (hasUncertainOrInFlight) continue // Resolve receipts first
+
+            val hasConflict = childOps.any {
+                it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED
+            }
+            if (hasConflict) continue // Leave for explicit user review
+
+            val hasPendingDelete = childOps.any {
+                it.deliveryState == OutboxEntity.STATE_PENDING && it.kind == StrictOperationKind.DELETE.wireName
+            }
+            if (hasPendingDelete) continue
+
+            val draft = store.dao.getDraft(childBase.rowId)
+            if (draft != null && draft.isDeleted) continue
+
+            // Enqueue clean per-row DELETE for this late child
+            store.deleteTodoLocally(childBase.rowId)
+        }
+
+        // 2. Offline drafts created under a parent that has since been tombstoned on the server
+        val allDrafts = store.dao.getAllDrafts()
+        for (draft in allDrafts) {
+            val parentId = draft.parentTaskId ?: continue
+            if (!tombstoneRootIds.contains(parentId)) continue
+            store.withMutationLock {
+                val base = store.dao.getServerBase(draft.rowId)
+                if (base == null) {
+                    val ops = store.dao.getOutboxByRowId(draft.rowId)
+                    val isUnsentCreate = ops.isNotEmpty() && ops.all {
+                        it.deliveryState == OutboxEntity.STATE_PENDING &&
+                                it.transitionCheckpoint == null &&
+                                it.kind == StrictOperationKind.CREATE.wireName
+                    }
+                    if (isUnsentCreate) {
+                        store.dao.cancelUnsentCreateAtomic(draft.rowId)
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun refreshProgressState() {
@@ -428,6 +491,20 @@ class AccountSyncCoordinator(
 
         val hasDeadline = deadlineDate != null
         val parentTaskId = draft?.parentTaskId ?: conflictOp?.parentTaskId ?: currentBase?.parentTaskId
+        if (parentTaskId != null && kind != StrictOperationKind.DELETE) {
+            val parentBase = store.dao.getServerBase(parentTaskId)
+            if (parentBase == null || parentBase.deleted) {
+                updateProgress(
+                    status = SyncStatus.IDLE,
+                    safeError = SafeError.Validation(
+                        code = "PARENT_DELETED",
+                        field = "parentTaskId",
+                        message = "Cannot reapply subtask edits because parent task is deleted on server"
+                    )
+                )
+                return
+            }
+        }
         val isReadyV3 = store.isAccountV3()
         val isReadyV2 = store.isAccountV2()
         val contractVersion = when {
@@ -435,7 +512,6 @@ class AccountSyncCoordinator(
             isReadyV2 || conflictOp?.contractVersion == OutboxEntity.CONTRACT_VERSION_V2 || hasDeadline -> OutboxEntity.CONTRACT_VERSION_V2
             else -> OutboxEntity.CONTRACT_VERSION_V1
         }
-
         val nextRev = store.allocateNextLocalRevision()
         val newOpId = generateUuid()
 

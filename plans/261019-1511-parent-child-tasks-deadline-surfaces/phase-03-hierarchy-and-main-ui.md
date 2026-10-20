@@ -79,3 +79,16 @@ Preserve generation admission, account isolation and wipe barriers for group rea
 
 ## Next steps
 Phase 03 shared hierarchy semantics and main UI are marked DONE administratively on 2026-10-20 (24h credited). Shared interfaces freeze, unblocking Phase 04 (Android widget) and Phase 05 (Desktop sticky) surface adaptations. Technical acceptance remains qualified: W1 mixed-group queue drainage, W2 preservation-marker retention during edit coalescing, Step 7 late-child cleanup, unresolved recovery UI, conflict-review copy, and native UI smoke are tracked in Phase 06 (`phase-06-acceptance-and-rollout.md`). Unresolved product questions: none.
+
+## Follow-up Enhancement (2026-10-21): Subtask Disclosure and Desktop Menu Centering
+### Requirements & Scope
+1. **Subtask Disclosure Control (Expand / Collapse)**:
+   - Main UI (`TodoList`) supports expanding and collapsing subtasks under any parent task with live children.
+   - Disclosure is presentation-only: collapsing a parent visually filters its descendant rows out of the displayed list, leaving `ProjectedTaskSnapshot` computation, `TodoCounts`, reminder scheduling, deletion cascades, and automatic completion completely unchanged.
+   - Default state is expanded for all newly encountered parents.
+   - Context-only parents in Active and Completed views remain visible when collapsed, showing their read-only progress and disclosure toggle; expanding reveals only children admitted by that filter.
+   - The disclosure control is an independent button/chevron control with >=48dp touch target, distinct from the completion checkbox, equipped with TalkBack/screen-reader accessibility semantics (`stateDescription` and `contentDescription`).
+   - State is scoped to the active account/session to prevent state retention across account switches.
+2. **Desktop Sidebar Menu Center Alignment**:
+   - Desktop layout (viewport >= 840dp) in `TabbyRushApp` centers navigation buttons ('My Tasks', 'Announcements', 'Reminder Settings', 'Open Source Notices', 'Leave Account') horizontally.
+   - Announcements badge is centered alongside the title cluster without misalignment or truncation.

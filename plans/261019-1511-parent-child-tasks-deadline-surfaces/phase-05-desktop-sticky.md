@@ -98,3 +98,10 @@ Preserve current account/generation fences and no cross-account cached data. No 
 
 ## Next steps
 Deliver platform-specific runtime screenshots/logged scenarios to Phase 6. Unresolved prerequisites: interactive Linux session and native Windows host; not verified available here.
+
+## Follow-up Enhancement (2026-10-21): Sticky Window Subtask Disclosure (Expand/Collapse)
+### Requirements & Scope
+- Grouped parent rows in `StickyTaskContent` support subtask disclosure (expand/collapse) alongside the main UI.
+- Presentation-only: collapsing a parent in the sticky window hides its child rows without affecting section classification (mixed groups remain intact in Active section, completed groups in Completed section) or header counts.
+- Independent disclosure button/chevron with >=48dp touch target and TalkBack/Orca/Narrator semantics (`stateDescription` = "Expanded" / "Collapsed").
+- Default presentation: expanded.

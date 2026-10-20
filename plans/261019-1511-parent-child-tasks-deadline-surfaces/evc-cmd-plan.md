@@ -63,3 +63,16 @@ Activation script was invoked; `EVCRATE_SESSION_ID` is unset, so active-plan sta
 ## Unresolved questions / prerequisites
 - No unresolved product questions. Phase 1 must calculate/freeze v3 bytes, fingerprint, receipt behavior, and upgrade checkpoints; these are deliverables, not assumed capabilities.
 - Staging Hub/Mongo access, operator authorization, and interactive Android/Linux/Windows testbeds are acceptance prerequisites; availability not verified in this planning run.
+
+## Follow-up Enhancement (2026-10-21): Subtask Disclosure and Desktop Menu Centering
+- **Subtask Disclosure (Expand/Collapse)**:
+  - Both main `TodoList` and compact `StickyTaskContent` support dedicated expand/collapse toggle controls for parent tasks with live subtasks.
+  - Disclosure is strictly presentation-only: child rows are hidden from view without mutating or altering the complete hierarchy snapshot, background task counts (`TodoCounts`), automatic parent completion aggregation, reminder scheduling, or deletion confirmation.
+  - Default state: newly encountered parents default to expanded.
+  - Account-fenced state: disclosure state resets at account/session boundaries.
+  - Filtered views: context-only parents in Active/Completed remain visible with progress and disclosure controls; expanding reveals only filter-matching children, never non-matching siblings.
+  - Accessible controls: separate keyboard-operable disclosure control with >=48dp touch target, `stateDescription` ('Expanded, X subtasks visible' / 'Collapsed, X subtasks hidden'), and `contentDescription`.
+  - Glance widgets on Android home screens render compact static whole groups without interactive disclosure.
+- **Desktop Sidebar Menu Center Alignment**:
+  - In desktop app layouts (viewport width >= 840dp), navigation menu buttons in the sidebar ('My Tasks', 'Announcements', 'Reminder Settings', 'Open Source Notices', 'Leave Account') are centered horizontally (`Arrangement.Center`), eliminating forced left-alignment.
+  - Combined text and badge clusters (e.g. in 'Announcements') are centered as a cohesive unit.

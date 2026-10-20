@@ -179,12 +179,31 @@ object TaskWidgetUpdater {
 
     /**
      * Awaits completion or cancellation of all tracked background update jobs.
+     * Returns true if all active jobs settled within timeoutMs, false if timed out.
      */
-    suspend fun awaitQuiescence(timeoutMs: Long = BOUNDED_TIMEOUT_MS) {
-        withTimeoutOrNull(timeoutMs) {
+    suspend fun awaitQuiescence(timeoutMs: Long = BOUNDED_TIMEOUT_MS): Boolean {
+        val result = withTimeoutOrNull(timeoutMs) {
             val jobs = activeJobs.values.toList()
             jobs.joinAll()
+            true
         }
+        return result == true
+    }
+
+    /**
+     * Awaits both active update job completion and termination of any active clear operation.
+     * Returns true if quiescence was fully established, false if timed out.
+     */
+    suspend fun awaitQuiescenceAndNotClearing(timeoutMs: Long = BOUNDED_TIMEOUT_MS): Boolean {
+        val result = withTimeoutOrNull(timeoutMs) {
+            while (isClearing.get()) {
+                kotlinx.coroutines.delay(20)
+            }
+            val jobs = activeJobs.values.toList()
+            jobs.joinAll()
+            !isClearing.get()
+        }
+        return result == true
     }
 
     private suspend fun publishToGlance(context: Context) {

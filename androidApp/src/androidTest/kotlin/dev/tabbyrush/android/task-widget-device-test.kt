@@ -40,8 +40,11 @@ class TaskWidgetDeviceTest {
 
     @Before
     fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-        TabbyRushTaskWidget.clearState()
+        runBlocking {
+            context = ApplicationProvider.getApplicationContext()
+            assertTrue("Widget updater must quiesce before test execution", TaskWidgetUpdater.awaitQuiescenceAndNotClearing(5_000L))
+            TabbyRushTaskWidget.clearState()
+        }
     }
 
     @Test
@@ -161,27 +164,29 @@ class TaskWidgetDeviceTest {
     }
 
     @Test
-    fun testUpdaterRefreshAndClearLifecycle() = runBlocking {
-        val access = DeviceTestAccess(SurfaceReadiness.Ready(testToken))
-        val host = DeviceTestHost(access)
+    fun testUpdaterRefreshAndClearLifecycle() {
+        runBlocking {
+            val access = DeviceTestAccess(SurfaceReadiness.Ready(testToken))
+            val host = DeviceTestHost(access)
 
-        // 1. Refresh updates display state
-        TaskWidgetUpdater.refreshAll(context, host)
-        assertEquals(1, access.publishedCount)
-        val stateAfterRefresh = TabbyRushTaskWidget.displayState.value
-        assertTrue("Display state must be Content after refresh", stateAfterRefresh is WidgetDisplayState.Content)
-        val content = stateAfterRefresh as WidgetDisplayState.Content
-        assertEquals(testToken, content.token)
-        assertEquals(1, content.sections.incomplete.size)
-        assertEquals("Device Test Task", content.sections.incomplete.first().title)
+            // 1. Refresh updates display state
+            TaskWidgetUpdater.refreshAll(context, host)
+            assertEquals(1, access.publishedCount)
+            val stateAfterRefresh = TabbyRushTaskWidget.displayState.value
+            assertTrue("Display state must be Content after refresh", stateAfterRefresh is WidgetDisplayState.Content)
+            val content = stateAfterRefresh as WidgetDisplayState.Content
+            assertEquals(testToken, content.token)
+            assertEquals(1, content.sections.incomplete.size)
+            assertEquals("Device Test Task", content.sections.incomplete.first().title)
 
-        // 2. Clear all resets to SignedOut immediately
-        TaskWidgetUpdater.clearAll(context)
-        val stateAfterClear = TabbyRushTaskWidget.displayState.value
-        assertEquals("Display state must be SignedOut after clearAll", WidgetDisplayState.SignedOut, stateAfterClear)
+            // 2. Clear all resets to SignedOut immediately
+            TaskWidgetUpdater.clearAll(context)
+            val stateAfterClear = TabbyRushTaskWidget.displayState.value
+            assertEquals("Display state must be SignedOut after clearAll", WidgetDisplayState.SignedOut, stateAfterClear)
 
-        // 3. Await quiescence completes cleanly
-        TaskWidgetUpdater.awaitQuiescence(2_000L)
+            // 3. Await quiescence completes cleanly
+            assertTrue("Quiescence must complete cleanly", TaskWidgetUpdater.awaitQuiescence(2_000L))
+        }
     }
 
     @Test

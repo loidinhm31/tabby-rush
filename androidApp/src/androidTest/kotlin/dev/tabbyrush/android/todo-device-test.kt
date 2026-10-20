@@ -21,12 +21,15 @@ class TodoDeviceTest {
 
     private lateinit var context: Context
     private lateinit var app: TabbyRushApplication
-    private val testAccountKey = AccountKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+    private val canonicalIdentity = dev.tabbyrush.shared.contract.AccountIdentity("test-user-id", "testuser", "test@example.com")
+    private val testAccountKey by lazy { AccountKey.create(app.hubConfig.canonicalOrigin, canonicalIdentity.userId) }
 
     @Before
     fun setUp() = runBlocking {
         context = ApplicationProvider.getApplicationContext()
         app = TabbyRushApplication.instance
+        app.closeActiveRuntime()
+        app.clearActiveAccount()
         app.accountFiles.deleteDatabaseAndArtifacts(testAccountKey)
         app.vault.clear(testAccountKey)
         app.accountFiles.clearWipeMarker(testAccountKey)
@@ -35,9 +38,22 @@ class TodoDeviceTest {
     @After
     fun tearDown() = runBlocking {
         app.closeActiveRuntime()
+        app.clearActiveAccount()
         app.accountFiles.deleteDatabaseAndArtifacts(testAccountKey)
         app.vault.clear(testAccountKey)
         app.accountFiles.clearWipeMarker(testAccountKey)
+    }
+
+    private suspend fun awaitUiState(
+        viewModel: SessionViewModel,
+        timeoutMs: Long = 2_000L,
+        condition: (dev.tabbyrush.shared.contract.TodoUiState) -> Boolean
+    ) {
+        val start = System.currentTimeMillis()
+        while (!condition(viewModel.uiState.value) && (System.currentTimeMillis() - start) < timeoutMs) {
+            kotlinx.coroutines.delay(20)
+        }
+        org.junit.Assert.assertTrue("UiState condition timed out after ${timeoutMs}ms", condition(viewModel.uiState.value))
     }
 
     @Test
@@ -54,11 +70,11 @@ class TodoDeviceTest {
     fun testFilterSelectionAction() = runBlocking {
         val viewModel = SessionViewModel()
         viewModel.onAction(TodoAction.SelectFilter(TodoFilter.ACTIVE))
-        kotlinx.coroutines.delay(50)
+        awaitUiState(viewModel) { it.filter == TodoFilter.ACTIVE }
         assertEquals(TodoFilter.ACTIVE, viewModel.uiState.value.filter)
 
         viewModel.onAction(TodoAction.SelectFilter(TodoFilter.COMPLETED))
-        kotlinx.coroutines.delay(50)
+        awaitUiState(viewModel) { it.filter == TodoFilter.COMPLETED }
         assertEquals(TodoFilter.COMPLETED, viewModel.uiState.value.filter)
     }
 
@@ -66,30 +82,37 @@ class TodoDeviceTest {
     fun testEditorOpenAndCancel() = runBlocking {
         val viewModel = SessionViewModel()
         viewModel.onAction(TodoAction.OpenCreate("Initial title"))
-        kotlinx.coroutines.delay(50)
+        awaitUiState(viewModel) { it.editor != null }
         val stateWithEditor = viewModel.uiState.value
         assertNotNull(stateWithEditor.editor)
         assertEquals("Initial title", stateWithEditor.editor?.rawTitle)
 
         viewModel.onAction(TodoAction.CancelEditor)
-        kotlinx.coroutines.delay(50)
+        awaitUiState(viewModel) { it.editor == null }
         assertEquals(null, viewModel.uiState.value.editor)
     }
 
     @Test
     fun testAccountRuntimeCreationAndStoreAccess() = runBlocking {
-        val runtime = app.getOrCreateAccountRuntime(testAccountKey)
-        assertNotNull(runtime)
-        assertEquals(testAccountKey, runtime.accountKey)
-        assertNotNull(runtime.store)
-        assertNotNull(runtime.coordinator)
+        app.saveActiveAccount(canonicalIdentity, testAccountKey)
+        try {
+            val runtime = app.getOrCreateAccountRuntime(testAccountKey)
+            assertNotNull(runtime)
+            assertEquals(testAccountKey, runtime.accountKey)
+            assertNotNull(runtime.store)
+            assertNotNull(runtime.coordinator)
 
-        val now = System.currentTimeMillis()
-        val todo = Todo(id = "todo_device_1", title = "Test device task", completed = false, createdAt = now, updatedAt = now)
-        runtime.store.saveTodoLocally(todo)
+            val now = System.currentTimeMillis()
+            val todo = Todo(id = "todo_device_1", title = "Test device task", completed = false, createdAt = now, updatedAt = now)
+            runtime.store.saveTodoLocally(todo)
 
-        val todos = runtime.store.loadTodos()
-        assertEquals(1, todos.size)
-        assertEquals("Test device task", todos[0].title)
+            val todos = runtime.store.loadTodos()
+            assertEquals(1, todos.size)
+            assertEquals("Test device task", todos[0].title)
+        } finally {
+            app.closeActiveRuntime()
+            app.clearActiveAccount()
+            app.accountFiles.deleteDatabaseAndArtifacts(testAccountKey)
+        }
     }
 }

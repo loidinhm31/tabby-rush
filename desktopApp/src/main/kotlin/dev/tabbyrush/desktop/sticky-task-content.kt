@@ -25,6 +25,7 @@ import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Checkbox
 import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Surface
@@ -37,6 +38,10 @@ import dev.tabbyrush.shared.theme.TabbyRushPage
 import dev.tabbyrush.shared.theme.TabbyRushInk
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -312,7 +317,14 @@ private fun ReadyStickyContent(
         // Single scrollable column: Incomplete then Completed whole compact groups
         val incomplete = state.projectedSections.incomplete
         val completed = state.projectedSections.completed
+        var collapsedParentIds by remember(token) { mutableStateOf(emptySet<String>()) }
 
+        val visibleIncomplete = remember(incomplete, collapsedParentIds) {
+            incomplete.filterNot { it.isChild && it.todo.parentTaskId != null && collapsedParentIds.contains(it.todo.parentTaskId) }
+        }
+        val visibleCompleted = remember(completed, collapsedParentIds) {
+            completed.filterNot { it.isChild && it.todo.parentTaskId != null && collapsedParentIds.contains(it.todo.parentTaskId) }
+        }
         if (incomplete.isEmpty() && completed.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -337,11 +349,22 @@ private fun ReadyStickyContent(
                     }
 
                     items(
-                        items = incomplete,
+                        items = visibleIncomplete,
                         key = { "inc_${it.todo.id}" }
                     ) { item ->
+                        val isCollapsed = collapsedParentIds.contains(item.todo.id)
                         CompactTaskRow(
                             item = item,
+                            isCollapsed = isCollapsed,
+                            onToggleExpand = if (item.hasLiveChildren) {
+                                {
+                                    collapsedParentIds = if (isCollapsed) {
+                                        collapsedParentIds - item.todo.id
+                                    } else {
+                                        collapsedParentIds + item.todo.id
+                                    }
+                                }
+                            } else null,
                             onToggle = { desired ->
                                 onAction(StickyTaskAction.SetCompleted(token, item.todo.id, desired))
                             }
@@ -358,11 +381,22 @@ private fun ReadyStickyContent(
                     }
 
                     items(
-                        items = completed,
+                        items = visibleCompleted,
                         key = { "comp_${it.todo.id}" }
                     ) { item ->
+                        val isCollapsed = collapsedParentIds.contains(item.todo.id)
                         CompactTaskRow(
                             item = item,
+                            isCollapsed = isCollapsed,
+                            onToggleExpand = if (item.hasLiveChildren) {
+                                {
+                                    collapsedParentIds = if (isCollapsed) {
+                                        collapsedParentIds - item.todo.id
+                                    } else {
+                                        collapsedParentIds + item.todo.id
+                                    }
+                                }
+                            } else null,
                             onToggle = { desired ->
                                 onAction(StickyTaskAction.SetCompleted(token, item.todo.id, desired))
                             }
@@ -388,7 +422,9 @@ private fun SectionHeader(title: String, count: Int) {
 private fun CompactTaskRow(
     item: StickyTaskItem,
     onToggle: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isCollapsed: Boolean = false,
+    onToggleExpand: (() -> Unit)? = null
 ) {
     val todo = item.todo
     val isCompleted = item.effectiveCompleted
@@ -416,6 +452,33 @@ private fun CompactTaskRow(
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (item.hasLiveChildren && onToggleExpand != null) {
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier
+                        .size(TabbyRushThemeTokens.MinTouchTargetSize)
+                        .semantics {
+                            stateDescription = if (isCollapsed) {
+                                "Collapsed (${item.childCount} hidden)"
+                            } else {
+                                "Expanded (${item.childCount} visible)"
+                            }
+                            contentDescription = if (isCollapsed) {
+                                "Expand ${todo.title}"
+                            } else {
+                                "Collapse ${todo.title}"
+                            }
+                        }
+                ) {
+                    Text(
+                        text = if (isCollapsed) "▶" else "▼",
+                        style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.Bold),
+                        color = TabbyRushPrimary
+                    )
+                }
+                Spacer(modifier = Modifier.width(TabbyRushThemeTokens.SpacingXSmall))
+            }
+
             if (item.hasLiveChildren) {
                 Checkbox(
                     checked = isCompleted,
@@ -428,11 +491,11 @@ private fun CompactTaskRow(
                         .size(TabbyRushThemeTokens.MinTouchTargetSize)
                         .semantics {
                             stateDescription = if (isCompleted) {
-                                "Completed (automatic: ${item.completedChildCount}/${item.childCount} subtasks)"
+                                "Completed (automatic: ${item.completedChildCount}/${item.childCount})"
                             } else {
-                                "Active (automatic: ${item.completedChildCount}/${item.childCount} subtasks)"
+                                "Active (automatic: ${item.completedChildCount}/${item.childCount})"
                             }
-                            contentDescription = "Automatic subtask progress for ${todo.title}"
+                            contentDescription = "Automatic progress for ${todo.title}"
                         }
                 )
             } else {
@@ -485,11 +548,11 @@ private fun CompactTaskRow(
                 if (item.hasLiveChildren) {
                     Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
                     Text(
-                        text = "Subtasks: ${item.completedChildCount}/${item.childCount} completed",
+                        text = "${item.completedChildCount}/${item.childCount} completed",
                         style = MaterialTheme.typography.caption,
                         color = TabbyRushThemeTokens.customColors.primaryDeep,
                         modifier = Modifier.semantics {
-                            contentDescription = "Subtasks progress: ${item.completedChildCount} of ${item.childCount} completed"
+                            contentDescription = "Progress: ${item.completedChildCount} of ${item.childCount} completed"
                         }
                     )
                 }

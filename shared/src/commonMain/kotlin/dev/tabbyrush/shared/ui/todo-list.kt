@@ -29,12 +29,16 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -64,13 +68,22 @@ fun TodoList(
     nowEpochMs: Long = 0L,
     hierarchicalItems: List<HierarchicalTodoItem> = emptyList(),
     deleteCandidateChildCount: Int = 0,
-    unresolvedChildren: List<Todo> = emptyList()
+    unresolvedChildren: List<Todo> = emptyList(),
+    accountKey: String? = null
 ) {
     val displayItems = remember(items, filter, hierarchicalItems) {
         if (hierarchicalItems.isNotEmpty()) {
             hierarchicalItems
         } else {
             TaskHierarchyProjector.projectHierarchy(items, filter).items
+        }
+    }
+
+    var collapsedParentIds by remember(accountKey) { mutableStateOf(emptySet<String>()) }
+
+    val visibleItems = remember(displayItems, collapsedParentIds) {
+        displayItems.filterNot { item ->
+            item.depth > 0 && item.todo.parentTaskId != null && collapsedParentIds.contains(item.todo.parentTaskId)
         }
     }
 
@@ -127,11 +140,22 @@ fun TodoList(
                     }
                 } else {
                     items(
-                        items = displayItems,
+                        items = visibleItems,
                         key = { it.todo.id }
                     ) { item ->
+                        val isCollapsed = collapsedParentIds.contains(item.todo.id)
                         TodoRow(
                             item = item,
+                            isCollapsed = isCollapsed,
+                            onToggleExpand = if (item.hasLiveChildren) {
+                                {
+                                    collapsedParentIds = if (isCollapsed) {
+                                        collapsedParentIds - item.todo.id
+                                    } else {
+                                        collapsedParentIds + item.todo.id
+                                    }
+                                }
+                            } else null,
                             onToggle = { onAction(TodoAction.ToggleCompleted(item.todo)) },
                             onEdit = { onAction(TodoAction.OpenEdit(item.todo)) },
                             onDelete = { onAction(TodoAction.RequestDelete(item.todo)) },
@@ -141,7 +165,7 @@ fun TodoList(
                             nowEpochMs = nowEpochMs
                         )
                     }
-                }
+                    }
             }
         }
     }
@@ -262,11 +286,13 @@ private fun TodoRow(
     onDelete: () -> Unit,
     onAddSubtask: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    nowEpochMs: Long = 0L
+    nowEpochMs: Long = 0L,
+    isCollapsed: Boolean = false,
+    onToggleExpand: (() -> Unit)? = null
 ) {
     val todo = item.todo
     val currentClockMs = if (nowEpochMs > 0L) nowEpochMs else System.currentTimeMillis()
-    val startPadding = if (item.depth > 0) TabbyRushThemeTokens.SpacingXLarge else 0.dp
+    val startPadding = if (item.depth > 0) TabbyRushThemeTokens.SpacingXXLarge else 0.dp
     val deadlinePresentation = TaskDeadlinePresentation.formatDeadline(
         deadline = todo.deadline,
         effectiveCompleted = item.effectiveCompleted,
@@ -295,6 +321,33 @@ private fun TodoRow(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (item.hasLiveChildren && onToggleExpand != null) {
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier
+                        .size(width = 32.dp, height = TabbyRushThemeTokens.MinTouchTargetSize)
+                        .semantics {
+                            stateDescription = if (isCollapsed) {
+                                "Collapsed (${item.childCount} hidden)"
+                            } else {
+                                "Expanded (${item.childCount} visible)"
+                            }
+                            contentDescription = if (isCollapsed) {
+                                "Expand ${todo.title}"
+                            } else {
+                                "Collapse ${todo.title}"
+                            }
+                        }
+                ) {
+                    Text(
+                        text = if (isCollapsed) "▶" else "▼",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.width(2.dp))
+            }
+
             if (item.hasLiveChildren) {
                 Checkbox(
                     checked = item.effectiveCompleted,
@@ -305,14 +358,14 @@ private fun TodoRow(
                         disabledUncheckedColor = TabbyRushThemeTokens.customColors.muted
                     ),
                     modifier = Modifier
-                        .size(TabbyRushThemeTokens.MinTouchTargetSize)
+                        .size(36.dp)
                         .semantics {
                             stateDescription = if (item.effectiveCompleted) {
-                                "Completed (automatic: ${item.completedChildCount}/${item.childCount} subtasks)"
+                                "Completed (automatic: ${item.completedChildCount}/${item.childCount})"
                             } else {
-                                "Active (automatic: ${item.completedChildCount}/${item.childCount} subtasks)"
+                                "Active (automatic: ${item.completedChildCount}/${item.childCount})"
                             }
-                            contentDescription = "Automatic subtask progress for ${todo.title}"
+                            contentDescription = "Automatic progress for ${todo.title}"
                         }
                 )
             } else {
@@ -324,7 +377,7 @@ private fun TodoRow(
                         uncheckedColor = TabbyRushThemeTokens.customColors.muted
                     ),
                     modifier = Modifier
-                        .size(TabbyRushThemeTokens.MinTouchTargetSize)
+                        .size(36.dp)
                         .semantics {
                             stateDescription = if (item.depth > 0) {
                                 if (item.effectiveCompleted) "Completed subtask" else "Active subtask"
@@ -360,7 +413,7 @@ private fun TodoRow(
                 if (item.hasLiveChildren) {
                     Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
                     Text(
-                        text = "Subtasks: ${item.completedChildCount}/${item.childCount} completed",
+                        text = "${item.completedChildCount}/${item.childCount} completed",
                         style = MaterialTheme.typography.labelSmall,
                         color = TabbyRushThemeTokens.customColors.primaryDeep
                     )
@@ -412,6 +465,7 @@ private fun TodoRow(
             if (onAddSubtask != null) {
                 TextButton(
                     onClick = onAddSubtask,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                     modifier = Modifier
                         .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                         .semantics {
@@ -420,7 +474,7 @@ private fun TodoRow(
                 ) {
                     Text(
                         text = "+ Subtask",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -428,6 +482,7 @@ private fun TodoRow(
 
             TextButton(
                 onClick = onEdit,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                 modifier = Modifier
                     .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                     .semantics {
@@ -436,13 +491,14 @@ private fun TodoRow(
             ) {
                 Text(
                     text = "Edit",
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
 
             TextButton(
                 onClick = onDelete,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                 modifier = Modifier
                     .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                     .semantics {
@@ -451,7 +507,7 @@ private fun TodoRow(
             ) {
                 Text(
                     text = "Delete",
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.error
                 )
             }

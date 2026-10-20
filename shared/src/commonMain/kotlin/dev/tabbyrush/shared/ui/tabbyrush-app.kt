@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -259,6 +260,8 @@ private fun AuthenticatedWorkspace(
                     Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingLarge))
 
                     Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall)
                     ) {
                         TextButton(
@@ -267,11 +270,13 @@ private fun AuthenticatedWorkspace(
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = "My Tasks",
                                     style = MaterialTheme.typography.labelLarge,
+                                    textAlign = TextAlign.Center,
                                     color = if (navState.currentRoute is RemoteInboxRoute.Tasks) MaterialTheme.colorScheme.onPrimary else TabbyRushThemeTokens.customColors.mintSurface
                                 )
                             }
@@ -282,15 +287,17 @@ private fun AuthenticatedWorkspace(
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = "Announcements",
                                     style = MaterialTheme.typography.labelLarge,
+                                    textAlign = TextAlign.Center,
                                     color = if (navState.currentRoute !is RemoteInboxRoute.Tasks) MaterialTheme.colorScheme.onPrimary else TabbyRushThemeTokens.customColors.mintSurface
                                 )
                                 if (remoteInboxState.unreadCount > 0) {
+                                    Spacer(modifier = Modifier.width(TabbyRushThemeTokens.SpacingSmall))
                                     Surface(
                                         shape = MaterialTheme.shapes.small,
                                         color = TabbyRushThemeTokens.customColors.coral
@@ -312,11 +319,13 @@ private fun AuthenticatedWorkspace(
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = "Reminder Settings",
                                     style = MaterialTheme.typography.labelLarge,
+                                    textAlign = TextAlign.Center,
                                     color = TabbyRushThemeTokens.customColors.mintSurface
                                 )
                             }
@@ -327,11 +336,13 @@ private fun AuthenticatedWorkspace(
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = "Open Source Notices",
                                     style = MaterialTheme.typography.labelLarge,
+                                    textAlign = TextAlign.Center,
                                     color = TabbyRushThemeTokens.customColors.mintSurface
                                 )
                             }
@@ -346,7 +357,8 @@ private fun AuthenticatedWorkspace(
                         ) {
                             Text(
                                 text = "Leave Account",
-                                style = MaterialTheme.typography.labelLarge
+                                style = MaterialTheme.typography.labelLarge,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -443,7 +455,8 @@ private fun AuthenticatedWorkspace(
                                     nowEpochMs = state.nowEpochMs,
                                     hierarchicalItems = state.hierarchicalItems,
                                     deleteCandidateChildCount = state.deleteCandidateChildCount,
-                                    unresolvedChildren = state.unresolvedChildren
+                                    unresolvedChildren = state.unresolvedChildren,
+                                    accountKey = state.identity?.userId
                                 )
                             }
                         }
@@ -645,7 +658,8 @@ private fun AuthenticatedWorkspace(
                                     nowEpochMs = state.nowEpochMs,
                                     hierarchicalItems = state.hierarchicalItems,
                                     deleteCandidateChildCount = state.deleteCandidateChildCount,
-                                    unresolvedChildren = state.unresolvedChildren
+                                    unresolvedChildren = state.unresolvedChildren,
+                                    accountKey = state.identity?.userId
                                 )
                             }
                         }

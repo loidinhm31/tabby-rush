@@ -265,13 +265,17 @@ private fun AuthenticatedWorkspace(
                             onClick = { navState = navState.navigateToTasks() },
                             modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                         ) {
-                            Text(
-                                text = "My Tasks",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (navState.currentRoute is RemoteInboxRoute.Tasks) MaterialTheme.colorScheme.onPrimary else TabbyRushThemeTokens.customColors.mintSurface
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "My Tasks",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (navState.currentRoute is RemoteInboxRoute.Tasks) MaterialTheme.colorScheme.onPrimary else TabbyRushThemeTokens.customColors.mintSurface
+                                )
+                            }
                         }
-
                         TextButton(
                             onClick = { navState = navState.navigateToList() },
                             modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
@@ -306,22 +310,31 @@ private fun AuthenticatedWorkspace(
                             onClick = { onAction(TodoAction.OpenSettings) },
                             modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                         ) {
-                            Text(
-                                text = "Reminder Settings",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = TabbyRushThemeTokens.customColors.mintSurface
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Reminder Settings",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = TabbyRushThemeTokens.customColors.mintSurface
+                                )
+                            }
                         }
-
                         TextButton(
                             onClick = { showNotices = true },
                             modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
                         ) {
-                            Text(
-                                text = "Open Source Notices",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = TabbyRushThemeTokens.customColors.mintSurface
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Open Source Notices",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = TabbyRushThemeTokens.customColors.mintSurface
+                                )
+                            }
                         }
 
                         OutlinedButton(

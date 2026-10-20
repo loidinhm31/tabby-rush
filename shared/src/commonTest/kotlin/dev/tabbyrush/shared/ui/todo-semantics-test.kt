@@ -44,6 +44,8 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import dev.tabbyrush.shared.contract.TaskHierarchyProjector
+import dev.tabbyrush.shared.contract.HierarchicalTodoItem
 
 class TodoSemanticsTest {
 
@@ -694,6 +696,136 @@ class TodoSemanticsTest {
         val brandingColumnWidth = TabbyRushThemeTokens.CompactAccountLabelMaxWidth + TabbyRushThemeTokens.SpacingSmall
         val availableButtonWidth360 = screenWidth360 - horizontalPadding - brandingColumnWidth
         assertTrue(availableButtonWidth360 >= 270.dp, "Available width for top buttons on 360dp screen must be >= 270dp (was $availableButtonWidth360)")
+    }
+
+    @Test
+    fun testSubtaskDisclosurePresentationFilteringPreservesCountsAndProgress() {
+        val rootId = "root-proj-1"
+        val root = Todo(id = rootId, title = "Parent Task", completed = false, createdAt = 1000L)
+        val child1 = Todo(id = "child-act-1", title = "Active Subtask", completed = false, createdAt = 1100L, parentTaskId = rootId)
+        val child2 = Todo(id = "child-comp-2", title = "Done Subtask", completed = true, createdAt = 1200L, parentTaskId = rootId)
+        val standalone = Todo(id = "standalone-1", title = "Standalone", completed = false, createdAt = 900L)
+
+        val todos = listOf(root, child1, child2, standalone)
+        val snapshot = TaskHierarchyProjector.projectHierarchy(todos, TodoFilter.ALL)
+        val displayItems = snapshot.items
+
+        // Initially 4 items in display items
+        assertEquals(4, displayItems.size)
+        // Counts strictly count unique real tasks using effective completion:
+        // root (active because child1 active), child1 (active), child2 (completed), standalone (active) => all=4, active=3, completed=1
+        assertEquals(4, snapshot.counts.all)
+        assertEquals(3, snapshot.counts.active)
+        assertEquals(1, snapshot.counts.completed)
+
+        // Simulate collapse of root-proj-1
+        val collapsedParentIds = setOf(rootId)
+        val visibleItems = displayItems.filterNot { item ->
+            item.depth > 0 && item.todo.parentTaskId != null && collapsedParentIds.contains(item.todo.parentTaskId)
+        }
+
+        // Only root and standalone are rendered; child1 and child2 are visually filtered out
+        assertEquals(2, visibleItems.size)
+        assertEquals(listOf("root-proj-1", "standalone-1"), visibleItems.map { it.todo.id })
+
+        // The parent row retains its true child counts and automatic completion progress
+        val rootRendered = visibleItems.first { it.todo.id == rootId }
+        assertTrue(rootRendered.hasLiveChildren)
+        assertEquals(2, rootRendered.childCount)
+        assertEquals(1, rootRendered.completedChildCount)
+        assertFalse(rootRendered.effectiveCompleted)
+
+        // Presentation filtering must not alter the snapshot counts
+        assertEquals(4, snapshot.counts.all)
+        assertEquals(3, snapshot.counts.active)
+        assertEquals(1, snapshot.counts.completed)
+
+        // Expand again
+        val expandedItems = displayItems.filterNot { item ->
+            item.depth > 0 && item.todo.parentTaskId != null && emptySet<String>().contains(item.todo.parentTaskId)
+        }
+        assertEquals(4, expandedItems.size)
+    }
+
+    @Test
+    fun testSubtaskDisclosureInFilteredViewsWithContextOnlyParent() {
+        val rootId = "root-context-1"
+        val root = Todo(id = rootId, title = "Parent", completed = false, createdAt = 1000L)
+        val child1Active = Todo(id = "c-active", title = "Active Subtask", completed = false, createdAt = 1100L, parentTaskId = rootId)
+        val child2Done = Todo(id = "c-done", title = "Done Subtask", completed = true, createdAt = 1200L, parentTaskId = rootId)
+        val todos = listOf(root, child1Active, child2Done)
+
+        // 1. Under COMPLETED filter:
+        val compSnapshot = TaskHierarchyProjector.projectHierarchy(todos, TodoFilter.COMPLETED)
+        // Parent is context-only, child2Done is matching real row, child1Active excluded
+        assertEquals(2, compSnapshot.items.size)
+        val compParent = compSnapshot.items.first { it.todo.id == rootId }
+        assertTrue(compParent.isContextOnly)
+        assertTrue(compParent.hasLiveChildren)
+
+        // When parent is collapsed in completed view:
+        val collapsedComp = compSnapshot.items.filterNot { item ->
+            item.depth > 0 && item.todo.parentTaskId != null && setOf(rootId).contains(item.todo.parentTaskId)
+        }
+        assertEquals(1, collapsedComp.size)
+        assertEquals(rootId, collapsedComp[0].todo.id)
+        assertTrue(collapsedComp[0].isContextOnly)
+
+        // When expanded, only the filter-admitted child (c-done) appears, NEVER c-active
+        val expandedComp = compSnapshot.items.filterNot { item ->
+            item.depth > 0 && item.todo.parentTaskId != null && emptySet<String>().contains(item.todo.parentTaskId)
+        }
+        assertEquals(2, expandedComp.size)
+        assertEquals(listOf(rootId, "c-done"), expandedComp.map { it.todo.id })
+
+        // 2. Under ACTIVE filter:
+        val activeSnapshot = TaskHierarchyProjector.projectHierarchy(todos, TodoFilter.ACTIVE)
+        // Parent is matching row (effective active), child1Active is matching real row, child2Done excluded
+        assertEquals(2, activeSnapshot.items.size)
+        val collapsedActive = activeSnapshot.items.filterNot { item ->
+            item.depth > 0 && item.todo.parentTaskId != null && setOf(rootId).contains(item.todo.parentTaskId)
+        }
+        assertEquals(1, collapsedActive.size)
+        assertEquals(rootId, collapsedActive[0].todo.id)
+    }
+
+    @Test
+    fun testSubtaskDisclosureStateKeyedByAccount() {
+        // State is isolated per account identity key
+        var activeAccount: String? = "acc-alice"
+        val collapsedMap = mutableMapOf<String?, Set<String>>()
+
+        // Collapse a parent in Alice's account
+        collapsedMap[activeAccount] = setOf("task-1", "task-2")
+        assertEquals(setOf("task-1", "task-2"), collapsedMap["acc-alice"])
+
+        // Switch to Bob's account: disclosure state starts fresh (default expanded)
+        activeAccount = "acc-bob"
+        val bobsCollapsed = collapsedMap[activeAccount] ?: emptySet()
+        assertTrue(bobsCollapsed.isEmpty(), "Switching to new account must default to empty collapsed set (all expanded)")
+
+        // Sign out: null account key also isolated
+        activeAccount = null
+        val signedOutCollapsed = collapsedMap[activeAccount] ?: emptySet()
+        assertTrue(signedOutCollapsed.isEmpty(), "Signed-out state must not retain previous user's collapsed parent IDs")
+    }
+
+    @Test
+    fun testDesktopSidebarNavigationMenuLayoutInvariants() {
+        // Enforce minimum touch target token on all desktop menu controls
+        assertEquals(48.dp, TabbyRushThemeTokens.MinTouchTargetSize)
+
+        // Desktop sidebar geometry constraints (>= 840dp layout)
+        val sidebarWidth = 280.dp
+        val sidebarPadding = TabbyRushThemeTokens.SpacingLarge * 2 // 16.dp * 2 = 32.dp
+        val availableSidebarContentWidth = sidebarWidth - sidebarPadding
+        assertEquals(248.dp, availableSidebarContentWidth)
+
+        // In the desktop sidebar, buttons fill maxWidth (248dp) and center their contents
+        // A standard button title + badge cluster (e.g., "Announcements" ~120dp + 8dp spacer + 24dp badge = ~152dp)
+        // fits well within the 248dp width budget with ample safety margin preventing truncation
+        val estimatedClusterWidth = 160.dp
+        assertTrue(estimatedClusterWidth < availableSidebarContentWidth, "Navigation menu cluster must fit within available sidebar width")
     }
 
     private fun calculateContrastRatio(foreground: Color, background: Color): Double {

@@ -2,11 +2,14 @@ package dev.tabbyrush.desktop
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -18,8 +21,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import kotlin.math.roundToInt
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Checkbox
@@ -80,7 +86,8 @@ import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
 fun StickyTaskContent(
     state: StickyTaskState,
     onAction: (StickyTaskAction) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    effectiveFontScale: Float = state.fontScale
 ) {
     LaunchedEffect(Unit) {
         while (true) {
@@ -96,15 +103,18 @@ fun StickyTaskContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(TabbyRushThemeTokens.SpacingMedium)
+                    .padding(6.dp)
             ) {
-                // Persistent recovery header: Open App and Quit controls are always accessible
+                // Persistent recovery header: Open App, Quit, and font zoom controls are always accessible
                 StickyHeaderBar(
+                    effectiveFontScale = effectiveFontScale,
+                    manualZoom = state.fontScale,
+                    onAction = onAction,
                     onOpenApp = { onAction(StickyTaskAction.OpenApp) },
                     onQuit = { onAction(StickyTaskAction.Quit) }
                 )
 
-                Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 // Content area gated on SurfaceReadiness
                 when (val readiness = state.readiness) {
@@ -153,56 +163,122 @@ fun StickyTaskContent(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StickyHeaderBar(
+    effectiveFontScale: Float,
+    manualZoom: Float,
+    onAction: (StickyTaskAction) -> Unit,
     onOpenApp: () -> Unit,
     onQuit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    FlowRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Heading is flexible to prevent crowding out recovery controls on narrow viewports
+        // Heading is flexible to prevent crowding out zoom and recovery controls on narrow viewports
         Text(
             text = "TabbyRush Sticky",
-            style = MaterialTheme.typography.subtitle1.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.subtitle2.copy(fontWeight = FontWeight.Bold),
             color = TabbyRushPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
+            modifier = Modifier.align(Alignment.CenterVertically)
         )
 
-        Spacer(modifier = Modifier.width(TabbyRushThemeTokens.SpacingSmall))
+        Spacer(modifier = Modifier.width(4.dp))
 
-        // Recovery buttons retain dedicated >=48dp click targets and never get squeezed
+        // Zoom controls cluster
         Row(
-            horizontalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingXSmall),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = { onAction(StickyTaskAction.ZoomOut) },
+                enabled = effectiveFontScale > MIN_STICKY_FONT_SCALE && manualZoom > MIN_STICKY_FONT_SCALE,
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
+                    .semantics { contentDescription = "Decrease font size" }
+            ) {
+                Text(
+                    text = "A−",
+                    style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.Bold),
+                    color = if (effectiveFontScale > MIN_STICKY_FONT_SCALE && manualZoom > MIN_STICKY_FONT_SCALE) TabbyRushPrimary else TabbyRushThemeTokens.customColors.muted
+                )
+            }
+
+            TextButton(
+                onClick = { onAction(StickyTaskAction.ResetZoom) },
+                enabled = manualZoom != DEFAULT_STICKY_FONT_SCALE,
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .defaultMinSize(minWidth = 32.dp, minHeight = 24.dp)
+                    .semantics {
+                        contentDescription = if (manualZoom != DEFAULT_STICKY_FONT_SCALE) {
+                            "Reset to automatic size"
+                        } else {
+                            "Automatic size"
+                        }
+                        stateDescription = "${(effectiveFontScale * 100).roundToInt()}%"
+                    }
+            ) {
+                Text(
+                    text = "${(effectiveFontScale * 100).roundToInt()}%",
+                    style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (manualZoom != DEFAULT_STICKY_FONT_SCALE) TabbyRushPrimary else TabbyRushThemeTokens.customColors.muted
+                )
+            }
+
+            TextButton(
+                onClick = { onAction(StickyTaskAction.ZoomIn) },
+                enabled = effectiveFontScale < MAX_STICKY_FONT_SCALE && manualZoom < MAX_STICKY_FONT_SCALE,
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
+                    .semantics { contentDescription = "Increase font size" }
+            ) {
+                Text(
+                    text = "A+",
+                    style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.Bold),
+                    color = if (effectiveFontScale < MAX_STICKY_FONT_SCALE && manualZoom < MAX_STICKY_FONT_SCALE) TabbyRushPrimary else TabbyRushThemeTokens.customColors.muted
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // Recovery buttons cluster
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextButton(
                 onClick = onOpenApp,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier
-                    .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                    .defaultMinSize(minHeight = 26.dp)
                     .semantics { contentDescription = "Open main application window" }
             ) {
                 Text(
-                    text = "Open App",
-                    style = MaterialTheme.typography.button,
+                    text = "Open",
+                    style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),
                     color = TabbyRushPrimary
                 )
             }
 
             TextButton(
                 onClick = onQuit,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier
-                    .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                    .defaultMinSize(minHeight = 26.dp)
                     .semantics { contentDescription = "Quit TabbyRush application" }
             ) {
                 Text(
                     text = "Quit",
-                    style = MaterialTheme.typography.button,
+                    style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),
                     color = TabbyRushThemeTokens.customColors.coral
                 )
             }
@@ -220,17 +296,18 @@ private fun ReadyStickyContent(
     val canSubmit = state.quickAdd.rawTitle.isNotBlank() && !state.quickAdd.submitting
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Independent quick-add inline input
+        // Independent compact quick-add inline input
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
+            BasicTextField(
                 value = state.quickAdd.rawTitle,
                 onValueChange = { onAction(StickyTaskAction.ChangeTitle(token, it)) },
                 enabled = !state.quickAdd.submitting,
-                placeholder = { Text("Quick add task…", style = MaterialTheme.typography.body2) },
                 singleLine = true,
+                textStyle = MaterialTheme.typography.body2.copy(color = TabbyRushInk),
+                cursorBrush = SolidColor(TabbyRushPrimary),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(
                     onDone = {
@@ -241,7 +318,10 @@ private fun ReadyStickyContent(
                 ),
                 modifier = Modifier
                     .weight(1f)
-                    .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                    .defaultMinSize(minHeight = 32.dp)
+                    .border(1.dp, TabbyRushThemeTokens.customColors.outline, MaterialTheme.shapes.small)
+                    .background(TabbyRushWhite, MaterialTheme.shapes.small)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
                     .onPreviewKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
                             when (event.key) {
@@ -262,14 +342,21 @@ private fun ReadyStickyContent(
                         }
                     }
                     .semantics { contentDescription = "Quick add task title input" },
-                colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedBorderColor = TabbyRushPrimary,
-                    unfocusedBorderColor = TabbyRushThemeTokens.customColors.outline,
-                    cursorColor = TabbyRushPrimary
-                )
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (state.quickAdd.rawTitle.isEmpty()) {
+                            Text(
+                                text = "Quick add task…",
+                                 style = MaterialTheme.typography.body2,
+                                color = TabbyRushThemeTokens.customColors.muted
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
             )
 
-            Spacer(modifier = Modifier.width(TabbyRushThemeTokens.SpacingSmall))
+            Spacer(modifier = Modifier.width(6.dp))
 
             Button(
                 onClick = { onAction(StickyTaskAction.Submit(token)) },
@@ -278,18 +365,19 @@ private fun ReadyStickyContent(
                     backgroundColor = TabbyRushPrimary,
                     contentColor = TabbyRushWhite
                 ),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 modifier = Modifier
-                    .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                    .defaultMinSize(minHeight = 32.dp)
                     .semantics { contentDescription = "Submit quick add task" }
             ) {
                 if (state.quickAdd.submitting) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                         strokeWidth = 2.dp,
                         color = TabbyRushWhite
                     )
                 } else {
-                    Text("Add", style = MaterialTheme.typography.button)
+                    Text("Add", style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.Bold))
                 }
             }
         }
@@ -312,18 +400,18 @@ private fun ReadyStickyContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingMedium))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Single scrollable column: Incomplete then Completed whole compact groups
         val incomplete = state.projectedSections.incomplete
         val completed = state.projectedSections.completed
-        var collapsedParentIds by remember(token) { mutableStateOf(emptySet<String>()) }
+        var expandedParentIds by remember(token) { mutableStateOf(emptySet<String>()) }
 
-        val visibleIncomplete = remember(incomplete, collapsedParentIds) {
-            incomplete.filterNot { it.isChild && it.todo.parentTaskId != null && collapsedParentIds.contains(it.todo.parentTaskId) }
+        val visibleIncomplete = remember(incomplete, expandedParentIds) {
+            incomplete.filterNot { it.isChild && it.todo.parentTaskId != null && !expandedParentIds.contains(it.todo.parentTaskId) }
         }
-        val visibleCompleted = remember(completed, collapsedParentIds) {
-            completed.filterNot { it.isChild && it.todo.parentTaskId != null && collapsedParentIds.contains(it.todo.parentTaskId) }
+        val visibleCompleted = remember(completed, expandedParentIds) {
+            completed.filterNot { it.isChild && it.todo.parentTaskId != null && !expandedParentIds.contains(it.todo.parentTaskId) }
         }
         if (incomplete.isEmpty() && completed.isEmpty()) {
             Box(
@@ -341,7 +429,7 @@ private fun ReadyStickyContent(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingXSmall)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 if (incomplete.isNotEmpty()) {
                     item(key = "header_incomplete") {
@@ -352,16 +440,16 @@ private fun ReadyStickyContent(
                         items = visibleIncomplete,
                         key = { "inc_${it.todo.id}" }
                     ) { item ->
-                        val isCollapsed = collapsedParentIds.contains(item.todo.id)
+                        val isCollapsed = !expandedParentIds.contains(item.todo.id)
                         CompactTaskRow(
                             item = item,
                             isCollapsed = isCollapsed,
                             onToggleExpand = if (item.hasLiveChildren) {
                                 {
-                                    collapsedParentIds = if (isCollapsed) {
-                                        collapsedParentIds - item.todo.id
+                                    expandedParentIds = if (isCollapsed) {
+                                        expandedParentIds + item.todo.id
                                     } else {
-                                        collapsedParentIds + item.todo.id
+                                        expandedParentIds - item.todo.id
                                     }
                                 }
                             } else null,
@@ -384,16 +472,16 @@ private fun ReadyStickyContent(
                         items = visibleCompleted,
                         key = { "comp_${it.todo.id}" }
                     ) { item ->
-                        val isCollapsed = collapsedParentIds.contains(item.todo.id)
+                        val isCollapsed = !expandedParentIds.contains(item.todo.id)
                         CompactTaskRow(
                             item = item,
                             isCollapsed = isCollapsed,
                             onToggleExpand = if (item.hasLiveChildren) {
                                 {
-                                    collapsedParentIds = if (isCollapsed) {
-                                        collapsedParentIds - item.todo.id
+                                    expandedParentIds = if (isCollapsed) {
+                                        expandedParentIds + item.todo.id
                                     } else {
-                                        collapsedParentIds + item.todo.id
+                                        expandedParentIds - item.todo.id
                                     }
                                 }
                             } else null,
@@ -414,7 +502,7 @@ private fun SectionHeader(title: String, count: Int) {
         text = "$title ($count)",
         style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),
         color = TabbyRushThemeTokens.customColors.muted,
-        modifier = Modifier.padding(vertical = TabbyRushThemeTokens.SpacingXSmall)
+        modifier = Modifier.padding(vertical = 2.dp)
     )
 }
 @OptIn(ExperimentalLayoutApi::class)
@@ -428,13 +516,13 @@ private fun CompactTaskRow(
 ) {
     val todo = item.todo
     val isCompleted = item.effectiveCompleted
-    val startPadding = if (item.isChild) TabbyRushThemeTokens.SpacingLarge else 0.dp
+    val startPadding = if (item.isChild) 12.dp else 0.dp
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(start = startPadding)
-            .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+            .defaultMinSize(minHeight = 28.dp)
             .border(1.dp, TabbyRushThemeTokens.customColors.line, MaterialTheme.shapes.small),
         shape = MaterialTheme.shapes.small,
         color = if (isCompleted) {
@@ -447,8 +535,8 @@ private fun CompactTaskRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
-                    horizontal = TabbyRushThemeTokens.SpacingSmall,
-                    vertical = TabbyRushThemeTokens.SpacingXSmall
+                    horizontal = 6.dp,
+                    vertical = 3.dp
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -456,7 +544,7 @@ private fun CompactTaskRow(
                 IconButton(
                     onClick = onToggleExpand,
                     modifier = Modifier
-                        .size(TabbyRushThemeTokens.MinTouchTargetSize)
+                        .size(22.dp)
                         .semantics {
                             stateDescription = if (isCollapsed) {
                                 "Collapsed (${item.childCount} hidden)"
@@ -476,7 +564,7 @@ private fun CompactTaskRow(
                         color = TabbyRushPrimary
                     )
                 }
-                Spacer(modifier = Modifier.width(TabbyRushThemeTokens.SpacingXSmall))
+                Spacer(modifier = Modifier.width(2.dp))
             }
 
             if (item.hasLiveChildren) {
@@ -488,7 +576,7 @@ private fun CompactTaskRow(
                         disabledColor = if (isCompleted) TabbyRushPrimary else TabbyRushThemeTokens.customColors.outline
                     ),
                     modifier = Modifier
-                        .size(TabbyRushThemeTokens.MinTouchTargetSize)
+                        .size(22.dp)
                         .semantics {
                             stateDescription = if (isCompleted) {
                                 "Completed (automatic: ${item.completedChildCount}/${item.childCount})"
@@ -507,7 +595,7 @@ private fun CompactTaskRow(
                         uncheckedColor = TabbyRushThemeTokens.customColors.outline
                     ),
                     modifier = Modifier
-                        .size(TabbyRushThemeTokens.MinTouchTargetSize)
+                        .size(22.dp)
                         .semantics {
                             stateDescription = if (item.isChild) {
                                 if (isCompleted) "Completed subtask" else "Active subtask"
@@ -523,14 +611,14 @@ private fun CompactTaskRow(
                 )
             }
 
-            Spacer(modifier = Modifier.width(TabbyRushThemeTokens.SpacingSmall))
+            Spacer(modifier = Modifier.width(6.dp))
 
             Column(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
                     text = todo.title,
-                    style = MaterialTheme.typography.body1,
+                    style = MaterialTheme.typography.body2,
                     color = if (isCompleted) {
                         TabbyRushThemeTokens.customColors.muted
                     } else {
@@ -546,22 +634,20 @@ private fun CompactTaskRow(
                 )
 
                 if (item.hasLiveChildren) {
-                    Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "${item.completedChildCount}/${item.childCount} completed",
                         style = MaterialTheme.typography.caption,
                         color = TabbyRushThemeTokens.customColors.primaryDeep,
-                        modifier = Modifier.semantics {
-                            contentDescription = "Progress: ${item.completedChildCount} of ${item.childCount} completed"
-                        }
+                        modifier = Modifier.clearAndSetSemantics { }
                     )
                 }
 
                 val deadlinePres = item.deadlinePresentation
                 if (deadlinePres != null) {
-                    Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
+                    Spacer(modifier = Modifier.height(2.dp))
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                         modifier = Modifier.clearAndSetSemantics {
                             contentDescription = deadlinePres.contentDescription
@@ -583,7 +669,7 @@ private fun CompactTaskRow(
                                         TabbyRushThemeTokens.customColors.coralSurface,
                                         MaterialTheme.shapes.small
                                     )
-                                    .padding(horizontal = TabbyRushThemeTokens.SpacingXSmall, vertical = 2.dp)
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
                             )
                         }
                     }
@@ -607,8 +693,10 @@ private fun ReadinessStatusView(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingMedium),
-            modifier = Modifier.padding(TabbyRushThemeTokens.SpacingLarge)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .padding(12.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -632,7 +720,8 @@ private fun ReadinessStatusView(
 
             Button(
                 onClick = onOpenApp,
-                modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                modifier = Modifier.defaultMinSize(minHeight = 32.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text("Open Main App")
             }

@@ -3,6 +3,24 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Desktop Sticky Font Resizing & Compact Layout] - 2026-10-21: Implementation & Automated Verification
+
+### Delivered
+- **Desktop Sticky Font Resizing (Text Zoom)**: Delivered interactive font size scaling (50% to 150%, 12.5% step) in the desktop companion sticky window, supporting scale values under 75% down to 50% for high information density. Added header zoom controls (`A−`, percentage reset, `A+`) and global keyboard shortcuts (`Ctrl+=`, `Ctrl+-`, `Ctrl+0`) with zero runtime dependencies.
+- **Automatic Responsive Font Scaling on Window Resize**: Font size adapts automatically as window width changes relative to standard 360dp width, combining dynamically with manual zoom preference (`computeEffectiveStickyFontScale`). Clicking the percentage label resets manual zoom to the automatic baseline.
+- **Default Collapsed Task Hierarchy**: Parent tasks with live subtasks in both `TodoList` and `StickyTaskContent` default to collapsed (`expandedParentIds` starts empty), cleanly concealing subtasks until the user explicitly expands them.
+- **Presentation Persistence**: Scaled font preference is persisted across restarts in `sticky-window.properties` (`fontScale` and `sticky.window.font_scale` alias) alongside window geometry and visibility. Legacy preference files and out-of-range/non-finite values safely fall back to default (1.0f).
+- **Dense Compact Desktop Layout**: Optimized sticky companion components for mouse/keyboard viewports:
+  - Reduced outer padding from 12dp to 6dp.
+  - Compact `FlowRow` header bar with 14sp title, integrated zoom controls, and compact 26–28dp recovery buttons (`Open`, `Quit`) that wrap gracefully on narrow displays.
+  - Compact 32dp quick-add field (`BasicTextField`) and button with responsive Enter/Escape key actions.
+  - Compact task rows (`CompactTaskRow`): 22dp checkboxes and subtask toggles, 28dp minimum row height, and 2–4dp component spacing.
+- **Accessibility Invariant Preserved**: Sticky-only desktop control sizing maintains full accessibility: screen-reader semantics (`contentDescription`, `stateDescription`), keyboard navigation (Tab/Shift-Tab, Space, Enter), and focus rings.
+### Reported Verification
+- **Desktop Unit & Controller Suite**: 131/131 tests in `:desktopApp:test` passed, including new test cases for font scale round-trip, out-of-bounds/non-finite recovery, legacy compatibility, zoom actions and clamping, readiness transitions, and `DesktopController` persistence.
+- **Shared JVM Suite**: 268/268 tests in `:shared:jvmTest` passed with zero regressions.
+
+---
 ## [Native Standard Sync & API-Managed Schema Version / Phases 02–04] - 2026-10-20: Source Delivery, Integrated Verification and Isolated Smoke
 
 This cutover work is for the native TabbyRush Android/Desktop app, not a TabbyRush web client. Previously delivered strict-v3 work remains historical context; source delivery does not authorize live migration.

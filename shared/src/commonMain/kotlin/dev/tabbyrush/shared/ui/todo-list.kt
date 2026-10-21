@@ -79,11 +79,11 @@ fun TodoList(
         }
     }
 
-    var collapsedParentIds by remember(accountKey) { mutableStateOf(emptySet<String>()) }
+    var expandedParentIds by remember(accountKey) { mutableStateOf(emptySet<String>()) }
 
-    val visibleItems = remember(displayItems, collapsedParentIds) {
+    val visibleItems = remember(displayItems, expandedParentIds) {
         displayItems.filterNot { item ->
-            item.depth > 0 && item.todo.parentTaskId != null && collapsedParentIds.contains(item.todo.parentTaskId)
+            item.depth > 0 && item.todo.parentTaskId != null && !expandedParentIds.contains(item.todo.parentTaskId)
         }
     }
 
@@ -143,16 +143,16 @@ fun TodoList(
                         items = visibleItems,
                         key = { it.todo.id }
                     ) { item ->
-                        val isCollapsed = collapsedParentIds.contains(item.todo.id)
+                        val isCollapsed = !expandedParentIds.contains(item.todo.id)
                         TodoRow(
                             item = item,
                             isCollapsed = isCollapsed,
                             onToggleExpand = if (item.hasLiveChildren) {
                                 {
-                                    collapsedParentIds = if (isCollapsed) {
-                                        collapsedParentIds - item.todo.id
+                                    expandedParentIds = if (isCollapsed) {
+                                        expandedParentIds + item.todo.id
                                     } else {
-                                        collapsedParentIds + item.todo.id
+                                        expandedParentIds - item.todo.id
                                     }
                                 }
                             } else null,

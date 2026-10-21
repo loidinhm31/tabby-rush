@@ -1,9 +1,26 @@
 package dev.tabbyrush.desktop
 
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.LocalMinimumInteractiveComponentEnforcement
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Tray
@@ -139,12 +156,15 @@ class DesktopController(
 
     // Task surface integration
     val taskSurfaceAccess = DesktopTaskSurfaceAccess()
+    private var currentStickyFontScale: Float = initialStickyPresentation.fontScale
     val stickyController = DesktopStickyTaskController(
         access = taskSurfaceAccess,
         scope = scope,
         onOpenApp = { showMainWindow() },
         onQuit = { quit() },
-        onTriggerSync = { triggerSync() }
+        onTriggerSync = { triggerSync() },
+        initialFontScale = initialStickyPresentation.fontScale,
+        onFontScaleChanged = { updateStickyFontScale(it) }
     )
     val stickyState = stickyController.stickyState
 
@@ -155,6 +175,7 @@ class DesktopController(
     private val _isTrayUsable = MutableStateFlow(platform.traySupported())
     val isTrayUsable: StateFlow<Boolean> = _isTrayUsable.asStateFlow()
     private var currentStickyGeometry: StickyWindowGeometry = initialStickyPresentation.geometry
+    private val presentationLock = Any()
 
     private val runtimeMutex = Mutex()
     private var activeRuntime: DesktopAccountRuntime? = null
@@ -181,15 +202,31 @@ class DesktopController(
 
     fun updateStickyGeometry(geometry: StickyWindowGeometry) {
         if (isValidStickyGeometry(geometry)) {
-            currentStickyGeometry = geometry
+            synchronized(presentationLock) {
+                currentStickyGeometry = geometry
+            }
         }
     }
 
-    fun flushStickyGeometry() {
+    fun updateStickyFontScale(scale: Float) {
+        if (isValidStickyFontScale(scale)) {
+            synchronized(presentationLock) {
+                currentStickyFontScale = scale
+                flushStickyPresentationLocked()
+            }
+        }
+    }
+
+    fun flushStickyGeometry(): Unit = synchronized(presentationLock) {
+        flushStickyPresentationLocked()
+    }
+
+    private fun flushStickyPresentationLocked() {
         preferences.save(
             StickyWindowPresentation(
                 visible = isStickyWindowVisible.value,
-                geometry = currentStickyGeometry
+                geometry = currentStickyGeometry,
+                fontScale = currentStickyFontScale
             )
         )
     }
@@ -1154,11 +1191,55 @@ fun launchDesktop(
             state = stickyWindowState
         ) {
             val stickyState by controller.stickyState.collectAsState()
-            TabbyRushTheme {
-                StickyTaskContent(
-                    state = stickyState,
-                    onAction = { controller.onStickyAction(it) }
+            val windowWidthDp = stickyWindowState.size.width.value.toDouble()
+            val effectiveScale = remember(windowWidthDp, stickyState.fontScale) {
+                computeEffectiveStickyFontScale(windowWidthDp, stickyState.fontScale)
+            }
+            val currentDensity = LocalDensity.current
+            val customDensity = remember(currentDensity.density, currentDensity.fontScale, effectiveScale) {
+                Density(
+                    density = currentDensity.density,
+                    fontScale = currentDensity.fontScale * effectiveScale
                 )
+            }
+            @OptIn(ExperimentalMaterialApi::class)
+            CompositionLocalProvider(
+                LocalDensity provides customDensity,
+                LocalMinimumInteractiveComponentEnforcement provides false
+            ) {
+                TabbyRushTheme {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed) && !event.isAltPressed) {
+                                    when {
+                                        event.key == Key.Equals || event.key == Key.Plus || event.key == Key.NumPadAdd -> {
+                                            controller.onStickyAction(StickyTaskAction.ZoomIn)
+                                            true
+                                        }
+                                        event.key == Key.Minus || event.key == Key.NumPadSubtract -> {
+                                            controller.onStickyAction(StickyTaskAction.ZoomOut)
+                                            true
+                                        }
+                                        event.key == Key.Zero || event.key == Key.NumPad0 -> {
+                                            controller.onStickyAction(StickyTaskAction.ResetZoom)
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                } else {
+                                    false
+                                }
+                            }
+                    ) {
+                        StickyTaskContent(
+                            state = stickyState,
+                            onAction = { controller.onStickyAction(it) },
+                            effectiveFontScale = effectiveScale
+                        )
+                    }
+                }
             }
         }
     }

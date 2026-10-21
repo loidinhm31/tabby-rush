@@ -34,6 +34,8 @@ class StickyWindowPreferences(val file: File) {
         const val KEY_HEIGHT_DP = "heightDp"
         const val KEY_SCALE_X = "savedScaleX"
         const val KEY_SCALE_Y = "savedScaleY"
+        const val KEY_FONT_SCALE = "fontScale"
+        const val KEY_FONT_SCALE_ALIAS = "sticky.window.font_scale"
 
         val DEFAULT_PRESENTATION = StickyWindowPresentation(
             visible = false,
@@ -44,7 +46,8 @@ class StickyWindowPreferences(val file: File) {
                 heightDp = DEFAULT_STICKY_HEIGHT_DP,
                 savedScaleX = 1.0,
                 savedScaleY = 1.0
-            )
+            ),
+            fontScale = DEFAULT_STICKY_FONT_SCALE
         )
     }
 
@@ -79,6 +82,15 @@ class StickyWindowPreferences(val file: File) {
             val scaleX = properties.getProperty(KEY_SCALE_X)?.toDoubleOrNull() ?: 1.0
             val scaleY = properties.getProperty(KEY_SCALE_Y)?.toDoubleOrNull() ?: 1.0
 
+            val rawFontScaleStr = properties.getProperty(KEY_FONT_SCALE)
+                ?: properties.getProperty(KEY_FONT_SCALE_ALIAS)
+            val rawFontScale = rawFontScaleStr?.toFloatOrNull()
+            val fontScale = if (rawFontScale != null && isValidStickyFontScale(rawFontScale)) {
+                rawFontScale
+            } else {
+                DEFAULT_STICKY_FONT_SCALE
+            }
+
             val candidateGeometry = StickyWindowGeometry(
                 xDp = xDp,
                 yDp = yDp,
@@ -89,11 +101,12 @@ class StickyWindowPreferences(val file: File) {
             )
 
             if (!isValidStickyGeometry(candidateGeometry)) {
-                DEFAULT_PRESENTATION.copy(visible = visible)
+                DEFAULT_PRESENTATION.copy(visible = visible, fontScale = fontScale)
             } else {
                 StickyWindowPresentation(
                     visible = visible,
-                    geometry = candidateGeometry
+                    geometry = candidateGeometry,
+                    fontScale = fontScale
                 )
             }
         } catch (_: Exception) {
@@ -124,7 +137,8 @@ class StickyWindowPreferences(val file: File) {
             properties.setProperty(KEY_HEIGHT_DP, presentation.geometry.heightDp.toString())
             properties.setProperty(KEY_SCALE_X, presentation.geometry.savedScaleX.toString())
             properties.setProperty(KEY_SCALE_Y, presentation.geometry.savedScaleY.toString())
-
+            val safeScale = if (isValidStickyFontScale(presentation.fontScale)) presentation.fontScale else DEFAULT_STICKY_FONT_SCALE
+            properties.setProperty(KEY_FONT_SCALE, safeScale.toString())
             FileOutputStream(tempFile).use { fos ->
                 properties.store(fos, "TabbyRush Sticky Window Presentation Preferences")
                 fos.fd.sync()

@@ -34,6 +34,17 @@ flowchart TD
 
 Local edits are persisted before network activity. Account-scoped storage and auth generations fence stale callbacks after account changes. A sync round authenticates, reconciles standard push results, and obtains server state through pull/delta; delta is a sequential push followed by pull, not an atomic transaction. Room applies related state changes transactionally where implemented, but a client transaction does not create server-side group-write atomicity.
 
+### 2.1 Proposed Desktop Sticky Typography and Compact Controls
+
+Design recorded 2026-10-21; implementation and native acceptance pending. See the [implementation plan](../plans/261021-0844-compact-sticky-font-resize/plan.md).
+
+- `StickyWindowPresentation` gains a defaulted `fontScale` presentation field. `StickyWindowPreferences` loads/saves `sticky.window.font_scale` in the existing device-profile `sticky-window.properties`; no Room schema, task payload, account identity, or sync contract changes.
+- Proposed flow: preferences load → `DesktopController` seeds `DesktopStickyTaskController` → immutable `StickyTaskState.fontScale` → sticky content. Header buttons and sticky-only keyboard shortcuts emit presentation actions through the existing action path; changed scale is persisted with current geometry and visibility by `DesktopController`.
+- Zoom range is 0.75–1.50 inclusive, step 0.125, default/reset 1.0. Missing, malformed, non-finite, or out-of-range persisted scale falls back independently to 1.0 without discarding otherwise valid geometry/visibility. Task-state clearing preserves this non-sensitive, device-profile preference.
+- A sticky-subtree `LocalDensity` override retains display density and multiplies inherited font scale by sticky zoom. Only scalable text changes; window geometry, main-app typography, Android targets, task projections, and account-generation fences stay unchanged.
+- Compact spacing and 24dp row controls are desktop-sticky-only; shared/Android 48dp touch-target defaults remain unchanged. Implementation must document the explicit sticky exception in code/design standards, preserve semantic roles/state, keyboard focus/activation, and keep Open App/Quit reachable with narrow-window wrapping and large text.
+- Native Windows/Linux checks must establish actual measured controls, text fit, focus, restart persistence, and recovery behavior. Unit tests or design baselines do not close existing native acceptance/release holds.
+
 ## 3. Native Persistence
 
 `TabbyRushDatabase` is Room version 4 and registers explicit migrations 1→2, 2→3, and 3→4. Destructive fallback is prohibited. Its entities are:

@@ -718,18 +718,18 @@ class TodoSemanticsTest {
         assertEquals(3, snapshot.counts.active)
         assertEquals(1, snapshot.counts.completed)
 
-        // Simulate collapse of root-proj-1
-        val collapsedParentIds = setOf(rootId)
-        val visibleItems = displayItems.filterNot { item ->
-            item.depth > 0 && item.todo.parentTaskId != null && collapsedParentIds.contains(item.todo.parentTaskId)
+        // Subtasks are collapsed by default (empty expanded set)
+        val defaultExpandedParentIds = emptySet<String>()
+        val defaultVisibleItems = displayItems.filterNot { item ->
+            item.depth > 0 && item.todo.parentTaskId != null && !defaultExpandedParentIds.contains(item.todo.parentTaskId)
         }
 
-        // Only root and standalone are rendered; child1 and child2 are visually filtered out
-        assertEquals(2, visibleItems.size)
-        assertEquals(listOf("root-proj-1", "standalone-1"), visibleItems.map { it.todo.id })
+        // Only root and standalone are rendered by default; child1 and child2 are visually filtered out
+        assertEquals(2, defaultVisibleItems.size)
+        assertEquals(listOf("root-proj-1", "standalone-1"), defaultVisibleItems.map { it.todo.id })
 
         // The parent row retains its true child counts and automatic completion progress
-        val rootRendered = visibleItems.first { it.todo.id == rootId }
+        val rootRendered = defaultVisibleItems.first { it.todo.id == rootId }
         assertTrue(rootRendered.hasLiveChildren)
         assertEquals(2, rootRendered.childCount)
         assertEquals(1, rootRendered.completedChildCount)
@@ -740,11 +740,13 @@ class TodoSemanticsTest {
         assertEquals(3, snapshot.counts.active)
         assertEquals(1, snapshot.counts.completed)
 
-        // Expand again
+        // Expand parent task
+        val expandedParentIds = setOf(rootId)
         val expandedItems = displayItems.filterNot { item ->
-            item.depth > 0 && item.todo.parentTaskId != null && emptySet<String>().contains(item.todo.parentTaskId)
+            item.depth > 0 && item.todo.parentTaskId != null && !expandedParentIds.contains(item.todo.parentTaskId)
         }
         assertEquals(4, expandedItems.size)
+        assertEquals(displayItems.map { it.todo.id }, expandedItems.map { it.todo.id })
     }
 
     @Test
@@ -763,9 +765,9 @@ class TodoSemanticsTest {
         assertTrue(compParent.isContextOnly)
         assertTrue(compParent.hasLiveChildren)
 
-        // When parent is collapsed in completed view:
+        // When parent is collapsed (default):
         val collapsedComp = compSnapshot.items.filterNot { item ->
-            item.depth > 0 && item.todo.parentTaskId != null && setOf(rootId).contains(item.todo.parentTaskId)
+            item.depth > 0 && item.todo.parentTaskId != null && !emptySet<String>().contains(item.todo.parentTaskId)
         }
         assertEquals(1, collapsedComp.size)
         assertEquals(rootId, collapsedComp[0].todo.id)
@@ -773,7 +775,7 @@ class TodoSemanticsTest {
 
         // When expanded, only the filter-admitted child (c-done) appears, NEVER c-active
         val expandedComp = compSnapshot.items.filterNot { item ->
-            item.depth > 0 && item.todo.parentTaskId != null && emptySet<String>().contains(item.todo.parentTaskId)
+            item.depth > 0 && item.todo.parentTaskId != null && !setOf(rootId).contains(item.todo.parentTaskId)
         }
         assertEquals(2, expandedComp.size)
         assertEquals(listOf(rootId, "c-done"), expandedComp.map { it.todo.id })
@@ -783,7 +785,7 @@ class TodoSemanticsTest {
         // Parent is matching row (effective active), child1Active is matching real row, child2Done excluded
         assertEquals(2, activeSnapshot.items.size)
         val collapsedActive = activeSnapshot.items.filterNot { item ->
-            item.depth > 0 && item.todo.parentTaskId != null && setOf(rootId).contains(item.todo.parentTaskId)
+            item.depth > 0 && item.todo.parentTaskId != null && !emptySet<String>().contains(item.todo.parentTaskId)
         }
         assertEquals(1, collapsedActive.size)
         assertEquals(rootId, collapsedActive[0].todo.id)
@@ -793,21 +795,21 @@ class TodoSemanticsTest {
     fun testSubtaskDisclosureStateKeyedByAccount() {
         // State is isolated per account identity key
         var activeAccount: String? = "acc-alice"
-        val collapsedMap = mutableMapOf<String?, Set<String>>()
+        val expandedMap = mutableMapOf<String?, Set<String>>()
 
-        // Collapse a parent in Alice's account
-        collapsedMap[activeAccount] = setOf("task-1", "task-2")
-        assertEquals(setOf("task-1", "task-2"), collapsedMap["acc-alice"])
+        // Expand a parent in Alice's account
+        expandedMap[activeAccount] = setOf("task-1", "task-2")
+        assertEquals(setOf("task-1", "task-2"), expandedMap["acc-alice"])
 
-        // Switch to Bob's account: disclosure state starts fresh (default expanded)
+        // Switch to Bob's account: disclosure state starts fresh (default collapsed)
         activeAccount = "acc-bob"
-        val bobsCollapsed = collapsedMap[activeAccount] ?: emptySet()
-        assertTrue(bobsCollapsed.isEmpty(), "Switching to new account must default to empty collapsed set (all expanded)")
+        val bobsExpanded = expandedMap[activeAccount] ?: emptySet()
+        assertTrue(bobsExpanded.isEmpty(), "Switching to new account must default to empty expanded set (all collapsed)")
 
         // Sign out: null account key also isolated
         activeAccount = null
-        val signedOutCollapsed = collapsedMap[activeAccount] ?: emptySet()
-        assertTrue(signedOutCollapsed.isEmpty(), "Signed-out state must not retain previous user's collapsed parent IDs")
+        val signedOutExpanded = expandedMap[activeAccount] ?: emptySet()
+        assertTrue(signedOutExpanded.isEmpty(), "Signed-out state must not retain previous user's expanded parent IDs")
     }
 
     @Test

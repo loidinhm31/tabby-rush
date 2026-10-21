@@ -1037,4 +1037,241 @@ class DesktopTaskSurfacesTest {
         val todos = store.loadTodos()
         assertTrue(todos.isEmpty())
     }
+
+    @Test
+    fun testStickyZoomActionsAndClamping() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        var reportedScale: Float? = null
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = {},
+            initialFontScale = DEFAULT_STICKY_FONT_SCALE,
+            onFontScaleChanged = { reportedScale = it }
+        )
+
+        assertEquals(DEFAULT_STICKY_FONT_SCALE, controller.stickyState.value.fontScale)
+
+        // 1. ZoomIn increases by STICKY_FONT_SCALE_STEP (0.125f)
+        controller.onAction(StickyTaskAction.ZoomIn)
+        assertEquals(1.125f, controller.stickyState.value.fontScale)
+        assertEquals(1.125f, reportedScale)
+
+        // 2. ZoomIn up to MAX_STICKY_FONT_SCALE (1.50f)
+        controller.onAction(StickyTaskAction.ZoomIn)
+        assertEquals(1.25f, controller.stickyState.value.fontScale)
+        controller.onAction(StickyTaskAction.ZoomIn)
+        assertEquals(1.375f, controller.stickyState.value.fontScale)
+        controller.onAction(StickyTaskAction.ZoomIn)
+        assertEquals(1.50f, controller.stickyState.value.fontScale)
+
+        // 3. ZoomIn past MAX_STICKY_FONT_SCALE is clamped and does not report a change
+        reportedScale = null
+        controller.onAction(StickyTaskAction.ZoomIn)
+        assertEquals(MAX_STICKY_FONT_SCALE, controller.stickyState.value.fontScale)
+        assertNull(reportedScale)
+
+        // 4. ZoomOut decreases by STICKY_FONT_SCALE_STEP
+        controller.onAction(StickyTaskAction.ZoomOut)
+        assertEquals(1.375f, controller.stickyState.value.fontScale)
+        assertEquals(1.375f, reportedScale)
+
+        // 5. ResetZoom restores DEFAULT_STICKY_FONT_SCALE (1.0f)
+        controller.onAction(StickyTaskAction.ResetZoom)
+        assertEquals(DEFAULT_STICKY_FONT_SCALE, controller.stickyState.value.fontScale)
+        assertEquals(DEFAULT_STICKY_FONT_SCALE, reportedScale)
+
+        // 6. ResetZoom when already at default is a no-op
+        reportedScale = null
+        controller.onAction(StickyTaskAction.ResetZoom)
+        assertEquals(DEFAULT_STICKY_FONT_SCALE, controller.stickyState.value.fontScale)
+        assertNull(reportedScale)
+
+        // 7. ZoomOut down to MIN_STICKY_FONT_SCALE (0.50f)
+        controller.onAction(StickyTaskAction.ZoomOut) // 0.875f
+        controller.onAction(StickyTaskAction.ZoomOut) // 0.750f
+        controller.onAction(StickyTaskAction.ZoomOut) // 0.625f
+        controller.onAction(StickyTaskAction.ZoomOut) // 0.500f
+        assertEquals(MIN_STICKY_FONT_SCALE, controller.stickyState.value.fontScale)
+        assertEquals(MIN_STICKY_FONT_SCALE, reportedScale)
+
+        // 8. ZoomOut past MIN_STICKY_FONT_SCALE (0.50f) is clamped
+        reportedScale = null
+        controller.onAction(StickyTaskAction.ZoomOut)
+        assertEquals(MIN_STICKY_FONT_SCALE, controller.stickyState.value.fontScale)
+        assertNull(reportedScale)
+    }
+
+    @Test
+    fun testComputeEffectiveStickyFontScale() {
+        // Default width and 1.0 manual zoom yields 1.0
+        assertEquals(1.0f, computeEffectiveStickyFontScale(360.0, 1.0f))
+
+        // Narrower window yields proportionally smaller font scale
+        val narrowScale = computeEffectiveStickyFontScale(280.0, 1.0f)
+        assertEquals((280.0f / 360.0f), narrowScale, 0.001f)
+
+        // Manual zoom scales relative to window width
+        val manualUnder75 = computeEffectiveStickyFontScale(280.0, 0.75f)
+        assertEquals((280.0f / 360.0f) * 0.75f, manualUnder75, 0.001f)
+
+        // Clamping to MIN_STICKY_FONT_SCALE (0.50f) on tiny windows
+        val tinyWindowScale = computeEffectiveStickyFontScale(100.0, 1.0f)
+        assertEquals(MIN_STICKY_FONT_SCALE, tinyWindowScale)
+
+        // Clamping to MAX_STICKY_FONT_SCALE (1.50f) on huge windows
+        val hugeWindowScale = computeEffectiveStickyFontScale(800.0, 1.0f)
+        assertEquals(MAX_STICKY_FONT_SCALE, hugeWindowScale)
+
+        // Invalid dimensions safely fall back to manual zoom
+        assertEquals(1.0f, computeEffectiveStickyFontScale(Double.NaN, 1.0f))
+        assertEquals(1.0f, computeEffectiveStickyFontScale(-50.0, 1.0f))
+    }
+    @Test
+    fun testStickyFontScalePreservedAcrossReadinessTransitions() = runTest {
+        val access = DesktopTaskSurfaceAccess()
+        val controller = DesktopStickyTaskController(
+            access = access,
+            scope = backgroundScope,
+            onOpenApp = {},
+            onQuit = {},
+            onTriggerSync = {},
+            initialFontScale = 1.25f
+        )
+        assertEquals(1.25f, controller.stickyState.value.fontScale)
+
+        // Authenticate
+        access.onAccountAuthenticated(token1, store)
+        testScheduler.advanceUntilIdle()
+        assertEquals(1.25f, controller.stickyState.value.fontScale)
+
+        // Start observing
+        controller.startObserving(token1, store)
+        testScheduler.advanceUntilIdle()
+        assertEquals(1.25f, controller.stickyState.value.fontScale)
+
+        // Stop observing
+        controller.stopObserving()
+        assertEquals(1.25f, controller.stickyState.value.fontScale)
+
+        // Sign out
+        access.onSignedOut()
+        testScheduler.advanceUntilIdle()
+        assertEquals(1.25f, controller.stickyState.value.fontScale)
+
+        // Close and drain (unavailable)
+        access.closeAndDrain()
+        testScheduler.advanceUntilIdle()
+        assertEquals(1.25f, controller.stickyState.value.fontScale)
+
+        // Re-authenticate with different token
+        val token2 = SurfaceAccountToken(AccountKey("b".repeat(64)), 1L)
+        access.onAccountAuthenticated(token2, store)
+        testScheduler.advanceUntilIdle()
+        assertEquals(1.25f, controller.stickyState.value.fontScale)
+    }
+
+    @Test
+    fun testDesktopControllerStickyFontScalePersistence() = runTest {
+        val tempDir = Files.createTempDirectory("tabbyrush-fontscale-persistence-test").toFile()
+        tempDir.deleteOnExit()
+        val tempLock = File(tempDir, "tabbyrush.lock")
+        val guard = SingleInstanceGuard.tryAcquire(tempLock)!!
+        val files = JvmAccountFiles(baseDir = tempDir)
+        val prefsFile = File(tempDir, "sticky-window.properties")
+        val preferences = StickyWindowPreferences(prefsFile)
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+        preferences.save(
+            StickyWindowPresentation(
+                visible = true,
+                geometry = StickyWindowGeometry(10.0, 20.0, 360.0, 520.0, 1.0, 1.0),
+                fontScale = 1.25f
+            )
+        )
+
+        val controller = DesktopController(
+            mode = BuildMode.DEBUG,
+            scope = scope,
+            instanceGuard = guard,
+            accountFiles = files,
+            preferences = preferences,
+            initialStickyPresentation = preferences.load()
+        )
+
+        try {
+            assertEquals(1.25f, controller.stickyState.value.fontScale)
+
+            // Zoom in via controller action
+            controller.onStickyAction(StickyTaskAction.ZoomIn)
+            assertEquals(1.375f, controller.stickyState.value.fontScale)
+
+            // Verify persisted in preferences
+            val reloaded = preferences.load()
+            assertEquals(1.375f, reloaded.fontScale)
+            assertTrue(reloaded.visible)
+            assertEquals(360.0, reloaded.geometry.widthDp)
+
+            // Update geometry must preserve fontScale
+            controller.updateStickyGeometry(
+                StickyWindowGeometry(50.0, 60.0, 400.0, 600.0, 1.0, 1.0)
+            )
+            controller.flushStickyGeometry()
+            val reloadedAfterGeom = preferences.load()
+            assertEquals(1.375f, reloadedAfterGeom.fontScale)
+            assertEquals(400.0, reloadedAfterGeom.geometry.widthDp)
+
+            // Reset zoom
+            controller.onStickyAction(StickyTaskAction.ResetZoom)
+            assertEquals(DEFAULT_STICKY_FONT_SCALE, controller.stickyState.value.fontScale)
+            val reloadedAfterReset = preferences.load()
+            assertEquals(DEFAULT_STICKY_FONT_SCALE, reloadedAfterReset.fontScale)
+        } finally {
+            controller.disposeSuspend()
+        }
+    }
+
+    @Test
+    fun testConcurrentZoomUpdatesPersistConsistentState() = runTest {
+        val tempDir = Files.createTempDirectory("tabbyrush-concurrent-zoom-test").toFile()
+        tempDir.deleteOnExit()
+        val tempLock = File(tempDir, "tabbyrush.lock")
+        val guard = SingleInstanceGuard.tryAcquire(tempLock)!!
+        val files = JvmAccountFiles(baseDir = tempDir)
+        val prefsFile = File(tempDir, "sticky-window.properties")
+        val preferences = StickyWindowPreferences(prefsFile)
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+        val controller = DesktopController(
+            mode = BuildMode.DEBUG,
+            scope = scope,
+            instanceGuard = guard,
+            accountFiles = files,
+            preferences = preferences,
+            initialStickyPresentation = preferences.load()
+        )
+
+        try {
+            val threads = (1..8).map { i ->
+                kotlin.concurrent.thread {
+                    for (j in 1..20) {
+                        if ((i + j) % 2 == 0) {
+                            controller.onStickyAction(StickyTaskAction.ZoomIn)
+                        } else {
+                            controller.onStickyAction(StickyTaskAction.ZoomOut)
+                        }
+                    }
+                }
+            }
+            threads.forEach { it.join() }
+
+            val liveScale = controller.stickyState.value.fontScale
+            val persistedScale = preferences.load().fontScale
+            assertEquals(liveScale, persistedScale)
+        } finally {
+            controller.disposeSuspend()
+        }
+    }
 }

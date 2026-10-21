@@ -33,7 +33,8 @@ data class StickyTaskState(
     val readiness: SurfaceReadiness,
     val sections: TaskSections,
     val quickAdd: StickyQuickAddState,
-    val projectedSections: StickyTaskSections = projectStickySections(sections)
+    val projectedSections: StickyTaskSections = projectStickySections(sections),
+    val fontScale: Float = DEFAULT_STICKY_FONT_SCALE
 )
 
 /**
@@ -89,4 +90,7 @@ sealed interface StickyTaskAction {
     data object RefreshDeadlines : StickyTaskAction
     data object OpenApp : StickyTaskAction
     data object Quit : StickyTaskAction
+    data object ZoomIn : StickyTaskAction
+    data object ZoomOut : StickyTaskAction
+    data object ResetZoom : StickyTaskAction
 }

@@ -276,7 +276,9 @@ class DesktopStickyTaskController(
     private val onOpenApp: () -> Unit,
     private val onQuit: () -> Unit,
     private val onTriggerSync: () -> Unit,
-    private val clock: () -> Long = { System.currentTimeMillis() }
+    private val clock: () -> Long = { System.currentTimeMillis() },
+    initialFontScale: Float = DEFAULT_STICKY_FONT_SCALE,
+    private val onFontScaleChanged: ((Float) -> Unit)? = null
 ) {
 
     private val _stickyState = MutableStateFlow(
@@ -284,7 +286,8 @@ class DesktopStickyTaskController(
             readiness = access.readiness.value,
             sections = TaskSections(emptyList(), emptyList()),
             quickAdd = StickyQuickAddState(),
-            projectedSections = StickyTaskSections(emptyList(), emptyList())
+            projectedSections = StickyTaskSections(emptyList(), emptyList()),
+            fontScale = if (isValidStickyFontScale(initialFontScale)) initialFontScale else DEFAULT_STICKY_FONT_SCALE
         )
     )
     val stickyState: StateFlow<StickyTaskState> = _stickyState.asStateFlow()
@@ -294,6 +297,7 @@ class DesktopStickyTaskController(
     @kotlin.jvm.Volatile
     private var activeToken: SurfaceAccountToken? = null
     private val lifecycleLock = Any()
+    private val zoomLock = Any()
     init {
         scope.launch {
             access.readiness.collect { r ->
@@ -306,7 +310,8 @@ class DesktopStickyTaskController(
                                     readiness = r,
                                     sections = TaskSections(emptyList(), emptyList()),
                                     quickAdd = StickyQuickAddState(),
-                                    projectedSections = StickyTaskSections(emptyList(), emptyList())
+                                    projectedSections = StickyTaskSections(emptyList(), emptyList()),
+                                    fontScale = current.fontScale
                                 )
                             } else {
                                 current.copy(readiness = r)
@@ -316,12 +321,13 @@ class DesktopStickyTaskController(
                     else -> {
                         val currentToken = access.getCurrentToken()
                         if (currentToken == null) {
-                            _stickyState.update {
+                            _stickyState.update { current ->
                                 StickyTaskState(
                                     readiness = r,
                                     sections = TaskSections(emptyList(), emptyList()),
                                     quickAdd = StickyQuickAddState(),
-                                    projectedSections = StickyTaskSections(emptyList(), emptyList())
+                                    projectedSections = StickyTaskSections(emptyList(), emptyList()),
+                                    fontScale = current.fontScale
                                 )
                             }
                         } else {
@@ -392,12 +398,13 @@ class DesktopStickyTaskController(
         activeObserverJob?.cancel()
         activeObserverJob = null
         activeToken = null
-        _stickyState.update {
+        _stickyState.update { current ->
             StickyTaskState(
                 readiness = access.readiness.value,
                 sections = TaskSections(emptyList(), emptyList()),
                 quickAdd = StickyQuickAddState(),
-                projectedSections = StickyTaskSections(emptyList(), emptyList())
+                projectedSections = StickyTaskSections(emptyList(), emptyList()),
+                fontScale = current.fontScale
             )
         }
     }
@@ -526,6 +533,47 @@ class DesktopStickyTaskController(
             }
             is StickyTaskAction.Quit -> {
                 onQuit()
+            }
+            is StickyTaskAction.ZoomIn -> synchronized(zoomLock) {
+                var updatedScale: Float? = null
+                _stickyState.update { current ->
+                    val newScale = (current.fontScale + STICKY_FONT_SCALE_STEP).coerceIn(MIN_STICKY_FONT_SCALE, MAX_STICKY_FONT_SCALE)
+                    if (newScale != current.fontScale) {
+                        updatedScale = newScale
+                        current.copy(fontScale = newScale)
+                    } else {
+                        updatedScale = null
+                        current
+                    }
+                }
+                updatedScale?.let { onFontScaleChanged?.invoke(it) }
+            }
+            is StickyTaskAction.ZoomOut -> synchronized(zoomLock) {
+                var updatedScale: Float? = null
+                _stickyState.update { current ->
+                    val newScale = (current.fontScale - STICKY_FONT_SCALE_STEP).coerceIn(MIN_STICKY_FONT_SCALE, MAX_STICKY_FONT_SCALE)
+                    if (newScale != current.fontScale) {
+                        updatedScale = newScale
+                        current.copy(fontScale = newScale)
+                    } else {
+                        updatedScale = null
+                        current
+                    }
+                }
+                updatedScale?.let { onFontScaleChanged?.invoke(it) }
+            }
+            is StickyTaskAction.ResetZoom -> synchronized(zoomLock) {
+                var updatedScale: Float? = null
+                _stickyState.update { current ->
+                    if (current.fontScale != DEFAULT_STICKY_FONT_SCALE) {
+                        updatedScale = DEFAULT_STICKY_FONT_SCALE
+                        current.copy(fontScale = DEFAULT_STICKY_FONT_SCALE)
+                    } else {
+                        updatedScale = null
+                        current
+                    }
+                }
+                updatedScale?.let { onFontScaleChanged?.invoke(it) }
             }
         }
     }

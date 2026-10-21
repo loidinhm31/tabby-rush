@@ -302,6 +302,15 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 
 Current implementation divergence: Android `closeRuntimeInternal()` catches and logs a drain-timeout exception, then returns before observer-job cancellation or Room closure; `closeActiveRuntime()` nevertheless clears `activeRuntime`. This remains an open safety finding, not acceptable teardown behavior.
 
+### 10.5 Desktop Sticky Companion Compact Sizing & Typography Scaling Exception
+- **Desktop Companion Control Sizing**: As an explicit desktop-companion-only exception to the universal 48dp minimum touch target rule (§3.5), desktop sticky window controls use dense mouse/keyboard-appropriate dimensions:
+  - Checkboxes and subtask expander toggles render at 22–24dp (`size(22.dp)`).
+  - Quick-add input uses compact `BasicTextField` with 32dp minimum height.
+  - Header actions ("Open", "Quit", zoom buttons) use compact buttons (24–28dp minimum height).
+  - Task row container uses 28dp minimum height (`defaultMinSize(minHeight = 28.dp)`).
+- **Accessibility Invariant**: Compact desktop sizing is scoped strictly to the desktop sticky companion window. Semantic labels (`contentDescription`), state descriptions (`stateDescription`), keyboard navigation (Tab/Shift-Tab, Space, Enter), and focus rings remain strictly required.
+- **Dynamic & Responsive Text Scaling**: Sticky window provides persistent text zoom (0.50x to 1.50x, step 0.125x) via `CompositionLocalProvider(LocalDensity provides customDensity)`. Stored in presentation properties (`fontScale`). Keyboard shortcuts (`Ctrl+=`, `Ctrl+-`, `Ctrl+0`) and header zoom controls (`A−`, `reset to automatic`, `A+`) provide zero-dependency scaling. When sticky window dimensions change, text automatically scales responsively relative to standard width (360dp) combined with manual zoom (`computeEffectiveStickyFontScale`).
+
 ---
 
 ## 11. Server Admin Announcements & Remote Security Standards (Phase 12)

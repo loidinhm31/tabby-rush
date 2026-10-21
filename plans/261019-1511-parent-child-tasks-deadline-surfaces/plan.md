@@ -46,7 +46,7 @@ Phase 01 contract freeze and Hub upgrade/receipt source deliverables are marked 
 - **Subtask Disclosure (Expand/Collapse)**:
   - Parent tasks with live children feature a dedicated disclosure toggle control in main `TodoList` and compact `StickyTaskContent` to expand or collapse subtasks.
   - Disclosure is strictly presentation-only: collapsing hides child rows in the UI without altering the complete snapshot hierarchy, background counts (`TodoCounts`), automatic completion calculation, reminder schedules, or deletion cascades.
-  - Default state: newly encountered parent tasks default to expanded.
+  - Default state: parent tasks with live children default to collapsed.
   - Account-fenced state: disclosure state is scoped to the active account/session to prevent state leakage across account switches.
   - Filtered views: context-only parents in Active/Completed remain visible with progress and disclosure controls; expanding reveals only filter-matching children, never non-matching siblings.
   - Accessible controls: separate keyboard-operable disclosure control with >=48dp touch target, `stateDescription` ('Expanded, X subtasks visible' / 'Collapsed, X subtasks hidden'), and `contentDescription`.

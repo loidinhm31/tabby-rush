@@ -1,9 +1,15 @@
 package dev.tabbyrush.shared.contract
+import dev.tabbyrush.shared.sync.CanonicalRecordRefDto
+import dev.tabbyrush.shared.sync.PullRequestDto
+import dev.tabbyrush.shared.sync.TaskAccessResultDto
+import dev.tabbyrush.shared.sync.TaskCapabilitiesDto
 
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RemoteContractVectorTest {
@@ -169,6 +175,57 @@ class RemoteContractVectorTest {
         assertTrue(validateAudienceCount(500))
         assertFalse(validateAudienceCount(0), "Empty audience rejected")
         assertFalse(validateAudienceCount(501), "Audience > 500 overflow rejected")
+    }
+
+    @Test
+    fun testCollaborationWireVectors() {
+        val refDto = CanonicalRecordRefDto("user-1", "todos", "row-123")
+        val caps = TaskCapabilitiesDto(editContent = true, manageAssignment = false, deleteTask = false, createChild = false)
+        val accessResult = TaskAccessResultDto(ref = refDto, status = "accessible", capabilities = caps, hierarchyCoverage = "child-only")
+
+        // 1. Serialization round-trip using production syncWireJson
+        val encodedResult = dev.tabbyrush.shared.sync.syncWireJson.encodeToString(TaskAccessResultDto.serializer(), accessResult)
+        val decodedResult = dev.tabbyrush.shared.sync.syncWireJson.decodeFromString(TaskAccessResultDto.serializer(), encodedResult)
+        assertEquals(accessResult, decodedResult)
+
+        // 2. Fixed wire fixture from Rust engine decodes cleanly into Kotlin DTO
+        val rustWireAccessResult = """{"ref":{"ownerUserId":"user-1","tableName":"todos","rowId":"row-99"},"status":"accessible","capabilities":{"editContent":true,"manageAssignment":false,"deleteTask":false,"createChild":false},"hierarchyCoverage":"child-only"}"""
+        val decodedRustResult = dev.tabbyrush.shared.sync.syncWireJson.decodeFromString(TaskAccessResultDto.serializer(), rustWireAccessResult)
+        assertEquals("user-1", decodedRustResult.ref.ownerUserId)
+        assertEquals("todos", decodedRustResult.ref.tableName)
+        assertEquals("row-99", decodedRustResult.ref.rowId)
+        assertEquals("accessible", decodedRustResult.status)
+        assertEquals(true, decodedRustResult.capabilities?.editContent)
+        assertEquals(false, decodedRustResult.capabilities?.manageAssignment)
+        assertEquals("child-only", decodedRustResult.hierarchyCoverage)
+
+        // 3. PullRequest with explicit tables and null accessChecks (scan mode: tables emitted, accessChecks omitted)
+        val scanPull = PullRequestDto(tables = listOf("todos", "taskAssignees"), collaborationVersion = 1L, accessChecks = null)
+        val scanJson = dev.tabbyrush.shared.sync.syncWireJson.encodeToString(PullRequestDto.serializer(), scanPull)
+        assertFalse(scanJson.contains("\"accessChecks\""), "null accessChecks must be omitted")
+        assertTrue(scanJson.contains("\"collaborationVersion\":1"), "collaborationVersion must be emitted")
+        assertTrue(scanJson.contains("\"tables\":[\"todos\",\"taskAssignees\"]"), "tables filter must be emitted in scan mode")
+
+        // 4. PullRequest with non-empty accessChecks (validation mode: tables omitted, accessChecks emitted)
+        val nonEmptyCheckPull = PullRequestDto(collaborationVersion = 1L, accessChecks = listOf(refDto))
+        val nonEmptyJson = dev.tabbyrush.shared.sync.syncWireJson.encodeToString(PullRequestDto.serializer(), nonEmptyCheckPull)
+        assertFalse(nonEmptyJson.contains("\"tables\""), "tables must not be emitted in validation mode")
+        assertTrue(nonEmptyJson.contains("\"accessChecks\":["), "accessChecks must be emitted")
+
+        // 5. PullRequest with explicit empty list accessChecks (final boundary validation mode: tables omitted, accessChecks=[])
+        val checkPull = PullRequestDto(collaborationVersion = 1L, accessChecks = emptyList())
+        val checkJson = dev.tabbyrush.shared.sync.syncWireJson.encodeToString(PullRequestDto.serializer(), checkPull)
+        assertTrue(checkJson.contains("\"accessChecks\":[]"), "empty accessChecks must be emitted as []")
+        assertTrue(checkJson.contains("\"collaborationVersion\":1"))
+        assertFalse(checkJson.contains("\"tables\""), "tables must not be emitted in validation mode")
+
+        // 6. Server validation wire fixture with empty accessChecks has no tables
+        val rustValidationWire = """{"batchSize":100,"collaborationVersion":1,"accessChecks":[]}"""
+        val decodedValidation = dev.tabbyrush.shared.sync.syncWireJson.decodeFromString(PullRequestDto.serializer(), rustValidationWire)
+        assertEquals(1L, decodedValidation.collaborationVersion)
+        assertNull(decodedValidation.tables, "tables must be null in validation-only wire fixture")
+        assertNotNull(decodedValidation.accessChecks, "accessChecks must not be null when [] is sent")
+        assertTrue(decodedValidation.accessChecks!!.isEmpty(), "accessChecks must be empty list")
     }
 
     private fun compareGenerations(a: String, b: String): Int {

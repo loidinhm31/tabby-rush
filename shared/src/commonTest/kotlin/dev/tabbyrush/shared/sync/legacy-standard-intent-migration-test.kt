@@ -13,7 +13,7 @@ class LegacyStandardIntentMigrationTest {
             put("dispatchHistory", history?.let(::JsonPrimitive) ?: JsonNull)
             put("transitionCheckpoint", checkpoint?.let(::JsonPrimitive) ?: JsonNull)
         }
-        return LegacySyncEvidenceEntity("old", "a", raw.toString())
+        return LegacySyncEvidenceEntity(sourceOpId = "old", rowId = "a", originalJson = raw.toString())
     }
 
     @Test fun pendingAndAbsentHistoryAreNotProofOfNonDispatch() {

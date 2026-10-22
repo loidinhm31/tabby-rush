@@ -1,17 +1,23 @@
 package dev.tabbyrush.shared.contract
 
 data class DeadlineSelection(
-    val taskId: String,
+    val taskRef: TaskRef,
     val title: String,
     val deadline: TaskDeadline,
     val hasUnresolvedConflict: Boolean
-)
+) {
+    val taskId: String get() = taskRef.rowId
+    val ownerUserId: String get() = taskRef.ownerUserId
+}
 
 data class DeadlineSelectionKey(
     val token: SurfaceAccountToken,
-    val taskId: String,
+    val taskRef: TaskRef,
     val deadline: TaskDeadline
-)
+) {
+    val taskId: String get() = taskRef.rowId
+    val ownerUserId: String get() = taskRef.ownerUserId
+}
 
 /**
  * Partitions todos into incomplete and completed sections, omitting deleted records
@@ -23,7 +29,8 @@ fun partitionSurfaceTodos(todos: List<Todo>): TaskSections {
 
 private val DEADLINE_COMPARATOR = compareBy<PersistedTaskSchedule>(
     { it.deadline!!.overdueEpochMs },
-    { it.taskId }
+    { it.taskRef.ownerUserId },
+    { it.taskRef.rowId }
 )
 
 /**
@@ -39,7 +46,7 @@ fun selectNextDeadline(schedules: List<PersistedTaskSchedule>, nowEpochMs: Long)
     var bestUpcoming: PersistedTaskSchedule? = null
 
     for (schedule in schedules) {
-        if (schedule.isDeleted || schedule.completed || schedule.deadline == null) continue
+        if (!schedule.isAccessible || schedule.isDeleted || schedule.completed || schedule.deadline == null) continue
         val dl = schedule.deadline
         if (nowEpochMs >= dl.overdueEpochMs) {
             if (bestOverdue == null || DEADLINE_COMPARATOR.compare(schedule, bestOverdue) < 0) {
@@ -55,7 +62,7 @@ fun selectNextDeadline(schedules: List<PersistedTaskSchedule>, nowEpochMs: Long)
     val selected = bestOverdue ?: bestUpcoming ?: return null
 
     return DeadlineSelection(
-        taskId = selected.taskId,
+        taskRef = selected.taskRef,
         title = selected.title,
         deadline = selected.deadline!!,
         hasUnresolvedConflict = selected.hasUnresolvedConflict

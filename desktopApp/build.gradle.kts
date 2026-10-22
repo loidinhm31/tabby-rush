@@ -118,6 +118,17 @@ tasks.register<JavaExec>("runDebug") {
     }
 }
 
+tasks.register<JavaExec>("runTaskAssigneesRuntimeSmoke") {
+    group = "verification"
+    description = "Runs TabbyRush collaborative task assignees standalone runtime smoke against disposable Hub"
+    mainClass.set("dev.tabbyrush.desktop.TaskAssigneesRuntimeSmoke")
+    classpath = sourceSets["test"].runtimeClasspath
+    dependsOn(tasks.named("testClasses"))
+    if (providers.gradleProperty("isolatedTestConfig").orNull == "true") {
+        systemProperty("tabbyrush.isolatedTestConfig", "true")
+    }
+}
+
 tasks.withType<Test> {
     if (providers.gradleProperty("isolatedTestConfig").orNull == "true") {
         systemProperty("tabbyrush.isolatedTestConfig", "true")

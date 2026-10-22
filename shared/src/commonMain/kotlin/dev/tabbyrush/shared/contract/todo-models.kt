@@ -55,7 +55,7 @@ data class ReminderRule(
 }
 
 data class Todo(
-    val id: String,
+    val taskRef: TaskRef,
     val title: String,
     val completed: Boolean,
     val createdAt: Long,
@@ -66,16 +66,25 @@ data class Todo(
     val deadline: TaskDeadline? = null,
     val reminderRule: ReminderRule = ReminderRule.DISABLED,
     val scheduleToken: String? = null,
-    val parentTaskId: String? = null
+    val parentTaskRef: TaskRef? = null,
+    val accessState: TaskAccessState? = null
 ) {
+    val id: String get() = taskRef.rowId
+    val ownerUserId: String get() = taskRef.ownerUserId
+    val parentTaskId: String? get() = parentTaskRef?.rowId
+
     init {
         require(createdAt >= 0) { "createdAt must be non-negative" }
         require(updatedAt >= createdAt) { "updatedAt must be greater than or equal to createdAt" }
         require(serverRevision >= 0) { "serverRevision must be non-negative" }
         validateScheduleConsistency()
-        if (parentTaskId != null) {
-            require(parentTaskId.isNotBlank()) { "parentTaskId must not be blank" }
-            require(parentTaskId != id) { "parentTaskId must not equal id (self-reference forbidden)" }
+        if (parentTaskRef != null) {
+            require(parentTaskRef.ownerUserId == taskRef.ownerUserId) {
+                "parentTaskRef owner '${parentTaskRef.ownerUserId}' must match task owner '${taskRef.ownerUserId}'"
+            }
+            require(parentTaskRef != taskRef) {
+                "parentTaskRef must not equal taskRef (self-reference forbidden)"
+            }
         }
     }
 

@@ -1,0 +1,1334 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "e8d641d9167df66f9dc81e815617a23d",
+    "entities": [
+      {
+        "tableName": "server_base",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`bindingKey` TEXT NOT NULL, `ownerBinding` TEXT NOT NULL, `ownerUserId` TEXT, `tableName` TEXT NOT NULL, `rowId` TEXT NOT NULL, `serverRevision` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, `title` TEXT NOT NULL, `completed` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deadlineDate` TEXT, `deadlineTime` TEXT, `deadlineZone` TEXT, `deadlineOffsetSeconds` INTEGER, `reminderAnchorTime` TEXT, `deadlineAnchorEpochMs` INTEGER, `deadlineOverdueEpochMs` INTEGER, `reminderEnabled` INTEGER NOT NULL, `reminderLeadMinutes` INTEGER NOT NULL, `reminderIntervalMinutes` INTEGER, `reminderCount` INTEGER NOT NULL, `scheduleToken` TEXT, `parentTaskId` TEXT, `rawJson` TEXT, `syncedAt` TEXT, `standardConfirmed` INTEGER NOT NULL, `projectionError` TEXT, PRIMARY KEY(`bindingKey`, `tableName`, `rowId`))",
+        "fields": [
+          {
+            "fieldPath": "bindingKey",
+            "columnName": "bindingKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerBinding",
+            "columnName": "ownerBinding",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tableName",
+            "columnName": "tableName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverRevision",
+            "columnName": "serverRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completed",
+            "columnName": "completed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deadlineDate",
+            "columnName": "deadlineDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineTime",
+            "columnName": "deadlineTime",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineZone",
+            "columnName": "deadlineZone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineOffsetSeconds",
+            "columnName": "deadlineOffsetSeconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderAnchorTime",
+            "columnName": "reminderAnchorTime",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineAnchorEpochMs",
+            "columnName": "deadlineAnchorEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deadlineOverdueEpochMs",
+            "columnName": "deadlineOverdueEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderEnabled",
+            "columnName": "reminderEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderLeadMinutes",
+            "columnName": "reminderLeadMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderIntervalMinutes",
+            "columnName": "reminderIntervalMinutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderCount",
+            "columnName": "reminderCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleToken",
+            "columnName": "scheduleToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "parentTaskId",
+            "columnName": "parentTaskId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rawJson",
+            "columnName": "rawJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncedAt",
+            "columnName": "syncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "standardConfirmed",
+            "columnName": "standardConfirmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectionError",
+            "columnName": "projectionError",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "bindingKey",
+            "tableName",
+            "rowId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`opId` TEXT NOT NULL, `bindingKey` TEXT NOT NULL, `ownerBinding` TEXT NOT NULL, `ownerUserId` TEXT, `tableName` TEXT NOT NULL, `rowId` TEXT NOT NULL, `kind` TEXT NOT NULL, `title` TEXT, `completed` INTEGER, `createdAt` INTEGER, `localRevision` INTEGER NOT NULL, `deliveryState` TEXT NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `errorMessage` TEXT, `consecutiveFailures` INTEGER NOT NULL, `deadlineDate` TEXT, `deadlineTime` TEXT, `deadlineZone` TEXT, `deadlineOffsetSeconds` INTEGER, `reminderAnchorTime` TEXT, `deadlineAnchorEpochMs` INTEGER, `deadlineOverdueEpochMs` INTEGER, `reminderEnabled` INTEGER NOT NULL, `reminderLeadMinutes` INTEGER NOT NULL, `reminderIntervalMinutes` INTEGER, `reminderCount` INTEGER NOT NULL, `scheduleToken` TEXT, `dispatchHistory` TEXT NOT NULL, `intentMask` TEXT, `parentTaskId` TEXT, `payloadJson` TEXT NOT NULL, `envelopeJson` TEXT, `version` INTEGER, `assumedServerVersion` INTEGER, `legacyEvidenceId` TEXT, `resolution` TEXT, PRIMARY KEY(`opId`))",
+        "fields": [
+          {
+            "fieldPath": "opId",
+            "columnName": "opId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bindingKey",
+            "columnName": "bindingKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerBinding",
+            "columnName": "ownerBinding",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tableName",
+            "columnName": "tableName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "completed",
+            "columnName": "completed",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "localRevision",
+            "columnName": "localRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deliveryState",
+            "columnName": "deliveryState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "createdAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "errorMessage",
+            "columnName": "errorMessage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "consecutiveFailures",
+            "columnName": "consecutiveFailures",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deadlineDate",
+            "columnName": "deadlineDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineTime",
+            "columnName": "deadlineTime",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineZone",
+            "columnName": "deadlineZone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineOffsetSeconds",
+            "columnName": "deadlineOffsetSeconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderAnchorTime",
+            "columnName": "reminderAnchorTime",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineAnchorEpochMs",
+            "columnName": "deadlineAnchorEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deadlineOverdueEpochMs",
+            "columnName": "deadlineOverdueEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderEnabled",
+            "columnName": "reminderEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderLeadMinutes",
+            "columnName": "reminderLeadMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderIntervalMinutes",
+            "columnName": "reminderIntervalMinutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderCount",
+            "columnName": "reminderCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleToken",
+            "columnName": "scheduleToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "dispatchHistory",
+            "columnName": "dispatchHistory",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "intentMask",
+            "columnName": "intentMask",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "parentTaskId",
+            "columnName": "parentTaskId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payloadJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "envelopeJson",
+            "columnName": "envelopeJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "assumedServerVersion",
+            "columnName": "assumedServerVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "legacyEvidenceId",
+            "columnName": "legacyEvidenceId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resolution",
+            "columnName": "resolution",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "opId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_outbox_legacyEvidenceId",
+            "unique": true,
+            "columnNames": [
+              "legacyEvidenceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_outbox_legacyEvidenceId` ON `${TABLE_NAME}` (`legacyEvidenceId`)"
+          },
+          {
+            "name": "index_outbox_bindingKey_tableName_rowId",
+            "unique": false,
+            "columnNames": [
+              "bindingKey",
+              "tableName",
+              "rowId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outbox_bindingKey_tableName_rowId` ON `${TABLE_NAME}` (`bindingKey`, `tableName`, `rowId`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "editor_drafts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`bindingKey` TEXT NOT NULL, `ownerBinding` TEXT NOT NULL, `ownerUserId` TEXT, `tableName` TEXT NOT NULL, `rowId` TEXT NOT NULL, `draftTitle` TEXT NOT NULL, `draftCompleted` INTEGER NOT NULL, `localRevision` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, `deadlineDate` TEXT, `deadlineTime` TEXT, `deadlineZone` TEXT, `deadlineOffsetSeconds` INTEGER, `reminderAnchorTime` TEXT, `deadlineAnchorEpochMs` INTEGER, `deadlineOverdueEpochMs` INTEGER, `reminderEnabled` INTEGER NOT NULL, `reminderLeadMinutes` INTEGER NOT NULL, `reminderIntervalMinutes` INTEGER, `reminderCount` INTEGER NOT NULL, `scheduleToken` TEXT, `parentTaskId` TEXT, PRIMARY KEY(`bindingKey`, `tableName`, `rowId`))",
+        "fields": [
+          {
+            "fieldPath": "bindingKey",
+            "columnName": "bindingKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerBinding",
+            "columnName": "ownerBinding",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tableName",
+            "columnName": "tableName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "draftTitle",
+            "columnName": "draftTitle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "draftCompleted",
+            "columnName": "draftCompleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localRevision",
+            "columnName": "localRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "isDeleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deadlineDate",
+            "columnName": "deadlineDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineTime",
+            "columnName": "deadlineTime",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineZone",
+            "columnName": "deadlineZone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineOffsetSeconds",
+            "columnName": "deadlineOffsetSeconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderAnchorTime",
+            "columnName": "reminderAnchorTime",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineAnchorEpochMs",
+            "columnName": "deadlineAnchorEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deadlineOverdueEpochMs",
+            "columnName": "deadlineOverdueEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderEnabled",
+            "columnName": "reminderEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderLeadMinutes",
+            "columnName": "reminderLeadMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderIntervalMinutes",
+            "columnName": "reminderIntervalMinutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderCount",
+            "columnName": "reminderCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleToken",
+            "columnName": "scheduleToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "parentTaskId",
+            "columnName": "parentTaskId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "bindingKey",
+            "tableName",
+            "rowId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "scan_staging",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`bindingKey` TEXT NOT NULL, `ownerBinding` TEXT NOT NULL, `ownerUserId` TEXT, `rowId` TEXT NOT NULL, `tableName` TEXT NOT NULL, `serverRevision` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, `title` TEXT NOT NULL, `completed` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `deadlineDate` TEXT, `deadlineTime` TEXT, `deadlineZone` TEXT, `deadlineOffsetSeconds` INTEGER, `reminderAnchorTime` TEXT, `deadlineAnchorEpochMs` INTEGER, `deadlineOverdueEpochMs` INTEGER, `reminderEnabled` INTEGER NOT NULL, `reminderLeadMinutes` INTEGER NOT NULL, `reminderIntervalMinutes` INTEGER, `reminderCount` INTEGER NOT NULL, `scheduleToken` TEXT, `parentTaskId` TEXT, `rawJson` TEXT, `syncedAt` TEXT, `scanGeneration` INTEGER NOT NULL, `projectionError` TEXT, PRIMARY KEY(`bindingKey`, `tableName`, `rowId`))",
+        "fields": [
+          {
+            "fieldPath": "bindingKey",
+            "columnName": "bindingKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerBinding",
+            "columnName": "ownerBinding",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tableName",
+            "columnName": "tableName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverRevision",
+            "columnName": "serverRevision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completed",
+            "columnName": "completed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deadlineDate",
+            "columnName": "deadlineDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineTime",
+            "columnName": "deadlineTime",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineZone",
+            "columnName": "deadlineZone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineOffsetSeconds",
+            "columnName": "deadlineOffsetSeconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderAnchorTime",
+            "columnName": "reminderAnchorTime",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deadlineAnchorEpochMs",
+            "columnName": "deadlineAnchorEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deadlineOverdueEpochMs",
+            "columnName": "deadlineOverdueEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderEnabled",
+            "columnName": "reminderEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderLeadMinutes",
+            "columnName": "reminderLeadMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reminderIntervalMinutes",
+            "columnName": "reminderIntervalMinutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "reminderCount",
+            "columnName": "reminderCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleToken",
+            "columnName": "scheduleToken",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "parentTaskId",
+            "columnName": "parentTaskId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rawJson",
+            "columnName": "rawJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncedAt",
+            "columnName": "syncedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "scanGeneration",
+            "columnName": "scanGeneration",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectionError",
+            "columnName": "projectionError",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "bindingKey",
+            "tableName",
+            "rowId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "account_sync_meta",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `lastSyncTime` INTEGER, `localRevisionCounter` INTEGER NOT NULL, `syncStatus` TEXT NOT NULL, `safeErrorCode` TEXT, `safeErrorMessage` TEXT, `consecutiveFailedRounds` INTEGER NOT NULL, `credentialPersistencePending` INTEGER NOT NULL, `hubSchemaVersion` INTEGER, `checkpointUpdatedAt` TEXT, `checkpointId` TEXT, `scanGeneration` INTEGER NOT NULL, `scanState` TEXT NOT NULL, `scanCheckpointUpdatedAt` TEXT, `scanCheckpointId` TEXT, `lastCompletedCatchUpEpochMs` INTEGER, `accessGeneration` INTEGER NOT NULL, `ownerBindingState` TEXT NOT NULL, `boundOwnerUserId` TEXT, `accessRevision` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncTime",
+            "columnName": "lastSyncTime",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "localRevisionCounter",
+            "columnName": "localRevisionCounter",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "safeErrorCode",
+            "columnName": "safeErrorCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "safeErrorMessage",
+            "columnName": "safeErrorMessage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "consecutiveFailedRounds",
+            "columnName": "consecutiveFailedRounds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "credentialPersistencePending",
+            "columnName": "credentialPersistencePending",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hubSchemaVersion",
+            "columnName": "hubSchemaVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "checkpointUpdatedAt",
+            "columnName": "checkpointUpdatedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "checkpointId",
+            "columnName": "checkpointId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "scanGeneration",
+            "columnName": "scanGeneration",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scanState",
+            "columnName": "scanState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scanCheckpointUpdatedAt",
+            "columnName": "scanCheckpointUpdatedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "scanCheckpointId",
+            "columnName": "scanCheckpointId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastCompletedCatchUpEpochMs",
+            "columnName": "lastCompletedCatchUpEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "accessGeneration",
+            "columnName": "accessGeneration",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerBindingState",
+            "columnName": "ownerBindingState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "boundOwnerUserId",
+            "columnName": "boundOwnerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "accessRevision",
+            "columnName": "accessRevision",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "account_local_settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `notificationsEnabled` INTEGER NOT NULL, `defaultReminderEnabled` INTEGER NOT NULL, `defaultReminderLeadMinutes` INTEGER NOT NULL, `defaultReminderIntervalMinutes` INTEGER, `defaultReminderCount` INTEGER NOT NULL, `defaultDateOnlyAnchorTime` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notificationsEnabled",
+            "columnName": "notificationsEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultReminderEnabled",
+            "columnName": "defaultReminderEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultReminderLeadMinutes",
+            "columnName": "defaultReminderLeadMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultReminderIntervalMinutes",
+            "columnName": "defaultReminderIntervalMinutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "defaultReminderCount",
+            "columnName": "defaultReminderCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultDateOnlyAnchorTime",
+            "columnName": "defaultDateOnlyAnchorTime",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "reminder_delivery_ledger",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`accountKey` TEXT NOT NULL, `generation` INTEGER NOT NULL, `bindingKey` TEXT NOT NULL, `ownerBinding` TEXT NOT NULL, `ownerUserId` TEXT, `tableName` TEXT NOT NULL, `taskId` TEXT NOT NULL, `scheduleToken` TEXT NOT NULL, `occurrenceIndex` INTEGER NOT NULL, `dueEpochMs` INTEGER NOT NULL, `claimOutcome` TEXT NOT NULL, `claimedAtEpochMs` INTEGER, `postedPlatformId` TEXT, `cancellationState` TEXT NOT NULL, `updatedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`accountKey`, `generation`, `bindingKey`, `tableName`, `taskId`, `scheduleToken`, `occurrenceIndex`))",
+        "fields": [
+          {
+            "fieldPath": "accountKey",
+            "columnName": "accountKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "generation",
+            "columnName": "generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bindingKey",
+            "columnName": "bindingKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerBinding",
+            "columnName": "ownerBinding",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tableName",
+            "columnName": "tableName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taskId",
+            "columnName": "taskId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheduleToken",
+            "columnName": "scheduleToken",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "occurrenceIndex",
+            "columnName": "occurrenceIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dueEpochMs",
+            "columnName": "dueEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "claimOutcome",
+            "columnName": "claimOutcome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "claimedAtEpochMs",
+            "columnName": "claimedAtEpochMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "postedPlatformId",
+            "columnName": "postedPlatformId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cancellationState",
+            "columnName": "cancellationState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updatedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "accountKey",
+            "generation",
+            "bindingKey",
+            "tableName",
+            "taskId",
+            "scheduleToken",
+            "occurrenceIndex"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reminder_delivery_ledger_accountKey_generation_bindingKey_tableName_taskId",
+            "unique": false,
+            "columnNames": [
+              "accountKey",
+              "generation",
+              "bindingKey",
+              "tableName",
+              "taskId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminder_delivery_ledger_accountKey_generation_bindingKey_tableName_taskId` ON `${TABLE_NAME}` (`accountKey`, `generation`, `bindingKey`, `tableName`, `taskId`)"
+          },
+          {
+            "name": "index_reminder_delivery_ledger_dueEpochMs",
+            "unique": false,
+            "columnNames": [
+              "dueEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminder_delivery_ledger_dueEpochMs` ON `${TABLE_NAME}` (`dueEpochMs`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "legacy_sync_evidence",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceOpId` TEXT NOT NULL, `bindingKey` TEXT NOT NULL, `ownerBinding` TEXT NOT NULL, `ownerUserId` TEXT, `tableName` TEXT NOT NULL, `rowId` TEXT NOT NULL, `originalJson` TEXT NOT NULL, `outcome` TEXT NOT NULL, `translatedOpId` TEXT, PRIMARY KEY(`sourceOpId`))",
+        "fields": [
+          {
+            "fieldPath": "sourceOpId",
+            "columnName": "sourceOpId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bindingKey",
+            "columnName": "bindingKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerBinding",
+            "columnName": "ownerBinding",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tableName",
+            "columnName": "tableName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalJson",
+            "columnName": "originalJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outcome",
+            "columnName": "outcome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "translatedOpId",
+            "columnName": "translatedOpId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceOpId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "task_access",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerUserId` TEXT NOT NULL, `tableName` TEXT NOT NULL, `rowId` TEXT NOT NULL, `revision` INTEGER NOT NULL, `status` TEXT NOT NULL, `editContent` INTEGER NOT NULL, `manageAssignment` INTEGER NOT NULL, `deleteTask` INTEGER NOT NULL, `createChild` INTEGER NOT NULL, `hierarchyCoverage` TEXT NOT NULL, `updatedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`ownerUserId`, `tableName`, `rowId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tableName",
+            "columnName": "tableName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "editContent",
+            "columnName": "editContent",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "manageAssignment",
+            "columnName": "manageAssignment",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deleteTask",
+            "columnName": "deleteTask",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createChild",
+            "columnName": "createChild",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hierarchyCoverage",
+            "columnName": "hierarchyCoverage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updatedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerUserId",
+            "tableName",
+            "rowId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "access_check_staging",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`scanGeneration` INTEGER NOT NULL, `ownerUserId` TEXT NOT NULL, `tableName` TEXT NOT NULL, `rowId` TEXT NOT NULL, `revision` INTEGER NOT NULL, `status` TEXT NOT NULL, `editContent` INTEGER NOT NULL, `manageAssignment` INTEGER NOT NULL, `deleteTask` INTEGER NOT NULL, `createChild` INTEGER NOT NULL, `hierarchyCoverage` TEXT NOT NULL, PRIMARY KEY(`scanGeneration`, `ownerUserId`, `tableName`, `rowId`))",
+        "fields": [
+          {
+            "fieldPath": "scanGeneration",
+            "columnName": "scanGeneration",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tableName",
+            "columnName": "tableName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "editContent",
+            "columnName": "editContent",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "manageAssignment",
+            "columnName": "manageAssignment",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deleteTask",
+            "columnName": "deleteTask",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createChild",
+            "columnName": "createChild",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hierarchyCoverage",
+            "columnName": "hierarchyCoverage",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "scanGeneration",
+            "ownerUserId",
+            "tableName",
+            "rowId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "access_loss_evidence",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`evidenceId` TEXT NOT NULL, `ownerUserId` TEXT NOT NULL, `tableName` TEXT NOT NULL, `rowId` TEXT NOT NULL, `opId` TEXT, `baseVersion` INTEGER, `submittedVersion` INTEGER, `timestamp` INTEGER NOT NULL, `reason` TEXT NOT NULL, PRIMARY KEY(`evidenceId`))",
+        "fields": [
+          {
+            "fieldPath": "evidenceId",
+            "columnName": "evidenceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tableName",
+            "columnName": "tableName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "opId",
+            "columnName": "opId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "baseVersion",
+            "columnName": "baseVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "submittedVersion",
+            "columnName": "submittedVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "evidenceId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_access_loss_evidence_ownerUserId_tableName_rowId",
+            "unique": false,
+            "columnNames": [
+              "ownerUserId",
+              "tableName",
+              "rowId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_access_loss_evidence_ownerUserId_tableName_rowId` ON `${TABLE_NAME}` (`ownerUserId`, `tableName`, `rowId`)"
+          }
+        ],
+        "foreignKeys": []
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e8d641d9167df66f9dc81e815617a23d')"
+    ]
+  }
+}

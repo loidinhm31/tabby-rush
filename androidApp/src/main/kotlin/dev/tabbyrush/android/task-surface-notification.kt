@@ -169,14 +169,14 @@ class TaskSurfaceNotificationCoordinator(
 
         val targetKey = DeadlineSelectionKey(
             token = token,
-            taskId = selection.taskId,
+            taskRef = selection.taskRef,
             deadline = selection.deadline
         )
 
         // 4. Reconcile selection state in durable preferences
         val updatedPrefs = preferences.reconcileSelection(token, targetKey)
         if (updatedPrefs.suppressed == targetKey || updatedPrefs.hasCorruptSuppression) {
-            Log.d(TAG, "Selection key for task ${selection.taskId} is suppressed by user dismissal.")
+            Log.d(TAG, "Selection key for task ${selection.taskRef} is suppressed by user dismissal.")
             if (updatedPrefs.postedKey != null || updatedPrefs.postedReceipt != null) {
                 preferences.invalidatePost(token.accountKey)
                 nm.cancel(TaskSurfaceIntents.NOTIFICATION_TAG, TaskSurfaceIntents.NOTIFICATION_ID)
@@ -236,7 +236,7 @@ class TaskSurfaceNotificationCoordinator(
         val completePendingIntent = TaskSurfaceIntents.createCompletePendingIntent(
             context,
             token,
-            selection.taskId
+            selection.taskRef
         )
         val completeLabel = try {
             context.getString(R.string.task_surface_action_complete)
@@ -252,7 +252,7 @@ class TaskSurfaceNotificationCoordinator(
         val openPendingIntent = TaskSurfaceIntents.createOpenPendingIntent(
             context,
             token,
-            selection.taskId
+            selection.taskRef
         )
         val dismissPendingIntent = TaskSurfaceIntents.createDismissPendingIntent(
             context,

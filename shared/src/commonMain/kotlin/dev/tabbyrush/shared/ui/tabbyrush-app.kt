@@ -48,9 +48,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import dev.tabbyrush.shared.contract.AccessLossEvidence
+import dev.tabbyrush.shared.contract.ApiResult
 import dev.tabbyrush.shared.contract.AuthState
 import dev.tabbyrush.shared.contract.SafeError
 import dev.tabbyrush.shared.contract.RemoteInboxAction
+import dev.tabbyrush.shared.contract.TaskRef
+import dev.tabbyrush.shared.contract.UserLookupResult
 import dev.tabbyrush.shared.contract.RemoteInboxAvailability
 import dev.tabbyrush.shared.contract.RemoteInboxState
 import dev.tabbyrush.shared.contract.TodoAction
@@ -74,13 +78,26 @@ fun TabbyRushApp(
     onAction: (TodoAction) -> Unit,
     onRemoteAction: (RemoteInboxAction) -> Unit,
     onAuthSubmit: (AuthSubmitAction) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLookupUser: (suspend (String) -> ApiResult<UserLookupResult>)? = null
 ) {
     TabbyRushTheme {
         Surface(
             modifier = modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
+            // Authoritative Access Loss Privacy Purge: immediately close editor/conflict if access was lost
+            LaunchedEffect(state.accessLossEvidence, state.editor?.taskRef, state.conflict?.taskRef) {
+                val editorRef = state.editor?.taskRef
+                if (editorRef != null && state.accessLossEvidence.any { it.ref == editorRef }) {
+                    onAction(TodoAction.CancelEditor)
+                }
+                val conflictRef = state.conflict?.taskRef
+                if (conflictRef != null && state.accessLossEvidence.any { it.ref == conflictRef }) {
+                    onAction(TodoAction.DismissError)
+                }
+            }
+
             when (state.authState) {
                 AuthState.UNAUTHENTICATED,
                 AuthState.AUTHENTICATING -> {
@@ -140,20 +157,23 @@ fun TabbyRushApp(
                 }
             }
 
-            // Modal Overlays with explicit dismissal safety (prevent accidental outside-click draft loss)
-            if (state.editor != null) {
+            // Modal Overlays with explicit dismissal safety: suppress revoked editor or conflict immediately during composition
+            val isEditorRevoked = state.editor?.taskRef != null && state.accessLossEvidence.any { it.ref == state.editor.taskRef }
+            if (state.editor != null && !isEditorRevoked) {
                 Dialog(
-                    onDismissRequest = { /* Require explicit Cancel or Save button */ },
-                    properties = DialogProperties(dismissOnClickOutside = false)
+                    onDismissRequest = { onAction(TodoAction.CancelEditor) },
+                    properties = DialogProperties(dismissOnClickOutside = true)
                 ) {
                     TodoEditor(
                         editor = state.editor,
-                        onAction = onAction
+                        onAction = onAction,
+                        onLookupUser = onLookupUser
                     )
                 }
             }
 
-            if (state.conflict != null) {
+            val isConflictRevoked = state.conflict?.taskRef != null && state.accessLossEvidence.any { it.ref == state.conflict.taskRef }
+            if (state.conflict != null && !isConflictRevoked) {
                 Dialog(
                     onDismissRequest = { onAction(TodoAction.DismissError) },
                     properties = DialogProperties(dismissOnClickOutside = false)
@@ -432,6 +452,13 @@ private fun AuthenticatedWorkspace(
                                     modifier = Modifier.padding(horizontal = TabbyRushThemeTokens.SpacingXLarge)
                                 )
                             }
+                            if (state.accessLossEvidence.isNotEmpty()) {
+                                AccessLossNoticeBanner(
+                                    evidenceList = state.accessLossEvidence,
+                                    onDismiss = { onAction(TodoAction.DismissAccessLossNotice(it)) },
+                                    modifier = Modifier.padding(horizontal = TabbyRushThemeTokens.SpacingXLarge)
+                                )
+                            }
                             if (isAdmin && !adminWarningDismissed) {
                                 AdminWarningBanner(
                                     onDismiss = { adminWarningDismissed = true },
@@ -456,7 +483,7 @@ private fun AuthenticatedWorkspace(
                                     hierarchicalItems = state.hierarchicalItems,
                                     deleteCandidateChildCount = state.deleteCandidateChildCount,
                                     unresolvedChildren = state.unresolvedChildren,
-                                    accountKey = state.identity?.userId
+                                    currentUserId = state.identity?.userId
                                 )
                             }
                         }
@@ -648,6 +675,13 @@ private fun AuthenticatedWorkspace(
                                         modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
                                     )
                                 }
+                                if (state.accessLossEvidence.isNotEmpty()) {
+                                    AccessLossNoticeBanner(
+                                        evidenceList = state.accessLossEvidence,
+                                        onDismiss = { onAction(TodoAction.DismissAccessLossNotice(it)) },
+                                        modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
+                                    )
+                                }
 
                                 TodoList(
                                     items = state.items,
@@ -659,7 +693,7 @@ private fun AuthenticatedWorkspace(
                                     hierarchicalItems = state.hierarchicalItems,
                                     deleteCandidateChildCount = state.deleteCandidateChildCount,
                                     unresolvedChildren = state.unresolvedChildren,
-                                    accountKey = state.identity?.userId
+                                    currentUserId = state.identity?.userId
                                 )
                             }
                         }
@@ -683,11 +717,14 @@ private fun SafeErrorBanner(
     modifier: Modifier = Modifier
 ) {
     val isProtocol = error is SafeError.ProtocolIncompatible
+    val isCollaborationRequired = error is SafeError.CollaborationRequired
     val title = when {
+        isCollaborationRequired -> "Upgrade Required"
         isProtocol -> "Sync Compatibility Review"
         else -> "Attention"
     }
     val guidance = when {
+        isCollaborationRequired -> " An application update is required to synchronize collaborative tasks. Please upgrade to the latest version of TabbyRush to restore sync."
         isProtocol -> " Local tasks and drafts remain on this device. Check server availability and client compatibility before retrying; no data reset is required."
         else -> ""
     }
@@ -728,6 +765,64 @@ private fun SafeErrorBanner(
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelLarge
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccessLossNoticeBanner(
+    evidenceList: List<AccessLossEvidence>,
+    onDismiss: (TaskRef) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val distinctEvidence = remember(evidenceList) { evidenceList.distinctBy { it.ref } }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall)
+    ) {
+        distinctEvidence.forEach { evidence ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small),
+                color = TabbyRushThemeTokens.customColors.coralSurface,
+                shape = MaterialTheme.shapes.small
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(TabbyRushThemeTokens.SpacingMedium),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Changes Not Delivered",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
+                        Text(
+                            text = "Access to shared task (ID: ${evidence.ref.rowId.take(8)}…) is no longer available (${evidence.reason}). Unsent changes could not be delivered to the server.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(TabbyRushThemeTokens.SpacingSmall))
+
+                    TextButton(
+                        onClick = { onDismiss(evidence.ref) },
+                        modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                    ) {
+                        Text(
+                            text = "Dismiss",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
             }
         }
     }

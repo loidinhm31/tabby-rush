@@ -49,8 +49,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import dev.tabbyrush.shared.contract.HierarchicalTodoItem
+import dev.tabbyrush.shared.contract.HierarchyCoverage
+import dev.tabbyrush.shared.contract.TaskAccessStatus
+import dev.tabbyrush.shared.contract.TaskCapabilities
 import dev.tabbyrush.shared.contract.TaskDeadlinePresentation
 import dev.tabbyrush.shared.contract.TaskHierarchyProjector
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.TodoCounts
@@ -69,7 +73,7 @@ fun TodoList(
     hierarchicalItems: List<HierarchicalTodoItem> = emptyList(),
     deleteCandidateChildCount: Int = 0,
     unresolvedChildren: List<Todo> = emptyList(),
-    accountKey: String? = null
+    currentUserId: String? = null
 ) {
     val displayItems = remember(items, filter, hierarchicalItems) {
         if (hierarchicalItems.isNotEmpty()) {
@@ -79,11 +83,11 @@ fun TodoList(
         }
     }
 
-    var expandedParentIds by remember(accountKey) { mutableStateOf(emptySet<String>()) }
+    var expandedParentRefs by remember(currentUserId) { mutableStateOf(emptySet<TaskRef>()) }
 
-    val visibleItems = remember(displayItems, expandedParentIds) {
+    val visibleItems = remember(displayItems, expandedParentRefs) {
         displayItems.filterNot { item ->
-            item.depth > 0 && item.todo.parentTaskId != null && !expandedParentIds.contains(item.todo.parentTaskId)
+            item.depth > 0 && item.todo.parentTaskRef != null && !expandedParentRefs.contains(item.todo.parentTaskRef)
         }
     }
 
@@ -125,7 +129,8 @@ fun TodoList(
                         UnresolvedSubtaskSection(
                             unresolvedChildren = unresolvedChildren,
                             onAction = onAction,
-                            nowEpochMs = nowEpochMs
+                            nowEpochMs = nowEpochMs,
+                            accountKey = currentUserId
                         )
                     }
                 }
@@ -141,31 +146,37 @@ fun TodoList(
                 } else {
                     items(
                         items = visibleItems,
-                        key = { it.todo.id }
+                        key = { "${it.todo.taskRef.ownerUserId}:${it.todo.taskRef.rowId}" }
                     ) { item ->
-                        val isCollapsed = !expandedParentIds.contains(item.todo.id)
+                        val isChildOnly = item.isChildOnly
+                        val isCollapsed = !expandedParentRefs.contains(item.todo.taskRef)
+                        val isUnavailable = item.todo.accessState?.status == TaskAccessStatus.Unavailable
+                        val isOwner = !isUnavailable && currentUserId != null && item.todo.taskRef.ownerUserId == currentUserId
+                        val canDelete = if (isUnavailable) false else if (isOwner) true else (item.todo.accessState?.canDeleteTask == true)
+                        val canCreateChild = (if (isUnavailable) false else if (isOwner) true else (item.todo.accessState?.canCreateChild == true)) && !isChildOnly && item.depth == 0
                         TodoRow(
                             item = item,
+                            currentUserId = currentUserId,
                             isCollapsed = isCollapsed,
-                            onToggleExpand = if (item.hasLiveChildren) {
+                            onToggleExpand = if (item.hasLiveChildren && !isChildOnly) {
                                 {
-                                    expandedParentIds = if (isCollapsed) {
-                                        expandedParentIds + item.todo.id
+                                    expandedParentRefs = if (isCollapsed) {
+                                        expandedParentRefs + item.todo.taskRef
                                     } else {
-                                        expandedParentIds - item.todo.id
+                                        expandedParentRefs - item.todo.taskRef
                                     }
                                 }
                             } else null,
                             onToggle = { onAction(TodoAction.ToggleCompleted(item.todo)) },
                             onEdit = { onAction(TodoAction.OpenEdit(item.todo)) },
-                            onDelete = { onAction(TodoAction.RequestDelete(item.todo)) },
-                            onAddSubtask = if (item.depth == 0) {
-                                { onAction(TodoAction.OpenCreate(parentTaskId = item.todo.id, parentTitle = item.todo.title)) }
+                            onDelete = if (canDelete) { { onAction(TodoAction.RequestDelete(item.todo)) } } else null,
+                            onAddSubtask = if (canCreateChild) {
+                                { onAction(TodoAction.OpenCreate(parentTaskRef = item.todo.taskRef, parentTitle = item.todo.title)) }
                             } else null,
                             nowEpochMs = nowEpochMs
                         )
                     }
-                    }
+                }
             }
         }
     }
@@ -184,7 +195,8 @@ fun TodoList(
 private fun UnresolvedSubtaskSection(
     unresolvedChildren: List<Todo>,
     onAction: (TodoAction) -> Unit,
-    nowEpochMs: Long
+    nowEpochMs: Long,
+    accountKey: String? = null
 ) {
     Card(
         modifier = Modifier
@@ -211,6 +223,9 @@ private fun UnresolvedSubtaskSection(
             Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingMedium))
             Column(verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall)) {
                 unresolvedChildren.forEach { child ->
+                    val isUnavailable = child.accessState?.status == TaskAccessStatus.Unavailable
+                    val isOwner = !isUnavailable && accountKey != null && child.taskRef.ownerUserId == accountKey
+                    val canDelete = if (isUnavailable) false else if (isOwner) true else (child.accessState?.canDeleteTask == true)
                     TodoRow(
                         item = HierarchicalTodoItem(
                             todo = child,
@@ -218,9 +233,10 @@ private fun UnresolvedSubtaskSection(
                             hasLiveChildren = false,
                             depth = 0
                         ),
+                        currentUserId = accountKey,
                         onToggle = { onAction(TodoAction.ToggleCompleted(child)) },
                         onEdit = { onAction(TodoAction.OpenEdit(child)) },
-                        onDelete = { onAction(TodoAction.RequestDelete(child)) },
+                        onDelete = if (canDelete) { { onAction(TodoAction.RequestDelete(child)) } } else null,
                         onAddSubtask = null,
                         nowEpochMs = nowEpochMs
                     )
@@ -283,22 +299,28 @@ private fun TodoRow(
     item: HierarchicalTodoItem,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     onAddSubtask: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     nowEpochMs: Long = 0L,
     isCollapsed: Boolean = false,
-    onToggleExpand: (() -> Unit)? = null
+    onToggleExpand: (() -> Unit)? = null,
+    currentUserId: String? = null
 ) {
     val todo = item.todo
+    val isChildOnly = item.isChildOnly
     val currentClockMs = if (nowEpochMs > 0L) nowEpochMs else System.currentTimeMillis()
-    val startPadding = if (item.depth > 0) TabbyRushThemeTokens.SpacingXXLarge else 0.dp
+    val startPadding = if (!isChildOnly && item.depth > 0) TabbyRushThemeTokens.SpacingXXLarge else 0.dp
     val deadlinePresentation = TaskDeadlinePresentation.formatDeadline(
         deadline = todo.deadline,
         effectiveCompleted = item.effectiveCompleted,
         nowEpochMs = currentClockMs
     )
-
+    val isUnavailable = todo.accessState?.status == TaskAccessStatus.Unavailable
+    val isOwner = !isUnavailable && currentUserId != null && todo.taskRef.ownerUserId == currentUserId
+    val canEdit = if (isUnavailable) false else if (isOwner) true else (todo.accessState?.canEditContent == true)
+    val canDelete = (if (isUnavailable) false else if (isOwner) true else (todo.accessState?.canDeleteTask == true)) && onDelete != null
+    val canCreateChild = (if (isUnavailable) false else if (isOwner) true else (todo.accessState?.canCreateChild == true)) && onAddSubtask != null && !isChildOnly
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -321,7 +343,7 @@ private fun TodoRow(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (item.hasLiveChildren && onToggleExpand != null) {
+            if (item.hasLiveChildren && !isChildOnly && onToggleExpand != null) {
                 IconButton(
                     onClick = onToggleExpand,
                     modifier = Modifier
@@ -348,7 +370,7 @@ private fun TodoRow(
                 Spacer(modifier = Modifier.width(2.dp))
             }
 
-            if (item.hasLiveChildren) {
+            if (item.hasLiveChildren && !isChildOnly) {
                 Checkbox(
                     checked = item.effectiveCompleted,
                     onCheckedChange = null,
@@ -371,7 +393,8 @@ private fun TodoRow(
             } else {
                 Checkbox(
                     checked = item.effectiveCompleted,
-                    onCheckedChange = { onToggle() },
+                    onCheckedChange = if (canEdit) { { onToggle() } } else null,
+                    enabled = canEdit,
                     colors = CheckboxDefaults.colors(
                         checkedColor = MaterialTheme.colorScheme.primary,
                         uncheckedColor = TabbyRushThemeTokens.customColors.muted
@@ -379,12 +402,14 @@ private fun TodoRow(
                     modifier = Modifier
                         .size(36.dp)
                         .semantics {
-                            stateDescription = if (item.depth > 0) {
+                            stateDescription = if (isChildOnly) {
+                                if (item.effectiveCompleted) "Completed shared child" else "Active shared child"
+                            } else if (item.depth > 0) {
                                 if (item.effectiveCompleted) "Completed subtask" else "Active subtask"
                             } else {
                                 if (item.effectiveCompleted) "Completed" else "Active"
                             }
-                            contentDescription = if (item.depth > 0) "Toggle subtask ${todo.title}" else "Toggle completion for ${todo.title}"
+                            contentDescription = if (isChildOnly) "Toggle shared child ${todo.title}" else if (item.depth > 0) "Toggle subtask ${todo.title}" else "Toggle completion for ${todo.title}"
                         }
                 )
             }
@@ -400,6 +425,12 @@ private fun TodoRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = TabbyRushThemeTokens.customColors.muted
                     )
+                } else if (isChildOnly) {
+                    Text(
+                        text = "Shared child",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TabbyRushThemeTokens.customColors.primaryDeep
+                    )
                 }
 
                 Text(
@@ -410,7 +441,7 @@ private fun TodoRow(
                     textDecoration = if (item.effectiveCompleted) TextDecoration.LineThrough else TextDecoration.None
                 )
 
-                if (item.hasLiveChildren) {
+                if (item.hasLiveChildren && !isChildOnly) {
                     Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
                     Text(
                         text = "${item.completedChildCount}/${item.childCount} completed",
@@ -462,7 +493,7 @@ private fun TodoRow(
 
             Spacer(modifier = Modifier.width(TabbyRushThemeTokens.SpacingSmall))
 
-            if (onAddSubtask != null) {
+            if (canCreateChild) {
                 TextButton(
                     onClick = onAddSubtask,
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
@@ -480,36 +511,40 @@ private fun TodoRow(
                 }
             }
 
-            TextButton(
-                onClick = onEdit,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                modifier = Modifier
-                    .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
-                    .semantics {
-                        contentDescription = "Edit ${todo.title}"
-                    }
-            ) {
-                Text(
-                    text = "Edit",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+            if (canEdit) {
+                TextButton(
+                    onClick = onEdit,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                        .semantics {
+                            contentDescription = "Edit ${todo.title}"
+                        }
+                ) {
+                    Text(
+                        text = "Edit",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
-            TextButton(
-                onClick = onDelete,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                modifier = Modifier
-                    .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
-                    .semantics {
-                        contentDescription = if (item.hasLiveChildren) "Delete group ${todo.title}" else "Delete ${todo.title}"
-                    }
-            ) {
-                Text(
-                    text = "Delete",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error
-                )
+            if (canDelete) {
+                TextButton(
+                    onClick = onDelete,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
+                        .semantics {
+                            contentDescription = if (item.hasLiveChildren) "Delete group ${todo.title}" else "Delete ${todo.title}"
+                        }
+                ) {
+                    Text(
+                        text = "Delete",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
     }

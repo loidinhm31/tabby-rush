@@ -9,17 +9,20 @@ The current client does not use strict-v1/v2/v3 synchronization. Hub `schemaVers
 - Offline-first task creation, editing, completion, deletion, and account-specific storage.
 - Two-level parent/child tasks, client-side hierarchy projection, group deletion, and parent completion behavior.
 - Optional date/time deadlines and local reminders, with shared scheduling rules and platform-specific delivery integrations.
+- Collaborative task assignment: multi-user task delegation with single canonical creator-owned rows, child-only privacy boundaries, full-group completion calculation, and username lookup.
 - Standard Hub sync with raw unknown JSON retention, explicit intent-based merges, version acknowledgements, staged full scans, and conflict review.
+- Room v5 local storage with two-stage legacy owner binding, authoritative access state tracking, and privacy-first revocation purge with non-replayable content-free evidence.
+- Whole-app collaboration cutoff (HTTP 426) for legacy clients and single app-wide replica-set transaction guard (`_sync_assignment_fences`).
 - Android app and Glance task widget/notifications; desktop Compose app and sticky task surfaces where the platform supports them.
 - Protected platform credentials: Android Keystore, Linux Secret Service, and current-user Windows DPAPI.
 - Glean Hub administrator announcements with a separate versioned contract and in-memory client inbox.
-
 ## Current Status
 
-Reported verification includes offline Gradle/package suites, disposable-local Hub API/browser smoke, 7/7 disposable-Mongo conversion-operator checks, and a standalone Windows runtime smoke through a strict Gradle JavaExec entry point. The standalone runtime smoke exercised DPAPI, real HTTP authentication, Room offline restart, two independent stores using the actual coordinator's push/pull/delta, schemaVersion 2, unknown nested JSON and nullable `customNotes` preservation through native edit, and parent/child sync/group deletion against loopback services.
+Implementation of Collaborative Task Assignees (Phases 01–08) is complete, establishing Room v5 persistence, two-stage binding, canonical identity projections, and shared Compose/Android/desktop surfaces. Policy validation (G0) was confirmed 2026-10-21 (privacy-first purge, whole-app capability cutoff, and simpler app-wide replica-set guard).
 
-This evidence is not interactive UI or connected-Android acceptance. UI provider approval timed out twice; connected-device acceptance was not run. Native acceptance is not passed, no production database has been migrated or authorized, and release remains blocked. See [Release Acceptance](docs/release-acceptance.md) for the current boundary.
+Dedicated verification harnesses have been prepared in Phase 09: `./gradlew :desktopApp:runTaskAssigneesRuntimeSmoke` and `node scripts/task-assignees-live-smoke.mjs`. However, G1–G6 runtime verification is **NOT RUN / pending** per project delegation rules (reserved for Main integration verification).
 
+Prior reported verification includes offline Gradle/package suites, disposable-local Hub API/browser smoke, 7/7 disposable-Mongo conversion-operator checks, and a standalone Windows runtime smoke through a strict Gradle JavaExec entry point. Interactive UI provider approval timed out twice; connected-device acceptance was not run. Native acceptance is not passed, no production database has been migrated or authorized, and release remains blocked. See [Release Acceptance](docs/release-acceptance.md) for the current boundary.
 ## Repository Layout
 
 ```text
@@ -38,6 +41,8 @@ See [Toolchain Versions](docs/toolchain-versions.md), [Code Standards](docs/code
 
 ```bash
 ./gradlew :shared:jvmTest
+./gradlew :desktopApp:runTaskAssigneesRuntimeSmoke -PdesktopTarget=windows
+node scripts/task-assignees-live-smoke.mjs --help
 node scripts/hub-schema-provision.mjs --help
 node scripts/release-security-check.mjs --diagnose-source
 node scripts/admin-announcements-smoke.mjs --self-test

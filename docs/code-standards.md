@@ -1,8 +1,8 @@
 # TabbyRush Code Standards & Implementation Guidelines
 
-Last Updated: 2026-10-20
-Status: The current client uses standard Hub sync. Native acceptance remains incomplete; production migration is unauthorized.
-Related Docs: [Standard Sync Design](./standard-sync-cutover-design.md) · [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Announcement Contract](./announcement-contract.md) · [Remote Notification Setup](./remote-notification-setup.md) · [Admin Announcements Acceptance](./evidence/admin-announcements-acceptance.md)
+Last Updated: 2026-10-21
+Status: Collaborative task assignees and Room v5 delivered (Phases 01–08); dedicated smoke harnesses prepared in Phase 09. G0 policy validation confirmed 2026-10-21. Native acceptance remains incomplete; production migration is unauthorized.
+Related Docs: [Standard Sync Design](./standard-sync-cutover-design.md) · [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Announcement Contract](./announcement-contract.md) · [Remote Notification Setup](./remote-notification-setup.md) · [Admin Announcements Acceptance](./evidence/admin-announcements-acceptance.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ---
 
@@ -363,3 +363,29 @@ Current implementation divergence: Android `closeRuntimeInternal()` catches and 
 - **Fail-Closed Verification**: `scripts/release-security-check.mjs` enforces Fail-Closed release gating; absence of release artifacts or required Android SDK tools halts release pipelines with exit code 1.
 - **Widget Provider Metadata Formats**: `TabbyRushTaskWidgetReceiver` metadata must declare `android.appwidget.provider` pointing to either raw `@xml/task-widget-info` / `@xml/task_widget_info` or compiled `@ref/0x[0-9a-fA-F]+` resource identifiers produced by `apkanalyzer manifest print`. Malformed resource formats (e.g. bare hex, missing `@xml/`, or foreign attributes) fail closed.
 - **Permitted AndroidX System Components**: Transitive AndroidX system receivers protected by `android.permission.DUMP` (`DiagnosticsReceiver`, `ProfileInstallReceiver`) and services protected by system permissions (`GlanceRemoteViewsService` with `BIND_REMOTEVIEWS`, `SystemJobService` with `BIND_JOB_SERVICE`) are permitted; all other exported services, receivers, and content providers are strictly prohibited.
+
+---
+
+## 12. Collaborative Task Assignment & Identity Standards (Phases 01–09)
+
+### 12.1 Canonical Identity & TaskRef Everywhere
+- **Explicit Value Types**: Use `TaskRef(ownerUserId, rowId)` for task references and `CanonicalRecordRef(appId, ownerUserId, tableName, rowId)` for generic sync records. Bare String row IDs or bare integer keys are strictly prohibited across store methods, view models, intent extras, reminder delivery suppression, Glance widgets, and desktop surfaces.
+- **Owner Namespace Isolation**: An assignee's store never treats incoming collaborative tasks as caller-owned; `ownerUserId` identifies the canonical creator. Duplicate row IDs under different owners represent entirely distinct tasks and never collide.
+
+### 12.2 Two-Stage Room v5 Legacy Binding
+- **Preserve Legacy State**: Migration 4→5 marks pre-existing private rows with `ownerBinding = LOCAL_ACCOUNT` and nullable `ownerUserId`.
+- **Cryptographic Match Gate**: Store initialization requires an authenticated or restored `AccountIdentity` and verifies `AccountKey.create(origin, userId)` matches the partition before binding legacy rows atomically.
+- **Local-Only Boundary**: Unresolved legacy rows display offline for continuity, but fail closed against outgoing sync dispatch or shared assignment actions.
+
+### 12.3 Privacy-First Revocation Purge & Non-Replayable Evidence
+- **Authoritative Access Loss**: When access is revoked or denied, the client immediately removes the active task projection, cancels scheduled reminders and notifications, and purges `server_base`, `editor_drafts`, and pending `outbox` records for that task from active storage.
+- **Zero Retained Task Content**: `access_loss_evidence` stores only audit metadata: `ownerUserId`, `tableName`, `rowId`, `opId`, `baseVersion`, `submittedVersion`, `occurredEpochMs`, and `reason` (`REVOCATION`). Retaining task titles, deadlines, notes, or raw JSON payloads in evidence tables is strictly prohibited.
+- **No Auto-Replay on Regrant**: A fresh grant restores the live canonical task as currently stored on the server. Purged unsent drafts or outbox operations are never resurrected or automatically replayed.
+
+### 12.4 Assignee Capability & Privilege Invariants
+- **Editable Allowlist**: Assignees may edit only fields explicitly registered in `assignmentPolicy.editableFields` (`title`, `completed`, `deadlineDate`, `deadlineTime`, etc.). Modifying non-editable, structural, or unknown JSON fields is rejected.
+- **Creator-Only Operations**: Creating subtasks, reparenting, task deletion, tombstone restoration, and assignee management (`taskAssignees`) are strictly creator-only.
+- **Error Code Typing**: Privileged mutation attempts while retaining read access return `OPERATION_FORBIDDEN` (preserving valid local access). Loss of read access returns `ACCESS_DENIED` and triggers local purge.
+
+### 12.5 Whole-App Capability Cutoff (HTTP 426)
+- **Pre-Mutation Enforcement**: When `assignmentPolicy` version 1 is active on Glean Hub, any `/push`, `/pull`, or `/delta` request lacking `collaborationVersion: 1` fails closed with HTTP 426 `COLLABORATION_REQUIRED` before processing any records. Downgrading to unsafe private sync is prohibited.

@@ -8,6 +8,7 @@ import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.SurfaceAccountToken
 import dev.tabbyrush.shared.contract.SurfaceReadiness
 import dev.tabbyrush.shared.contract.SurfaceResult
+import dev.tabbyrush.shared.contract.TaskRef
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,11 +29,26 @@ class TaskSurfaceActionReceiver : BroadcastReceiver() {
             return
         }
 
-        val accountKeyValue = intent.getStringExtra(TaskSurfaceIntents.EXTRA_ACCOUNT_KEY) ?: return
+        val accountKeyValue = intent.getStringExtra(TaskSurfaceIntents.EXTRA_ACCOUNT_KEY)
         val generation = intent.getLongExtra(TaskSurfaceIntents.EXTRA_GENERATION, -1L)
-        if (generation < 0L) return
-        val taskId = intent.getStringExtra(TaskSurfaceIntents.EXTRA_TASK_ID) ?: return
+        val ownerUserId = intent.getStringExtra(TaskSurfaceIntents.EXTRA_OWNER_USER_ID)
+        val rowId = intent.getStringExtra(TaskSurfaceIntents.EXTRA_ROW_ID) ?: intent.getStringExtra(TaskSurfaceIntents.EXTRA_TASK_ID)
 
+        if (accountKeyValue.isNullOrBlank() || generation < 0L || ownerUserId.isNullOrBlank() || rowId.isNullOrBlank()) {
+            Log.w(TAG, "Missing or legacy owner-less complete action intent; dropped")
+            return
+        }
+
+        val parsedUri = TaskSurfaceIntents.parseDataUri(intent.data)
+        if (parsedUri != null) {
+            if (parsedUri.accountKey.value != accountKeyValue || parsedUri.generation != generation ||
+                parsedUri.taskRef.ownerUserId != ownerUserId || parsedUri.taskRef.rowId != rowId
+            ) {
+                Log.w(TAG, "Data URI and extras mismatch in complete action intent; dropped")
+                return
+            }
+        }
+        val taskRef = TaskRef(ownerUserId, rowId)
         val hostOwner = context.applicationContext as? TaskSurfaceHostOwner
         if (hostOwner == null) {
             Log.w(TAG, "ApplicationContext does not implement TaskSurfaceHostOwner. Dropping complete action.")
@@ -47,7 +63,7 @@ class TaskSurfaceActionReceiver : BroadcastReceiver() {
             try {
                 val readiness = host.access.awaitReadiness(timeoutMs = 4_000L)
                 if (readiness !is SurfaceReadiness.Ready) {
-                    Log.w(TAG, "Surface is not ready ($readiness). Dropping complete action for $taskId.")
+                    Log.w(TAG, "Surface is not ready ($readiness). Dropping complete action for $taskRef.")
                     return@launch
                 }
 
@@ -63,7 +79,7 @@ class TaskSurfaceActionReceiver : BroadcastReceiver() {
                 val nowEpochMs = System.currentTimeMillis()
                 val result = host.access.setCompleted(
                     token = activeToken,
-                    taskId = taskId,
+                    taskRef = taskRef,
                     completed = true,
                     nowEpochMs = nowEpochMs
                 )
@@ -74,8 +90,7 @@ class TaskSurfaceActionReceiver : BroadcastReceiver() {
                     Log.w(TAG, "Complete action rejected or unavailable: $result")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error processing complete action for $taskId: ${e.message}", e)
-            } finally {
+                Log.e(TAG, "Error processing complete action for $taskRef: ${e.message}", e)
                 pendingResult.finish()
             }
         }

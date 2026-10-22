@@ -7,11 +7,11 @@ import dev.tabbyrush.shared.auth.HubHttpClient
 import dev.tabbyrush.shared.contract.AccountIdentity
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.HubConfig
+import dev.tabbyrush.shared.contract.OwnerBindingState
 import dev.tabbyrush.shared.remote.DefaultRemoteInboxController
 import dev.tabbyrush.shared.data.AndroidAccountFiles
 import dev.tabbyrush.shared.data.TabbyRushDatabase
 import dev.tabbyrush.shared.data.ReminderOccurrenceStore
-import dev.tabbyrush.shared.data.RoomAccountStore
 import dev.tabbyrush.shared.data.createAndroidDatabaseBuilder
 import dev.tabbyrush.shared.sync.AccountLeaveProtocol
 import dev.tabbyrush.shared.sync.AccountSyncCoordinator
@@ -19,6 +19,8 @@ import dev.tabbyrush.shared.sync.ReminderDeliveryGate
 import dev.tabbyrush.shared.sync.ReminderSchedulingCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import dev.tabbyrush.shared.data.RoomAccountStore
+import kotlinx.coroutines.flow.collect
 
 /**
  * Factory for instantiating isolated AccountRuntime instances and their
@@ -28,7 +30,7 @@ object AccountRuntimeFactory {
 
     private const val TAG = "AccountRuntimeFactory"
 
-    fun create(
+    suspend fun create(
         context: Context,
         scope: CoroutineScope,
         accountKey: AccountKey,
@@ -39,13 +41,19 @@ object AccountRuntimeFactory {
         authSession: HubAuthSession,
         syncScheduler: AndroidSyncScheduler
     ): AccountRuntime {
-        val userId = activeIdentity?.userId
-            ?: authSession.currentIdentity.value?.userId
+        val establishedIdentity = activeIdentity
+            ?: authSession.currentIdentity.value
             ?: throw IllegalStateException("Cannot open runtime without established account identity for $accountKey")
+        val userId = establishedIdentity.userId
 
         val dbFile = accountFiles.getDatabaseFile(accountKey)
         val database = createAndroidDatabaseBuilder(context, dbFile).build()
         val store = RoomAccountStore(accountKey = accountKey, userId = userId, database = database, appId = hubConfig.appId)
+
+        val bindingState = store.initializeOwnerBinding(establishedIdentity)
+        if (bindingState != OwnerBindingState.BOUND) {
+            Log.w(TAG, "Owner binding state is $bindingState for $accountKey")
+        }
 
         val deliveryGate = ReminderDeliveryGate(
             accountKey = accountKey,
@@ -105,7 +113,6 @@ object AccountRuntimeFactory {
             isDesktop = false
         )
 
-        val establishedIdentity = activeIdentity ?: authSession.currentIdentity.value
         if (establishedIdentity != null) {
             scope.launch {
                 try {

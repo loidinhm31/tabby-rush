@@ -2,6 +2,7 @@ package dev.tabbyrush.shared.contract
 
 object TaskDataContract {
     const val DEFAULT_TABLE_NAME = "todos"
+    const val ASSIGNMENT_TABLE_NAME = "taskAssignees"
     const val MIN_REPEAT_INTERVAL_MINUTES = 15L
     const val MIN_REMINDER_COUNT = 1L
     const val MAX_REMINDER_COUNT = 10L

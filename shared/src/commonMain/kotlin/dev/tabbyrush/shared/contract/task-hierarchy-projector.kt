@@ -13,13 +13,15 @@ data class HierarchicalTodoItem(
     val isContextOnly: Boolean = false,
     val depth: Int = 0,
     val childCount: Int = 0,
-    val completedChildCount: Int = 0
+    val completedChildCount: Int = 0,
+    val isChildOnly: Boolean = false
 )
 
 data class GroupedTask(
     val root: Todo,
     val effectiveCompleted: Boolean,
-    val children: List<Todo>
+    val children: List<Todo>,
+    val isChildOnly: Boolean = false
 )
 
 data class ProjectedTaskSnapshot(
@@ -31,8 +33,8 @@ data class ProjectedTaskSnapshot(
 object TaskHierarchyProjector {
 
     private val ENCOUNTER_COMPARATOR = compareByDescending<Todo> { it.createdAt }
-        .thenByDescending { it.id }
-
+        .thenByDescending { it.taskRef.ownerUserId }
+        .thenByDescending { it.taskRef.rowId }
     /**
      * Projects the complete todo snapshot into an indexed hierarchical structure,
      * applying encounter ordering, ancestor deletion dominance, effective completion derivation,
@@ -91,69 +93,96 @@ object TaskHierarchyProjector {
     )
 
     private fun buildGroups(todos: List<Todo>): GroupBuildResult {
-        val rootsById = HashMap<String, Todo>()
-        val deletedRootIds = HashSet<String>()
-        val childrenByParentId = LinkedHashMap<String, MutableList<Todo>>()
+        val rootsByRef = HashMap<TaskRef, Todo>()
+        val deletedRootRefs = HashSet<TaskRef>()
+        val childrenByParentRef = LinkedHashMap<TaskRef, MutableList<Todo>>()
         val candidateRoots = mutableListOf<Todo>()
         val allChildren = mutableListOf<Todo>()
+        val childOnlyTasks = mutableListOf<Todo>()
 
         // 1. Separate roots and children, index roots
         for (todo in todos) {
-            if (todo.parentTaskId == null) {
+            if (todo.parentTaskRef == null) {
                 if (todo.isDeleted) {
-                    deletedRootIds.add(todo.id)
+                    deletedRootRefs.add(todo.taskRef)
                 } else {
-                    rootsById[todo.id] = todo
+                    rootsByRef[todo.taskRef] = todo
                     candidateRoots.add(todo)
                 }
             } else {
                 if (!todo.isDeleted) {
-                    allChildren.add(todo)
+                    if (todo.accessState?.coverage == HierarchyCoverage.ChildOnly && rootsByRef[todo.parentTaskRef] == null && !deletedRootRefs.contains(todo.parentTaskRef)) {
+                        // Trusted server metadata marks this child as ChildOnly:
+                        // Projected as flat item without requiring parent locally.
+                        childOnlyTasks.add(todo)
+                    } else {
+                        allChildren.add(todo)
+                    }
                 }
             }
         }
-
-        // Sort candidate roots by encounter order
-        candidateRoots.sortWith(ENCOUNTER_COMPARATOR)
 
         val unresolvedChildren = mutableListOf<Todo>()
 
         // 2. Associate children with live roots, applying ancestor deletion dominance
         for (child in allChildren) {
-            val parentId = child.parentTaskId!!
-            if (deletedRootIds.contains(parentId)) {
+            val parentRef = child.parentTaskRef!!
+            if (deletedRootRefs.contains(parentRef)) {
                 // Ancestor deletion dominance: child is suppressed
                 continue
             }
-            if (!rootsById.containsKey(parentId)) {
+            if (!rootsByRef.containsKey(parentRef)) {
                 // Parent is missing without a confirmed tombstone
                 unresolvedChildren.add(child)
                 continue
             }
-            childrenByParentId.getOrPut(parentId) { mutableListOf() }.add(child)
+            childrenByParentRef.getOrPut(parentRef) { mutableListOf() }.add(child)
         }
 
         // Sort children encounter order
-        for (childrenList in childrenByParentId.values) {
+        for (childrenList in childrenByParentRef.values) {
             childrenList.sortWith(ENCOUNTER_COMPARATOR)
         }
 
-        // 3. Assemble GroupedTasks
-        val validGroups = ArrayList<GroupedTask>(candidateRoots.size)
-        for (root in candidateRoots) {
-            val children = childrenByParentId[root.id] ?: emptyList()
-            val effectiveCompleted = if (children.isNotEmpty()) {
-                children.all { it.completed }
-            } else {
-                root.completed
-            }
-            validGroups.add(
-                GroupedTask(
-                    root = root,
-                    effectiveCompleted = effectiveCompleted,
-                    children = children
-                )
+        // 3. Assemble GroupedTasks in encounter order
+        data class TopLevelCandidate(val todo: Todo, val isChildOnly: Boolean)
+        val allTopLevel = (candidateRoots.map { TopLevelCandidate(it, isChildOnly = false) } +
+                childOnlyTasks.map { TopLevelCandidate(it, isChildOnly = true) })
+            .sortedWith(
+                compareByDescending<TopLevelCandidate> { it.todo.createdAt }
+                    .thenByDescending { it.todo.taskRef.ownerUserId }
+                    .thenByDescending { it.todo.taskRef.rowId }
             )
+
+        val validGroups = ArrayList<GroupedTask>(allTopLevel.size)
+        for (candidate in allTopLevel) {
+            val root = candidate.todo
+            if (candidate.isChildOnly) {
+                validGroups.add(
+                    GroupedTask(
+                        root = root,
+                        effectiveCompleted = root.completed,
+                        children = emptyList(),
+                        isChildOnly = true
+                    )
+                )
+            } else {
+                val children = childrenByParentRef[root.taskRef] ?: emptyList()
+                val isFullGroup = root.accessState == null || root.accessState.coverage == HierarchyCoverage.FullGroup
+                val effectiveCompleted = if (isFullGroup && children.isNotEmpty()) {
+                    children.all { it.completed }
+                } else {
+                    root.completed
+                }
+                validGroups.add(
+                    GroupedTask(
+                        root = root,
+                        effectiveCompleted = effectiveCompleted,
+                        children = children,
+                        isChildOnly = false
+                    )
+                )
+            }
         }
 
         unresolvedChildren.sortWith(ENCOUNTER_COMPARATOR)
@@ -216,7 +245,8 @@ object TaskHierarchyProjector {
                             isContextOnly = false,
                             depth = 0,
                             childCount = childCount,
-                            completedChildCount = completedChildCount
+                            completedChildCount = completedChildCount,
+                            isChildOnly = group.isChildOnly
                         )
                     )
                     for (child in children) {
@@ -228,7 +258,8 @@ object TaskHierarchyProjector {
                                 isContextOnly = false,
                                 depth = 1,
                                 childCount = 0,
-                                completedChildCount = 0
+                                completedChildCount = 0,
+                                isChildOnly = false
                             )
                         )
                     }
@@ -247,7 +278,8 @@ object TaskHierarchyProjector {
                                 isContextOnly = false,
                                 depth = 0,
                                 childCount = childCount,
-                                completedChildCount = completedChildCount
+                                completedChildCount = completedChildCount,
+                                isChildOnly = group.isChildOnly
                             )
                         )
                         for (child in matchingChildren) {
@@ -259,12 +291,12 @@ object TaskHierarchyProjector {
                                     isContextOnly = false,
                                     depth = 1,
                                     childCount = 0,
-                                    completedChildCount = 0
+                                    completedChildCount = 0,
+                                    isChildOnly = false
                                 )
                             )
                         }
                     } else if (matchingChildren.isNotEmpty()) {
-                        // Root completed, but has active children (context-only root)
                         result.add(
                             HierarchicalTodoItem(
                                 todo = root,
@@ -273,7 +305,8 @@ object TaskHierarchyProjector {
                                 isContextOnly = true,
                                 depth = 0,
                                 childCount = childCount,
-                                completedChildCount = completedChildCount
+                                completedChildCount = completedChildCount,
+                                isChildOnly = group.isChildOnly
                             )
                         )
                         for (child in matchingChildren) {
@@ -285,7 +318,8 @@ object TaskHierarchyProjector {
                                     isContextOnly = false,
                                     depth = 1,
                                     childCount = 0,
-                                    completedChildCount = 0
+                                    completedChildCount = 0,
+                                    isChildOnly = false
                                 )
                             )
                         }
@@ -305,7 +339,8 @@ object TaskHierarchyProjector {
                                 isContextOnly = false,
                                 depth = 0,
                                 childCount = childCount,
-                                completedChildCount = completedChildCount
+                                completedChildCount = completedChildCount,
+                                isChildOnly = group.isChildOnly
                             )
                         )
                         for (child in matchingChildren) {
@@ -317,13 +352,12 @@ object TaskHierarchyProjector {
                                     isContextOnly = false,
                                     depth = 1,
                                     childCount = 0,
-                                    completedChildCount = 0
+                                    completedChildCount = 0,
+                                    isChildOnly = false
                                 )
                             )
                         }
                     } else if (matchingChildren.isNotEmpty()) {
-                        // Root is effectively active, but has completed children:
-                        // Root appears as context-only row, non-matching (active) children are omitted.
                         result.add(
                             HierarchicalTodoItem(
                                 todo = root,
@@ -332,7 +366,8 @@ object TaskHierarchyProjector {
                                 isContextOnly = true,
                                 depth = 0,
                                 childCount = childCount,
-                                completedChildCount = completedChildCount
+                                completedChildCount = completedChildCount,
+                                isChildOnly = group.isChildOnly
                             )
                         )
                         for (child in matchingChildren) {
@@ -344,7 +379,8 @@ object TaskHierarchyProjector {
                                     isContextOnly = false,
                                     depth = 1,
                                     childCount = 0,
-                                    completedChildCount = 0
+                                    completedChildCount = 0,
+                                    isChildOnly = false
                                 )
                             )
                         }

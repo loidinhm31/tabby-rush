@@ -1,7 +1,7 @@
 # TabbyRush API & Standard Sync Contract
 
-Date: 2026-10-20  
-Status: Standard sync is the current TabbyRush client protocol. Strict-sync contracts below are historical and do not describe the current binary.  
+Date: 2026-10-22  
+Status: Standard sync is the current TabbyRush client protocol, including collaborative task assignment on existing push/pull/delta routes. Strict-sync contracts below are historical and do not describe the current binary.  
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Toolchain Versions](./toolchain-versions.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md)
 
 ---
@@ -29,6 +29,7 @@ Payloads use JSON camelCase. These paths are relative to `/api/v1`.
 | `GET` | `/auth/me` | Read authenticated account identity |
 | `POST` | `/apps/access-requests` | Request app access |
 | `GET` | `/apps/access-requests/me` | Read the account's access requests |
+| `GET` | `/auth/lookup?username={username}` | Username identity lookup used by the assignee picker; lookup alone does not grant app membership or task access |
 
 Exact server response fields are governed by the deployed Hub contract; do not infer them from this route summary.
 
@@ -38,26 +39,62 @@ Exact server response fields are governed by the deployed Hub contract; do not i
 
 All paths below are relative to `/api/v1`. The `{app_id}` path segment is the Hub app identifier. Sync requests use the dual-auth headers above.
 
+### Collaborative Assignment Data
+
+The native client adds no dedicated assignment route. Assignment policy is configured in the ordinary app `SharingConfig`; the current [Hub schema input](../integration/glean-hub/tabbyrush-schema.json) defines `todos.parentTaskId` as a nullable string and `taskAssignees` with required string columns `id`, `taskId`, and `userId` (`id` is the primary key). The sharing mapping uses `sharingTable: "taskAssignees"`, `parentIdField: "taskId"`, `userIdField: "userId"`, `parentTable: "todos"`, and `childTables: []`. See [Hub Schema Integration](./hub-schema-integration.md) for the policy configuration.
+
+`assignmentPolicy` version 1 sets `hierarchyParentField: "parentTaskId"` and allows assignee content edits only to `title`, `completed`, `deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, and `scheduleToken`. Structural `parentTaskId` changes and assignment management are not in that allowlist.
+
+A live assignment is represented by the ordinary push record envelope and one owner-scoped relationship slot:
+
+```json
+{
+  "tableName": "taskAssignees",
+  "rowId": "<taskId>",
+  "ownerUserId": "<creatorUserId>",
+  "data": {
+    "id": "<taskId>",
+    "taskId": "<taskId>",
+    "userId": "<recipientUserId>"
+  }
+}
+```
+
+For this slot, `ownerUserId` qualifies the canonical task owner and `rowId == data.id == data.taskId`. Reassignment updates the same slot. Unassignment is a deleted relationship record (`deleted: true`) at that same identity; its tombstone is retained to prevent stale recreation. The client may include `userId: null` in tombstone data, but a live assignment has a string `userId`. Task content remains in the creator-owned `todos` row; the relationship record does not copy task content to the recipient.
+
+The native client sends assignment changes as standard records through `POST /sync/{app_id}/push` or the `push` portion of `POST /sync/{app_id}/delta`; it reconciles shared task data and access through the standard pull route. No dedicated assignment sync endpoint is added.
+
 ### 2.1 Push — `POST /sync/{app_id}/push`
 
-`PushRequestDto` contains `records` and an optional `clientTimestamp`. Each record has `tableName` (defaults to `todos`), `rowId`, raw JSON `data`, `version`, `deleted` (defaults to `false`), and `assumedServerVersion`.
+`PushRequestDto` contains `records`, optional `clientTimestamp`, and optional `collaborationVersion` (must be 1 for collaborative apps). Each record has `tableName` (defaults to `todos`), `rowId`, optional `ownerUserId` (mandatory for collaborative apps), raw JSON `data`, `version`, `deleted` (defaults to `false`), and `assumedServerVersion`.
 
-The response contains `synced`, `conflicts`, optional `failures` and `syncedRecords`, `serverTimestamp`, and informational `schemaVersion`. Conflict entries identify the table and row plus client and server versions. `syncedRecords` names exact accepted `(tableName, rowId, version)` tuples.
+The response contains `synced`, `conflicts`, optional `failures` and `syncedRecords`, `serverTimestamp`, informational `schemaVersion`, and `collaborationVersion: 1` when enabled. Conflict entries identify the table, row, and client/server versions. `syncedRecords` names exact accepted `(ownerUserId, tableName, rowId, version)` tuples.
 
 Only an explicit accepted tuple is confirmation that a particular submitted version was accepted. A later pull that happens to match local content is desired-state convergence, not an operation receipt.
 
 ### 2.2 Pull — `POST /sync/{app_id}/pull`
 
-`PullRequestDto` contains an optional `{updatedAt, id}` checkpoint, `batchSize` (defaults to 100), and `tables` (defaults to `["todos"]`). The response contains records, the next checkpoint, `serverTimestamp`, `hasMore`, and informational `schemaVersion`. Each record carries `tableName`, `rowId`, JSON `data`, `version`, `syncedAt`, and `deleted`.
+`PullRequestDto` contains an optional `{updatedAt, id}` checkpoint, `batchSize` (defaults to 100), `tables` (Hub default `["todos"]`; the native collaborative client explicitly requests `["todos", "taskAssignees"]`), optional `collaborationVersion: 1`, optional `expectedAccessRevision`, and optional `accessChecks: [{ownerUserId, tableName, rowId}]`.
 
-The client starts a fresh full scan from a null checkpoint for every sync round/reconnect because it does not rely on a durable server-retention horizon. An incomplete scan does not establish that an absent row was deleted.
+When `accessChecks` is present, pull runs in validation-only mode:
+- Bounded to <= 100 keys and 256 KiB body limit.
+- The response contains `accessRevision` and `accessResults` matching each requested record: `{ref, status: "accessible", capabilities: {editContent, manageAssignment, deleteTask, createChild}, hierarchyCoverage: "full-group" | "child-only" | "standalone"}` or `{ref, status: "unavailable"}`.
+- Checkpoint is unchanged, hasMore is false, and no content rows are returned.
+- An empty array `accessChecks: []` serves as the final confirmation boundary at access revision E.
+
+When `accessChecks` is omitted, pull performs a normal data scan returning records, the next checkpoint, `serverTimestamp`, `hasMore`, `schemaVersion`, and `accessRevision`. In collaborative mode, tie-breaker sorting uses unique stored record ID, not row ID.
 
 ### 2.3 Delta — `POST /sync/{app_id}/delta`
 
-The request has optional `push` and `pull` bodies; the response has optional `push` and `pull` results. Delta performs push followed by pull; it is not a transaction and does not make the two phases atomic.
+The request has optional `push` and `pull` bodies; the response has optional `push` and `pull` results. Delta performs push followed by pull; it is not a transaction and does not make the two phases atomic. For collaborative apps, both parts require `collaborationVersion: 1`.
 
-### 2.4 Version and Schema Semantics
+### 2.4 Collaboration Capability Cutoff & Guard
 
+For apps with an active `assignmentPolicy`:
+- **Capability Cutoff**: Any request to `/push`, `/pull`, or `/delta` lacking `collaborationVersion: 1` fails immediately with HTTP 426 `COLLABORATION_REQUIRED` before processing any records or reading content. No unsafe private-only fallback is attempted.
+- **Single App Guard**: All collaborative mutations are serialized using an internal MongoDB document in `_sync_assignment_fences` per app. Any grant, hierarchy, or visibility change increments `accessRevision`.
+- **Revision Mismatch**: An in-flight change returning HTTP 409 `ACCESS_REVISION_CHANGED` invalidates current scan/validation staging and forces a restart from a null checkpoint.
+### 2.5 Version and Schema Semantics
 - `schemaVersion` is positive exact-integer Hub metadata (bounded by JavaScript's safe-integer range), used for schema concurrency; it is not a native feature gate or a request to generate UI/database fields.
 - Admin schema updates use `PUT /api/v1/apps/{app_id}/schema` with `schema` and `expectedSchemaVersion`. A changed schema commits only against the exact current version; a stale edit conflicts. An effective no-op does not increment the version.
 - TabbyRush preserves unknown JSON fields when applying intent-selected local changes. Hub schema additions do not generate Kotlin models, Room columns, or native UI automatically.
@@ -69,11 +106,9 @@ The request has optional `push` and `pull` bodies; the response has optional `pu
 
 Standard sync is a desired-state synchronization protocol, not the retired strict operation-receipt protocol. It does not provide strict exact-revision compare-and-swap receipts, server-enforced hierarchy, permanent tombstones, or transactional group writes. Do not rely on convergence, a matching version, or matching full JSON as proof that an individual operation was accepted.
 
-The native client retains raw unknown JSON fields and merges only fields named by a valid local intent mask. Ambiguous legacy intent requires user review; it must never be reinterpreted as “reapply every known field.” Users can discard, selectively reapply explicit intent, or copy the latest server draft as a fresh root. Copy-latest reads the current projection and creates a new root record.
+In collaborative mode, content remains in creator-owned `todos` rows; `taskAssignees` relationship rows use `rowId == data.id == taskId`. Assignment tombstones are exempt from generic cleanup to prevent stale recreations. Direct child grants require an internally live same-owner root parent on the server; child-only recipients lack the parent locally due to privacy, not server absence.
 
-The Room v4 migration losslessly archives legacy outbox values, including floating-point bit patterns and BLOB bytes, before normal reconciliation. Archival does not silently confirm or reapply those legacy operations. Every scan round begins from null; if the process restarts, stale scan-generation staging is discarded and a fresh scan begins.
-
-The client checks serialized UTF-8 request bytes before freezing a push batch against its 256 KiB limit. If a single known record exceeds the limit, it is marked actionable/conflicted and nothing is sent for that record; the client does not report it as an uncertain network outcome. Fitting records may be sent while other pending records remain unsent.
+Authoritative access loss purges active base, draft, and outbox payloads locally, retaining non-replayable content-free evidence in `access_loss_evidence`. Regrant hydrates the live task fresh without replaying purged unsent edits.
 
 ---
 

@@ -22,6 +22,41 @@
         { "name": "parentTaskId", "type": "string", "nullable": true }
       ],
       "primaryKey": "id"
+    },
+    "taskAssignees": {
+      "columns": [
+        { "name": "id", "type": "string", "nullable": false },
+        { "name": "taskId", "type": "string", "nullable": false },
+        { "name": "userId", "type": "string", "nullable": false }
+      ],
+      "primaryKey": "id"
+    }
+  },
+  "sharing": {
+    "sharingTable": "taskAssignees",
+    "parentIdField": "taskId",
+    "userIdField": "userId",
+    "parentTable": "todos",
+    "childTables": [],
+    "assignmentPolicy": {
+      "version": 1,
+      "hierarchyParentField": "parentTaskId",
+      "editableFields": [
+        "title",
+        "completed",
+        "deadlineDate",
+        "deadlineTime",
+        "deadlineZone",
+        "deadlineOffsetSeconds",
+        "reminderAnchorTime",
+        "deadlineAnchorEpochMs",
+        "deadlineOverdueEpochMs",
+        "reminderEnabled",
+        "reminderLeadMinutes",
+        "reminderIntervalMinutes",
+        "reminderCount",
+        "scheduleToken"
+      ]
     }
   }
 }

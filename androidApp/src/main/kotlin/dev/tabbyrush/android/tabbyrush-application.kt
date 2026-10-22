@@ -12,6 +12,7 @@ import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.AuthState
 import dev.tabbyrush.shared.contract.BuildMode
 import dev.tabbyrush.shared.contract.HubConfig
+import dev.tabbyrush.shared.contract.OwnerBindingState
 import dev.tabbyrush.shared.contract.SurfaceAccountToken
 import dev.tabbyrush.shared.contract.SurfaceReadiness
 import dev.tabbyrush.shared.data.AndroidAccountFiles
@@ -188,16 +189,19 @@ class TabbyRushApplication : Application(), TaskSurfaceHostOwner {
         }
 
         val persistedGen = accountFiles.readGeneration(accountKey)
+        val active = readActiveAccountSync()
+        val activeIdentity = if (active != null && active.first == accountKey) active.second else (if (authSession.currentAccountKey.value == accountKey) authSession.currentIdentity.value else null)
+
         val existing = activeRuntime
         if (existing != null && existing.accountKey == accountKey && existing.generation == persistedGen) {
+            if (activeIdentity != null && existing.store.getOwnerBindingState() != OwnerBindingState.BOUND) {
+                existing.store.initializeOwnerBinding(activeIdentity)
+            }
             taskSurfaceRuntimeCoordinator.setReady(SurfaceAccountToken(accountKey, persistedGen))
             return existing
         }
 
         if (existing != null) closeRuntimeInternal(existing)
-
-        val active = readActiveAccountSync()
-        val activeIdentity = if (active != null && active.first == accountKey) active.second else null
 
         val runtime = AccountRuntimeFactory.create(
             context = this,
@@ -210,6 +214,13 @@ class TabbyRushApplication : Application(), TaskSurfaceHostOwner {
             authSession = authSession,
             syncScheduler = syncScheduler
         )
+
+        if (accountFiles.hasPendingWipe(accountKey) || accountFiles.readGeneration(accountKey) != persistedGen) {
+            closeRuntimeInternal(runtime)
+            taskSurfaceRuntimeCoordinator.setUnavailable()
+            throw IllegalStateException("Account state changed during initialization for $accountKey")
+        }
+
         activeRuntime = runtime
         val token = SurfaceAccountToken(accountKey, persistedGen)
         taskSurfaceRuntimeCoordinator.setReady(token)
@@ -223,7 +234,6 @@ class TabbyRushApplication : Application(), TaskSurfaceHostOwner {
         taskSurfaceRuntimeCoordinator.refresh(SurfaceRefreshReason.Account)
         runtime
     }
-
     fun getActiveRuntime(): AccountRuntime? = activeRuntime
 
     suspend fun closeActiveRuntime() = runtimeMutex.withLock {

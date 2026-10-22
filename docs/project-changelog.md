@@ -3,6 +3,39 @@
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
+## [Native JVM Contract Migration Fixes] - 2026-10-21
+### Fixed
+- Restored shared-test compilation after the canonical identity migration: editor/coordinator calls now use `TaskRef`, legacy evidence fixtures name the Room v5 fields explicitly, and test imports include the required assertions, task references, and JSON primitive accessors.
+- Corrected canonical schedule fixtures to use valid timed deadlines, preserving their relation-collision and unavailable-access assertions.
+- Removed nested non-reentrant store mutex acquisition in task mutations and conflict actions. Copy-as-new now copies the latest displayed draft as a fresh actor-owned root and atomically retires only represented source revisions for the selected canonical identity; unavailable content cannot be copied.
+- Restored explicit changed-field intent masks, schedule-token rotation, tombstone dominance, exact acknowledgment advancement of confirmed bases, and local-account reminder projection identities. Aligned projection intent constants with the existing uppercase persisted format.
+- Corrected collaboration HTTP/frozen-envelope fixtures, historical migration fixture defaults/evidence assertions, child-only hierarchy fixtures, staged-generation cleanup in the test DAO, and terminal scan checkpoint persistence.
+- Restored desktop tests and smoke-harness compilation for owner-qualified tasks, reminder signatures, current authentication/assignment contracts, and `REVOKED` evidence; shared fixtures now enter through authoritative reconciliation and controller fixtures restore authenticated identities. Routed controller sync exclusively through the scheduler so shutdown drains every request; added deterministic blocked-coordinator shutdown coverage. **Desktop verification:** `cmd.exe /c "gradlew.bat :desktopApp:test -PdesktopTarget=windows"` completed **BUILD SUCCESSFUL** in 14 seconds; all tests passed. Existing compiler/Gradle warnings remain; standalone live smoke and interactive acceptance were not run.
+- **Verification:** `cmd.exe /c "gradlew.bat :shared:jvmTest"` completed **BUILD SUCCESSFUL** in 19 seconds: 324 tests, zero failures/errors/skips. Includes SQLite copy rollback/restart, canonical-owner collision isolation and unavailable-content rejection. Native interactive acceptance and production migration remain unauthorized.
+---
+## [Collaborative Task Assignees & Room v5 / Phases 01–09] - 2026-10-21–2026-10-22: Implementation, Review & Acceptance Harness Delivery
+
+### Delivered
+- **Canonical Identity & Hierarchy Projection (Phase 01)**: Implemented `TaskRef(ownerUserId, rowId)` and `CanonicalRecordRef(ownerUserId, tableName, rowId)` across persistence, transport, and surfaces. App identity remains sync context. `TaskHierarchyProjector` supports child-only projections without synthetic parent or sibling disclosure; `TaskAccessState` carries content-edit, assignment, delete, and child-create capabilities.
+- **Hub Collaborative Synchronization & Policy Enforcement (Phase 02)**: Added version-1 `assignmentPolicy` to Hub `SharingConfig`. Content remains in creator-owned `todos` rows, with stable `taskAssignees` slots (`rowId == data.id == taskId`); the app-scoped `_sync_assignment_fences` guard and `accessRevision` coordinate opted-in writes and visibility changes. Requests lacking `collaborationVersion: 1` fail closed with HTTP 426 `COLLABORATION_REQUIRED`; bounded `accessChecks` are limited to 100 keys and 256 KiB. Cycle 3 review notes remain below.
+- **Room v5 Persistence & Two-Stage Binding (Phase 03)**: Delivered `MIGRATION_4_5` for `TabbyRushDatabase` with new tables `task_access`, `access_loss_evidence`, and `access_check_staging`. Implemented two-stage binding preserving legacy rows as `ownerBinding = LOCAL_ACCOUNT` until store initialization verifies `AccountIdentity` against `AccountKey.create(origin, userId)`; unresolved legacy rows remain local-only.
+- **Admin Provisioning & Schema DTOs (Phase 04)**: Extended admin schema types and provisioning scripts with `assignmentPolicy` DTOs and validation-only access checks.
+- **Native Transport & Sync Lifecycle (Phase 05)**: Updated `AccountSyncCoordinator` and `HubSyncClient` with `collaborationVersion: 1`, two-stage reconciliation state machine (revision-bound full scan + bounded access checks + atomic Room promotion), exact-tuple acknowledgements `(ownerUserId, tableName, rowId, version)`, and `accessGeneration` fencing.
+- **Shared Compose Collaboration UI (Phase 06)**: Delivered `TaskAssigneePicker` with username lookup (`/api/v1/auth/lookup?username=...`), assignee indicators in `TodoList` and `TodoEditor`, and capability-aware controls. The final Cycle 3 review’s three non-critical warnings are listed under Reported Verification Status.
+- **Android & Desktop Surface Integration (Phases 07 & 08)**: Updated Glance widgets, sticky companion window, alarm receivers, and native notifications to re-resolve `TaskRef` and `accessGeneration` at admission and before mutation. Child-only tasks render without synthetic parent disclosure. Revocation immediately cancels alarms/notifications and refreshes widgets.
+- **Privacy-First Revocation Purge**: Immediate local purge of active `server_base`, `editor_drafts`, and `outbox` payloads upon authoritative access loss; non-replayable, content-free audit records written to `access_loss_evidence` (`ownerUserId`, `tableName`, `rowId`, `opId`, `baseVersion`, `submittedVersion`, `occurredEpochMs`, `reason = REVOCATION`). Zero task title, deadline, notes, or payload bytes retained. Regrant restores live server state without auto-replaying purged unsent edits.
+- **Dedicated Acceptance Harnesses (Phase 09)**:
+  - Registered `:desktopApp:runTaskAssigneesRuntimeSmoke` JavaExec task in `desktopApp/build.gradle.kts`.
+  - Implemented standalone runtime runner in `desktopApp/src/test/kotlin/dev/tabbyrush/desktop/task-assignees-runtime-smoke.kt`.
+  - Implemented live API feature smoke in `scripts/task-assignees-live-smoke.mjs`.
+  - Prepared complete traceability mapping in `plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md`.
+
+### Reported Verification Status
+- **Policy Validation (G0)**: Confirmed 2026-10-21: privacy-first purge, whole-app capability cutoff, and app-wide transaction guard (see `06-validation-interview.md`).
+- **Automated Verification & Review**: The broad QA report (2026-10-21) records 625/625 across seven suites; a later selected-suite report (2026-10-22) records 390/390 across a different subset, not additive. Final targeted Cycle 3 review (2026-10-22) scored 9.5/10 with 0 critical findings and 3 warnings: permissive desktop sticky access fallback, N+1 app-membership queries during access checks, and missing replica-set integration coverage for concurrent insert-collision recovery. The review reports no critical issues; later disposition of its warnings is not evidenced ([review report](../plans/reports/code-review-261022-1649-collaborative-assignees-cycle3.md)).
+- **Runtime & Release Boundary**: G1 automated results are reported; G2/G3 disposable runtime acceptance and G4/G5 device/interactive acceptance remain pending; G6 security/release audit is not evidenced. QA 2026-10-22 flags a disposable Mongo test credential in command text; rotation is not evidenced, so treat this as an open security hold and do not reuse it. Release remains blocked; production database migration and operational schema enablement remain unauthorized.
+
+---
 ## [Desktop Sticky Font Resizing & Compact Layout] - 2026-10-21: Implementation & Automated Verification
 
 ### Delivered

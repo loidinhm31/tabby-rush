@@ -23,26 +23,30 @@ class ReminderOccurrenceStore(
         val existingEntries = dao.getAllLedgerEntries()
             .filter { it.accountKey == accountKey.toString() && it.generation == generation }
         val existingByKey = existingEntries.associateBy {
-            "${it.taskId}:${it.scheduleToken}:${it.occurrenceIndex}"
+            "${it.bindingKey}:${it.tableName}:${it.taskId}:${it.scheduleToken}:${it.occurrenceIndex}"
         }
 
         val entriesToUpsert = mutableListOf<ReminderDeliveryLedgerEntity>()
-        val activeEligibleTaskTokens = mutableMapOf<String, String>() // taskId -> scheduleToken
+        val activeEligibleTaskTokens = mutableMapOf<String, String>() // "${bindingKey}:${tableName}:${taskId}" -> scheduleToken
 
         for (schedule in schedules) {
+            val boundKey = boundBindingKey(schedule.ownerUserId)
+            val tableName = dev.tabbyrush.shared.contract.TaskDataContract.DEFAULT_TABLE_NAME
+            val taskMapKey = "$boundKey:$tableName:${schedule.taskId}"
+
             if (!schedule.isEligibleForScheduling) {
                 // Ineligible: cancel active ledger entries for this task
-                dao.cancelLedgerEntriesForTask(accountKey.toString(), generation, schedule.taskId, nowEpochMs)
+                dao.cancelLedgerEntriesForTask(accountKey.toString(), generation, boundKey, tableName, schedule.taskId, nowEpochMs)
                 continue
             }
 
             val deadline = schedule.deadline ?: continue
             val token = schedule.scheduleToken ?: continue
-            activeEligibleTaskTokens[schedule.taskId] = token
+            activeEligibleTaskTokens[taskMapKey] = token
 
             val calculated = ReminderScheduleCalculator.calculateOccurrences(deadline, schedule.reminderRule)
             for (occ in calculated) {
-                val key = "${schedule.taskId}:$token:${occ.index}"
+                val key = "$boundKey:$tableName:${schedule.taskId}:$token:${occ.index}"
                 val existing = existingByKey[key]
 
                 if (existing == null) {
@@ -51,6 +55,10 @@ class ReminderOccurrenceStore(
                         ReminderDeliveryLedgerEntity(
                             accountKey = accountKey.toString(),
                             generation = generation,
+                            bindingKey = boundKey,
+                            ownerBinding = BINDING_BOUND,
+                            ownerUserId = schedule.ownerUserId,
+                            tableName = tableName,
                             taskId = schedule.taskId,
                             scheduleToken = token,
                             occurrenceIndex = occ.index,
@@ -77,10 +85,13 @@ class ReminderOccurrenceStore(
         }
 
         // Cancel any occurrences belonging to older schedule tokens or orphan tasks
-        val allScheduleTaskIds = schedules.map { it.taskId }.toSet()
+        val allScheduleKeys = schedules.map {
+            "${boundBindingKey(it.ownerUserId)}:${dev.tabbyrush.shared.contract.TaskDataContract.DEFAULT_TABLE_NAME}:${it.taskId}"
+        }.toSet()
         for (entry in existingEntries) {
-            val activeToken = activeEligibleTaskTokens[entry.taskId]
-            val isOrphanTask = !allScheduleTaskIds.contains(entry.taskId)
+            val entryKey = "${entry.bindingKey}:${entry.tableName}:${entry.taskId}"
+            val activeToken = activeEligibleTaskTokens[entryKey]
+            val isOrphanTask = !allScheduleKeys.contains(entryKey)
             val isStaleToken = activeToken != null && entry.scheduleToken != activeToken
             if ((isOrphanTask || isStaleToken) && entry.cancellationState == ReminderDeliveryLedgerEntity.CANCELLATION_ACTIVE) {
                 dao.upsertLedgerEntry(

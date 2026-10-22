@@ -14,6 +14,7 @@ import dev.tabbyrush.shared.contract.SyncStatus
 import dev.tabbyrush.shared.contract.TitlePolicy
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.ReminderRule
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.TodoCounts
@@ -149,8 +150,9 @@ class TodoSemanticsTest {
     @Test
     fun testConflictReviewActionsAndTombstoneGuard() {
         val rowId = "00000000-0000-0000-0000-000000000001"
+        val taskRef = TaskRef("test-user", rowId)
         val localTodo = Todo(
-            id = rowId,
+            taskRef = taskRef,
             title = "My Local Edit",
             completed = false,
             createdAt = 1000L,
@@ -158,7 +160,7 @@ class TodoSemanticsTest {
             serverRevision = 1L
         )
         val remoteTodoDeleted = Todo(
-            id = rowId,
+            taskRef = taskRef,
             title = "",
             completed = false,
             createdAt = 1000L,
@@ -168,25 +170,26 @@ class TodoSemanticsTest {
         )
 
         val conflict = ConflictState(
-            rowId = rowId,
+            taskRef = taskRef,
             localTodo = localTodo,
             remoteTodo = remoteTodoDeleted
         )
 
         assertTrue(conflict.remoteTodo?.isDeleted == true)
 
-        val copyAction = TodoAction.CopyAsNew(conflict.rowId)
-        val discardAction = TodoAction.DiscardConflict(conflict.rowId)
-        val reapplyAction = TodoAction.ReapplyConflict(conflict.rowId)
+        val copyAction = TodoAction.CopyAsNew(conflict.taskRef)
+        val discardAction = TodoAction.DiscardConflict(conflict.taskRef)
+        val reapplyAction = TodoAction.ReapplyConflict(conflict.taskRef)
 
-        assertEquals(rowId, copyAction.rowId)
-        assertEquals(rowId, discardAction.rowId)
-        assertEquals(rowId, reapplyAction.rowId)
+        assertEquals(taskRef, copyAction.taskRef)
+        assertEquals(taskRef, discardAction.taskRef)
+        assertEquals(taskRef, reapplyAction.taskRef)
     }
 
     @Test
     fun testConflictStateUnknownSupersededAndDeadlineContext() {
         val rowId = "00000000-0000-0000-0000-000000000002"
+        val taskRef = TaskRef("test-user", rowId)
         val deadline = TaskDeadline(
             date = "2026-11-20",
             time = "15:00",
@@ -197,7 +200,7 @@ class TodoSemanticsTest {
         )
         val rule = ReminderRule(enabled = true, leadMinutes = 30L, count = 1L)
         val localTodo = Todo(
-            id = rowId,
+            taskRef = taskRef,
             title = "Local Task with Deadline",
             completed = false,
             createdAt = 1000L,
@@ -206,7 +209,7 @@ class TodoSemanticsTest {
             scheduleToken = "tok-local"
         )
         val remoteTodo = Todo(
-            id = rowId,
+            taskRef = taskRef,
             title = "Remote Task without Deadline",
             completed = false,
             createdAt = 1000L,
@@ -214,7 +217,7 @@ class TodoSemanticsTest {
         )
 
         val conflict = ConflictState(
-            rowId = rowId,
+            taskRef = taskRef,
             localTodo = localTodo,
             remoteTodo = remoteTodo,
             requiresDeliveryReview = true
@@ -328,7 +331,7 @@ class TodoSemanticsTest {
     fun testDeadlineValidationValidTimedAndDateOnly() {
         // Timed deadline in UTC
         val timedEditor = EditorState(
-            id = null,
+            taskRef = null,
             rawTitle = "Timed task",
             hasDeadline = true,
             deadlineDate = "2026-10-20",
@@ -351,7 +354,7 @@ class TodoSemanticsTest {
 
         // Date-only deadline
         val dateOnlyEditor = EditorState(
-            id = null,
+            taskRef = null,
             rawTitle = "Date-only task",
             hasDeadline = true,
             deadlineDate = "2026-10-20",
@@ -374,7 +377,7 @@ class TodoSemanticsTest {
     fun testDeadlineValidationDstGapAndOverlap() {
         // Gap in America/New_York on 2026-03-08 at 02:30 (spring forward skips 02:00-03:00)
         val gapEditor = EditorState(
-            id = null,
+            taskRef = null,
             rawTitle = "Spring forward gap",
             hasDeadline = true,
             deadlineDate = "2026-03-08",
@@ -388,7 +391,7 @@ class TodoSemanticsTest {
 
         // Overlap in America/New_York on 2026-11-01 at 01:30 (fall back repeats 01:00-02:00)
         val overlapEditorWithoutChoice = EditorState(
-            id = null,
+            taskRef = null,
             rawTitle = "Fall back overlap",
             hasDeadline = true,
             deadlineDate = "2026-11-01",
@@ -416,7 +419,7 @@ class TodoSemanticsTest {
         val impossibleDates = listOf("2026-02-30", "2026-02-31", "2026-04-31", "2025-02-29")
         for (date in impossibleDates) {
             val editor = EditorState(
-                id = null,
+                taskRef = null,
                 rawTitle = "Impossible date task",
                 hasDeadline = true,
                 deadlineDate = date,
@@ -438,7 +441,7 @@ class TodoSemanticsTest {
     fun testDeadlineReminderBoundsAndLastOccurrenceLimit() {
         // Negative lead minutes rejected
         val invalidLead = EditorState(
-            id = null,
+            taskRef = null,
             rawTitle = "Negative lead",
             hasDeadline = true,
             deadlineDate = "2026-10-20",
@@ -452,7 +455,7 @@ class TodoSemanticsTest {
 
         // Count > 1 requires interval >= 15
         val invalidInterval = EditorState(
-            id = null,
+            taskRef = null,
             rawTitle = "Short interval",
             hasDeadline = true,
             deadlineDate = "2026-10-20",
@@ -468,7 +471,7 @@ class TodoSemanticsTest {
 
         // Last occurrence exceeds anchor: lead 30m, count 3, interval 20m -> offsets: -30m, -10m, +10m > anchor!
         val exceedsAnchor = EditorState(
-            id = null,
+            taskRef = null,
             rawTitle = "Exceeds anchor",
             hasDeadline = true,
             deadlineDate = "2026-10-20",
@@ -498,7 +501,7 @@ class TodoSemanticsTest {
             overdueEpochMs = anchorMs
         )
         val timedTodo = Todo(
-            id = "t-1",
+            taskRef = TaskRef("test-user", "t-1"),
             title = "Timed Todo",
             completed = false,
             createdAt = 1000L,
@@ -521,7 +524,7 @@ class TodoSemanticsTest {
             overdueEpochMs = overdueMs
         )
         val dateOnlyTodo = Todo(
-            id = "t-2",
+            taskRef = TaskRef("test-user", "t-2"),
             title = "Date-only Todo",
             completed = false,
             createdAt = 1000L,
@@ -583,8 +586,9 @@ class TodoSemanticsTest {
             intervalMinutes = 15L,
             count = 2L
         )
+        val taskRef = TaskRef("test-user", "c-1")
         val todo = Todo(
-            id = "c-1",
+            taskRef = taskRef,
             title = "Conflicted task",
             completed = false,
             createdAt = 1000L,
@@ -593,7 +597,7 @@ class TodoSemanticsTest {
             scheduleToken = "sched-token-1234"
         )
         val conflictState = ConflictState(
-            rowId = "c-1",
+            taskRef = taskRef,
             localTodo = todo,
             remoteTodo = null,
             requiresDeliveryReview = true
@@ -611,7 +615,7 @@ class TodoSemanticsTest {
         assertEquals("2026-11-01", canonicalDate)
 
         val initialEditor = EditorState(
-            id = "t-picker",
+            taskRef = TaskRef("u1", "t-picker"),
             rawTitle = "Picker task",
             hasDeadline = true,
             deadlineDate = canonicalDate,
@@ -635,7 +639,7 @@ class TodoSemanticsTest {
     fun testDeadlinePickerDstGapRejection() {
         val time = DateTimePickerFormats.formatTime(2, 30)
         val editor = EditorState(
-            id = "t-gap",
+            taskRef = TaskRef("u1", "t-gap"),
             rawTitle = "Gap task",
             hasDeadline = true,
             deadlineDate = "2026-03-08",
@@ -660,7 +664,7 @@ class TodoSemanticsTest {
         assertEquals("08:30", settings.defaultDateOnlyAnchorTime)
 
         val editor = EditorState(
-            id = "t-date-only",
+            taskRef = TaskRef("u1", "t-date-only"),
             rawTitle = "Date only task",
             hasDeadline = true,
             deadlineDate = "2026-10-20",
@@ -701,11 +705,11 @@ class TodoSemanticsTest {
     @Test
     fun testSubtaskDisclosurePresentationFilteringPreservesCountsAndProgress() {
         val rootId = "root-proj-1"
-        val root = Todo(id = rootId, title = "Parent Task", completed = false, createdAt = 1000L)
-        val child1 = Todo(id = "child-act-1", title = "Active Subtask", completed = false, createdAt = 1100L, parentTaskId = rootId)
-        val child2 = Todo(id = "child-comp-2", title = "Done Subtask", completed = true, createdAt = 1200L, parentTaskId = rootId)
-        val standalone = Todo(id = "standalone-1", title = "Standalone", completed = false, createdAt = 900L)
-
+        val rootRef = TaskRef("test-user", rootId)
+        val root = Todo(taskRef = rootRef, title = "Parent Task", completed = false, createdAt = 1000L)
+        val child1 = Todo(taskRef = TaskRef("test-user", "child-act-1"), title = "Active Subtask", completed = false, createdAt = 1100L, parentTaskRef = rootRef)
+        val child2 = Todo(taskRef = TaskRef("test-user", "child-comp-2"), title = "Done Subtask", completed = true, createdAt = 1200L, parentTaskRef = rootRef)
+        val standalone = Todo(taskRef = TaskRef("test-user", "standalone-1"), title = "Standalone", completed = false, createdAt = 900L)
         val todos = listOf(root, child1, child2, standalone)
         val snapshot = TaskHierarchyProjector.projectHierarchy(todos, TodoFilter.ALL)
         val displayItems = snapshot.items
@@ -752,9 +756,10 @@ class TodoSemanticsTest {
     @Test
     fun testSubtaskDisclosureInFilteredViewsWithContextOnlyParent() {
         val rootId = "root-context-1"
-        val root = Todo(id = rootId, title = "Parent", completed = false, createdAt = 1000L)
-        val child1Active = Todo(id = "c-active", title = "Active Subtask", completed = false, createdAt = 1100L, parentTaskId = rootId)
-        val child2Done = Todo(id = "c-done", title = "Done Subtask", completed = true, createdAt = 1200L, parentTaskId = rootId)
+        val rootRef = TaskRef("test-user", rootId)
+        val root = Todo(taskRef = rootRef, title = "Parent", completed = false, createdAt = 1000L)
+        val child1Active = Todo(taskRef = TaskRef("test-user", "c-active"), title = "Active Subtask", completed = false, createdAt = 1100L, parentTaskRef = rootRef)
+        val child2Done = Todo(taskRef = TaskRef("test-user", "c-done"), title = "Done Subtask", completed = true, createdAt = 1200L, parentTaskRef = rootRef)
         val todos = listOf(root, child1Active, child2Done)
 
         // 1. Under COMPLETED filter:

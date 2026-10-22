@@ -5,9 +5,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.AuthState
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.TodoAction
-import dev.tabbyrush.shared.contract.TodoFilter
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -103,9 +103,9 @@ class TodoDeviceTest {
             assertNotNull(runtime.coordinator)
 
             val now = System.currentTimeMillis()
-            val todo = Todo(id = "todo_device_1", title = "Test device task", completed = false, createdAt = now, updatedAt = now)
+            val taskRef = TaskRef(canonicalIdentity.userId, "todo_device_1")
+            val todo = Todo(taskRef = taskRef, title = "Test device task", completed = false, createdAt = now, updatedAt = now)
             runtime.store.saveTodoLocally(todo)
-
             val todos = runtime.store.loadTodos()
             assertEquals(1, todos.size)
             assertEquals("Test device task", todos[0].title)

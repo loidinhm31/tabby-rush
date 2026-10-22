@@ -1,16 +1,21 @@
 # Android Composition, Reminder Alarms & Runtime Acceptance Specification
 
-**Document Version**: 1.4.0
-**Last Updated**: 2026-10-20
-**Status**: Android unit/package and offline evidence are reported; connected-device and interactive UI acceptance were not run. Native acceptance is not passed. Production migration is unauthorized.
-**Related Documents**: [Project Overview PDR](./project-overview-pdr.md) · [System Architecture](./system-architecture.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Design Guidelines](./design-guidelines.md) · [Release Acceptance](./release-acceptance.md)
+**Document Version**: 1.5.0
+**Last Updated**: 2026-10-21
+**Status**: Collaborative task assignees and Room v5 delivered (Phases 01–08). Android unit/package and offline evidence reported; connected-device and interactive UI acceptance NOT RUN. Native acceptance is not passed. Production migration is unauthorized.
+**Related Documents**: [Project Overview PDR](./project-overview-pdr.md) · [System Architecture](./system-architecture.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Design Guidelines](./design-guidelines.md) · [Release Acceptance](./release-acceptance.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ---
 
 ## 1. Overview & Architectural Boundaries
 
-The Android app integrates platform lifecycle, reminders, notifications, task surfaces, and account coordination with Room v4 local storage and the current standard Hub sync client. It does not use strict-v1/v2/v3 task-sync routes. Historical Android phase evidence below is dated and must not be treated as a fresh run or connected-device acceptance.
+The Android app integrates platform lifecycle, reminders, notifications, task surfaces, and account coordination with Room v5 local storage and the current standard Hub sync client. It does not use strict-v1/v2/v3 task-sync routes. Historical Android phase evidence below is dated and must not be treated as a fresh run or connected-device acceptance.
 
+### 1.0 Collaborative Task Assignees & Surface Invariants
+1. **Canonical Identity in Intents & Reminders**: Android `AlarmManager` alarms, notification tags, and `PendingIntent` extras transport canonical `TaskRef(ownerUserId, rowId)` rather than bare row IDs.
+2. **Admission Re-Authorization**: Widgets (`GlanceAppWidget`), alarm receivers (`TabbyRushAlarmReceiver`), and notification click handlers re-resolve `TaskRef` and current `accessGeneration` at admission and immediately before local mutation or delivery. If authoritative access was lost, delivery is suppressed and alarms are cancelled fail-closed.
+3. **Child-Only Privacy**: Assigned child tasks render flat in the Android task list and Glance widget without synthetic parent rows or sibling disclosures.
+4. **Revocation Purge & Notification Cancellation**: When access is revoked, active notifications for the task are cancelled, scheduled alarms are cleared from `AndroidAlarmRegistry`, and active widget state is refreshed.
 ```
                       ┌──────────────────────────────────────────────┐
                       │              TabbyRushApplication                │
@@ -315,4 +320,5 @@ Recorded from QA validation report (`plans/reports/qa-261020-0053-phase-04-andro
 ### 6.2 Acceptance & Pilot Gate Status
 - **Automated Checks**: Smoke runner self-test passes 21/21 assertions (`scripts/admin-announcements-smoke.mjs --self-test`).
 - **Hardware Hold**: Physical connected Android API 33+ device verification (actual notification shade capture and tap navigation) remains held at Gate G2.
-- **Pilot Readiness**: Software runtime and security manifest invariants are validated; restricted operator pilot approved for Android and Linux, while Windows desktop remains held at Gate G5.
+- **Collaborative Assignees Gate (G4)**: Connected Android verification of collaborative task assignees (assignee picker, child-only Glance widget, alarm re-authorization, revocation cancellation) is **NOT RUN / pending**.
+- **Pilot & Release Boundary**: The earlier restricted operator pilot statement applies only to announcements scope. It is not approval for collaborative sync release or production migration. Full delivery remains blocked until Gate G4 and interactive UI acceptance are executed and evidenced.

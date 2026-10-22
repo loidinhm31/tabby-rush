@@ -24,9 +24,9 @@ interface SyncCoordinator {
 
     suspend fun triggerSync()
     suspend fun reconcilePending()
-    suspend fun discardConflict(rowId: String)
-    suspend fun reapplyConflict(rowId: String)
-    suspend fun copyAsNew(rowId: String)
+    suspend fun discardConflict(taskRef: TaskRef)
+    suspend fun reapplyConflict(taskRef: TaskRef)
+    suspend fun copyAsNew(taskRef: TaskRef)
     suspend fun requestLeave(): Boolean
     fun close()
 }

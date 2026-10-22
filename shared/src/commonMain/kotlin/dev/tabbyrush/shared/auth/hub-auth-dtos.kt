@@ -169,6 +169,17 @@ object AccessRequestStatus {
     fun isRejected(status: String): Boolean = status.equals(REJECTED, ignoreCase = true)
 }
 
+@Serializable
+data class LookupRecipient(
+    val userId: String,
+    val username: String
+)
+
+@Serializable
+data class LookupUserResponse(
+    val user: LookupRecipient? = null
+)
+
 /**
  * UI validation helpers that mirror server byte-length rules without replacing server authority.
  * Email is trimmed and lowercased; password is NEVER trimmed or logged.

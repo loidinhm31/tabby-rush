@@ -28,7 +28,7 @@ class CompositeDesktopLeaveCancelGateTest {
     private class RecordingNativeAdapter : NativeReminderAdapter {
         override suspend fun queryCapabilities(): ReminderCapabilities = ReminderCapabilities(true, true, true)
         override suspend fun reconcileSchedule(accountKey: AccountKey, generation: Long, desiredAlarms: List<ScheduledAlarmHandle>) {}
-        override suspend fun postOwnedNotification(accountKey: AccountKey, generation: Long, taskId: String, scheduleToken: String, occurrenceIndex: Int, title: String, dueEpochMs: Long): String? = "id"
+        override suspend fun postOwnedNotification(accountKey: AccountKey, generation: Long, taskRef: dev.tabbyrush.shared.contract.TaskRef, scheduleToken: String, occurrenceIndex: Int, title: String, dueEpochMs: Long): String? = "id"
         override suspend fun removeOwnedNotification(accountKey: AccountKey, platformNotificationId: String) {}
         override suspend fun cancelAllForAccount(accountKey: AccountKey) {}
     }

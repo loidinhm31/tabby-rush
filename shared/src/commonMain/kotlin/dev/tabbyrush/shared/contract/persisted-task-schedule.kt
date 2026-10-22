@@ -6,7 +6,7 @@ package dev.tabbyrush.shared.contract
  * Uncommitted editor drafts are strictly excluded.
  */
 data class PersistedTaskSchedule(
-    val taskId: String,
+    val taskRef: TaskRef,
     val title: String,
     val completed: Boolean,
     val isDeleted: Boolean,
@@ -14,11 +14,17 @@ data class PersistedTaskSchedule(
     val reminderRule: ReminderRule,
     val scheduleToken: String?,
     val hasUnresolvedConflict: Boolean,
-    val parentTaskId: String? = null,
-    val hasUnresolvedPreservationBarrier: Boolean = false
+    val parentTaskRef: TaskRef? = null,
+    val hasUnresolvedPreservationBarrier: Boolean = false,
+    val isAccessible: Boolean = true
 ) {
+    val taskId: String get() = taskRef.rowId
+    val ownerUserId: String get() = taskRef.ownerUserId
+    val parentTaskId: String? get() = parentTaskRef?.rowId
+
     /**
      * A task is eligible for scheduling reminders if and only if:
+     * - It is accessible (access not revoked/unavailable)
      * - It is not deleted
      * - It is not completed (saved completion is a cancellation barrier)
      * - It has no unresolved conflict (conflict/unknown heads suppress scheduling)
@@ -28,7 +34,8 @@ data class PersistedTaskSchedule(
      * - Schedule token is present
      */
     val isEligibleForScheduling: Boolean
-        get() = !isDeleted &&
+        get() = isAccessible &&
+                !isDeleted &&
                 !completed &&
                 !hasUnresolvedConflict &&
                 !hasUnresolvedPreservationBarrier &&

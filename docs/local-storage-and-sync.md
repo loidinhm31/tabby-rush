@@ -1,36 +1,41 @@
 # TabbyRush Local Storage and Standard Sync
 
-Date: 2026-10-20  
-Status: Room v4 and standard sync are current. Disposable API/browser and standalone Windows runtime smoke passed against loopback services; native interactive/device acceptance and production migration are not passed/authorized.  
+Date: 2026-10-21  
+Status: Room v5 and collaborative standard sync implemented (Phases 01–08). Dedicated runtime harnesses prepared in Phase 09. G0 policy validation confirmed 2026-10-21; G1–G6 runtime verification pending Main integration. Release remains blocked; production migration unauthorized.  
 Related Docs: [System Architecture](./system-architecture.md) · [API Contract](./api-contract.md) · [Standard Sync Design](./standard-sync-cutover-design.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md)
 
 ---
 
 ## 1. Storage Architecture
 
-TabbyRush stores account-scoped local state in Room/SQLite through the shared Kotlin Multiplatform data layer. Destructive migration fallback is prohibited. The registered migration chain is Room 1→2, 2→3, and 3→4. Android and JVM/desktop builders register the same migrations.
-
+TabbyRush stores account-scoped local state in Room/SQLite through the shared Kotlin Multiplatform data layer. Destructive migration fallback is prohibited. The registered migration chain is Room 1→2, 2→3, 3→4, and 4→5. Android and JVM/desktop builders register the same migrations.
 Account partitions use a canonical account key derived from Hub origin and user identity. Platform account data is stored under an account-specific directory; credentials are held separately in Android Keystore, Linux Secret Service, or user-scoped Windows DPAPI. Account leave/wipe coordinates scheduler cancellation, database/artifact cleanup, and credential clearing. OS-held widget/notification content is not guaranteed erased when the OS rejects cleanup.
 
-### Room v4 Tables
+### Room v5 Tables
 
 | Table | Purpose |
 |---|---|
-| `server_base` | Latest confirmed standard server projection, version/deletion metadata, preserved raw JSON and projection status. |
-| `outbox` | User-submitted intent and delivery/review state. Includes intent mask, current standard payload/envelope, record version and assumed server version where applicable. |
+| `server_base` | Latest confirmed standard server projection, version/deletion metadata, preserved raw JSON, projection status, and canonical owner binding. |
+| `outbox` | User-submitted intent and delivery/review state. Includes intent mask, current standard payload/envelope, record version, canonical TaskRef, and assumed server version. |
 | `editor_drafts` | Uncommitted edits, separate from confirmed server data and submitted intent. |
 | `scan_staging` | Pull pages held under a scan generation until a full scan can be applied. |
-| `account_sync_meta` | Informational Hub `schemaVersion`, checkpoint, scan generation/state and sync metadata. |
+| `access_check_staging` | Staged access-validation results across multiple pages, validated against a consistent access revision before atomic promotion. |
+| `task_access` | Authoritative reconciled task access rights, capability flags (`editContent`, `manageAssignment`, `deleteTask`, `createChild`), and hierarchy coverage (`full-group`, `child-only`). |
+| `access_loss_evidence` | Non-replayable, content-free records of authoritative access loss (identity, versions, timestamp, reason) retained for review without leaking purged payloads. |
+| `account_sync_meta` | Informational Hub `schemaVersion`, checkpoint, scan generation/state, sync progress metadata, and cached access revision. |
 | `account_local_settings` | Account/device-local reminder and notification defaults; not synchronized as task data. |
 | `reminder_delivery_ledger` | Durable reminder occurrence and delivery-claim state. |
 | `legacy_sync_evidence` | Lossless archive of pre-v4 outbox SQLite values, retained for explicit review and never sent to sync routes. |
 
+### Room 4→5 Migration and Two-Stage Binding
+
+`MIGRATION_4_5` updates local database schemas to support canonical identities (`ownerUserId`, `tableName`, `rowId`), relationship tracking, and access state.
+
+To prevent guessing owner identities from one-way `AccountKey` hashes, legacy rows are preserved with `ownerBinding = LOCAL_ACCOUNT` and nullable `ownerUserId`. During store initialization, when an authenticated or restored `AccountIdentity` is supplied, `RoomAccountStore` verifies that `AccountKey.create(origin, userId)` matches the current partition and binds legacy rows atomically. Unresolved legacy rows survive upgrade and display offline, but remain strictly local-only and cannot be dispatched to sync endpoints until bound.
+
 ### Room 3→4 Legacy Archive
 
 `MIGRATION_3_4` copies every old outbox column into `legacy_sync_evidence.originalJson` before rebuilding the active outbox. SQLite values retain type-sensitive representation: `NULL` remains JSON null, integers remain integer values, text remains text, FLOAT stores its bit representation, and BLOB stores its exact bytes as hex. An unsupported SQLite storage type aborts the migration rather than dropping evidence. Archived rows begin `PENDING_REVIEW`; the new outbox row uses review state and retains a link to its original evidence.
-
-The migration does not prove an operation was unsent, accepted, or safe to reapply. Preserve the archive until the user's conflict/review decision is complete.
-
 ## 2. Local Mutation and Account Isolation
 
 A task edit is persisted locally before network dispatch. The local task projection combines confirmed server base, submitted outbox intent, and editor draft state; scheduling projections intentionally exclude uncommitted drafts. Outbox processing is serialized per account/coordinator, and authentication generation/account identity checks prevent stale asynchronous completions from modifying a switched or leaving account.
@@ -77,9 +82,16 @@ Hub `schemaVersion` is a positive exact JSON integer used to coordinate admin sc
 
 The client stores the Hub version as informational metadata. It does not drive feature gates, Room migration, code generation, or UI generation. Hub schema may permit nullable/custom keys such as `customNotes`; the native client preserves such keys in raw JSON but does not display or edit arbitrary schema columns unless product code separately implements them.
 
-## 8. Conflict Resolution and Group Semantics
+## 8. Conflict Resolution, Revocation Purge, and Privacy Guarantees
 
 Conflict resolution is explicit. Discard removes the reviewed conflicting intent; selective reapply creates a new supported intent based on the current confirmed state; copy-latest creates a fresh root from the latest server projection. Unknown legacy intent never takes an automatic all-fields replay path.
+
+In collaborative mode, authoritative loss of access (via revocation or unassignment) enforces a privacy-first purge:
+1. The active task projection is immediately removed from the user's task lists.
+2. Scheduled reminders and active notifications for the task are cancelled.
+3. Active `server_base`, `editor_drafts`, and pending `outbox` payloads for the task are purged from active storage.
+4. Non-replayable, content-free audit records are written to `access_loss_evidence` recording only canonical identity, opId, base/submitted version, timestamps, and reason (`REVOCATION`). No task title, deadline, description, or payload content is retained.
+5. A subsequent regrant fetches current authorized state from the server without automatically replaying purged unsent edits.
 
 Parent/child task behavior, last-child completion preservation, group deletion, and reminder eligibility are native client/domain behavior. The standalone Windows runtime smoke exercised parent/child sync and group deletion against a disposable loopback Hub, but standard sync does not enforce those rules for arbitrary clients and the smoke is not interactive UI or connected-device acceptance.
 
@@ -91,4 +103,4 @@ A separate standalone Windows runtime smoke passed through a strict Gradle JavaE
 
 ## 10. Historical Strict Sync
 
-Earlier strict-v1/v2/v3 outbox, epoch, digest, receipt, transition, and runbook descriptions are historical snapshots from 2026-10-14 through 2026-10-20. They do not describe current Room v4 or the current binary. Former strict-specific scripts and runbooks have been retired.
+Earlier strict-v1/v2/v3 outbox, epoch, digest, receipt, transition, and runbook descriptions are historical snapshots from 2026-10-14 through 2026-10-20. They do not describe current Room v5 or the current binary. Former strict-specific scripts and runbooks have been retired.

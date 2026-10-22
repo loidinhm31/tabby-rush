@@ -22,7 +22,14 @@ class RoomAccountStoreTest {
     }
     private fun open() = RoomAccountStore(key, "sqlite-user", createJvmDatabaseBuilder(file).build(), "tabby-rush")
     @AfterTest fun cleanup() { store.close(); directory.deleteRecursively() }
-    private fun todo(id: String = parent, completed: Boolean = false, parentId: String? = null) = Todo(id, "Task $id", completed, 1000L, parentTaskId = parentId)
+    private fun taskRef(id: String = parent) = TaskRef("sqlite-user", id)
+    private fun todo(id: String = parent, completed: Boolean = false, parentId: String? = null) = Todo(
+        taskRef = taskRef(id),
+        title = "Task $id",
+        completed = completed,
+        createdAt = 1000L,
+        parentTaskRef = parentId?.let { taskRef(it) }
+    )
     private suspend fun confirm(id: String = parent) {
         val reconciliation = OutboxReconciliation(store)
         val batch = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch().filter { it.rowId == id })
@@ -41,7 +48,7 @@ class RoomAccountStoreTest {
     }
 
     @Test fun neverDispatchedCreateDeleteCancelsOnlyLocalIntent() = runTest {
-        store.saveTodoLocally(todo()); store.deleteTodoLocally(parent)
+        store.saveTodoLocally(todo()); store.deleteTodoLocally(taskRef(parent))
         assertEquals(0, store.dao.countOutbox()); assertEquals(0, store.dao.countDrafts())
         assertTrue(store.loadTodos().isEmpty())
     }
@@ -83,9 +90,10 @@ class RoomAccountStoreTest {
 
     @Test fun confirmedDeleteNeverAllowsSameIdentityUpsert() = runTest {
         store.saveTodoLocally(todo()); confirm()
-        store.deleteTodoLocally(parent); confirm()
+        store.deleteTodoLocally(taskRef(parent)); confirm()
         assertTrue(store.dao.getServerBase(parent)!!.deleted)
-        assertFailsWith<IllegalStateException> { store.saveTodoLocally(todo()) }
+        assertEquals(TaskMutationResult.Missing, store.saveTodoLocally(todo()))
+        assertTrue(store.dao.getServerBase(parent)!!.deleted)
     }
 
     @Test fun childWaitsForConfirmedLiveRootAndParentCompletionIsDerived() = runTest {
@@ -96,21 +104,23 @@ class RoomAccountStoreTest {
         assertEquals(listOf(parent), first.map { it.rowId })
         store.reconcileAccepted(first.single().opId, 1L)
         assertEquals(listOf(child), reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).map { it.rowId })
-        assertEquals(CompletionChange.AutomaticParentRejected, store.setCompletedLocally(parent, true, 2000L))
+        assertEquals(CompletionChange.AutomaticParentRejected, store.setCompletedLocally(taskRef(parent), true, 2000L))
         val hierarchy = TaskHierarchyProjector.projectHierarchy(store.loadTodos(), TodoFilter.ALL)
         assertTrue(hierarchy.items.first { it.todo.id == parent }.effectiveCompleted)
     }
 
     @Test fun reparentGrandchildAndSelfReferenceRejected() = runTest {
         store.saveTodoLocally(todo()); store.saveTodoLocally(todo(child, parentId = parent))
-        assertFailsWith<IllegalArgumentException> { store.saveTodoLocally(todo(child)) }
-        assertFailsWith<IllegalArgumentException> { store.saveTodoLocally(todo("cccccccc-cccc-4ccc-8ccc-cccccccccccc", parentId = child)) }
-        assertFailsWith<IllegalArgumentException> { todo(child, parentId = child) }
+        assertIs<TaskMutationResult.InvalidStructure>(store.saveTodoLocally(todo(child)))
+        assertIs<TaskMutationResult.InvalidStructure>(store.saveTodoLocally(todo("cccccccc-cccc-4ccc-8ccc-cccccccccccc", parentId = child)))
+        assertEquals(taskRef(parent), store.getTodo(taskRef(child))?.parentTaskRef)
+        assertNull(store.getTodo(taskRef("cccccccc-cccc-4ccc-8ccc-cccccccccccc")))
+        assertFailsWith<IllegalArgumentException> { TaskRef("sqlite-user", child).let { Todo(it, "Self", false, 1000L, parentTaskRef = it) } }
     }
 
     @Test fun unsentGroupDeletionIsAtomicLocalCancellation() = runTest {
         store.saveTodoLocally(todo()); store.saveTodoLocally(todo(child, parentId = parent))
-        store.deleteTodoLocally(parent)
+        store.deleteTodoLocally(taskRef(parent))
         assertTrue(store.loadTodos().isEmpty()); assertEquals(0, store.dao.countOutbox())
         assertEquals(0, store.dao.countDrafts())
     }
@@ -118,7 +128,7 @@ class RoomAccountStoreTest {
     @Test fun lastChildDeletionCapturesPrecedingEffectiveCompletion() = runTest {
         store.saveTodoLocally(todo()); confirm()
         store.saveTodoLocally(todo(child, true, parent)); confirm(child)
-        store.deleteTodoLocally(child)
+        store.deleteTodoLocally(taskRef(child))
         assertTrue(store.loadTodos().single().completed)
         val parentOp = store.dao.getOutboxByRowId(parent).single()
         assertTrue(parentOp.intentMask!!.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION))
@@ -129,7 +139,7 @@ class RoomAccountStoreTest {
 
     @Test fun groupDeletionCreatesIndependentFrozenRowsAndHidesGroup() = runTest {
         store.saveTodoLocally(todo()); confirm(); store.saveTodoLocally(todo(child, parentId = parent)); confirm(child)
-        store.deleteTodoLocally(parent)
+        store.deleteTodoLocally(taskRef(parent))
         assertTrue(store.loadTodos().isEmpty())
         assertEquals(setOf(parent, child), store.dao.getAllOutbox().map { it.rowId }.toSet())
         assertTrue(store.dao.getAllOutbox().all { it.kind == "delete" })
@@ -150,12 +160,12 @@ class RoomAccountStoreTest {
     }
 
     @Test fun desiredStateCompletionRejectsMissingAndIsIdempotent() = runTest {
-        assertEquals(CompletionChange.Missing, store.setCompletedLocally(parent, true, 2000L))
+        assertEquals(CompletionChange.Missing, store.setCompletedLocally(taskRef(parent), true, 2000L))
         store.saveTodoLocally(todo())
         val counter = store.dao.getMeta()!!.localRevisionCounter
-        assertEquals(CompletionChange.Unchanged, store.setCompletedLocally(parent, false, 2000L))
+        assertEquals(CompletionChange.Unchanged, store.setCompletedLocally(taskRef(parent), false, 2000L))
         assertEquals(counter, store.dao.getMeta()!!.localRevisionCounter)
-        assertEquals(CompletionChange.Changed, store.setCompletedLocally(parent, true, 2000L))
+        assertEquals(CompletionChange.Changed, store.setCompletedLocally(taskRef(parent), true, 2000L))
         assertTrue(store.loadTodos().single().completed)
     }
 
@@ -186,8 +196,12 @@ class RoomAccountStoreTest {
     @Test fun settingsAndReminderLedgerSurviveRestartThenExplicitWipe() = runTest {
         val settings = AccountLocalSettingsEntity(notificationsEnabled = true)
         store.updateLocalSettings(settings)
-        val ledger = ReminderDeliveryLedgerEntity(key.toString(), 4L, parent, "schedule", 0, 1000L,
-            "POSTED", postedPlatformId = "notification", cancellationState = "ACTIVE", updatedAtEpochMs = 1000L)
+        val ledger = ReminderDeliveryLedgerEntity(
+            accountKey = key.toString(), generation = 4L,
+            bindingKey = boundBindingKey("sqlite-user"), ownerBinding = BINDING_BOUND, ownerUserId = "sqlite-user", tableName = "todos",
+            taskId = parent, scheduleToken = "schedule", occurrenceIndex = 0, dueEpochMs = 1000L,
+            claimOutcome = "POSTED", postedPlatformId = "notification", cancellationState = "ACTIVE", updatedAtEpochMs = 1000L
+        )
         store.upsertLedgerEntry(ledger)
         store.close(); store = open()
         assertEquals(settings, store.getLocalSettings()); assertEquals(listOf(ledger), store.getLedgerEntriesForTask(4L, parent))

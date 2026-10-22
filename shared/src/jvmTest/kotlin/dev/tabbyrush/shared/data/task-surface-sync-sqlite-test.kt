@@ -5,6 +5,7 @@ import dev.tabbyrush.shared.contract.CompletionChange
 import dev.tabbyrush.shared.contract.PersistedTaskSchedule
 import dev.tabbyrush.shared.contract.TaskOperationKind
 import dev.tabbyrush.shared.contract.TaskDeadline
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.selectNextDeadline
 import kotlinx.coroutines.CompletableDeferred
@@ -44,6 +45,7 @@ class TaskSurfaceSyncSqliteTest {
             appId = "tabby-rush"
         )
     }
+    private fun taskRef(id: String) = TaskRef("user-sync-test", id)
 
     @AfterTest
     fun tearDown() {
@@ -65,7 +67,7 @@ class TaskSurfaceSyncSqliteTest {
     fun testReconcileAcceptedEmitsUpdatedStateInObservers() = runBlocking {
         val now = 10_000L
         val todo = Todo(
-            id = "t1",
+            taskRef = taskRef("t1"),
             title = "Task to Reconcile",
             completed = false,
             createdAt = now,
@@ -230,7 +232,7 @@ class TaskSurfaceSyncSqliteTest {
     fun testConcurrentTitleEditPreservedBySetCompletedLocally() = runBlocking {
         val now = 10_000L
         val original = Todo(
-            id = "t1",
+            taskRef = taskRef("t1"),
             title = "Original Title",
             completed = false,
             createdAt = now,
@@ -245,7 +247,7 @@ class TaskSurfaceSyncSqliteTest {
         store.saveTodoLocally(edited)
 
         // Complete the task via setCompletedLocally
-        val result = store.setCompletedLocally("t1", completed = true, nowEpochMs = now + 5000L)
+        val result = store.setCompletedLocally(taskRef("t1"), completed = true, nowEpochMs = now + 5000L)
         assertEquals(CompletionChange.Changed, result)
 
         val loaded = store.loadTodos().first { it.id == "t1" }

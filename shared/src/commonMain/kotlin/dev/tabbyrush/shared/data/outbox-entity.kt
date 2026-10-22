@@ -5,10 +5,19 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /** Submitted intent. A non-null envelopeJson is immutable and never automatically replayed. */
-@Entity(tableName = "outbox", indices = [Index(value = ["legacyEvidenceId"], unique = true)])
+@Entity(
+    tableName = "outbox",
+    indices = [
+        Index(value = ["legacyEvidenceId"], unique = true),
+        Index(value = ["bindingKey", "tableName", "rowId"])
+    ]
+)
 data class OutboxEntity(
     @PrimaryKey val opId: String,
-    val tableName: String = "todos",
+    val bindingKey: String = BINDING_LOCAL_ACCOUNT,
+    val ownerBinding: String = BINDING_LOCAL_ACCOUNT,
+    val ownerUserId: String? = null,
+    val tableName: String = dev.tabbyrush.shared.contract.TaskDataContract.DEFAULT_TABLE_NAME,
     val rowId: String,
     val kind: String,
     val title: String?,
@@ -41,6 +50,33 @@ data class OutboxEntity(
     val legacyEvidenceId: String? = null,
     val resolution: String? = null
 ) {
+    fun toPersistedRecord(fallbackOwnerUserId: String = ""): dev.tabbyrush.shared.contract.PersistedOutboxRecord {
+        val resolvedOwner = ownerUserId ?: fallbackOwnerUserId
+        return dev.tabbyrush.shared.contract.SimplePersistedOutboxRecord(
+            ownerUserId = resolvedOwner,
+            tableName = tableName,
+            rowId = rowId,
+            localRevision = localRevision,
+            deliveryState = deliveryState,
+            kind = kind,
+            intentMask = intentMask,
+            parentTaskId = parentTaskId,
+            title = title,
+            completed = completed,
+            deadlineDate = deadlineDate,
+            deadlineTime = deadlineTime,
+            deadlineZone = deadlineZone,
+            deadlineOffsetSeconds = deadlineOffsetSeconds,
+            reminderAnchorTime = reminderAnchorTime,
+            deadlineAnchorEpochMs = deadlineAnchorEpochMs,
+            deadlineOverdueEpochMs = deadlineOverdueEpochMs,
+            reminderEnabled = reminderEnabled,
+            reminderLeadMinutes = reminderLeadMinutes,
+            reminderIntervalMinutes = reminderIntervalMinutes,
+            reminderCount = reminderCount,
+            scheduleToken = scheduleToken
+        )
+    }
     companion object {
         const val STATE_PENDING = "PENDING"
         const val STATE_DISPATCHING = "DISPATCHING"

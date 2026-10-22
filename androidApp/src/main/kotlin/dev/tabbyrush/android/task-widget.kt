@@ -390,8 +390,7 @@ private fun TaskRow(
 ) {
     val todo = item.todo
     val isCompleted = item.effectiveCompleted
-    val startPadding = if (item.isChild) (if (isCompact) 12.dp else 20.dp) else 0.dp
-
+    val startPadding = if (item.isChild && !item.isChildOnly) (if (isCompact) 12.dp else 20.dp) else 0.dp
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
@@ -415,7 +414,7 @@ private fun TaskRow(
                     }
             )
         } else {
-            val descriptionRes = if (item.isChild) {
+            val descriptionRes = if (item.isChild && !item.isChildOnly) {
                 if (isCompleted) R.string.task_widget_child_checkbox_completed
                 else R.string.task_widget_child_checkbox_incomplete
             } else {
@@ -427,7 +426,7 @@ private fun TaskRow(
                 onCheckedChange = actionRunCallback<ToggleTaskActionCallback>(
                     TaskWidgetActionKeys.toggleTaskParameters(
                         token = token,
-                        taskId = todo.id,
+                        taskRef = todo.taskRef,
                         desiredCompleted = !isCompleted
                     )
                 ),
@@ -466,8 +465,7 @@ private fun TaskRow(
             modifier = GlanceModifier
                 .defaultWeight()
                 .fillMaxHeight()
-                .clickable(actionStartActivity(createOpenTaskIntent(context, token, todo.id)))
-                .semantics { contentDescription = rowContentDescription },
+                .clickable(actionStartActivity(createOpenTaskIntent(context, token, todo.taskRef))),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(

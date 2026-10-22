@@ -1,9 +1,9 @@
 # Release & Operations Acceptance
 
-Document Version: 2.3.0  
-Last Updated: 2026-10-20  
+Document Version: 2.4.0  
+Last Updated: 2026-10-21  
 Status: **Release remains blocked. Native acceptance is not passed. Production migration is not authorized.**  
-Related Docs: [Standard Sync Design](./standard-sync-cutover-design.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [System Architecture](./system-architecture.md) · [Android Acceptance](./android-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Acceptance](./windows-acceptance.md) · [Project Roadmap](./project-roadmap.md)
+Related Docs: [Standard Sync Design](./standard-sync-cutover-design.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [System Architecture](./system-architecture.md) · [Android Acceptance](./android-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Acceptance](./windows-acceptance.md) · [Project Roadmap](./project-roadmap.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ---
 
@@ -17,15 +17,16 @@ The current native client uses ordinary Glean Hub registration and standard sync
 
 | Area | Reported evidence | Acceptance boundary |
 |---|---|---|
+| Collaborative policy (G0) | Policy choices confirmed 2026-10-21: privacy-first purge of revoked remote payloads and unsent edits; whole-app capability cutoff (HTTP 426); single app-wide replica-set transaction guard (`_sync_assignment_fences`). | Confirmed by policy interview record (`06-validation-interview.md`); document-only, does not authorize production or approve release. |
+| Collaborative runtime harnesses (G2, G3) | Dedicated harnesses delivered: `scripts/task-assignees-live-smoke.mjs` and `:desktopApp:runTaskAssigneesRuntimeSmoke`. Fail closed when disposable environment credentials are missing. | Prepared; NOT RUN during subagent phase per delegation rules (reserved for Main integration). |
 | Standard Hub API/browser smoke | Disposable MongoDB 27191, Hub 3100, admin UI 3102. Ordinary provisioning, standard create/pull/delta/update/stale-conflict/delete, and unknown JSON retention passed. | Local/disposable only; no production migration or authorization. |
 | Schema concurrency/UI | Nullable `customNotes` pasted in admin UI; `schemaVersion` 1→2, no-op remained 2, stale changed save returned 409 with draft preserved and latest schema read-only. | Admin/API behavior only; no generated native UI/Room fields. |
 | Windows standalone native runtime | Strict Gradle JavaExec standalone main passed against disposable loopback services: Windows DPAPI, real HTTP auth, Room offline restart, two independent stores using actual coordinator push/pull/delta, schemaVersion 2, unknown nested JSON and nullable `customNotes` retained through native edit, parent/child sync and group deletion. | Runtime harness only; not an interactive Windows UI test, connected-Android proof, or cross-platform physical acceptance. |
 | Offline Gradle/package suites | Parent reports current strict Gradle suites and Android/Desktop package outputs passed. | Build/test/package success does not establish native UI or device acceptance. Exact suite counts are maintained in parent verification reports. |
 | Conversion operator | Parent reports 7/7 disposable-Mongo operator checks passed, including concurrency, deadline, and recovery. | Test evidence only. Operator does not authorize live production use. |
-| Interactive native UI | Provider approval timed out twice. | Not run; native acceptance not passed. |
-| Connected Android/device matrix | Connected-device acceptance was not run. | Not run; native acceptance not passed. |
-| Production cutover | No production migration has occurred or been authorized. | Requires separate explicit approval and operator/backup/isolation gates. |
-
+| Interactive native UI (G4, G5) | Provider interactive approval timed out during earlier cycles; collaborative Compose surfaces require interactive session. | Not run; native acceptance not passed. |
+| Connected Android/device matrix (G4) | Connected-device acceptance was not run. | Not run; native acceptance not passed. |
+| Production cutover (G7) | No production migration has occurred or been authorized. | Requires separate explicit approval and operator/backup/isolation gates. |
 ## 3. Current Release Criteria and Holds
 
 A release decision requires, at minimum, review of current platform-specific acceptance documents, a successful interactive/native UI approval path, required connected-device verification, dependency/security review, and a separately authorized deployment decision. This document does not grant that authorization. Package creation and standalone harness execution are insufficient substitutes for connected-device or interactive acceptance.

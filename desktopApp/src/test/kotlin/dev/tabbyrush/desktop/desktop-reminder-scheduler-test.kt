@@ -4,6 +4,7 @@ import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.NativeReminderAdapter
 import dev.tabbyrush.shared.contract.ReminderCapabilities
 import dev.tabbyrush.shared.contract.ScheduledAlarmHandle
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.data.ReminderOccurrenceStore
 import dev.tabbyrush.shared.data.RoomAccountStore
 import dev.tabbyrush.shared.data.createInMemoryJvmDatabaseBuilder
@@ -45,13 +46,13 @@ class DesktopReminderSchedulerTest {
         override suspend fun postOwnedNotification(
             accountKey: AccountKey,
             generation: Long,
-            taskId: String,
+            taskRef: TaskRef,
             scheduleToken: String,
             occurrenceIndex: Int,
             title: String,
             dueEpochMs: Long
         ): String {
-            val id = "notif-$taskId-$occurrenceIndex"
+            val id = "notif-${taskRef.rowId}-$occurrenceIndex"
             postedReminders.add(id)
             return id
         }
@@ -101,7 +102,7 @@ class DesktopReminderSchedulerTest {
         val alarm = ScheduledAlarmHandle(
             accountKey = accountKey.value,
             generation = 1L,
-            taskId = "task-1",
+            taskRef = TaskRef("test-user", "task-1"),
             scheduleToken = "tok-1",
             occurrenceIndex = 0,
             triggerAtEpochMs = 1_000_000L
@@ -151,7 +152,7 @@ class DesktopReminderSchedulerTest {
         val alarm = ScheduledAlarmHandle(
             accountKey = accountKey.value,
             generation = 1L,
-            taskId = "task-2",
+            taskRef = TaskRef("test-user", "task-2"),
             scheduleToken = "tok-2",
             occurrenceIndex = 0,
             triggerAtEpochMs = 1_010_000L
@@ -215,7 +216,7 @@ class DesktopReminderSchedulerTest {
         val alarmFar = ScheduledAlarmHandle(
             accountKey = accountKey.value,
             generation = 1L,
-            taskId = "task-far",
+            taskRef = TaskRef("test-user", "task-far"),
             scheduleToken = "tok-far",
             occurrenceIndex = 0,
             triggerAtEpochMs = 1_060_000L
@@ -229,7 +230,7 @@ class DesktopReminderSchedulerTest {
         val alarmSoon = ScheduledAlarmHandle(
             accountKey = accountKey.value,
             generation = 1L,
-            taskId = "task-soon",
+            taskRef = TaskRef("test-user", "task-soon"),
             scheduleToken = "tok-soon",
             occurrenceIndex = 0,
             triggerAtEpochMs = 1_000_000L
@@ -278,7 +279,7 @@ class DesktopReminderSchedulerTest {
         val alarm = ScheduledAlarmHandle(
             accountKey = accountKey.value,
             generation = 1L,
-            taskId = "task-clock",
+            taskRef = TaskRef("test-user", "task-clock"),
             scheduleToken = "tok-clock",
             occurrenceIndex = 0,
             triggerAtEpochMs = 1_015_000L
@@ -328,7 +329,7 @@ class DesktopReminderSchedulerTest {
                 ScheduledAlarmHandle(
                     accountKey = accountKey.value,
                     generation = 1L,
-                    taskId = "t1",
+                    taskRef = TaskRef("test-user", "t1"),
                     scheduleToken = "s1",
                     occurrenceIndex = 0,
                     triggerAtEpochMs = System.currentTimeMillis() + 60_000L
@@ -371,9 +372,9 @@ class DesktopReminderSchedulerTest {
             scope = this
         )
 
-        val alarmA = ScheduledAlarmHandle(accountKey.value, 1L, "a", "s", 0, System.currentTimeMillis() + 50_000L)
-        val alarmB = ScheduledAlarmHandle(accountKey.value, 1L, "b", "s", 0, System.currentTimeMillis() + 60_000L)
-        val alarmC = ScheduledAlarmHandle(accountKey.value, 1L, "c", "s", 0, System.currentTimeMillis() + 70_000L)
+        val alarmA = ScheduledAlarmHandle(accountKey.value, 1L, TaskRef("test-user", "a"), "s", 0, System.currentTimeMillis() + 50_000L)
+        val alarmB = ScheduledAlarmHandle(accountKey.value, 1L, TaskRef("test-user", "b"), "s", 0, System.currentTimeMillis() + 60_000L)
+        val alarmC = ScheduledAlarmHandle(accountKey.value, 1L, TaskRef("test-user", "c"), "s", 0, System.currentTimeMillis() + 70_000L)
 
         // Rapid successive updates without yielding thread
         scheduler.updateDesiredAlarms(listOf(alarmA))

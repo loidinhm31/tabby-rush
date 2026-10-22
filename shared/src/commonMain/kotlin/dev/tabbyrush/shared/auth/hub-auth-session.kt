@@ -11,6 +11,7 @@ import dev.tabbyrush.shared.contract.CredentialVault
 import dev.tabbyrush.shared.contract.HubConfig
 import dev.tabbyrush.shared.contract.SafeError
 import dev.tabbyrush.shared.contract.VaultStatus
+import dev.tabbyrush.shared.contract.UserLookupResult
 import io.ktor.client.engine.HttpClientEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -426,6 +427,55 @@ class HubAuthSession(
                     }
                 }
             }
+        }
+    }
+
+    override suspend fun lookupUser(username: String): ApiResult<UserLookupResult> {
+        val (token, gen) = sessionMutex.withLock {
+            if (_state.value != AuthState.AUTHENTICATED) {
+                return ApiResult.Failure(
+                    SafeError.Unauthorized(
+                        code = "UNAUTHENTICATED",
+                        message = "Operation requires an authenticated session"
+                    )
+                )
+            }
+            Pair(inMemoryBundle?.accessToken, currentGeneration)
+        }
+        if (token == null) {
+            return ApiResult.Failure(
+                SafeError.Unauthorized(
+                    code = "UNAUTHENTICATED",
+                    message = "Operation requires an authenticated session"
+                )
+            )
+        }
+        val result = authClient.lookupUser(token, username)
+        sessionMutex.withLock {
+            if (currentGeneration != gen || _state.value != AuthState.AUTHENTICATED) {
+                return ApiResult.Failure(
+                    SafeError.Unauthorized(
+                        code = "ACCOUNT_CHANGED",
+                        message = "Account session changed during user lookup"
+                    )
+                )
+            }
+        }
+        return when (result) {
+            is ApiResult.Success -> {
+                val user = result.value.user
+                if (user != null) {
+                    ApiResult.Success(UserLookupResult(userId = user.userId, username = user.username))
+                } else {
+                    ApiResult.Failure(
+                        SafeError.Validation(
+                            code = "USER_NOT_FOUND",
+                            message = "User not found: $username"
+                        )
+                    )
+                }
+            }
+            is ApiResult.Failure -> result
         }
     }
 

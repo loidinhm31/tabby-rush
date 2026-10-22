@@ -8,6 +8,7 @@ import dev.tabbyrush.shared.contract.PersistedTaskSchedule
 import dev.tabbyrush.shared.contract.ReminderRule
 import dev.tabbyrush.shared.contract.SurfaceAccountToken
 import dev.tabbyrush.shared.contract.TaskDeadline
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.selectNextDeadline
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,12 +33,12 @@ class TaskSurfaceNotificationTest {
             anchorEpochMs = 1792161000000L,
             overdueEpochMs = 1792161000000L
         )
+        val taskRef = TaskRef("alice", "task-timed-1")
         val key = DeadlineSelectionKey(
             token = testToken,
-            taskId = "task-timed-1",
+            taskRef = taskRef,
             deadline = deadline
         )
-
         val encoded = DeadlineSelectionKeyCodec.encode(key)
         assertTrue(encoded.startsWith("v1:"), "Encoded key must contain version prefix")
         assertFalse(encoded.contains("secret-task-title"), "Codec must never leak task titles")
@@ -45,8 +46,9 @@ class TaskSurfaceNotificationTest {
         val decoded = DeadlineSelectionKeyCodec.decode(encoded)
         assertNotNull(decoded, "Decoded key must not be null")
         assertEquals(key.token, decoded.token)
+        assertEquals(key.taskRef, decoded.taskRef)
         assertEquals(key.taskId, decoded.taskId)
-        assertEquals(key.deadline.date, decoded.deadline.date)
+        assertEquals(key.ownerUserId, decoded.ownerUserId)
         assertEquals(key.deadline.time, decoded.deadline.time)
         assertEquals(key.deadline.zone, decoded.deadline.zone)
         assertEquals(key.deadline.offsetSeconds, decoded.deadline.offsetSeconds)
@@ -67,12 +69,12 @@ class TaskSurfaceNotificationTest {
             anchorEpochMs = 1792227600000L,
             overdueEpochMs = 1792281600000L
         )
+        val taskRef = TaskRef("alice", "task-dateonly-1")
         val key = DeadlineSelectionKey(
             token = testToken,
-            taskId = "task-dateonly-1",
+            taskRef = taskRef,
             deadline = deadline
         )
-
         val encoded = DeadlineSelectionKeyCodec.encode(key)
         val decoded = DeadlineSelectionKeyCodec.decode(encoded)
 
@@ -90,17 +92,24 @@ class TaskSurfaceNotificationTest {
         assertNull(DeadlineSelectionKeyCodec.decode("not-versioned:acc=123"))
         assertNull(DeadlineSelectionKeyCodec.decode("v1:acc=123")) // missing required fields
         assertNull(DeadlineSelectionKeyCodec.decode("v1:acc=123&gen=not-a-number&tid=t1"))
+        assertNull(DeadlineSelectionKeyCodec.decode("v1:acc=123&gen=1&tid=t1&date=2026-10-16&zone=UTC&offset=0&anchorEpoch=1000&overdueEpoch=1000"), "Owner-less legacy key must be rejected")
     }
 
     @Test
     fun testTaskSurfaceIntentsRequestCodes() {
-        val code1 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 42L, "task1")
-        val code2 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 42L, "task2")
-        val code3 = TaskSurfaceIntents.getRequestCode("open", testAccountKey, 42L, "task1")
-        val code4 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 43L, "task1")
+        val ref1 = TaskRef("alice", "task1")
+        val ref2 = TaskRef("alice", "task2")
+        val refBobSameRow = TaskRef("bob", "task1")
+
+        val code1 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 42L, ref1)
+        val code2 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 42L, ref2)
+        val code3 = TaskSurfaceIntents.getRequestCode("open", testAccountKey, 42L, ref1)
+        val code4 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 43L, ref1)
+        val codeBob = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 42L, refBobSameRow)
 
         assertTrue(code1 >= 0, "Request code must be non-negative")
         assertNotEquals(code1, code2, "Different task IDs must yield different request codes")
+        assertNotEquals(code1, codeBob, "Different owners with colliding row IDs must yield different request codes")
         assertNotEquals(code1, code3, "Different operations must yield different request codes")
         assertNotEquals(code1, code4, "Different generations must yield different request codes")
     }
@@ -111,13 +120,14 @@ class TaskSurfaceNotificationTest {
         assertEquals("tabbyrush.task.surface", TaskSurfaceIntents.NOTIFICATION_TAG)
         assertEquals(4101, TaskSurfaceIntents.NOTIFICATION_ID)
         assertEquals("dev.tabbyrush.android.TASK_SURFACE", TaskSurfaceIntents.GROUP_KEY)
-        val code1 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 1L, "t1")
-        val code1Repeat = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 1L, "t1")
-        val code2 = TaskSurfaceIntents.getRequestCode("open", testAccountKey, 1L, "t1")
-        val code3 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 1L, "t2")
-        val code4 = TaskSurfaceIntents.getRequestCode("dismiss", testAccountKey, 1L, "t1", "receipt-1")
-        val code5 = TaskSurfaceIntents.getRequestCode("dismiss", testAccountKey, 1L, "t1", "receipt-2")
-
+        val ref1 = TaskRef("alice", "t1")
+        val ref2 = TaskRef("alice", "t2")
+        val code1 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 1L, ref1)
+        val code1Repeat = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 1L, ref1)
+        val code2 = TaskSurfaceIntents.getRequestCode("open", testAccountKey, 1L, ref1)
+        val code3 = TaskSurfaceIntents.getRequestCode("complete", testAccountKey, 1L, ref2)
+        val code4 = TaskSurfaceIntents.getRequestCode("dismiss", testAccountKey, 1L, ref1, "receipt-1")
+        val code5 = TaskSurfaceIntents.getRequestCode("dismiss", testAccountKey, 1L, ref1, "receipt-2")
         assertEquals(code1, code1Repeat)
         assertTrue(code1 >= 0)
         assertTrue(code2 >= 0)
@@ -149,7 +159,7 @@ class TaskSurfaceNotificationTest {
         )
 
         val scheduleConflict = PersistedTaskSchedule(
-            taskId = "task-conflict",
+            taskRef = TaskRef("alice", "task-conflict"),
             title = "Conflict Task",
             completed = false,
             isDeleted = false,
@@ -159,7 +169,7 @@ class TaskSurfaceNotificationTest {
             hasUnresolvedConflict = true
         )
         val scheduleNormal = PersistedTaskSchedule(
-            taskId = "task-normal",
+            taskRef = TaskRef("alice", "task-normal"),
             title = "Normal Task",
             completed = false,
             isDeleted = false,
@@ -168,7 +178,6 @@ class TaskSurfaceNotificationTest {
             scheduleToken = "tok-2",
             hasUnresolvedConflict = false
         )
-
         // At now = 500_000L, both upcoming. dlConflict is due earlier (1_000_000L < 2_000_000L)
         val selection = selectNextDeadline(listOf(scheduleConflict, scheduleNormal), nowEpochMs = 500_000L)
         assertNotNull(selection)
@@ -188,7 +197,7 @@ class TaskSurfaceNotificationTest {
             overdueEpochMs = 1_000_000L
         )
         val completedSchedule = PersistedTaskSchedule(
-            taskId = "t-comp",
+            taskRef = TaskRef("alice", "t-comp"),
             title = "Completed",
             completed = true,
             isDeleted = false,
@@ -198,7 +207,7 @@ class TaskSurfaceNotificationTest {
             hasUnresolvedConflict = false
         )
         val deletedSchedule = PersistedTaskSchedule(
-            taskId = "t-del",
+            taskRef = TaskRef("alice", "t-del"),
             title = "Deleted",
             completed = false,
             isDeleted = true,
@@ -207,7 +216,6 @@ class TaskSurfaceNotificationTest {
             scheduleToken = "tok-d",
             hasUnresolvedConflict = false
         )
-
         val selection = selectNextDeadline(listOf(completedSchedule, deletedSchedule), nowEpochMs = 500_000L)
         assertNull(selection, "Completed or deleted tasks must never be selected")
     }

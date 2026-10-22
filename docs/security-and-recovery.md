@@ -1,9 +1,9 @@
 # TabbyRush Security Model & Operational Disaster Recovery
 
-**Document Version**: 1.4.0
-**Last Updated**: 2026-10-20
-**Status**: Standard sync is current. A standalone Windows native-runtime smoke passed against disposable loopback services; this is not interactive UI or connected-Android acceptance. Live production migration and release remain unauthorized.
-**Related Documents**: [Standard Sync Design](./standard-sync-cutover-design.md) · [Deployment Guide](./deployment-guide.md) · [Release Acceptance](./release-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
+**Document Version**: 1.5.0
+**Last Updated**: 2026-10-21
+**Status**: Collaborative task assignees (version 1) and Room v5 delivered (Phases 01–08); dedicated smoke harnesses prepared in Phase 09. G0 policy validation confirmed 2026-10-21; G1–G6 runtime verification pending Main integration. Live production migration and release remain unauthorized.
+**Related Documents**: [Standard Sync Design](./standard-sync-cutover-design.md) · [Deployment Guide](./deployment-guide.md) · [Release Acceptance](./release-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ## 1. Security Architecture & Threat Model
 
@@ -31,10 +31,19 @@ TabbyRush uses ordinary Hub registration and the standard `/api/v1/sync/{app_id}
 - The client preserves raw unknown JSON and merges only fields named by a valid explicit intent mask.
 - Ambiguous legacy intent is not safe to replay automatically. Require user review; do not fall back to reapplying every known field.
 - A full scan starts from a null checkpoint every round/reconnect. Stale scan staging is discarded after restart; an incomplete scan is not deletion proof.
-- Only an explicit accepted `(tableName,rowId,version)` tuple confirms a submitted version. A matching pull is convergence, not operation receipt evidence.
+- Only an explicit accepted `(ownerUserId, tableName, rowId, version)` tuple confirms a submitted version. A matching pull is convergence, not operation receipt evidence.
 - Body size is bounded by 256 KiB serialized bytes before freeze. A known individually oversized record is marked actionable/conflicted without sending that record; it is not an uncertain network result.
 - Standard sync does not provide strict exact-revision CAS, server-enforced hierarchy, permanent tombstones, or transactional group writes.
 
+### 2.1 Collaborative Access Security, Revocation Purge & Privacy
+
+For apps opting into task collaboration (`assignmentPolicy` version 1):
+- **Whole-App Capability Cutoff (HTTP 426)**: Sync requests lacking `collaborationVersion: 1` fail closed before processing mutations or reading content, preventing data corruption by un-migrated clients.
+- **Single App-Wide Transaction Guard**: Opted-in operations run within a MongoDB replica-set transaction against an app-scoped document in `_sync_assignment_fences`. Any change affecting visibility increments `accessRevision`.
+- **Child-Only Privacy**: Direct child assignment grants require an internally live root parent with identical canonical owner on the server. Child-only assignees receive only their assigned child task; private parent roots and sibling tasks are strictly omitted from response bodies and Room storage.
+- **Privacy-First Revocation Purge**: Upon authoritative access revocation, the active task projection is removed, reminders are cancelled, and active `server_base`, `editor_drafts`, and pending `outbox` records for the task are permanently purged from SQLite storage.
+- **Content-Free Non-Replayable Evidence**: `access_loss_evidence` retains only identity, opId, base/submitted version, timestamps, and reason (`REVOCATION`). Zero task title, deadline, description, or payload content is retained. Regrant fetches fresh server state without resurrecting or auto-replaying purged unsent edits.
+- **Two-Stage Legacy Binding**: SQLite `MIGRATION_4_5` preserves legacy rows with `ownerBinding = LOCAL_ACCOUNT` and nullable `ownerUserId`. During store initialization, restored `AccountIdentity` must match `AccountKey.create(origin, userId)` before legacy rows can be bound and dispatched to network sync.
 Schema editing uses `expectedSchemaVersion`. An effective no-op does not increment the counter; a stale changed edit must not overwrite current state. Admin UI stale-save behavior preserves the draft and exposes current schema read-only. Hub schema updates do not generate native UI, Kotlin fields, or Room migrations.
 
 ## 3. Standard Conversion Operator Recovery

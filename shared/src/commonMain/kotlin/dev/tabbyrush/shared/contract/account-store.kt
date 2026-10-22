@@ -6,8 +6,10 @@ interface AccountStore {
     val accountKey: AccountKey
 
     suspend fun loadTodos(): List<Todo>
-    suspend fun saveTodoLocally(todo: Todo)
-    suspend fun deleteTodoLocally(id: String)
+    suspend fun getTodo(taskRef: TaskRef): Todo?
+    suspend fun saveTodoLocally(todo: Todo): TaskMutationResult
+    suspend fun deleteTodoLocally(taskRef: TaskRef): TaskMutationResult
+    suspend fun assignTaskLocally(intent: AssignmentIntent): AssignmentSlotResult
     suspend fun reconcileAccepted(opId: String, serverRevision: Long)
     suspend fun wipeLocalData()
     fun close()
@@ -15,7 +17,7 @@ interface AccountStore {
     suspend fun getPersistedScheduleProjection(): List<PersistedTaskSchedule>
     fun observePersistedSchedule(): Flow<List<PersistedTaskSchedule>>
     fun observeTodos(): Flow<List<Todo>>
-    suspend fun setCompletedLocally(id: String, completed: Boolean, nowEpochMs: Long): CompletionChange
+    suspend fun setCompletedLocally(taskRef: TaskRef, completed: Boolean, nowEpochMs: Long): CompletionChange
 }
 
 interface AccountStoreFactory {

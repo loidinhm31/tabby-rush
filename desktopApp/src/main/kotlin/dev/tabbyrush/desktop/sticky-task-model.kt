@@ -6,8 +6,10 @@ import dev.tabbyrush.shared.contract.SurfaceReadiness
 import dev.tabbyrush.shared.contract.TaskDeadlinePresentation
 import dev.tabbyrush.shared.contract.TaskHierarchyProjector
 import dev.tabbyrush.shared.contract.TaskSections
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.TodoFilter
+
 data class StickyQuickAddState(
     val rawTitle: String = "",
     val error: String? = null,
@@ -21,6 +23,7 @@ data class StickyTaskItem(
     val isChild: Boolean,
     val childCount: Int = 0,
     val completedChildCount: Int = 0,
+    val isChildOnly: Boolean = false,
     val deadlinePresentation: DeadlinePresentation? = null
 )
 
@@ -58,9 +61,10 @@ fun projectStickyItems(
             todo = item.todo,
             effectiveCompleted = item.effectiveCompleted,
             hasLiveChildren = item.hasLiveChildren,
-            isChild = item.depth > 0,
+            isChild = !item.isChildOnly && item.depth > 0,
             childCount = item.childCount,
             completedChildCount = item.completedChildCount,
+            isChildOnly = item.isChildOnly,
             deadlinePresentation = deadlinePres
         )
     }
@@ -84,7 +88,7 @@ sealed interface StickyTaskAction {
     data class Submit(val token: SurfaceAccountToken) : StickyTaskAction
     data class SetCompleted(
         val token: SurfaceAccountToken,
-        val taskId: String,
+        val taskRef: TaskRef,
         val completed: Boolean
     ) : StickyTaskAction
     data object RefreshDeadlines : StickyTaskAction

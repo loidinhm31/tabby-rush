@@ -21,6 +21,11 @@ data class AccessRequestInfo(
     val updatedAt: Long
 )
 
+data class UserLookupResult(
+    val userId: String,
+    val username: String
+)
+
 interface AuthSession {
     val state: StateFlow<AuthState>
     val currentIdentity: StateFlow<AccountIdentity?>
@@ -31,6 +36,7 @@ interface AuthSession {
     suspend fun refresh(): ApiResult<Unit>
     suspend fun checkAccess(): ApiResult<AccessRequestInfo?>
     suspend fun requestAccess(message: String? = null): ApiResult<AccessRequestInfo>
+    suspend fun lookupUser(username: String): ApiResult<UserLookupResult>
     suspend fun logout()
     fun close()
 }

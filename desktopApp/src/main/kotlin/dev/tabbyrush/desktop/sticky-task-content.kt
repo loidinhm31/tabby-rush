@@ -68,6 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.tabbyrush.shared.contract.SurfaceAccountToken
 import dev.tabbyrush.shared.contract.SurfaceReadiness
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.theme.TabbyRushTheme
 import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
 
@@ -405,13 +406,13 @@ private fun ReadyStickyContent(
         // Single scrollable column: Incomplete then Completed whole compact groups
         val incomplete = state.projectedSections.incomplete
         val completed = state.projectedSections.completed
-        var expandedParentIds by remember(token) { mutableStateOf(emptySet<String>()) }
+        var expandedParentRefs by remember(token) { mutableStateOf(emptySet<TaskRef>()) }
 
-        val visibleIncomplete = remember(incomplete, expandedParentIds) {
-            incomplete.filterNot { it.isChild && it.todo.parentTaskId != null && !expandedParentIds.contains(it.todo.parentTaskId) }
+        val visibleIncomplete = remember(incomplete, expandedParentRefs) {
+            incomplete.filterNot { it.isChild && it.todo.parentTaskRef != null && !expandedParentRefs.contains(it.todo.parentTaskRef) }
         }
-        val visibleCompleted = remember(completed, expandedParentIds) {
-            completed.filterNot { it.isChild && it.todo.parentTaskId != null && !expandedParentIds.contains(it.todo.parentTaskId) }
+        val visibleCompleted = remember(completed, expandedParentRefs) {
+            completed.filterNot { it.isChild && it.todo.parentTaskRef != null && !expandedParentRefs.contains(it.todo.parentTaskRef) }
         }
         if (incomplete.isEmpty() && completed.isEmpty()) {
             Box(
@@ -438,23 +439,23 @@ private fun ReadyStickyContent(
 
                     items(
                         items = visibleIncomplete,
-                        key = { "inc_${it.todo.id}" }
+                        key = { "inc_${it.todo.taskRef.ownerUserId}_${it.todo.taskRef.rowId}" }
                     ) { item ->
-                        val isCollapsed = !expandedParentIds.contains(item.todo.id)
+                        val isCollapsed = !expandedParentRefs.contains(item.todo.taskRef)
                         CompactTaskRow(
                             item = item,
                             isCollapsed = isCollapsed,
                             onToggleExpand = if (item.hasLiveChildren) {
                                 {
-                                    expandedParentIds = if (isCollapsed) {
-                                        expandedParentIds + item.todo.id
+                                    expandedParentRefs = if (isCollapsed) {
+                                        expandedParentRefs + item.todo.taskRef
                                     } else {
-                                        expandedParentIds - item.todo.id
+                                        expandedParentRefs - item.todo.taskRef
                                     }
                                 }
                             } else null,
                             onToggle = { desired ->
-                                onAction(StickyTaskAction.SetCompleted(token, item.todo.id, desired))
+                                onAction(StickyTaskAction.SetCompleted(token, item.todo.taskRef, desired))
                             }
                         )
                     }
@@ -470,23 +471,23 @@ private fun ReadyStickyContent(
 
                     items(
                         items = visibleCompleted,
-                        key = { "comp_${it.todo.id}" }
+                        key = { "comp_${it.todo.taskRef.ownerUserId}_${it.todo.taskRef.rowId}" }
                     ) { item ->
-                        val isCollapsed = !expandedParentIds.contains(item.todo.id)
+                        val isCollapsed = !expandedParentRefs.contains(item.todo.taskRef)
                         CompactTaskRow(
                             item = item,
                             isCollapsed = isCollapsed,
                             onToggleExpand = if (item.hasLiveChildren) {
                                 {
-                                    expandedParentIds = if (isCollapsed) {
-                                        expandedParentIds + item.todo.id
+                                    expandedParentRefs = if (isCollapsed) {
+                                        expandedParentRefs + item.todo.taskRef
                                     } else {
-                                        expandedParentIds - item.todo.id
+                                        expandedParentRefs - item.todo.taskRef
                                     }
                                 }
                             } else null,
                             onToggle = { desired ->
-                                onAction(StickyTaskAction.SetCompleted(token, item.todo.id, desired))
+                                onAction(StickyTaskAction.SetCompleted(token, item.todo.taskRef, desired))
                             }
                         )
                     }
@@ -516,8 +517,8 @@ private fun CompactTaskRow(
 ) {
     val todo = item.todo
     val isCompleted = item.effectiveCompleted
+    val canEdit = item.todo.accessState?.canEditContent ?: true
     val startPadding = if (item.isChild) 12.dp else 0.dp
-
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -589,10 +590,12 @@ private fun CompactTaskRow(
             } else {
                 Checkbox(
                     checked = isCompleted,
-                    onCheckedChange = { checked -> onToggle(checked) },
+                    onCheckedChange = if (canEdit) { { checked -> onToggle(checked) } } else null,
+                    enabled = canEdit,
                     colors = CheckboxDefaults.colors(
                         checkedColor = TabbyRushPrimary,
-                        uncheckedColor = TabbyRushThemeTokens.customColors.outline
+                        uncheckedColor = TabbyRushThemeTokens.customColors.outline,
+                        disabledColor = if (isCompleted) TabbyRushPrimary.copy(alpha = 0.5f) else TabbyRushThemeTokens.customColors.outline.copy(alpha = 0.5f)
                     ),
                     modifier = Modifier
                         .size(22.dp)

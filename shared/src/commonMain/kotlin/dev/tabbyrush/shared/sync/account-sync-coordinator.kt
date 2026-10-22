@@ -2,8 +2,10 @@ package dev.tabbyrush.shared.sync
 
 import dev.tabbyrush.shared.auth.HubAuthSession
 import dev.tabbyrush.shared.contract.*
+import dev.tabbyrush.shared.data.BINDING_LOCAL_ACCOUNT
 import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.RoomAccountStore
+import dev.tabbyrush.shared.data.boundBindingKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +17,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject
 import kotlin.random.Random
 
-/** Account/generation-fenced ordinary sync. Delta is explicitly not treated as atomic. */
+/**
+ * Account/generation-fenced ordinary sync coordinator.
+ * Delta is explicitly not treated as batch atomic.
+ * Coordinates full scan, outbox dispatch, and TaskRef-based conflict resolution.
+ */
 class AccountSyncCoordinator(
     val store: RoomAccountStore,
     val session: HubAuthSession,
@@ -42,17 +48,19 @@ class AccountSyncCoordinator(
         }
         _progress.value = _progress.value.copy(status = SyncStatus.SYNCING, safeError = null)
         store.recoverInterruptedDispatches()
-        // No trustworthy retention horizon: discard prior staging and scan from null before every round's writes.
+
+        // Discard prior staging and scan from null before every round's writes.
         if (!catchUp(generation, full = true)) return
         LegacyStandardIntentMigration(store).translateAfterCompletedScan()
         val reconciliation = OutboxReconciliation(store)
         reconciliation.reconcileUncertain()
         reconcileLateChildren()
         if (fenced(generation)) return
+
         val pull = pullRequest()
         val batch = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch(), pull)
         if (batch.isNotEmpty()) {
-            val request = DeltaRequestDto(PushRequestDto(batch.map(reconciliation::toDto)), pull)
+            val request = DeltaRequestDto(PushRequestDto(batch.map(reconciliation::toDto), collaborationVersion = COLLABORATION_VERSION_1), pull)
             if (fenced(generation)) {
                 if (!store.isFrozen) reconciliation.markBatchUncertain(batch, "Account changed before dispatch; frozen intent retained")
                 return
@@ -83,13 +91,13 @@ class AccountSyncCoordinator(
                     val push = result.value.push
                     if (push == null) reconciliation.markBatchUncertain(batch, "Delta omitted push result")
                     else reconciliation.reconcilePushResults(batch, push)
-                    val pull = result.value.pull
-                    if (pull != null && !applyIncremental(pull, request.pull?.checkpoint, generation)) return
+                    val pullResult = result.value.pull
+                    if (pullResult != null && !applyIncremental(pullResult, request.pull?.checkpoint, generation)) return
                     if (result.value.pullError != null || result.value.pushError != null) {
                         fail(SafeError.ProtocolIncompatible("INVALID_DELTA_PART", result.value.pullError ?: requireNotNull(result.value.pushError)))
                         return
                     }
-                    if ((pull == null || pull.hasMore) && !catchUp(generation, full = false)) return
+                    if ((pullResult == null || pullResult.hasMore) && !catchUp(generation, full = false)) return
                 }
             }
             reconciliation.reconcileUncertain()
@@ -101,7 +109,11 @@ class AccountSyncCoordinator(
     private suspend fun pullRequest(): PullRequestDto {
         val meta = store.dao.getMeta()
         val checkpoint = meta?.checkpointUpdatedAt?.let { SyncCheckpointDto(it, requireNotNull(meta.checkpointId)) }
-        return PullRequestDto(checkpoint)
+        return PullRequestDto(
+            checkpoint = checkpoint,
+            tables = listOf("todos", ASSIGNMENT_TABLE_NAME),
+            collaborationVersion = COLLABORATION_VERSION_1
+        )
     }
 
     private suspend fun catchUp(generation: Long, full: Boolean): Boolean {
@@ -112,7 +124,7 @@ class AccountSyncCoordinator(
                 is ApiResult.Success -> Unit
             }
         }
-        // A standard scan is not a snapshot. Drain updates after its final checkpoint before reconciling/replay.
+        // Drain updates after final checkpoint before reconciling/replay.
         repeat(1000) {
             if (fenced(generation)) return false
             val request = pullRequest()
@@ -135,8 +147,15 @@ class AccountSyncCoordinator(
             val projected = response.records.map(TaskJsonMerge::project)
             store.withMutationLock {
                 check(!fenced(generation))
-                store.dao.commitPageAtomic(projected, response.checkpoint.updatedAt, response.checkpoint.id,
-                    response.schemaVersion, null, response.hasMore, System.currentTimeMillis())
+                store.dao.commitPageAtomic(
+                    projected,
+                    response.checkpoint.updatedAt,
+                    response.checkpoint.id,
+                    response.schemaVersion,
+                    null,
+                    response.hasMore,
+                    System.currentTimeMillis()
+                )
             }
             true
         } catch (cancelled: CancellationException) {
@@ -150,10 +169,12 @@ class AccountSyncCoordinator(
     private suspend fun reconcileLateChildren() {
         val bases = store.dao.getAllServerBase()
         val deletedParents = bases.filter { it.deleted && it.parentTaskId == null }.map { it.rowId }.toSet()
-        for (child in store.loadAllTodos(includeDeleted = false).filter { it.parentTaskId in deletedParents }) {
+        for (child in store.loadAllTodos(includeDeleted = false).filter { it.parentTaskRef?.rowId in deletedParents }) {
             val ops = store.dao.getOutboxByRowId(child.id)
             if (ops.any { it.kind == "delete" || it.deliveryState != OutboxEntity.STATE_PENDING }) continue
-            store.deleteTodoLocally(child.id)
+            store.withMutationLock {
+                store.deleteTodoLocally(child.taskRef)
+            }
         }
     }
 
@@ -163,70 +184,162 @@ class AccountSyncCoordinator(
         val conflicts = store.dao.countOutboxByState(OutboxEntity.STATE_CONFLICT) + store.dao.countOutboxByState(OutboxEntity.STATE_REVIEW)
         val incompatible = store.dao.getAllServerBase().any { !it.deleted && it.projectionError != null }
         val meta = store.dao.getMeta()
-        _progress.value = SyncProgress(pending, uncertain, conflicts, when {
-            conflicts > 0 || incompatible -> SyncStatus.PAUSED_CONFLICT
-            uncertain > 0 -> SyncStatus.UNCERTAIN
-            else -> SyncStatus.IDLE
-        }, meta?.lastCompletedCatchUpEpochMs,
-            if (incompatible) SafeError.Validation("REMOTE_PROJECTION", "Remote task data needs a compatible client; raw records retained") else null)
+        _progress.value = SyncProgress(
+            pendingCount = pending,
+            uncertainCount = uncertain,
+            conflictCount = conflicts,
+            status = when {
+                conflicts > 0 || incompatible -> SyncStatus.PAUSED_CONFLICT
+                uncertain > 0 -> SyncStatus.UNCERTAIN
+                else -> SyncStatus.IDLE
+            },
+            lastSyncTime = meta?.lastCompletedCatchUpEpochMs,
+            safeError = if (incompatible) SafeError.Validation("REMOTE_PROJECTION", "Remote task data needs a compatible client; raw records retained") else null
+        )
     }
 
     private fun fail(error: SafeError) {
-        _progress.value = _progress.value.copy(status = when (error) {
-            is SafeError.ProtocolIncompatible -> SyncStatus.PAUSED_PROTOCOL
-            is SafeError.Conflict -> SyncStatus.PAUSED_CONFLICT
-            is SafeError.UncertainOutcome -> SyncStatus.UNCERTAIN
-            else -> SyncStatus.IDLE
-        }, safeError = error)
+        _progress.value = _progress.value.copy(
+            status = when (error) {
+                is SafeError.ProtocolIncompatible, is SafeError.CollaborationRequired -> SyncStatus.PAUSED_PROTOCOL
+                is SafeError.Conflict -> SyncStatus.PAUSED_CONFLICT
+                is SafeError.UncertainOutcome -> SyncStatus.UNCERTAIN
+                else -> SyncStatus.IDLE
+            },
+            safeError = error
+        )
     }
 
-    override suspend fun discardConflict(rowId: String): Unit = coordinatorMutex.withLock {
+    override suspend fun discardConflict(taskRef: TaskRef): Unit = coordinatorMutex.withLock {
         store.withMutationLock {
-            val op = reviewHead(rowId) ?: return@withMutationLock
-            store.dao.discardConflictAtomic(op.opId, rowId, op.localRevision)
+            val boundKey = boundBindingKey(taskRef.ownerUserId)
+            val conflictOps = (store.dao.getOutboxByRow(boundKey, "todos", taskRef.rowId) +
+                    store.dao.getOutboxByRow(boundKey, ASSIGNMENT_TABLE_NAME, taskRef.rowId) +
+                    store.dao.getOutboxByRowId(taskRef.rowId).filter { it.ownerUserId == taskRef.ownerUserId &&
+                        (it.tableName == "todos" || it.tableName == ASSIGNMENT_TABLE_NAME) })
+                .distinctBy { it.opId }
+                .filter { it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW }
+            if (conflictOps.isEmpty()) {
+                val head = reviewHead(taskRef)
+                if (head != null) {
+                    store.dao.discardConflictAtomic(head.opId, taskRef.rowId, head.localRevision)
+                }
+            } else {
+                for (op in conflictOps) {
+                    store.dao.discardConflictAtomic(op.opId, taskRef.rowId, op.localRevision)
+                }
+            }
         }
         refreshProgressState()
     }
 
-    override suspend fun reapplyConflict(rowId: String): Unit = coordinatorMutex.withLock {
+    override suspend fun reapplyConflict(taskRef: TaskRef): Unit = coordinatorMutex.withLock {
         val generation = currentGeneration
         if (!catchUp(generation, full = true)) return@withLock
         var rejection: SafeError? = null
         store.withMutationLock {
-            val op = reviewHead(rowId) ?: return@withMutationLock
-            val base = store.dao.getServerBase(rowId)
-            if (base == null || base.deleted || !base.standardConfirmed || base.projectionError != null) {
+            val op = reviewHead(taskRef) ?: return@withMutationLock
+            if (op.tableName == ASSIGNMENT_TABLE_NAME) {
+                val taskBase = store.dao.getServerBase(op.bindingKey, "todos", taskRef.rowId)
+                    ?: store.dao.getServerBase(dev.tabbyrush.shared.data.BINDING_LOCAL_ACCOUNT, "todos", taskRef.rowId)
+                if (taskBase == null || taskBase.deleted) {
+                    fail(SafeError.Validation("REMOTE_MISSING", "Cannot assign missing/invalid task; discard or copy as a new root"))
+                    return@withMutationLock
+                }
+                val access = store.accessForLocked(taskRef)
+                val canManage = taskRef.ownerUserId == store.userId || access?.capabilities?.manageAssignment == true
+                if (!canManage) {
+                    fail(SafeError.OperationForbidden(message = "Cannot manage assignment for this task", taskRef = taskRef))
+                    return@withMutationLock
+                }
+                val currentSlot = store.dao.getServerBase(op.bindingKey, ASSIGNMENT_TABLE_NAME, taskRef.rowId)
+                val currentSlotVersion = currentSlot?.serverRevision ?: 0L
+                store.dao.replaceOutboxAtomic(
+                    op.opId,
+                    op.copy(
+                        opId = newId(),
+                        deliveryState = OutboxEntity.STATE_PENDING,
+                        envelopeJson = null,
+                        version = currentSlotVersion + 1L,
+                        assumedServerVersion = currentSlotVersion,
+                        legacyEvidenceId = null,
+                        dispatchHistory = "NEVER_DISPATCHED",
+                        errorMessage = null,
+                        resolution = "EXPLICIT_REAPPLY"
+                    )
+                )
+                return@withMutationLock
+            }
+            val base = store.dao.getServerBase(op.bindingKey, op.tableName, taskRef.rowId)
+            if (base == null || base.deleted) {
                 fail(SafeError.Validation("REMOTE_MISSING", "Cannot recreate missing/invalid task; discard or copy as a new root"))
                 return@withMutationLock
             }
-            if (op.parentTaskId != null && store.dao.getServerBase(op.parentTaskId)?.let { it.standardConfirmed && !it.deleted && it.parentTaskId == null } != true) {
-                fail(SafeError.Validation("PARENT_MISSING", "Parent unavailable; copy as a new root or discard"))
-                return@withMutationLock
+            if (op.parentTaskId != null) {
+                val parentBase = store.dao.getServerBase(op.bindingKey, op.tableName, op.parentTaskId)
+                if (parentBase == null || parentBase.deleted) {
+                    fail(SafeError.Validation("PARENT_MISSING", "Parent unavailable; copy as a new root or discard"))
+                    return@withMutationLock
+                }
             }
             val mask = op.intentMask?.takeIf { parts -> parts.split('|').all { it in TaskJsonMerge.masks } }
             if (mask == null) {
-                rejection = SafeError.Validation("UNKNOWN_LOCAL_INTENT",
-                    "Changed fields cannot be established for this retained edit; discard it or copy the local version as a new root")
+                rejection = SafeError.Validation(
+                    "UNKNOWN_LOCAL_INTENT",
+                    "Changed fields cannot be established for this retained edit; discard it or copy the local version as a new root"
+                )
                 return@withMutationLock
             }
-            val payload = TaskJsonMerge.merge(TaskJsonMerge.json.parseToJsonElement(requireNotNull(base.rawJson)).jsonObject, op.intentJson(), mask)
-            if (op.kind != "delete") TaskJsonMerge.decode(rowId, payload)
-            store.dao.replaceOutboxAtomic(op.opId, op.copy(opId = newId(), deliveryState = OutboxEntity.STATE_PENDING,
-                payloadJson = op.intentJson().toString(), intentMask = mask, envelopeJson = null, version = null,
-                assumedServerVersion = null, legacyEvidenceId = null, dispatchHistory = "NEVER_DISPATCHED",
-                errorMessage = null, resolution = "EXPLICIT_REAPPLY", kind = if (op.kind == "delete") "delete" else "update"))
+            val payload = TaskJsonMerge.merge(TaskJsonMerge.json.parseToJsonElement(base.rawJson ?: "{}").jsonObject, op.intentJson(), mask)
+            if (op.kind != "delete") TaskJsonMerge.decode(taskRef.rowId, payload)
+            store.dao.replaceOutboxAtomic(
+                op.opId,
+                op.copy(
+                    opId = newId(),
+                    deliveryState = OutboxEntity.STATE_PENDING,
+                    payloadJson = op.intentJson().toString(),
+                    intentMask = mask,
+                    envelopeJson = null,
+                    version = null,
+                    assumedServerVersion = null,
+                    legacyEvidenceId = null,
+                    dispatchHistory = "NEVER_DISPATCHED",
+                    errorMessage = null,
+                    resolution = "EXPLICIT_REAPPLY",
+                    kind = if (op.kind == "delete") "delete" else "update"
+                )
+            )
         }
         refreshProgressState()
         rejection?.let(::fail)
     }
 
-    override suspend fun copyAsNew(rowId: String): Unit = coordinatorMutex.withLock {
-        store.copyLatestConflictAsNew(rowId)
+    override suspend fun copyAsNew(taskRef: TaskRef): Unit = coordinatorMutex.withLock {
+        store.copyLatestConflictAsNew(taskRef)
         refreshProgressState()
     }
 
-    private suspend fun reviewHead(rowId: String): OutboxEntity? = store.dao.getOutboxByRowId(rowId).firstOrNull()?.takeIf {
-        it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW
+    private suspend fun reviewHead(taskRef: TaskRef): OutboxEntity? {
+        val boundKey = boundBindingKey(taskRef.ownerUserId)
+        val todoOps = store.dao.getOutboxByRow(boundKey, "todos", taskRef.rowId)
+        val assignOps = store.dao.getOutboxByRow(boundKey, ASSIGNMENT_TABLE_NAME, taskRef.rowId)
+        val ops = if (todoOps.any { it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW }) {
+            todoOps
+        } else if (assignOps.any { it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW }) {
+            assignOps
+        } else if (todoOps.isNotEmpty()) {
+            todoOps
+        } else {
+            assignOps
+        }
+        val activeOps = if (ops.isEmpty()) {
+            store.dao.getOutboxByRowId(taskRef.rowId).filter { it.ownerUserId == taskRef.ownerUserId }
+        } else {
+            ops
+        }
+        return activeOps.firstOrNull()?.takeIf {
+            it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW
+        }
     }
 
     override suspend fun requestLeave(): Boolean = coordinatorMutex.withLock { leaveProtocolProvider?.invoke()?.executeLeave() ?: false }

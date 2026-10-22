@@ -7,12 +7,15 @@ import kotlin.test.assertTrue
 
 class TaskHierarchyProjectorTest {
 
+    private val owner = "user-1"
+    private fun ref(id: String) = TaskRef(owner, id)
+
     @Test
     fun testEncounterOrderAndDepth() {
-        val r1 = Todo(id = "root-1", title = "Root 1", completed = false, createdAt = 1000L)
-        val r2 = Todo(id = "root-2", title = "Root 2", completed = false, createdAt = 2000L)
-        val c1 = Todo(id = "child-1", title = "Child 1", completed = false, createdAt = 1100L, parentTaskId = "root-1")
-        val c2 = Todo(id = "child-2", title = "Child 2", completed = false, createdAt = 1200L, parentTaskId = "root-1")
+        val r1 = Todo(taskRef = ref("root-1"), title = "Root 1", completed = false, createdAt = 1000L)
+        val r2 = Todo(taskRef = ref("root-2"), title = "Root 2", completed = false, createdAt = 2000L)
+        val c1 = Todo(taskRef = ref("child-1"), title = "Child 1", completed = false, createdAt = 1100L, parentTaskRef = ref("root-1"))
+        val c2 = Todo(taskRef = ref("child-2"), title = "Child 2", completed = false, createdAt = 1200L, parentTaskRef = ref("root-1"))
 
         val snapshot = TaskHierarchyProjector.projectHierarchy(listOf(r1, r2, c1, c2), TodoFilter.ALL)
         val items = snapshot.items
@@ -40,27 +43,27 @@ class TaskHierarchyProjectorTest {
 
     @Test
     fun testEffectiveCompletionDerivation() {
-        val rootId = "root-1"
-        // Root has raw completed = false, but both children completed -> effective = true
-        val root = Todo(id = rootId, title = "Root", completed = false, createdAt = 1000L)
-        val c1 = Todo(id = "c1", title = "C1", completed = true, createdAt = 1100L, parentTaskId = rootId)
-        val c2 = Todo(id = "c2", title = "C2", completed = true, createdAt = 1200L, parentTaskId = rootId)
+        val rootRef = ref("root-1")
+        // Root has raw completed = false, but both children completed -> effective = true (under default FullGroup)
+        val root = Todo(taskRef = rootRef, title = "Root", completed = false, createdAt = 1000L)
+        val c1 = Todo(taskRef = ref("c1"), title = "C1", completed = true, createdAt = 1100L, parentTaskRef = rootRef)
+        val c2 = Todo(taskRef = ref("c2"), title = "C2", completed = true, createdAt = 1200L, parentTaskRef = rootRef)
 
         val snapshot = TaskHierarchyProjector.projectHierarchy(listOf(root, c1, c2), TodoFilter.ALL)
-        val rootItem = snapshot.items.first { it.todo.id == rootId }
+        val rootItem = snapshot.items.first { it.todo.taskRef == rootRef }
         assertTrue(rootItem.effectiveCompleted, "Parent with all completed children must be effectively completed")
 
         // Add one incomplete child -> parent becomes effectively incomplete
-        val c3 = Todo(id = "c3", title = "C3", completed = false, createdAt = 1300L, parentTaskId = rootId)
+        val c3 = Todo(taskRef = ref("c3"), title = "C3", completed = false, createdAt = 1300L, parentTaskRef = rootRef)
         val snapshot2 = TaskHierarchyProjector.projectHierarchy(listOf(root, c1, c2, c3), TodoFilter.ALL)
-        val rootItem2 = snapshot2.items.first { it.todo.id == rootId }
+        val rootItem2 = snapshot2.items.first { it.todo.taskRef == rootRef }
         assertFalse(rootItem2.effectiveCompleted, "Parent with any active child must be effectively active")
     }
 
     @Test
     fun testStandaloneRootEffectiveCompletion() {
-        val activeRoot = Todo(id = "r-active", title = "Active Root", completed = false, createdAt = 1000L)
-        val completedRoot = Todo(id = "r-comp", title = "Completed Root", completed = true, createdAt = 2000L)
+        val activeRoot = Todo(taskRef = ref("r-active"), title = "Active Root", completed = false, createdAt = 1000L)
+        val completedRoot = Todo(taskRef = ref("r-comp"), title = "Completed Root", completed = true, createdAt = 2000L)
 
         val snapshot = TaskHierarchyProjector.projectHierarchy(listOf(activeRoot, completedRoot), TodoFilter.ALL)
         val activeItem = snapshot.items.first { it.todo.id == "r-active" }
@@ -73,11 +76,11 @@ class TaskHierarchyProjectorTest {
     @Test
     fun testFilteringAndContextOnlyParent() {
         // Mixed group: Root R has active C1 and completed C2. R is effectively active.
-        val rId = "r1"
-        val root = Todo(id = rId, title = "Parent", completed = false, createdAt = 1000L)
-        val c1Active = Todo(id = "c1", title = "Child 1 Active", completed = false, createdAt = 1100L, parentTaskId = rId)
-        val c2Completed = Todo(id = "c2", title = "Child 2 Completed", completed = true, createdAt = 1200L, parentTaskId = rId)
-        val standaloneCompleted = Todo(id = "r-done", title = "Standalone Done", completed = true, createdAt = 900L)
+        val rRef = ref("r1")
+        val root = Todo(taskRef = rRef, title = "Parent", completed = false, createdAt = 1000L)
+        val c1Active = Todo(taskRef = ref("c1"), title = "Child 1 Active", completed = false, createdAt = 1100L, parentTaskRef = rRef)
+        val c2Completed = Todo(taskRef = ref("c2"), title = "Child 2 Completed", completed = true, createdAt = 1200L, parentTaskRef = rRef)
+        val standaloneCompleted = Todo(taskRef = ref("r-done"), title = "Standalone Done", completed = true, createdAt = 900L)
 
         val allTodos = listOf(root, c1Active, c2Completed, standaloneCompleted)
 
@@ -105,11 +108,11 @@ class TaskHierarchyProjectorTest {
     fun testMetricsCountsExcludesContextRows() {
         // Root R has active C1 and completed C2. Standalone completed R2.
         // Real tasks: R (active), C1 (active), C2 (completed), R2 (completed) -> total = 4, active = 2, completed = 2
-        val rId = "r1"
-        val root = Todo(id = rId, title = "Parent", completed = false, createdAt = 1000L)
-        val c1Active = Todo(id = "c1", title = "Child 1 Active", completed = false, createdAt = 1100L, parentTaskId = rId)
-        val c2Completed = Todo(id = "c2", title = "Child 2 Completed", completed = true, createdAt = 1200L, parentTaskId = rId)
-        val standaloneCompleted = Todo(id = "r-done", title = "Standalone Done", completed = true, createdAt = 900L)
+        val rRef = ref("r1")
+        val root = Todo(taskRef = rRef, title = "Parent", completed = false, createdAt = 1000L)
+        val c1Active = Todo(taskRef = ref("c1"), title = "Child 1 Active", completed = false, createdAt = 1100L, parentTaskRef = rRef)
+        val c2Completed = Todo(taskRef = ref("c2"), title = "Child 2 Completed", completed = true, createdAt = 1200L, parentTaskRef = rRef)
+        val standaloneCompleted = Todo(taskRef = ref("r-done"), title = "Standalone Done", completed = true, createdAt = 900L)
 
         val allTodos = listOf(root, c1Active, c2Completed, standaloneCompleted)
 
@@ -127,9 +130,9 @@ class TaskHierarchyProjectorTest {
 
     @Test
     fun testAncestorDeletionDominance() {
-        val rootId = "deleted-root"
-        val deletedRoot = Todo(id = rootId, title = "Deleted Root", completed = false, createdAt = 1000L, isDeleted = true)
-        val child = Todo(id = "child", title = "Child", completed = false, createdAt = 1100L, parentTaskId = rootId)
+        val rootRef = ref("deleted-root")
+        val deletedRoot = Todo(taskRef = rootRef, title = "Deleted Root", completed = false, createdAt = 1000L, isDeleted = true)
+        val child = Todo(taskRef = ref("child"), title = "Child", completed = false, createdAt = 1100L, parentTaskRef = rootRef)
 
         val snapshot = TaskHierarchyProjector.projectHierarchy(listOf(deletedRoot, child), TodoFilter.ALL)
         assertTrue(snapshot.items.isEmpty(), "Child of deleted root must be suppressed")
@@ -138,7 +141,7 @@ class TaskHierarchyProjectorTest {
 
     @Test
     fun testMissingParentHandling() {
-        val orphan = Todo(id = "orphan", title = "Orphan Child", completed = false, createdAt = 1000L, parentTaskId = "non-existent")
+        val orphan = Todo(taskRef = ref("orphan"), title = "Orphan Child", completed = false, createdAt = 1000L, parentTaskRef = ref("non-existent"))
 
         val snapshot = TaskHierarchyProjector.projectHierarchy(listOf(orphan), TodoFilter.ALL)
         assertTrue(snapshot.items.isEmpty(), "Orphan child with missing parent must not be in normal items")
@@ -152,14 +155,14 @@ class TaskHierarchyProjectorTest {
         // Mixed group: R1 (incomplete root) + C1 (active) + C2 (completed)
         // Fully complete group: R2 + C3 (completed)
         // Standalone completed: R3
-        val r1 = Todo(id = "r1", title = "R1", completed = false, createdAt = 3000L)
-        val c1 = Todo(id = "c1", title = "C1", completed = false, createdAt = 3100L, parentTaskId = "r1")
-        val c2 = Todo(id = "c2", title = "C2", completed = true, createdAt = 3200L, parentTaskId = "r1")
+        val r1 = Todo(taskRef = ref("r1"), title = "R1", completed = false, createdAt = 3000L)
+        val c1 = Todo(taskRef = ref("c1"), title = "C1", completed = false, createdAt = 3100L, parentTaskRef = ref("r1"))
+        val c2 = Todo(taskRef = ref("c2"), title = "C2", completed = true, createdAt = 3200L, parentTaskRef = ref("r1"))
 
-        val r2 = Todo(id = "r2", title = "R2", completed = false, createdAt = 2000L)
-        val c3 = Todo(id = "c3", title = "C3", completed = true, createdAt = 2100L, parentTaskId = "r2")
+        val r2 = Todo(taskRef = ref("r2"), title = "R2", completed = false, createdAt = 2000L)
+        val c3 = Todo(taskRef = ref("c3"), title = "C3", completed = true, createdAt = 2100L, parentTaskRef = ref("r2"))
 
-        val r3 = Todo(id = "r3", title = "R3", completed = true, createdAt = 1000L)
+        val r3 = Todo(taskRef = ref("r3"), title = "R3", completed = true, createdAt = 1000L)
 
         val sections = TaskHierarchyProjector.partitionCompactSections(listOf(r1, c1, c2, r2, c3, r3))
 

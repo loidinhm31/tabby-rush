@@ -25,7 +25,11 @@ data class AccountSyncMetaEntity(
     val scanState: String = "REQUIRED",
     val scanCheckpointUpdatedAt: String? = null,
     val scanCheckpointId: String? = null,
-    val lastCompletedCatchUpEpochMs: Long? = null
+    val lastCompletedCatchUpEpochMs: Long? = null,
+    val accessGeneration: Long = 0L,
+    val ownerBindingState: String = "UNRESOLVED_LOCAL",
+    val boundOwnerUserId: String? = null,
+    val accessRevision: Long? = null
 ) {
     companion object {
         const val SINGLETON_ID = "singleton"

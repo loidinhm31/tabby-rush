@@ -17,7 +17,8 @@ data class WidgetTaskItem(
     val isChild: Boolean,
     val childCount: Int = 0,
     val completedChildCount: Int = 0,
-    val deadlinePresentation: DeadlinePresentation? = null
+    val deadlinePresentation: DeadlinePresentation? = null,
+    val isChildOnly: Boolean = false
 )
 
 /**
@@ -41,10 +42,11 @@ fun projectWidgetItems(
             todo = item.todo,
             effectiveCompleted = item.effectiveCompleted,
             hasLiveChildren = item.hasLiveChildren,
-            isChild = item.depth > 0,
+            isChild = item.depth > 0 || item.isChildOnly,
             childCount = item.childCount,
             completedChildCount = item.completedChildCount,
-            deadlinePresentation = deadlinePres
+            deadlinePresentation = deadlinePres,
+            isChildOnly = item.isChildOnly
         )
     }
 }

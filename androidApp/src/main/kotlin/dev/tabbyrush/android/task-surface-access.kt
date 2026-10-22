@@ -7,6 +7,7 @@ import dev.tabbyrush.shared.contract.SurfaceAccountToken
 import dev.tabbyrush.shared.contract.SurfaceReadiness
 import dev.tabbyrush.shared.contract.SurfaceResult
 import dev.tabbyrush.shared.contract.SurfaceSnapshot
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.TaskSurfaceAccess
 import dev.tabbyrush.shared.contract.partitionSurfaceTodos
 import kotlin.coroutines.cancellation.CancellationException
@@ -107,7 +108,7 @@ class AndroidTaskSurfaceAccess(
 
     override suspend fun setCompleted(
         token: SurfaceAccountToken,
-        taskId: String,
+        taskRef: TaskRef,
         completed: Boolean,
         nowEpochMs: Long
     ): SurfaceResult<CompletionChange> {
@@ -134,7 +135,13 @@ class AndroidTaskSurfaceAccess(
         val admitted = try {
             runtime.deliveryGate.withDeliveryAdmission(token.generation) {
                 try {
-                    val change = runtime.store.setCompletedLocally(taskId, completed, nowEpochMs)
+                    val access = runtime.store.accessFor(taskRef)
+                    val isOwner = taskRef.ownerUserId == runtime.store.userId
+                    val canEdit = if (isOwner) true else (access?.canEditContent == true)
+                    if (!canEdit) {
+                        return@withDeliveryAdmission SurfaceResult.Rejected
+                    }
+                    val change = runtime.store.setCompletedLocally(taskRef, completed, nowEpochMs)
                     changeResult = change
                     SurfaceResult.Value(change)
                 } catch (ce: CancellationException) {
@@ -186,8 +193,11 @@ class AndroidTaskSurfaceAccess(
             if (app.accountFiles.hasPendingWipe(token.accountKey)) {
                 return@withLock false
             }
-
+            val initialAccessGen = runtime.store.accessGeneration
             try {
+                if (runtime.store.accessGeneration != initialAccessGen) {
+                    return@withLock false
+                }
                 publish()
                 true
             } catch (ce: CancellationException) {
@@ -200,7 +210,7 @@ class AndroidTaskSurfaceAccess(
 
     override suspend fun validateNavigation(
         token: SurfaceAccountToken,
-        taskId: String?
+        taskRef: TaskRef?
     ): Boolean {
         val currentReadiness = _readiness.value
         if (currentReadiness !is SurfaceReadiness.Ready || currentReadiness.token != token) {
@@ -221,12 +231,12 @@ class AndroidTaskSurfaceAccess(
             return false
         }
 
-        if (taskId == null) {
+        if (taskRef == null) {
             return true
         }
 
         return try {
-            val todo = runtime.store.loadTodos().find { it.id == taskId }
+            val todo = runtime.store.getTodo(taskRef)
             todo != null && !todo.isDeleted
         } catch (ce: CancellationException) {
             throw ce
@@ -234,4 +244,5 @@ class AndroidTaskSurfaceAccess(
             false
         }
     }
+
 }

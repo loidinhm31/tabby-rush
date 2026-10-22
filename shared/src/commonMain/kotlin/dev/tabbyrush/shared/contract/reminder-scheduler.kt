@@ -7,11 +7,14 @@ package dev.tabbyrush.shared.contract
 data class ScheduledAlarmHandle(
     val accountKey: String,
     val generation: Long,
-    val taskId: String,
+    val taskRef: TaskRef,
     val scheduleToken: String,
     val occurrenceIndex: Int,
     val triggerAtEpochMs: Long
-)
+) {
+    val taskId: String get() = taskRef.rowId
+    val ownerUserId: String get() = taskRef.ownerUserId
+}
 
 /**
  * NativeReminderAdapter abstracts platform-specific alarm and notification operations
@@ -39,7 +42,7 @@ interface NativeReminderAdapter {
     suspend fun postOwnedNotification(
         accountKey: AccountKey,
         generation: Long,
-        taskId: String,
+        taskRef: TaskRef,
         scheduleToken: String,
         occurrenceIndex: Int,
         title: String,

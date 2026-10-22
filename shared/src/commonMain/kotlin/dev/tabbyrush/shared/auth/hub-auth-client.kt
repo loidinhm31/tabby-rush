@@ -7,6 +7,7 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.encodeURLQueryComponent
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -246,6 +247,45 @@ class HubAuthClient(
                     }
                 } else {
                     ApiResult.Failure(httpClient.parseResponseError(response, "/api/v1/apps/access-requests/me"))
+                }
+            }
+        }
+    }
+
+    suspend fun lookupUser(
+        accessToken: String,
+        username: String
+    ): ApiResult<LookupUserResponse> {
+        val trimmed = username.trim()
+        if (trimmed.isEmpty()) {
+            return ApiResult.Failure(SafeError.Validation("INVALID_USERNAME", "Username must not be blank"))
+        }
+        val encoded = trimmed.encodeURLQueryComponent()
+        val path = "/api/v1/auth/lookup?username=$encoded"
+        val rawResult = httpClient.executeRaw(
+            method = HttpMethod.Get,
+            path = path,
+            accessToken = accessToken
+        )
+        return when (rawResult) {
+            is ApiResult.Failure -> rawResult
+            is ApiResult.Success -> {
+                val response = rawResult.value
+                if (response.status == HttpStatusCode.OK) {
+                    try {
+                        val bodyText = response.bodyAsText()
+                        val parsed = json.decodeFromString<LookupUserResponse>(bodyText)
+                        ApiResult.Success(parsed)
+                    } catch (_: Exception) {
+                        ApiResult.Failure(
+                            SafeError.ProtocolIncompatible(
+                                code = "MALFORMED_LOOKUP_RESPONSE",
+                                message = "Unable to parse user lookup response"
+                            )
+                        )
+                    }
+                } else {
+                    ApiResult.Failure(httpClient.parseResponseError(response, path))
                 }
             }
         }

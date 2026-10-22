@@ -7,16 +7,21 @@ import androidx.room.PrimaryKey
  * ScanStagingEntity holds records accumulated across pagination pages during
  * a full scan until the scan terminates successfully and promotes to server_base.
  */
-@Entity(tableName = "scan_staging")
+@Entity(
+    tableName = "scan_staging",
+    primaryKeys = ["bindingKey", "tableName", "rowId"]
+)
 data class ScanStagingEntity(
-    @PrimaryKey
+    val bindingKey: String = BINDING_LOCAL_ACCOUNT,
+    val ownerBinding: String = BINDING_LOCAL_ACCOUNT,
+    val ownerUserId: String? = null,
+    val tableName: String = dev.tabbyrush.shared.contract.TaskDataContract.DEFAULT_TABLE_NAME,
     val rowId: String,
-    val tableName: String,
-    val serverRevision: Long,
-    val deleted: Boolean,
-    val title: String,
-    val completed: Boolean,
-    val createdAt: Long,
+    val serverRevision: Long = 0L,
+    val deleted: Boolean = false,
+    val title: String = "",
+    val completed: Boolean = false,
+    val createdAt: Long = 0L,
     val deadlineDate: String? = null,
     val deadlineTime: String? = null,
     val deadlineZone: String? = null,

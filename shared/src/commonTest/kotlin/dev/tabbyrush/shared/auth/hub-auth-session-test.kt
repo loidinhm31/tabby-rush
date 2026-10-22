@@ -338,4 +338,71 @@ class HubAuthSessionTest {
         assertEquals("CREDENTIAL_PERSISTENCE_FAILED", refreshResult.error.code)
         assertTrue(callbackNotified)
     }
+
+    @Test
+    fun testLookupUserAuthenticatedSuccess() = runTest {
+        val vault = FakeCredentialVault()
+        val engine = TestHttpEngine { req ->
+            when (req.url.encodedPath) {
+                "/api/v1/auth/login" -> Pair(
+                    HttpStatusCode.OK,
+                    """{"userId":"usr-1","accessToken":"access-1","refreshToken":"ref-1","apps":["tabby-rush"]}"""
+                )
+                "/api/v1/auth/me" -> Pair(
+                    HttpStatusCode.OK,
+                    """{"userId":"usr-1","username":"alice","email":"alice@example.com","apps":["tabby-rush"]}"""
+                )
+                "/api/v1/auth/lookup" -> Pair(
+                    HttpStatusCode.OK,
+                    """{"user":{"userId":"usr-bob","username":"bob"}}"""
+                )
+                else -> Pair(HttpStatusCode.NotFound, "")
+            }
+        }
+        val session = HubAuthSession(debugConfig, vault, engine)
+        session.login("alice@example.com", "pass")
+
+        val lookupResult = session.lookupUser("bob")
+        assertIs<ApiResult.Success<dev.tabbyrush.shared.contract.UserLookupResult>>(lookupResult)
+        assertEquals("usr-bob", lookupResult.value.userId)
+        assertEquals("bob", lookupResult.value.username)
+    }
+
+    @Test
+    fun testLookupUserNotFound() = runTest {
+        val vault = FakeCredentialVault()
+        val engine = TestHttpEngine { req ->
+            when (req.url.encodedPath) {
+                "/api/v1/auth/login" -> Pair(
+                    HttpStatusCode.OK,
+                    """{"userId":"usr-1","accessToken":"access-1","refreshToken":"ref-1","apps":["tabby-rush"]}"""
+                )
+                "/api/v1/auth/me" -> Pair(
+                    HttpStatusCode.OK,
+                    """{"userId":"usr-1","username":"alice","email":"alice@example.com","apps":["tabby-rush"]}"""
+                )
+                "/api/v1/auth/lookup" -> Pair(
+                    HttpStatusCode.OK,
+                    """{"user":null}"""
+                )
+                else -> Pair(HttpStatusCode.NotFound, "")
+            }
+        }
+        val session = HubAuthSession(debugConfig, vault, engine)
+        session.login("alice@example.com", "pass")
+
+        val lookupResult = session.lookupUser("nonexistent")
+        assertIs<ApiResult.Failure>(lookupResult)
+        assertIs<SafeError.Validation>(lookupResult.error)
+        assertEquals("USER_NOT_FOUND", lookupResult.error.code)
+    }
+
+    @Test
+    fun testLookupUserFailsWhenUnauthenticated() = runTest {
+        val session = HubAuthSession(debugConfig, FakeCredentialVault())
+        val result = session.lookupUser("bob")
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.Unauthorized>(result.error)
+        assertEquals("UNAUTHENTICATED", result.error.code)
+    }
 }

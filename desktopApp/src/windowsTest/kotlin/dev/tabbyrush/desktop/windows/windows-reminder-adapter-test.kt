@@ -1,9 +1,12 @@
 package dev.tabbyrush.desktop.windows
 
 import dev.tabbyrush.shared.contract.AccountKey
+import dev.tabbyrush.shared.contract.Sha256
+import dev.tabbyrush.shared.contract.TaskRef
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -54,10 +57,11 @@ class WindowsReminderAdapterTest {
         val fakeBridge = FakeWindowsToastBridge(available = true)
         val adapter = WindowsNativeReminderAdapter(WindowsNotificationAdapter(fakeBridge))
 
+        val taskRef = TaskRef("user-alice", "01234567-89ab-cdef-0123-456789abcdef")
         val platformId = adapter.postOwnedNotification(
             accountKey = accountKey1,
             generation = 1L,
-            taskId = "01234567-89ab-cdef-0123-456789abcdef",
+            taskRef = taskRef,
             scheduleToken = "tok-1",
             occurrenceIndex = 2,
             title = "Task with <special> & characters",
@@ -65,8 +69,9 @@ class WindowsReminderAdapterTest {
         )
 
         assertNotNull(platformId)
-        val expectedGroup = "d_111111111111"
-        val expectedTag = "t_01234567-89ab-cd_2"
+        val canonicalPayload = "${taskRef.ownerUserId.length}:${taskRef.ownerUserId}:${taskRef.rowId.length}:${taskRef.rowId}:tok-1:2"
+        val expectedTag = "t_${Sha256.sha256Hex(canonicalPayload.encodeToByteArray()).take(32)}"
+        val expectedGroup = "d_${Sha256.sha256Hex(accountKey1.value.encodeToByteArray()).take(16)}"
         assertEquals("$expectedGroup|$expectedTag", platformId)
 
         assertEquals(1, fakeBridge.dispatched.size)
@@ -77,14 +82,31 @@ class WindowsReminderAdapterTest {
     }
 
     @Test
+    fun testDuplicateRowIdsFromDifferentOwnersProduceDistinctTags() = runTest {
+        val fakeBridge = FakeWindowsToastBridge(available = true)
+        val adapter = WindowsNativeReminderAdapter(WindowsNotificationAdapter(fakeBridge))
+
+        val aliceTask = TaskRef("alice", "shared-row-id")
+        val bobTask = TaskRef("bob", "shared-row-id")
+
+        val alicePlatformId = adapter.postOwnedNotification(accountKey1, 1L, aliceTask, "tok", 0, "Alice", 100L)
+        val bobPlatformId = adapter.postOwnedNotification(accountKey1, 1L, bobTask, "tok", 0, "Bob", 100L)
+
+        assertNotNull(alicePlatformId)
+        assertNotNull(bobPlatformId)
+        assertFalse(alicePlatformId == bobPlatformId, "Tags for same rowId under different owners must not collide")
+    }
+
+    @Test
     fun testRemoveOwnedNotificationClearsFromBridge() = runTest {
         val fakeBridge = FakeWindowsToastBridge(available = true)
         val adapter = WindowsNativeReminderAdapter(WindowsNotificationAdapter(fakeBridge))
 
+        val taskRef = TaskRef("user-1", "task-x")
         val platformId = adapter.postOwnedNotification(
             accountKey = accountKey1,
             generation = 1L,
-            taskId = "task-x",
+            taskRef = taskRef,
             scheduleToken = "tok-x",
             occurrenceIndex = 0,
             title = "Task X",
@@ -100,26 +122,52 @@ class WindowsReminderAdapterTest {
         adapter.removeOwnedNotification(accountKey1, platformId)
         assertEquals(1, fakeBridge.cleared.size)
         val (tag, group) = fakeBridge.cleared.first()
-        assertEquals("t_task-x_0", tag)
-        assertEquals("d_111111111111", group)
+        val canonicalPayload = "${taskRef.ownerUserId.length}:${taskRef.ownerUserId}:${taskRef.rowId.length}:${taskRef.rowId}:tok-x:0"
+        val expectedTag = "t_${Sha256.sha256Hex(canonicalPayload.encodeToByteArray()).take(32)}"
+        val expectedGroup = "d_${Sha256.sha256Hex(accountKey1.value.encodeToByteArray()).take(16)}"
+        assertEquals(expectedTag, tag)
+        assertEquals(expectedGroup, group)
     }
 
     @Test
-    fun testCancelAllForAccountClearsToasts() = runTest {
+    fun testCancelNotificationsForTaskClearsOnlySpecificTaskEvenWithSameRowId() = runTest {
         val fakeBridge = FakeWindowsToastBridge(available = true)
         val adapter = WindowsNativeReminderAdapter(WindowsNotificationAdapter(fakeBridge))
 
-        adapter.postOwnedNotification(accountKey1, 1L, "t1", "s1", 0, "Task 1", 100L)
-        adapter.postOwnedNotification(accountKey1, 1L, "t2", "s2", 0, "Task 2", 100L)
-        adapter.postOwnedNotification(accountKey2, 1L, "t3", "s3", 0, "Task 3", 100L)
+        // Same rowId under different owners
+        val aliceTask = TaskRef("alice", "task-1")
+        val bobTask = TaskRef("bob", "task-1")
+
+        adapter.postOwnedNotification(accountKey1, 1L, aliceTask, "s1", 0, "Alice Task", 100L)
+        adapter.postOwnedNotification(accountKey1, 1L, bobTask, "s2", 0, "Bob Task", 100L)
+
+        adapter.cancelNotificationsForTask(accountKey1, aliceTask)
+
+        assertEquals(1, fakeBridge.cleared.size)
+        val canonicalPayload = "${aliceTask.ownerUserId.length}:${aliceTask.ownerUserId}:${aliceTask.rowId.length}:${aliceTask.rowId}:s1:0"
+        val expectedTag = "t_${Sha256.sha256Hex(canonicalPayload.encodeToByteArray()).take(32)}"
+        assertEquals(expectedTag, fakeBridge.cleared.first().first)
+    }
+
+    @Test
+    fun testCancelAllForAccountClearsToastsAndPreservesOtherAccount() = runTest {
+        val fakeBridge = FakeWindowsToastBridge(available = true)
+        val adapter = WindowsNativeReminderAdapter(WindowsNotificationAdapter(fakeBridge))
+
+        val t1 = TaskRef("alice", "t1")
+        val t2 = TaskRef("alice", "t2")
+        val t3 = TaskRef("bob", "t3")
+        val p1 = adapter.postOwnedNotification(accountKey1, 1L, t1, "s1", 0, "Task 1", 100L)
+        val p2 = adapter.postOwnedNotification(accountKey1, 1L, t2, "s2", 0, "Task 2", 100L)
+        val p3 = adapter.postOwnedNotification(accountKey2, 1L, t3, "s3", 0, "Task 3", 100L)
 
         adapter.cancelAllForAccount(accountKey1)
 
+        val groupHash1 = "d_${Sha256.sha256Hex(accountKey1.value.encodeToByteArray()).take(16)}"
+        val groupHash2 = "d_${Sha256.sha256Hex(accountKey2.value.encodeToByteArray()).take(16)}"
         assertEquals(2, fakeBridge.cleared.size)
-        assertTrue(fakeBridge.cleared.any { it.first == "t_t1_0" })
-        assertTrue(fakeBridge.cleared.any { it.first == "t_t2_0" })
-        assertFalse(fakeBridge.cleared.any { it.first == "t_t3_0" })
-        assertTrue(fakeBridge.clearedGroups.contains("d_111111111111"))
+        assertTrue(fakeBridge.clearedGroups.contains(groupHash1))
+        assertFalse(fakeBridge.clearedGroups.contains(groupHash2), "Account 2 notifications must NOT be cleared")
     }
 
     @Test
@@ -127,11 +175,10 @@ class WindowsReminderAdapterTest {
         val fakeBridge = FakeWindowsToastBridge(available = true)
         val adapter = WindowsNativeReminderAdapter(WindowsNotificationAdapter(fakeBridge))
 
-        // No in-memory notifications posted (simulating process restart)
         adapter.cancelAllForAccount(accountKey1)
 
-        // Must still clear the account's group in Windows Action Center!
-        assertEquals(listOf("d_111111111111"), fakeBridge.clearedGroups)
+        val groupHash = "d_${Sha256.sha256Hex(accountKey1.value.encodeToByteArray()).take(16)}"
+        assertEquals(listOf(groupHash), fakeBridge.clearedGroups)
     }
 
     @Test
@@ -139,10 +186,10 @@ class WindowsReminderAdapterTest {
         val fakeBridge = FakeWindowsToastBridge(available = true, shouldFail = false)
         val adapter = WindowsNativeReminderAdapter(WindowsNotificationAdapter(fakeBridge))
 
-        adapter.postOwnedNotification(accountKey1, 1L, "t1", "s1", 0, "Task 1", 100L)
+        adapter.postOwnedNotification(accountKey1, 1L, TaskRef("alice", "t1"), "s1", 0, "Task 1", 100L)
 
         fakeBridge.shouldFail = true
-        kotlin.test.assertFailsWith<IllegalStateException> {
+        assertFailsWith<IllegalStateException> {
             adapter.cancelAllForAccount(accountKey1)
         }
     }

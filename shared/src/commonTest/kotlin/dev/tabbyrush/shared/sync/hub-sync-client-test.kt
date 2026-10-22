@@ -115,4 +115,101 @@ class HubSyncClientTest {
         assertIs<ApiResult.Failure>(result)
         assertEquals(0, calls)
     }
+
+    @Test fun testPushIncludesCollaborationVersion() = runTest {
+        var recordedBody: String? = null
+        val engine = TestHttpEngine { req ->
+            recordedBody = when (val b = req.body) {
+                is io.ktor.http.content.TextContent -> b.text
+                is io.ktor.http.content.ByteArrayContent -> b.bytes().decodeToString()
+                else -> b.toString()
+            }
+            Pair(HttpStatusCode.OK, """{"synced":1,"conflicts":[],"serverTimestamp":"2026-10-21T00:00:00Z","schemaVersion":1,"collaborationVersion":1}""")
+        }
+        val client = HubSyncClient(config, session(engine))
+        val result = client.push(
+            listOf(
+                PushRecordDto(
+                    tableName = "todos",
+                    rowId = "t1",
+                    data = JsonObject(emptyMap()),
+                    version = 2L,
+                    assumedServerVersion = 1L,
+                    ownerUserId = "owner-1"
+                )
+            )
+        )
+        assertIs<ApiResult.Success<PushResponseDto>>(result)
+        assertNotNull(recordedBody)
+        assertTrue(recordedBody!!.contains("\"collaborationVersion\":1"))
+    }
+
+    @Test fun testUpgradeRequiredMappedToCollaborationRequired() = runTest {
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.UpgradeRequired,
+                """{"error":{"code":"COLLABORATION_REQUIRED","message":"Upgrade required for collaboration"}}"""
+            )
+        }
+        val client = HubSyncClient(config, session(engine))
+        val result = client.pull()
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.CollaborationRequired>(result.error)
+        assertEquals("COLLABORATION_REQUIRED", result.error.code)
+    }
+
+    @Test fun testAccessRevisionChangedMappedFrom409() = runTest {
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.Conflict,
+                """{"error":{"code":"ACCESS_REVISION_CHANGED","message":"Revision changed"}}"""
+            )
+        }
+        val client = HubSyncClient(config, session(engine))
+        val result = client.pull()
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.AccessRevisionChanged>(result.error)
+        assertEquals("ACCESS_REVISION_CHANGED", result.error.code)
+    }
+
+    @Test fun testDuplicateCanonicalPushRecordsRejectedBeforeNetwork() = runTest {
+        var calls = 0
+        val engine = TestHttpEngine { calls++; HttpStatusCode.OK to "{}" }
+        val client = HubSyncClient(config, session(engine))
+        val result = client.push(
+            listOf(
+                PushRecordDto(tableName = "todos", rowId = "r1", data = JsonObject(emptyMap()), version = 2L, assumedServerVersion = 1L, ownerUserId = "alice"),
+                PushRecordDto(tableName = "todos", rowId = "r1", data = JsonObject(emptyMap()), version = 3L, assumedServerVersion = 2L, ownerUserId = "alice")
+            )
+        )
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.Validation>(result.error)
+        assertEquals("INVALID_BATCH", result.error.code)
+        assertEquals(0, calls)
+    }
+
+    @Test fun testPullResponseValidationDetectsDuplicateAccessResults() = runTest {
+        val engine = TestHttpEngine {
+            Pair(
+                HttpStatusCode.OK,
+                """{
+                    "records": [],
+                    "checkpoint": {"updatedAt":"2026-10-21T00:00:00Z","id":"cp1"},
+                    "serverTimestamp": "2026-10-21T00:00:00Z",
+                    "hasMore": false,
+                    "schemaVersion": 1,
+                    "collaborationVersion": 1,
+                    "accessRevision": 5,
+                    "accessResults": [
+                        {"ref":{"ownerUserId":"u1","tableName":"todos","rowId":"r1"},"status":"accessible"},
+                        {"ref":{"ownerUserId":"u1","tableName":"todos","rowId":"r1"},"status":"accessible"}
+                    ]
+                }"""
+            )
+        }
+        val client = HubSyncClient(config, session(engine))
+        val result = client.pull()
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.ProtocolIncompatible>(result.error)
+    }
 }

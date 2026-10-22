@@ -14,6 +14,7 @@ import dev.tabbyrush.shared.contract.SurfaceResult
 import dev.tabbyrush.shared.contract.SurfaceSnapshot
 import dev.tabbyrush.shared.contract.TaskSections
 import dev.tabbyrush.shared.contract.TaskSurfaceAccess
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,9 +72,9 @@ class TaskWidgetDeviceTest {
 
     @Test
     fun testPendingIntentsCreation() {
-        val openPending = createOpenTaskPendingIntent(context, testToken, "task-1")
+        val taskRef = TaskRef("test-user", "task-1")
+        val openPending = createOpenTaskPendingIntent(context, testToken, taskRef)
         assertNotNull("Open task PendingIntent must not be null", openPending)
-
         val addPending = createAddTaskPendingIntent(context, testToken)
         assertNotNull("Add task PendingIntent must not be null", addPending)
 
@@ -120,7 +121,7 @@ class TaskWidgetDeviceTest {
                     token = token,
                     sections = TaskSections(
                         incomplete = listOf(
-                            Todo(id = "task-100", title = "Device Test Task", completed = false, createdAt = 500L, updatedAt = 500L)
+                            Todo(taskRef = TaskRef("test-user", "task-100"), title = "Device Test Task", completed = false, createdAt = 500L, updatedAt = 500L)
                         ),
                         completed = emptyList()
                     ),
@@ -131,12 +132,12 @@ class TaskWidgetDeviceTest {
 
         override suspend fun setCompleted(
             token: SurfaceAccountToken,
-            taskId: String,
+            taskRef: TaskRef,
             completed: Boolean,
             nowEpochMs: Long
         ): SurfaceResult<CompletionChange> {
             setCompletedCalled = true
-            lastCompletedTaskId = taskId
+            lastCompletedTaskId = taskRef.rowId
             lastCompletedValue = completed
             return SurfaceResult.Value(CompletionChange.Changed)
         }
@@ -150,7 +151,7 @@ class TaskWidgetDeviceTest {
             return true
         }
 
-        override suspend fun validateNavigation(token: SurfaceAccountToken, taskId: String?): Boolean = true
+        override suspend fun validateNavigation(token: SurfaceAccountToken, taskRef: TaskRef?): Boolean = true
     }
 
     private class DeviceTestHost(

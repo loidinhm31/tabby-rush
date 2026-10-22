@@ -1,9 +1,10 @@
 # Windows Desktop & Installed MSI Acceptance Specification
 
-**Document Version**: 1.3.0
-**Phase**: Sticky Task Surfaces Phase 07 documentation and automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
-**Status**: Parent reports a standalone Windows runtime smoke passed against disposable loopback services. Interactive native UI acceptance remains unpassed; connected-Android acceptance was not run. Windows sticky-surface, installed-MSI, and other native acceptance remain distinct holds; release remains blocked and production migration unauthorized.
-**Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
+**Document Version**: 1.4.0
+**Last Updated**: 2026-10-21
+**Phase**: Collaborative Task Assignees & Room v5 delivered (Phases 01–08); dedicated smoke wiring added in Phase 09 (`runTaskAssigneesRuntimeSmoke`)
+**Status**: G0 policy validation confirmed 2026-10-21. Dedicated Windows-compatible runtime harness prepared in Phase 09. Gate G5 (Windows Desktop Runtime & interactive sticky surfaces) is **NOT RUN / pending** per project delegation rules. Interactive native UI acceptance remains unpassed; release remains blocked and production migration unauthorized.
+**Related Documents**: [Plan](../plans/261021-1552-tabbyrush-task-assignees/phase-09-integrated-acceptance-and-documentation.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ---
 
@@ -36,7 +37,11 @@ Phase 10 implementation scope includes the desktop application module (`:desktop
 6. **Immutable Mode & Launchers**:
    - `MainKt.main` enforces `BuildMode.RELEASE` (HTTPS only, strict endpoint validation).
    - `DevelopmentLauncher.main` enables `BuildMode.DEBUG` (HTTP 127.0.0.1:3000 permitted) via custom `runDebug` task.
-
+7. **Collaborative Task Surfaces & Invariants**:
+   - Desktop task surfaces (`DesktopTaskSurfaces`, `DesktopTaskSurfaceAccess`, `StickyTaskContent`) use canonical `TaskRef(ownerUserId, rowId)`.
+   - Child-only assigned tasks render flat in the sticky window without synthetic parent roots or sibling disclosures.
+   - Surface admission and mutations re-resolve `accessGeneration` and current rights; on authoritative revocation, sticky items and associated toast reminders are immediately cleared fail-closed.
+   - Standalone runtime smoke registered as `:desktopApp:runTaskAssigneesRuntimeSmoke` executes Room v5 migration, independent coordinator sync, and revocation purge inspection against disposable loopback Hub.
 ---
 
 ## 2. Verification Evidence Matrix
@@ -162,6 +167,7 @@ The Phase 10 visual baseline consists of seven high-fidelity 960x720 design rend
 - **Click After Quit**: No cold COM activator is registered. Clicking an un-cleared toast after process crash does not launch an unintended process or leak private announcement content.
 - **Silent Reopen Catch-up**: On restart, the app clears the `tr-remote` group before establishing the SSE connection. Active unexpired announcements are caught up silently via baseline hydration without re-toasting historical alerts.
 
-### 5.3 Gate G5 Held Status & Staged Pilot Policy
-- **Environment Hold**: Linux host environment cannot compile MSVC C++20 WinRT or execute MSI installations. Gate G5 (Windows Desktop Runtime) is formally HELD.
-- **Staged Rollout Policy**: In accordance with the execution plan (report04/report05), restricted internal pilot enablement on Android and Linux does NOT require clearing Gate G5. Full organization-wide delivery remains blocked until Gate G5 is executed and evidenced on an installed Windows x64 testbed.
+### 5.3 Gate G5 Held Status & Release Boundary
+- **Environment Hold**: Interactive Windows desktop UI testing, installed MSI execution, and native notification inspection remain held at Gate G5.
+- **Collaborative Runtime Harness**: Task assignees runtime smoke (`:desktopApp:runTaskAssigneesRuntimeSmoke`) is prepared and verified in build wiring, but unexecuted (NOT RUN) during subagent phase.
+- **Release Boundary**: Staged pilot notes from historical announcements work do not apply to collaborative task sync. Organization-wide release and production migration remain strictly blocked until Gate G5 and connected platform gates are executed and evidenced.

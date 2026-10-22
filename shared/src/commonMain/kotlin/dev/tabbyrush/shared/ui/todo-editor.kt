@@ -5,8 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -36,13 +40,14 @@ import dev.tabbyrush.shared.contract.ApiResult
 import dev.tabbyrush.shared.contract.EditorState
 import dev.tabbyrush.shared.contract.TitlePolicy
 import dev.tabbyrush.shared.contract.TodoAction
+import dev.tabbyrush.shared.contract.UserLookupResult
 import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
-
 @Composable
 fun TodoEditor(
     editor: EditorState,
     onAction: (TodoAction) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLookupUser: (suspend (String) -> ApiResult<UserLookupResult>)? = null
 ) {
     val isCreating = editor.id == null
     val validation = remember(editor.rawTitle) {
@@ -88,7 +93,8 @@ fun TodoEditor(
 
     Card(
         modifier = modifier
-            .fillMaxWidth()
+            .widthIn(max = 560.dp)
+            .heightIn(max = 640.dp)
             .padding(TabbyRushThemeTokens.SpacingLarge),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -100,7 +106,6 @@ fun TodoEditor(
             modifier = Modifier
                 .padding(TabbyRushThemeTokens.SpacingLarge)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
         ) {
             Text(
                 text = if (isCreating) {
@@ -111,7 +116,16 @@ fun TodoEditor(
                 modifier = Modifier.semantics { heading() }
             )
 
-            if (editor.parentTaskId != null) {
+            Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingMedium))
+
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+
+            if (editor.parentTitle != null) {
                 Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -119,7 +133,24 @@ fun TodoEditor(
                     color = TabbyRushThemeTokens.customColors.mintSurface.copy(alpha = 0.5f)
                 ) {
                     Text(
-                        text = "Subtask of: ${editor.parentTitle ?: editor.parentTaskId}",
+                        text = "Subtask of: ${editor.parentTitle}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TabbyRushThemeTokens.customColors.primaryDeep,
+                        modifier = Modifier.padding(
+                            horizontal = TabbyRushThemeTokens.SpacingMedium,
+                            vertical = TabbyRushThemeTokens.SpacingSmall
+                        )
+                    )
+                }
+            } else if (editor.parentTaskRef != null) {
+                Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.small,
+                    color = TabbyRushThemeTokens.customColors.mintSurface.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        text = "Shared child task",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TabbyRushThemeTokens.customColors.primaryDeep,
                         modifier = Modifier.padding(
@@ -191,7 +222,25 @@ fun TodoEditor(
 
             Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingMedium))
 
-            Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingLarge))
+            TaskAssigneePicker(
+                assigneeUserId = editor.assigneeUserId,
+                inheritedAssigneeUserId = editor.inheritedAssigneeUserId,
+                canManageAssignment = editor.canManageAssignment,
+                isInitialAssignmentForNewTask = isCreating,
+                expectedSlotVersion = editor.expectedSlotVersion,
+                taskRef = editor.taskRef,
+                onAssigneeChanged = { newAssignee ->
+                    onAction(TodoAction.UpdateEditorState(editor.copy(assigneeUserId = newAssignee)))
+                },
+                onAssignTask = { intent ->
+                    onAction(TodoAction.AssignTask(intent))
+                },
+                onLookupUser = onLookupUser,
+                modifier = Modifier.fillMaxWidth()
+            )
+            }
+
+            Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingMedium))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

@@ -10,6 +10,10 @@ import dev.tabbyrush.shared.contract.SurfaceSnapshot
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.TaskSections
 import dev.tabbyrush.shared.contract.TaskSurfaceAccess
+import dev.tabbyrush.shared.contract.TaskRef
+import dev.tabbyrush.shared.contract.HierarchyCoverage
+import dev.tabbyrush.shared.contract.TaskAccessState
+import dev.tabbyrush.shared.contract.TaskCapabilities
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.partitionSurfaceTodos
 import kotlin.test.Test
@@ -44,16 +48,19 @@ class TaskWidgetModelTest {
         parentTaskId: String? = null,
         deadline: TaskDeadline? = null,
         scheduleToken: String? = if (deadline != null) "token-$id" else null,
-        reminderRule: ReminderRule = ReminderRule.DISABLED
+        reminderRule: ReminderRule = ReminderRule.DISABLED,
+        ownerUserId: String = "alice"
     ): Todo {
+        val taskRef = TaskRef(ownerUserId, id)
+        val parentTaskRef = parentTaskId?.let { TaskRef(ownerUserId, it) }
         return Todo(
-            id = id,
+            taskRef = taskRef,
             title = title,
             completed = completed,
             isDeleted = isDeleted,
             createdAt = createdAt,
             updatedAt = createdAt,
-            parentTaskId = parentTaskId,
+            parentTaskRef = parentTaskRef,
             deadline = deadline,
             scheduleToken = scheduleToken,
             reminderRule = reminderRule
@@ -299,31 +306,42 @@ class TaskWidgetModelTest {
 
     @Test
     fun testActionParametersSerializationRoundtrip() {
+        val ref = TaskRef("alice", "task-uuid-42")
         val params = TaskWidgetActionKeys.toggleTaskParameters(
             token = testToken,
-            taskId = "task-uuid-42",
+            taskRef = ref,
             desiredCompleted = true
         )
 
         assertEquals(testToken.accountKey.value, params[TaskWidgetActionKeys.PARAM_ACCOUNT_KEY])
         assertEquals(7L, params[TaskWidgetActionKeys.PARAM_GENERATION])
+        assertEquals("alice", params[TaskWidgetActionKeys.PARAM_OWNER_USER_ID])
+        assertEquals("task-uuid-42", params[TaskWidgetActionKeys.PARAM_ROW_ID])
         assertEquals("task-uuid-42", params[TaskWidgetActionKeys.PARAM_TASK_ID])
         assertEquals(true, params[TaskWidgetActionKeys.PARAM_DESIRED_COMPLETED])
     }
 
     @Test
     fun testRequestCodeDeterminismAndSeparation() {
-        val code1 = TaskWidgetActionKeys.getOpenTaskRequestCode(testToken, "task-1")
-        val code1Repeat = TaskWidgetActionKeys.getOpenTaskRequestCode(testToken, "task-1")
-        val code2 = TaskWidgetActionKeys.getOpenTaskRequestCode(testToken, "task-2")
+        val ref1 = TaskRef("alice", "task-1")
+        val ref1Repeat = TaskRef("alice", "task-1")
+        val ref2 = TaskRef("alice", "task-2")
+        val refDiffOwnerSameRow = TaskRef("bob", "task-1")
+
+        val code1 = TaskWidgetActionKeys.getOpenTaskRequestCode(testToken, ref1)
+        val code1Repeat = TaskWidgetActionKeys.getOpenTaskRequestCode(testToken, ref1Repeat)
+        val code2 = TaskWidgetActionKeys.getOpenTaskRequestCode(testToken, ref2)
+        val codeDiffOwner = TaskWidgetActionKeys.getOpenTaskRequestCode(testToken, refDiffOwnerSameRow)
         val addCode = TaskWidgetActionKeys.getAddTaskRequestCode(testToken)
         val appCode = TaskWidgetActionKeys.getOpenAppRequestCode()
 
         assertEquals(code1, code1Repeat)
         assertTrue(code1 >= 0, "Request code must be non-negative")
         assertTrue(code2 >= 0, "Request code must be non-negative")
+        assertTrue(codeDiffOwner >= 0, "Request code must be non-negative")
         assertTrue(addCode >= 0, "Add request code must be non-negative")
         assertTrue(code1 != code2, "Different tasks must yield distinct request codes")
+        assertTrue(code1 != codeDiffOwner, "Different owners with colliding row IDs must yield distinct request codes")
         assertTrue(code1 != addCode, "Open and Add must yield distinct request codes")
         assertTrue(code1 != appCode, "Open task and Open app must yield distinct request codes")
     }
@@ -334,6 +352,8 @@ class TaskWidgetModelTest {
         assertEquals("dev.tabbyrush.android.ACTION_ADD_TASK", TaskWidgetActionKeys.ACTION_WIDGET_ADD_TASK)
         assertEquals("extra_account_key", TaskWidgetActionKeys.EXTRA_ACCOUNT_KEY)
         assertEquals("extra_generation", TaskWidgetActionKeys.EXTRA_GENERATION)
+        assertEquals("extra_owner_user_id", TaskWidgetActionKeys.EXTRA_OWNER_USER_ID)
+        assertEquals("extra_row_id", TaskWidgetActionKeys.EXTRA_ROW_ID)
         assertEquals("extra_task_id", TaskWidgetActionKeys.EXTRA_TASK_ID)
     }
 
@@ -395,7 +415,7 @@ class TaskWidgetModelTest {
                 SurfaceSnapshot(
                     token = token,
                     sections = TaskSections(
-                        incomplete = listOf(Todo(id = "t1", title = "Leaked Title Candidate", completed = false, createdAt = 100L, updatedAt = 100L)),
+                        incomplete = listOf(Todo(taskRef = TaskRef("alice", "t1"), title = "Leaked Title Candidate", completed = false, createdAt = 100L, updatedAt = 100L)),
                         completed = emptyList()
                     ),
                     schedules = emptyList()
@@ -405,11 +425,10 @@ class TaskWidgetModelTest {
 
         override suspend fun setCompleted(
             token: SurfaceAccountToken,
-            taskId: String,
+            taskRef: TaskRef,
             completed: Boolean,
             nowEpochMs: Long
         ): SurfaceResult<CompletionChange> = SurfaceResult.Value(CompletionChange.Changed)
-
         override suspend fun publishIfCurrent(
             token: SurfaceAccountToken,
             publish: suspend () -> Unit
@@ -423,7 +442,7 @@ class TaskWidgetModelTest {
             return true
         }
 
-        override suspend fun validateNavigation(token: SurfaceAccountToken, taskId: String?): Boolean = true
+        override suspend fun validateNavigation(token: SurfaceAccountToken, taskRef: TaskRef?): Boolean = true
     }
 
     @Test
@@ -500,6 +519,31 @@ class TaskWidgetModelTest {
         assertFalse(s.hasLiveChildren)
         assertFalse(s.isChild)
         assertFalse(s.effectiveCompleted)
+    }
+
+    @Test
+    fun testChildOnlyTaskProjectedWithoutRequiringParent() {
+        val bobChildRef = TaskRef("bob", "child-only-1")
+        val childOnly = Todo(
+            taskRef = bobChildRef,
+            title = "Bob Child Only Task",
+            completed = false,
+            createdAt = 4000L,
+            parentTaskRef = TaskRef("bob", "private-parent-omitted"),
+            accessState = TaskAccessState(
+                ref = bobChildRef,
+                revision = 1L,
+                capabilities = TaskCapabilities.ASSIGNEE,
+                coverage = HierarchyCoverage.ChildOnly
+            )
+        )
+        val items = projectWidgetItems(listOf(childOnly))
+        assertEquals(1, items.size)
+        val item = items[0]
+        assertEquals("Bob Child Only Task", item.todo.title)
+        assertTrue(item.isChildOnly)
+        assertTrue(item.isChild)
+        assertFalse(item.hasLiveChildren)
     }
 
     @Test

@@ -1,5 +1,7 @@
 package dev.tabbyrush.desktop
 
+import dev.tabbyrush.shared.contract.AccountIdentity
+import dev.tabbyrush.shared.contract.CredentialBundle
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.BuildMode
 import dev.tabbyrush.shared.contract.CompletionChange
@@ -10,6 +12,7 @@ import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.TodoFilter
 import dev.tabbyrush.shared.contract.TaskDeadline
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.JvmAccountFiles
 import dev.tabbyrush.shared.data.RoomAccountStore
@@ -97,7 +100,7 @@ class DesktopTaskSurfacesTest {
         assertTrue(readRes is SurfaceResult.Rejected)
 
         // Stale token setCompleted is rejected
-        val completeRes = access.setCompleted(staleToken, "task-1", true, 1000L)
+        val completeRes = access.setCompleted(staleToken, TaskRef("test-user", "task-1"), true, 1000L)
         assertTrue(completeRes is SurfaceResult.Rejected)
 
         // Stale token publishIfCurrent returns false
@@ -107,7 +110,7 @@ class DesktopTaskSurfacesTest {
         assertFalse(published)
 
         // Stale token navigation is rejected
-        val navRes = access.validateNavigation(staleToken, "task-1")
+        val navRes = access.validateNavigation(staleToken, TaskRef("test-user", "task-1"))
         assertFalse(navRes)
     }
 
@@ -117,11 +120,11 @@ class DesktopTaskSurfacesTest {
         access.onAccountAuthenticated(token1, store)
 
         // Save an incomplete task
-        val initialTodo = createDefaultTodo(title = "Buy groceries")
+        val initialTodo = createDefaultTodo(title = "Buy groceries", ownerUserId = store.userId)
         store.saveTodoLocally(initialTodo)
 
         // 1. Set completed to true -> Changed
-        val res1 = access.setCompleted(token1, initialTodo.id, true, 2000L)
+        val res1 = access.setCompleted(token1, initialTodo.taskRef, true, 2000L)
         assertTrue(res1 is SurfaceResult.Value)
         assertEquals(CompletionChange.Changed, res1.value)
 
@@ -129,12 +132,12 @@ class DesktopTaskSurfacesTest {
         assertTrue(updated.completed)
 
         // 2. Set completed to true again -> Unchanged
-        val res2 = access.setCompleted(token1, initialTodo.id, true, 3000L)
+        val res2 = access.setCompleted(token1, initialTodo.taskRef, true, 3000L)
         assertTrue(res2 is SurfaceResult.Value)
         assertEquals(CompletionChange.Unchanged, res2.value)
 
         // 3. Set completed on missing task -> Missing
-        val res3 = access.setCompleted(token1, "missing-task-id", true, 4000L)
+        val res3 = access.setCompleted(token1, TaskRef("test-user", "missing-task-id"), true, 4000L)
         assertTrue(res3 is SurfaceResult.Value)
         assertEquals(CompletionChange.Missing, res3.value)
     }
@@ -390,7 +393,11 @@ class DesktopTaskSurfacesTest {
             accountFiles = files
         )
         try {
-            val runtime = controller.getOrCreateAccountRuntime(accountKey1)
+            val identity = AccountIdentity("test-user", "test-user", "test-user@example.com")
+            val key = AccountKey.create(controller.hubConfig.canonicalOrigin, identity.userId)
+            controller.vault.store(key, CredentialBundle("test-access-token", "test-refresh-token"))
+            assertTrue(controller.authSession.restoreSession(identity, key))
+            val runtime = controller.getOrCreateAccountRuntime(key)
             val token = runtime.token
 
             // Open an editor in main window
@@ -432,8 +439,8 @@ class DesktopTaskSurfacesTest {
         val access = DesktopTaskSurfaceAccess()
         access.onAccountAuthenticated(token1, store)
 
-        val todo1 = createDefaultTodo(title = "Task 1", nowEpochMs = 1000L).copy(completed = false)
-        val todo2 = createDefaultTodo(title = "Task 2", nowEpochMs = 2000L).copy(completed = true)
+        val todo1 = createDefaultTodo(title = "Task 1", nowEpochMs = 1000L, ownerUserId = store.userId).copy(completed = false)
+        val todo2 = createDefaultTodo(title = "Task 2", nowEpochMs = 2000L, ownerUserId = store.userId).copy(completed = true)
         store.saveTodoLocally(todo1)
         store.saveTodoLocally(todo2)
 
@@ -463,7 +470,7 @@ class DesktopTaskSurfacesTest {
         val access = DesktopTaskSurfaceAccess()
         access.onAccountAuthenticated(token1, store)
 
-        store.saveTodoLocally(createDefaultTodo(title = "Task A"))
+        store.saveTodoLocally(createDefaultTodo(title = "Task A", ownerUserId = store.userId))
 
         val controller = DesktopStickyTaskController(
             access = access,
@@ -507,13 +514,13 @@ class DesktopTaskSurfacesTest {
         val access = DesktopTaskSurfaceAccess()
         access.onAccountAuthenticated(token1, store)
 
-        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L).copy(completed = false)
-        val child1 = createDefaultTodo(title = "Child 1 Active", nowEpochMs = 1100L).copy(
-            parentTaskId = root.id,
+        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L, ownerUserId = store.userId).copy(completed = false)
+        val child1 = createDefaultTodo(title = "Child 1 Active", nowEpochMs = 1100L, ownerUserId = store.userId).copy(
+            parentTaskRef = root.taskRef,
             completed = false
         )
-        val child2 = createDefaultTodo(title = "Child 2 Done", nowEpochMs = 1200L).copy(
-            parentTaskId = root.id,
+        val child2 = createDefaultTodo(title = "Child 2 Done", nowEpochMs = 1200L, ownerUserId = store.userId).copy(
+            parentTaskRef = root.taskRef,
             completed = true
         )
         store.saveTodoLocally(root)
@@ -570,13 +577,13 @@ class DesktopTaskSurfacesTest {
         val access = DesktopTaskSurfaceAccess()
         access.onAccountAuthenticated(token1, store)
 
-        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L).copy(completed = false)
-        val child1 = createDefaultTodo(title = "Child 1", nowEpochMs = 1100L).copy(
-            parentTaskId = root.id,
+        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L, ownerUserId = store.userId).copy(completed = false)
+        val child1 = createDefaultTodo(title = "Child 1", nowEpochMs = 1100L, ownerUserId = store.userId).copy(
+            parentTaskRef = root.taskRef,
             completed = true
         )
-        val child2 = createDefaultTodo(title = "Child 2", nowEpochMs = 1200L).copy(
-            parentTaskId = root.id,
+        val child2 = createDefaultTodo(title = "Child 2", nowEpochMs = 1200L, ownerUserId = store.userId).copy(
+            parentTaskRef = root.taskRef,
             completed = true
         )
         store.saveTodoLocally(root)
@@ -617,9 +624,9 @@ class DesktopTaskSurfacesTest {
         val access = DesktopTaskSurfaceAccess()
         access.onAccountAuthenticated(token1, store)
 
-        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L).copy(completed = false)
-        val child = createDefaultTodo(title = "Child Incomplete", nowEpochMs = 1100L).copy(
-            parentTaskId = root.id,
+        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L, ownerUserId = store.userId).copy(completed = false)
+        val child = createDefaultTodo(title = "Child Incomplete", nowEpochMs = 1100L, ownerUserId = store.userId).copy(
+            parentTaskRef = root.taskRef,
             completed = false
         )
         store.saveTodoLocally(root)
@@ -636,7 +643,7 @@ class DesktopTaskSurfacesTest {
         controller.startObserving(token1, store)
 
         // Attempt direct parent completion
-        controller.onAction(StickyTaskAction.SetCompleted(token1, root.id, true))
+        controller.onAction(StickyTaskAction.SetCompleted(token1, root.taskRef, true))
 
         withContext(Dispatchers.Default) {
             delay(100)
@@ -653,9 +660,9 @@ class DesktopTaskSurfacesTest {
         val access = DesktopTaskSurfaceAccess()
         access.onAccountAuthenticated(token1, store)
 
-        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L).copy(completed = false)
-        val child = createDefaultTodo(title = "Only Child", nowEpochMs = 1100L).copy(
-            parentTaskId = root.id,
+        val root = createDefaultTodo(title = "Parent Project", nowEpochMs = 1000L, ownerUserId = store.userId).copy(completed = false)
+        val child = createDefaultTodo(title = "Only Child", nowEpochMs = 1100L, ownerUserId = store.userId).copy(
+            parentTaskRef = root.taskRef,
             completed = false
         )
         store.saveTodoLocally(root)
@@ -680,7 +687,7 @@ class DesktopTaskSurfacesTest {
         }
 
         // Complete child
-        controller.onAction(StickyTaskAction.SetCompleted(token1, child.id, true))
+        controller.onAction(StickyTaskAction.SetCompleted(token1, child.taskRef, true))
 
         withContext(Dispatchers.Default) {
             withTimeout(5000L) {
@@ -702,8 +709,8 @@ class DesktopTaskSurfacesTest {
         val access = DesktopTaskSurfaceAccess()
         access.onAccountAuthenticated(token1, store)
 
-        val taskNoDeadline = createDefaultTodo("No deadline", nowEpochMs = 1000L)
-        val taskDateOnly = createDefaultTodo("Date only", nowEpochMs = 1000L).copy(
+        val taskNoDeadline = createDefaultTodo("No deadline", nowEpochMs = 1000L, ownerUserId = store.userId)
+        val taskDateOnly = createDefaultTodo("Date only", nowEpochMs = 1000L, ownerUserId = store.userId).copy(
             scheduleToken = "sched-tok-1",
             deadline = TaskDeadline(
                 date = "2026-10-25",
@@ -715,7 +722,7 @@ class DesktopTaskSurfacesTest {
                 overdueEpochMs = fixedNow + 100_000L
             )
         )
-        val taskTimedFuture = createDefaultTodo("Timed future", nowEpochMs = 1000L).copy(
+        val taskTimedFuture = createDefaultTodo("Timed future", nowEpochMs = 1000L, ownerUserId = store.userId).copy(
             scheduleToken = "sched-tok-2",
             deadline = TaskDeadline(
                 date = "2026-10-25",
@@ -727,7 +734,7 @@ class DesktopTaskSurfacesTest {
                 overdueEpochMs = fixedNow + 200_000L
             )
         )
-        val taskOverdue = createDefaultTodo("Timed overdue", nowEpochMs = 1000L).copy(
+        val taskOverdue = createDefaultTodo("Timed overdue", nowEpochMs = 1000L, ownerUserId = store.userId).copy(
             scheduleToken = "sched-tok-3",
             deadline = TaskDeadline(
                 date = "2026-10-20",
@@ -739,7 +746,7 @@ class DesktopTaskSurfacesTest {
                 overdueEpochMs = fixedNow - 50_000L
             )
         )
-        val taskCompletedOverdue = createDefaultTodo("Completed overdue", nowEpochMs = 1000L).copy(
+        val taskCompletedOverdue = createDefaultTodo("Completed overdue", nowEpochMs = 1000L, ownerUserId = store.userId).copy(
             completed = true,
             scheduleToken = "sched-tok-4",
             deadline = TaskDeadline(
@@ -892,7 +899,7 @@ class DesktopTaskSurfacesTest {
                     onTriggerSync = {}
                 )
 
-                val task = createDefaultTodo(title = "Startup Task $i", nowEpochMs = 1000L + i)
+                val task = createDefaultTodo(title = "Startup Task $i", nowEpochMs = 1000L + i, ownerUserId = store.userId)
                 store.saveTodoLocally(task)
 
                 // Interleave authentication and observation on Default dispatcher
@@ -912,7 +919,7 @@ class DesktopTaskSurfacesTest {
                 assertEquals(1, state.projectedSections.incomplete.size)
                 assertEquals("Startup Task $i", state.projectedSections.incomplete[0].todo.title)
                 controller.stopObserving()
-                store.deleteTodoLocally(task.id)
+                store.deleteTodoLocally(task.taskRef)
             }
         } finally {
             testScope.cancel()
@@ -933,8 +940,8 @@ class DesktopTaskSurfacesTest {
 
         val testScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         try {
-            store.saveTodoLocally(createDefaultTodo(title = "Account 1 Task", nowEpochMs = 1000L))
-            store2.saveTodoLocally(createDefaultTodo(title = "Account 2 Task", nowEpochMs = 2000L))
+            store.saveTodoLocally(createDefaultTodo(title = "Account 1 Task", nowEpochMs = 1000L, ownerUserId = store.userId))
+            store2.saveTodoLocally(createDefaultTodo(title = "Account 2 Task", nowEpochMs = 2000L, ownerUserId = store2.userId))
 
             val access = DesktopTaskSurfaceAccess()
             val controller = DesktopStickyTaskController(
@@ -994,7 +1001,7 @@ class DesktopTaskSurfacesTest {
         )
         assertEquals(SurfaceReadiness.Restoring, controller.stickyState.value.readiness)
 
-        val task = createDefaultTodo(title = "Immediate Task", nowEpochMs = 1000L)
+        val task = createDefaultTodo(title = "Immediate Task", nowEpochMs = 1000L, ownerUserId = store.userId)
         store.saveTodoLocally(task)
 
         access.onAccountAuthenticated(token1, store)

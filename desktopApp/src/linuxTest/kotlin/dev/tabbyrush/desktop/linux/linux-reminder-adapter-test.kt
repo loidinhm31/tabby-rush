@@ -2,6 +2,7 @@ package dev.tabbyrush.desktop.linux
 
 import dev.tabbyrush.desktop.PlatformReminderDispatcher
 import dev.tabbyrush.shared.contract.AccountKey
+import dev.tabbyrush.shared.contract.TaskRef
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -79,7 +80,7 @@ class LinuxReminderAdapterTest {
         val notifId = adapter.postOwnedNotification(
             accountKey = accountKey1,
             generation = 1L,
-            taskId = "task-a",
+            taskRef = TaskRef("user-1", "task-a"),
             scheduleToken = "tok-a",
             occurrenceIndex = 0,
             title = "Pay bills",
@@ -94,7 +95,7 @@ class LinuxReminderAdapterTest {
         val notifIdBlank = adapter.postOwnedNotification(
             accountKey = accountKey1,
             generation = 1L,
-            taskId = "task-b",
+            taskRef = TaskRef("user-1", "task-b"),
             scheduleToken = "tok-b",
             occurrenceIndex = 0,
             title = "",
@@ -113,7 +114,7 @@ class LinuxReminderAdapterTest {
         val id1 = adapter.postOwnedNotification(
             accountKey = accountKey1,
             generation = 1L,
-            taskId = "task-1",
+            taskRef = TaskRef("user-1", "task-1"),
             scheduleToken = "tok-1",
             occurrenceIndex = 0,
             title = "Account 1 task",
@@ -131,18 +132,34 @@ class LinuxReminderAdapterTest {
     }
 
     @Test
+    fun testCancelNotificationsForTaskClearsOnlySpecificTask() = runTest {
+        val fake = FakeLinuxNotificationAdapter(available = true, nextId = 10L)
+        val adapter = LinuxNativeReminderAdapter(fake)
+
+        val task1 = TaskRef("alice", "t1")
+        val task2 = TaskRef("alice", "t2")
+
+        adapter.postOwnedNotification(accountKey1, 1L, task1, "s1", 0, "Task 1", 100L) // ID 10
+        adapter.postOwnedNotification(accountKey1, 1L, task2, "s2", 0, "Task 2", 100L) // ID 11
+
+        adapter.cancelNotificationsForTask(accountKey1, task1)
+
+        assertEquals(listOf(10L), fake.closedIds)
+    }
+
+    @Test
     fun testCancelAllForAccountOnlyCleansOwnedNotifications() = runTest {
         val fake = FakeLinuxNotificationAdapter(available = true, nextId = 1L)
         val adapter = LinuxNativeReminderAdapter(fake)
 
-        // Post for account 1 (ID 1, 2)
-        adapter.postOwnedNotification(accountKey1, 1L, "t1", "s1", 0, "Task 1", 100L)
-        adapter.postOwnedNotification(accountKey1, 1L, "t2", "s2", 0, "Task 2", 100L)
+        val t1 = TaskRef("alice", "t1")
+        val t2 = TaskRef("alice", "t2")
+        val t3 = TaskRef("bob", "t3")
 
-        // Post for account 2 (ID 3)
-        adapter.postOwnedNotification(accountKey2, 1L, "t3", "s3", 0, "Task 3", 100L)
+        adapter.postOwnedNotification(accountKey1, 1L, t1, "s1", 0, "Task 1", 100L)
+        adapter.postOwnedNotification(accountKey1, 1L, t2, "s2", 0, "Task 2", 100L)
+        adapter.postOwnedNotification(accountKey2, 1L, t3, "s3", 0, "Task 3", 100L)
 
-        // Cancel all for account 1
         adapter.cancelAllForAccount(accountKey1)
 
         assertEquals(2, fake.closedIds.size)
@@ -156,7 +173,7 @@ class LinuxReminderAdapterTest {
         val fake = FakeLinuxNotificationAdapter(available = true, nextId = 1L, failOnClose = false)
         val adapter = LinuxNativeReminderAdapter(fake)
 
-        adapter.postOwnedNotification(accountKey1, 1L, "t1", "s1", 0, "Task 1", 100L)
+        adapter.postOwnedNotification(accountKey1, 1L, TaskRef("alice", "t1"), "s1", 0, "Task 1", 100L)
 
         fake.failOnClose = true
         kotlin.test.assertFailsWith<IllegalStateException> {

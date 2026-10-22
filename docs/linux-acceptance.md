@@ -1,9 +1,10 @@
 # Linux Desktop & Installed RPM Acceptance Specification
 
-**Document Version**: 1.3.0
-**Phase**: 12 — Coordinated cutover, recovery runbook and release documentation
-**Status**: The Linux implementation and historic package/test evidence below do not establish current native acceptance or release readiness. Interactive UI approval timed out twice, connected-Android acceptance was not run, and production migration is unauthorized. The announcements pilot note below is not approval for standard-sync release or cutover.
-**Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
+**Document Version**: 1.4.0
+**Last Updated**: 2026-10-21
+**Phase**: Collaborative Task Assignees & Room v5 delivered (Phases 01–08); dedicated smoke wiring added in Phase 09 (`runTaskAssigneesRuntimeSmoke`)
+**Status**: G0 policy validation confirmed 2026-10-21. Dedicated Linux-compatible runtime harness prepared in Phase 09. Collaborative native desktop acceptance (Gate G5) is **NOT RUN / pending** per project delegation rules. Interactive UI approval timed out twice, connected-Android acceptance was not run, and production migration is unauthorized.
+**Related Documents**: [Plan](../plans/261021-1552-tabbyrush-task-assignees/phase-09-integrated-acceptance-and-documentation.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ---
 
@@ -33,7 +34,11 @@ Phase 09 delivered the desktop application module (`:desktopApp`) configured for
 6. **Immutable Mode & Launchers**:
    - `MainKt.main` enforces `BuildMode.RELEASE` (HTTPS only, strict endpoint validation).
    - `DevelopmentLauncher.main` enables `BuildMode.DEBUG` (HTTP 127.0.0.1:3000 permitted) via custom `runDebug` task.
-
+7. **Collaborative Task Surfaces & Invariants**:
+   - Desktop task surfaces (`DesktopTaskSurfaces`, `DesktopTaskSurfaceAccess`, `TodoList`) use canonical `TaskRef(ownerUserId, rowId)`.
+   - Child-only assigned tasks render flat without synthetic parent roots or sibling disclosures.
+   - Surface admission and mutations re-resolve `accessGeneration` and current rights; on authoritative revocation, active items and pending D-Bus notifications are immediately cleared fail-closed.
+   - Dedicated runtime smoke registered as `:desktopApp:runTaskAssigneesRuntimeSmoke` executes Room v5 migration, independent coordinator sync, and revocation purge inspection on Linux (`-PdesktopTarget=linux`).
 ---
 
 ## 2. Historical Verification Evidence Matrix
@@ -123,6 +128,6 @@ Reported verification: 127 `:desktopApp:test` unit tests passed (including 20 `D
 - **Signal Handling & Dispatch**: Subscribes to `ActionInvoked` and `NotificationClosed`. When the user clicks the notification, the adapter extracts the message ID and generation, marshals to the Compose UI dispatcher, requests window focus/restoration, and opens the announcement detail view.
 - **Tray Integration & Full-Quit**: When minimized to tray, the SSE stream remains active. On explicit Quit (`quitSuspend()`), active remote notifications are closed, the SSE stream is terminated, and D-Bus signal subscriptions are unregistered. Reopening catches up silently via baseline hydration.
 
-### 4.2 Gate G4 Acceptance & Pilot Status
-- **Gate G4 Status**: **PASS**. Automated contract vectors, D-Bus session communication, and SSE handshake framing verified.
-- **Pilot Readiness**: The earlier restricted internal pilot statement applies only to the announcements scope. It is not current approval for standard-sync release or production migration; native acceptance remains unpassed and release remains blocked.
+### 4.2 Gate G5 Acceptance & Release Boundary
+- **Collaborative Assignees Gate (G5)**: Dedicated runtime harness (`:desktopApp:runTaskAssigneesRuntimeSmoke -PdesktopTarget=linux`) prepared; runtime verification is **NOT RUN / pending** during subagent phase per delegation rules.
+- **Pilot & Release Boundary**: The earlier restricted internal pilot statement applies only to announcements scope. It is not approval for collaborative task sync release or production migration; native acceptance remains unpassed and release remains blocked.

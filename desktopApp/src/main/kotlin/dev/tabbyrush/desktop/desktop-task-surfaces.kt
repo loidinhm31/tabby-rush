@@ -12,6 +12,7 @@ import dev.tabbyrush.shared.contract.SurfaceSnapshot
 import dev.tabbyrush.shared.contract.TaskSections
 import dev.tabbyrush.shared.contract.TaskSurfaceAccess
 import dev.tabbyrush.shared.contract.TitlePolicy
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.partitionSurfaceTodos
 import dev.tabbyrush.shared.data.RoomAccountStore
@@ -40,10 +41,10 @@ import java.util.UUID
 fun createDefaultTodo(
     title: String,
     nowEpochMs: Long = System.currentTimeMillis(),
-    id: String = UUID.randomUUID().toString().lowercase()
+    taskRef: TaskRef
 ): Todo {
     return Todo(
-        id = id,
+        taskRef = taskRef,
         title = title,
         completed = false,
         createdAt = nowEpochMs,
@@ -53,6 +54,17 @@ fun createDefaultTodo(
         scheduleToken = null
     )
 }
+
+fun createDefaultTodo(
+    title: String,
+    nowEpochMs: Long = System.currentTimeMillis(),
+    ownerUserId: String,
+    rowId: String = UUID.randomUUID().toString().lowercase()
+): Todo = createDefaultTodo(
+    title = title,
+    nowEpochMs = nowEpochMs,
+    taskRef = TaskRef(ownerUserId = ownerUserId, rowId = rowId)
+)
 
 enum class SurfaceGateState {
     OPEN,
@@ -156,12 +168,12 @@ class DesktopTaskSurfaceAccess : TaskSurfaceAccess, LeaveSchedulerCancelGate {
 
     override suspend fun setCompleted(
         token: SurfaceAccountToken,
-        taskId: String,
+        taskRef: TaskRef,
         completed: Boolean,
         nowEpochMs: Long
     ): SurfaceResult<CompletionChange> {
         return withSurfaceAdmission(token) { store ->
-            store.setCompletedLocally(taskId, completed, nowEpochMs)
+            store.setCompletedLocally(taskRef, completed, nowEpochMs)
         }
     }
 
@@ -184,20 +196,20 @@ class DesktopTaskSurfaceAccess : TaskSurfaceAccess, LeaveSchedulerCancelGate {
         true
     }
 
-    override suspend fun validateNavigation(token: SurfaceAccountToken, taskId: String?): Boolean {
+    override suspend fun validateNavigation(token: SurfaceAccountToken, taskRef: TaskRef?): Boolean {
         return stateMutex.withLock {
             if (gateState != SurfaceGateState.OPEN) return@withLock false
             val ready = _readiness.value
             if (ready !is SurfaceReadiness.Ready || ready.token != token || currentToken != token) {
                 return@withLock false
             }
-            if (taskId == null) {
+            if (taskRef == null) {
                 true
             } else {
                 val store = activeStore ?: return@withLock false
                 try {
                     val todos = store.loadTodos()
-                    todos.any { it.id == taskId && !it.isDeleted }
+                    todos.any { it.taskRef == taskRef && !it.isDeleted }
                 } catch (_: Exception) {
                     false
                 }
@@ -454,7 +466,11 @@ class DesktopStickyTaskController(
 
                 scope.launch {
                     val result = access.withSurfaceAdmission(action.token) { store ->
-                        val todo = createDefaultTodo(title, nowEpochMs = clock())
+                        val todo = createDefaultTodo(
+                            title = title,
+                            nowEpochMs = clock(),
+                            taskRef = TaskRef(ownerUserId = store.userId, rowId = UUID.randomUUID().toString().lowercase())
+                        )
                         store.saveTodoLocally(todo)
                     }
 
@@ -514,7 +530,7 @@ class DesktopStickyTaskController(
                 scope.launch {
                     val res = access.setCompleted(
                         token = action.token,
-                        taskId = action.taskId,
+                        taskRef = action.taskRef,
                         completed = action.completed,
                         nowEpochMs = clock()
                     )

@@ -2,6 +2,7 @@ package dev.tabbyrush.desktop
 
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.ScheduledAlarmHandle
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.sync.LeaveSchedulerCancelGate
 import dev.tabbyrush.shared.sync.ReminderSchedulingCoordinator
 import kotlinx.coroutines.CoroutineDispatcher
@@ -76,6 +77,10 @@ class DesktopReminderScheduler(
      */
     suspend fun getPendingAlarms(): List<ScheduledAlarmHandle> = stateMutex.withLock {
         alarms.toList()
+    }
+
+    suspend fun cancelAlarmsForTask(taskRef: TaskRef) = stateMutex.withLock {
+        alarms.removeAll { it.taskRef == taskRef }
     }
 
     private suspend fun runWakeLoop() {

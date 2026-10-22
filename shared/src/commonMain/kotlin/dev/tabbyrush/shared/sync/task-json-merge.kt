@@ -25,8 +25,31 @@ object TaskJsonMerge {
         if ("REMINDER" in parts) keys.addAll(reminderKeys)
         if ("PARENT" in parts) keys.add("parentTaskId")
         return JsonObject(base.toMutableMap().apply {
-            for (key in keys) put(key, requireNotNull(intent[key]) { "Missing captured intent field $key" })
+            for (key in keys) {
+                put(key, intent[key] ?: JsonNull)
+            }
         })
+    }
+
+    fun decodeRelation(rowId: String, raw: JsonObject): String? {
+        val id = raw["id"]?.let { if (it is JsonPrimitive && it.isString) it.content else null }
+        val taskId = raw["taskId"]?.let { if (it is JsonPrimitive && it.isString) it.content else null }
+        require(id == rowId) { "Relation id mismatch: expected $rowId, got $id" }
+        require(taskId == rowId) { "Relation taskId mismatch: expected $rowId, got $taskId" }
+        val userEl = raw["userId"]
+        return if (userEl == null || userEl is JsonNull) null
+        else if (userEl is JsonPrimitive && userEl.isString) userEl.content
+        else throw IllegalArgumentException("Invalid userId in relation")
+    }
+
+    fun encodeRelation(taskId: String, recipientUserId: String?): JsonObject = buildJsonObject {
+        put("id", taskId)
+        put("taskId", taskId)
+        if (recipientUserId != null) {
+            put("userId", recipientUserId)
+        } else {
+            put("userId", JsonNull)
+        }
     }
 
     fun decode(rowId: String, raw: JsonObject): TaskData {
@@ -69,28 +92,74 @@ object TaskJsonMerge {
     }
 
     fun project(record: PullRecordDto): ServerBaseEntity {
-        require(record.tableName == "todos" && record.rowId.isNotEmpty()) { "Unexpected record identity" }
+        require((record.tableName == "todos" || record.tableName == "taskAssignees") && record.rowId.isNotEmpty()) {
+            "Unexpected record identity: table=${record.tableName}, rowId=${record.rowId}"
+        }
         require(record.version in 1..MAX_EXACT_VERSION) { "Invalid record version" }
+        val owner = record.ownerUserId
+        val boundKey = if (owner != null && owner.isNotBlank()) dev.tabbyrush.shared.data.boundBindingKey(owner) else dev.tabbyrush.shared.data.BINDING_LOCAL_ACCOUNT
+        val bindingState = if (owner != null && owner.isNotBlank()) dev.tabbyrush.shared.data.BINDING_BOUND else dev.tabbyrush.shared.data.BINDING_LOCAL_ACCOUNT
+
+        if (record.tableName == "taskAssignees") {
+            val relation = if (record.deleted) null else runCatching { decodeRelation(record.rowId, record.data.jsonObject) }.getOrNull()
+            return ServerBaseEntity(
+                bindingKey = boundKey,
+                ownerBinding = bindingState,
+                ownerUserId = owner,
+                tableName = record.tableName,
+                rowId = record.rowId,
+                serverRevision = record.version,
+                deleted = record.deleted,
+                rawJson = record.data.toString(),
+                syncedAt = record.syncedAt,
+                standardConfirmed = true,
+                projectionError = if (!record.deleted && relation == null && record.data !is JsonNull) "Remote relation fields are incompatible; raw data retained" else null
+            )
+        }
+
         val data = if (record.deleted) null else runCatching { decode(record.rowId, record.data.jsonObject) }.getOrNull()
         return ServerBaseEntity(
-            rowId = record.rowId, serverRevision = record.version, deleted = record.deleted,
-            title = data?.title ?: "", completed = data?.completed ?: false, createdAt = data?.createdAt ?: 0L,
+            bindingKey = boundKey,
+            ownerBinding = bindingState,
+            ownerUserId = owner,
+            tableName = record.tableName,
+            rowId = record.rowId,
+            serverRevision = record.version,
+            deleted = record.deleted,
+            title = data?.title ?: "",
+            completed = data?.completed ?: false,
+            createdAt = data?.createdAt ?: 0L,
             updatedAt = data?.createdAt ?: 0L,
-            deadlineDate = data?.deadlineDate, deadlineTime = data?.deadlineTime, deadlineZone = data?.deadlineZone,
-            deadlineOffsetSeconds = data?.deadlineOffsetSeconds, reminderAnchorTime = data?.reminderAnchorTime,
-            deadlineAnchorEpochMs = data?.deadlineAnchorEpochMs, deadlineOverdueEpochMs = data?.deadlineOverdueEpochMs,
-            reminderEnabled = data?.reminderEnabled ?: false, reminderLeadMinutes = data?.reminderLeadMinutes ?: 0L,
-            reminderIntervalMinutes = data?.reminderIntervalMinutes, reminderCount = data?.reminderCount ?: 1L,
-            scheduleToken = data?.scheduleToken, parentTaskId = data?.parentTaskId,
-            rawJson = record.data.toString(), syncedAt = record.syncedAt, standardConfirmed = true,
+            deadlineDate = data?.deadlineDate,
+            deadlineTime = data?.deadlineTime,
+            deadlineZone = data?.deadlineZone,
+            deadlineOffsetSeconds = data?.deadlineOffsetSeconds,
+            reminderAnchorTime = data?.reminderAnchorTime,
+            deadlineAnchorEpochMs = data?.deadlineAnchorEpochMs,
+            deadlineOverdueEpochMs = data?.deadlineOverdueEpochMs,
+            reminderEnabled = data?.reminderEnabled ?: false,
+            reminderLeadMinutes = data?.reminderLeadMinutes ?: 0L,
+            reminderIntervalMinutes = data?.reminderIntervalMinutes,
+            reminderCount = data?.reminderCount ?: 1L,
+            scheduleToken = data?.scheduleToken,
+            parentTaskId = data?.parentTaskId,
+            rawJson = record.data.toString(),
+            syncedAt = record.syncedAt,
+            standardConfirmed = true,
             projectionError = if (!record.deleted && data == null) "Remote task fields are incompatible; raw data retained for review" else null
         )
     }
 }
 
-fun TaskData.toTodo(): Todo = Todo(
-    id = id, title = title, completed = completed, createdAt = createdAt,
-    deadline = toDeadline(), reminderRule = toReminderRule(), scheduleToken = scheduleToken, parentTaskId = parentTaskId
+fun TaskData.toTodo(ownerUserId: String = "local"): Todo = Todo(
+    taskRef = TaskRef(if (ownerUserId.isNotBlank()) ownerUserId else "local", id),
+    title = title,
+    completed = completed,
+    createdAt = createdAt,
+    deadline = toDeadline(),
+    reminderRule = toReminderRule(),
+    scheduleToken = scheduleToken,
+    parentTaskRef = parentTaskId?.let { TaskRef(if (ownerUserId.isNotBlank()) ownerUserId else "local", it) }
 )
 
 fun OutboxEntity.intentJson(): JsonObject = if (payloadJson != "{}") TaskJsonMerge.json.parseToJsonElement(payloadJson).jsonObject else {

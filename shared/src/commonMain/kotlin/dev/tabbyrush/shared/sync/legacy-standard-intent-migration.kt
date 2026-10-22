@@ -15,12 +15,16 @@ class LegacyStandardIntentMigration(private val store: RoomAccountStore) {
                 store.dao.translateLegacyAtomic(evidence, null, "REVIEW_ORIGINAL_EVIDENCE")
                 continue
             }
-            val sameRow = store.dao.getOutboxByRowId(op.rowId)
-            if (!provablyNeverDispatched(evidence) || sameRow.any { it.legacyEvidenceId != null && it.opId != op.opId }) {
+            val boundKey = dev.tabbyrush.shared.data.boundBindingKey(op.ownerUserId ?: store.userId)
+            val sameRow = store.dao.getOutboxByRow(boundKey, op.tableName, op.rowId)
+            val activeSameRow = if (sameRow.isEmpty()) store.dao.getOutboxByRowId(op.rowId) else sameRow
+            if (!provablyNeverDispatched(evidence) || activeSameRow.any { it.legacyEvidenceId != null && it.opId != op.opId }) {
                 store.dao.translateLegacyAtomic(evidence, null, "REVIEW_DELIVERY_PROVENANCE")
                 continue
             }
-            val base = store.dao.getServerBase(op.rowId)
+            val base = store.dao.getServerBase(boundKey, op.tableName, op.rowId)
+                ?: store.dao.getServerBase(dev.tabbyrush.shared.data.BINDING_LOCAL_ACCOUNT, op.tableName, op.rowId)
+                ?: store.dao.getServerBase(op.rowId)
             if ((base == null && op.kind != "create") || base?.deleted == true || base?.projectionError != null) {
                 store.dao.translateLegacyAtomic(evidence, null, "REVIEW_MISSING_OR_INCOMPATIBLE_REMOTE")
                 continue

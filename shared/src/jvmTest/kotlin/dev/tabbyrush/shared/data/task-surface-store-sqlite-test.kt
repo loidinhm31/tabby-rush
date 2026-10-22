@@ -5,6 +5,7 @@ import dev.tabbyrush.shared.contract.CompletionChange
 import dev.tabbyrush.shared.contract.TaskOperationKind
 import dev.tabbyrush.shared.contract.ReminderRule
 import dev.tabbyrush.shared.contract.TaskDeadline
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -44,6 +45,7 @@ class TaskSurfaceStoreSqliteTest {
             appId = "tabby-rush"
         )
     }
+    private fun taskRef(id: String) = TaskRef("user-surface-test", id)
 
     @AfterTest
     fun tearDown() {
@@ -77,7 +79,7 @@ class TaskSurfaceStoreSqliteTest {
     fun testObserveTodosColdReplay() = runTest {
         val now = 10_000L
         val todo = Todo(
-            id = "t1",
+            taskRef = taskRef("t1"),
             title = "Existing task",
             completed = false,
             createdAt = now,
@@ -99,7 +101,7 @@ class TaskSurfaceStoreSqliteTest {
     fun testSetCompletedLocallyChangesStateAndUpdatesMonotonicTime() = runTest {
         val now = 10_000L
         val todo = Todo(
-            id = "t1",
+            taskRef = taskRef("t1"),
             title = "Task to complete",
             completed = false,
             createdAt = now,
@@ -110,7 +112,7 @@ class TaskSurfaceStoreSqliteTest {
         store.saveTodoLocally(todo)
 
         val completedNow = 15_000L
-        val result = store.setCompletedLocally("t1", completed = true, nowEpochMs = completedNow)
+        val result = store.setCompletedLocally(taskRef("t1"), completed = true, nowEpochMs = completedNow)
         assertEquals(CompletionChange.Changed, result)
 
         val loaded = store.loadTodos().first { it.id == "t1" }
@@ -130,7 +132,7 @@ class TaskSurfaceStoreSqliteTest {
     fun testSetCompletedLocallyDuplicateIsUnchangedNoOp() = runTest {
         val now = 10_000L
         val todo = Todo(
-            id = "t1",
+            taskRef = taskRef("t1"),
             title = "Already completed",
             completed = true,
             createdAt = now,
@@ -144,7 +146,7 @@ class TaskSurfaceStoreSqliteTest {
         val metaBefore = store.dao.getMeta()?.localRevisionCounter ?: 0L
 
         // Call again with desired = true
-        val result = store.setCompletedLocally("t1", completed = true, nowEpochMs = 20_000L)
+        val result = store.setCompletedLocally(taskRef("t1"), completed = true, nowEpochMs = 20_000L)
         assertEquals(CompletionChange.Unchanged, result)
 
         val outboxCountAfter = store.dao.getOutboxByRowId("t1").size
@@ -156,7 +158,7 @@ class TaskSurfaceStoreSqliteTest {
 
     @Test
     fun testSetCompletedLocallyMissingRecordReturnsMissing() = runTest {
-        val result = store.setCompletedLocally("non-existent", completed = true, nowEpochMs = 10_000L)
+        val result = store.setCompletedLocally(taskRef("non-existent"), completed = true, nowEpochMs = 10_000L)
         assertEquals(CompletionChange.Missing, result)
         assertEquals(0, store.dao.countOutbox())
     }
@@ -175,7 +177,7 @@ class TaskSurfaceStoreSqliteTest {
         )
         store.dao.upsertServerBase(tombstone)
 
-        val result = store.setCompletedLocally("tombstone-1", completed = true, nowEpochMs = 10_000L)
+        val result = store.setCompletedLocally(taskRef("tombstone-1"), completed = true, nowEpochMs = 10_000L)
         assertEquals(CompletionChange.Missing, result)
         assertEquals(0, store.dao.countOutbox())
     }
@@ -206,7 +208,7 @@ class TaskSurfaceStoreSqliteTest {
         store.dao.upsertDraft(draft)
 
         // Calling setCompletedLocally must return Missing, not throw IllegalStateException, and preserve existing draft
-        val result = store.setCompletedLocally("tombstone-residual", completed = true, nowEpochMs = 10_000L)
+        val result = store.setCompletedLocally(taskRef("tombstone-residual"), completed = true, nowEpochMs = 10_000L)
         assertEquals(CompletionChange.Missing, result)
         assertEquals(0, store.dao.countOutbox())
         assertNotNull(store.dao.getDraft("tombstone-residual"))
@@ -238,7 +240,7 @@ class TaskSurfaceStoreSqliteTest {
 
         // Calling setCompletedLocally must return Missing without throwing and not enqueue new outbox operations
         val initialCount = store.dao.countOutbox()
-        val result = store.setCompletedLocally("tombstone-outbox", completed = true, nowEpochMs = 10_000L)
+        val result = store.setCompletedLocally(taskRef("tombstone-outbox"), completed = true, nowEpochMs = 10_000L)
         assertEquals(CompletionChange.Missing, result)
         assertEquals(initialCount, store.dao.countOutbox())
     }
@@ -272,7 +274,7 @@ class TaskSurfaceStoreSqliteTest {
         store.dao.upsertServerBase(base)
 
         // Perform completion
-        val result = store.setCompletedLocally("t1", completed = true, nowEpochMs = 25_000L)
+        val result = store.setCompletedLocally(taskRef("t1"), completed = true, nowEpochMs = 25_000L)
         assertEquals(CompletionChange.Changed, result)
 
         val loaded = store.loadTodos().first { it.id == "t1" }
@@ -287,7 +289,7 @@ class TaskSurfaceStoreSqliteTest {
     fun testSetCompletedLocallyPersistsAcrossReopen() = runTest {
         val now = 10_000L
         val todo = Todo(
-            id = "t1",
+            taskRef = taskRef("t1"),
             title = "Persistent task",
             completed = false,
             createdAt = now,
@@ -297,7 +299,7 @@ class TaskSurfaceStoreSqliteTest {
         )
         store.saveTodoLocally(todo)
 
-        val result = store.setCompletedLocally("t1", completed = true, nowEpochMs = 12_000L)
+        val result = store.setCompletedLocally(taskRef("t1"), completed = true, nowEpochMs = 12_000L)
         assertEquals(CompletionChange.Changed, result)
 
         reopenStore()
@@ -311,7 +313,7 @@ class TaskSurfaceStoreSqliteTest {
     fun testObserveTodosEmitsOnCompletionMutation() = kotlinx.coroutines.runBlocking {
         val now = 10_000L
         val todo = Todo(
-            id = "t1",
+            taskRef = taskRef("t1"),
             title = "Observe mutation",
             completed = false,
             createdAt = now,
@@ -341,7 +343,7 @@ class TaskSurfaceStoreSqliteTest {
         try {
             initialEmitted.await()
             // Trigger mutation
-            store.setCompletedLocally("t1", completed = true, nowEpochMs = 15_000L)
+            store.setCompletedLocally(taskRef("t1"), completed = true, nowEpochMs = 15_000L)
             kotlinx.coroutines.withTimeout(3000) {
                 targetReached.await()
             }

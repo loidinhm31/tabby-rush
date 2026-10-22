@@ -27,14 +27,30 @@ class AdversarialSyncSqliteTest {
     }
     private fun open() = RoomAccountStore(key, "sqlite-user", createJvmDatabaseBuilder(file).build(), config.appId)
     @AfterTest fun cleanup() { store.close(); directory.deleteRecursively() }
-    private fun record(id: String, title: String = "Remote", version: Long = 1L) = PullRecordDto("todos", id, TaskJsonMerge.encode(Todo(id, title, false, 1000L)), version, stamp)
+    private fun record(id: String, title: String = "Remote", version: Long = 1L) = PullRecordDto("todos", id, TaskJsonMerge.encode(Todo(TaskRef("sqlite-user", id), title, false, 1000L)), version, stamp)
     private fun sql(statement: String) {
         val connection = BundledSQLiteDriver().open(file.absolutePath)
         try { connection.execSQL(statement) } finally { connection.close() }
     }
     private suspend fun session(engine: TestHttpEngine): HubAuthSession {
         val vault = FakeCredentialVault(); vault.store(key, CredentialBundle("access", "refresh"))
-        return HubAuthSession(config, vault, engine).also { it.restoreSession(AccountIdentity("sqlite-user", "test", "test@example.com"), key) }
+        val identity = AccountIdentity("sqlite-user", "test", "test@example.com")
+        store.initializeOwnerBinding(identity)
+        return HubAuthSession(config, vault, engine).also { it.restoreSession(identity, key) }
+    }
+    private fun pullResponse(request: PullRequestDto, records: List<PullRecordDto>, schemaVersion: Long): String {
+        val rows = if (request.accessChecks == null && request.checkpoint == null) records else emptyList()
+        return syncWireJson.encodeToString(PullResponseDto(
+            records = rows.map { it.copy(ownerUserId = "sqlite-user") },
+            checkpoint = request.checkpoint ?: SyncCheckpointDto(stamp, rows.lastOrNull()?.rowId ?: ""),
+            serverTimestamp = stamp,
+            schemaVersion = schemaVersion,
+            collaborationVersion = 1L,
+            accessRevision = 1L,
+            accessResults = request.accessChecks?.map {
+                TaskAccessResultDto(it, "accessible", TaskCapabilitiesDto(true, true, true, true), "full-group")
+            }
+        ))
     }
 
     @Test fun pageAndCheckpointRollbackTogetherThenRestartFreshAfterDowntime() = runTest {
@@ -46,7 +62,7 @@ class AdversarialSyncSqliteTest {
         assertEquals(0, store.dao.countStagedRecords()); assertNull(store.dao.getMeta()?.scanCheckpointUpdatedAt)
         sql("DROP TRIGGER abort_scan")
         store.dao.commitPageAtomic(listOf(TaskJsonMerge.project(record("a"))), stamp, "a", 2L, generation, true, 1L)
-        store.saveTodoLocally(Todo("local", "Concurrent scan edit", false, 1000L))
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "local"), "Concurrent scan edit", false, 1000L))
         store.close(); store = open()
         assertEquals(stamp, store.dao.getMeta()?.scanCheckpointUpdatedAt)
         assertEquals(1, store.dao.countStagedRecords()); assertEquals("Concurrent scan edit", store.loadTodos().single().title)
@@ -84,7 +100,7 @@ class AdversarialSyncSqliteTest {
     @Test fun opaqueJsonSurvivesFifoRebaseAndOlderAckCannotClearNewerEdit() = runTest {
         val raw = JsonObject(record("a").data.jsonObject.toMutableMap().apply { put("future", TaskJsonMerge.json.parseToJsonElement("""{"nested":[1,null,{"x":true}]}""")) })
         store.dao.upsertServerBase(TaskJsonMerge.project(record("a").copy(data = raw)))
-        store.saveTodoLocally(Todo("a", "First local", false, 1000L))
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "a"), "First local", false, 1000L))
         val reconciliation = OutboxReconciliation(store)
         val first = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).single()
         assertEquals(raw["future"], reconciliation.toDto(first).data["future"])
@@ -99,7 +115,7 @@ class AdversarialSyncSqliteTest {
     }
 
     @Test fun matchingLostDeliveryConvergesWithoutReceiptOrReplay() = runTest {
-        store.saveTodoLocally(Todo("a", "Local", false, 1000L))
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "a"), "Local", false, 1000L))
         val reconciliation = OutboxReconciliation(store)
         val frozen = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).single()
         reconciliation.markBatchUncertain(listOf(frozen), "lost response")
@@ -114,7 +130,7 @@ class AdversarialSyncSqliteTest {
 
     @Test fun supersededUncertainAndMissingConfirmedNeverBecomeCreates() = runTest {
         store.dao.upsertServerBase(TaskJsonMerge.project(record("a")))
-        store.saveTodoLocally(Todo("a", "Local", false, 1000L))
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "a"), "Local", false, 1000L))
         val reconciliation = OutboxReconciliation(store)
         val frozen = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).single()
         reconciliation.markBatchUncertain(listOf(frozen), "lost response")
@@ -136,7 +152,8 @@ class AdversarialSyncSqliteTest {
             put("deliveryState", "PENDING"); put("consecutiveFailures", 0L); put("intentMask", "TITLE")
             put("transitionCheckpoint", JsonNull); put("dispatchHistory", """{"createdUnsent":true,"dispatchCount":0}""")
         }
-        store.dao.upsertOutbox(legacy); store.dao.upsertLegacyEvidence(LegacySyncEvidenceEntity("old", "a", provenance.toString()))
+        store.dao.upsertOutbox(legacy)
+        store.dao.upsertLegacyEvidence(LegacySyncEvidenceEntity(sourceOpId = "old", rowId = "a", originalJson = provenance.toString()))
         store.dao.upsertServerBase(TaskJsonMerge.project(record("a")))
         store.dao.upsertMeta(AccountSyncMetaEntity(scanState = "READY"))
         sql("CREATE TRIGGER abort_translation BEFORE INSERT ON legacy_sync_evidence WHEN NEW.outcome = 'TRANSLATED_INTENT_ONLY' BEGIN SELECT RAISE(ABORT, 'injected translation failure'); END")
@@ -162,9 +179,8 @@ class AdversarialSyncSqliteTest {
             when {
                 request.url.encodedPath.endsWith("/pull") -> {
                     val pull = TaskJsonMerge.json.decodeFromString<PullRequestDto>(body)
-                    if (pull.checkpoint == null) fullPulls++
-                    val rows = if (pull.checkpoint == null) remote.toList() else emptyList()
-                    HttpStatusCode.OK to TaskJsonMerge.json.encodeToString(PullResponseDto(rows, SyncCheckpointDto(stamp, remote.lastOrNull()?.rowId ?: ""), stamp, false, 3L))
+                    if (pull.checkpoint == null && pull.accessChecks == null) fullPulls++
+                    HttpStatusCode.OK to pullResponse(pull, remote, 3L)
                 }
                 request.url.encodedPath.endsWith("/delta") -> {
                     deltaCalls++
@@ -177,7 +193,7 @@ class AdversarialSyncSqliteTest {
         }
         val session = session(engine)
         val coordinator = AccountSyncCoordinator(store, session)
-        store.saveTodoLocally(Todo("a", "Local", false, 1000L))
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "a"), "Local", false, 1000L))
         coordinator.triggerSync()
         assertEquals(1, deltaCalls); assertEquals("UNCERTAIN", store.dao.getAllOutbox().single().deliveryState)
         coordinator.triggerSync()
@@ -189,7 +205,7 @@ class AdversarialSyncSqliteTest {
     @Test fun explicitReapplyMintsEnvelopeOverRefreshedOpaqueBaseOnlyChangedFields() = runTest {
         val anchor = StrictTimeZoneResolver.default.resolveInstant("UTC", "2026-10-20", "10:00")
         val deadline = TaskDeadline("2026-10-20", "10:00", "UTC", 0L, anchorEpochMs = anchor, overdueEpochMs = anchor)
-        val raw = JsonObject(TaskJsonMerge.encode(Todo("a", "Remote", true, 1000L, deadline = deadline, scheduleToken = "remote-token"))
+        val raw = JsonObject(TaskJsonMerge.encode(Todo(TaskRef("sqlite-user", "a"), "Remote", true, 1000L, deadline = deadline, scheduleToken = "remote-token"))
             .toMutableMap().apply { put("future", TaskJsonMerge.json.parseToJsonElement("""{"nested":[null,true]}""")) })
         val remote = PullRecordDto("todos", "a", raw, 5L, stamp)
         store.dao.upsertServerBase(TaskJsonMerge.project(record("a")))
@@ -197,11 +213,10 @@ class AdversarialSyncSqliteTest {
             createdAt = 1000L, localRevision = 1L, deliveryState = "CONFLICT", createdAtEpochMs = 1000L, intentMask = "TITLE"))
         val engine = TestHttpEngine { request ->
             val pull = TaskJsonMerge.json.decodeFromString<PullRequestDto>((request.body as TextContent).text)
-            HttpStatusCode.OK to TaskJsonMerge.json.encodeToString(PullResponseDto(
-                if (pull.checkpoint == null) listOf(remote) else emptyList(), SyncCheckpointDto(stamp, "a"), stamp, false, 4L))
+            HttpStatusCode.OK to pullResponse(pull, listOf(remote), 4L)
         }
         val coordinator = AccountSyncCoordinator(store, session(engine))
-        coordinator.reapplyConflict("a")
+        coordinator.reapplyConflict(TaskRef("sqlite-user", "a"))
         assertEquals("DISCARDED", store.dao.getOutboxEntry("conflict")?.deliveryState)
         val reconciliation = OutboxReconciliation(store)
         val fresh = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).single()
@@ -221,7 +236,7 @@ class AdversarialSyncSqliteTest {
             createdAt = 1000L, localRevision = 1L, deliveryState = "REVIEW", createdAtEpochMs = 1000L,
             intentMask = "TITLE", parentTaskId = parent))
         val engine = TestHttpEngine { error("Copy-as-new is a local decision; no network required") }
-        AccountSyncCoordinator(store, session(engine)).copyAsNew(child)
+        AccountSyncCoordinator(store, session(engine)).copyAsNew(TaskRef("sqlite-user", child))
         val copy = store.loadTodos().single()
         assertNotEquals(child, copy.id)
         assertNull(copy.parentTaskId)

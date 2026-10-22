@@ -34,10 +34,10 @@ interface TaskSurfaceAccess {
     suspend fun read(token: SurfaceAccountToken): SurfaceResult<SurfaceSnapshot>
     suspend fun setCompleted(
         token: SurfaceAccountToken,
-        taskId: String,
+        taskRef: TaskRef,
         completed: Boolean,
         nowEpochMs: Long
     ): SurfaceResult<CompletionChange>
     suspend fun publishIfCurrent(token: SurfaceAccountToken, publish: suspend () -> Unit): Boolean
-    suspend fun validateNavigation(token: SurfaceAccountToken, taskId: String?): Boolean
+    suspend fun validateNavigation(token: SurfaceAccountToken, taskRef: TaskRef?): Boolean
 }

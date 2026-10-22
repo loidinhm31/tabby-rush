@@ -31,8 +31,15 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.tabbyrush.shared.auth.HubAuthSession
 import dev.tabbyrush.shared.contract.AccessRequestInfo
+import dev.tabbyrush.shared.contract.AccessLossEvidence
 import dev.tabbyrush.shared.contract.AccountIdentity
 import dev.tabbyrush.shared.contract.AccountKey
+import dev.tabbyrush.shared.contract.AssignmentSlotResult
+import dev.tabbyrush.shared.contract.HierarchyCoverage
+import dev.tabbyrush.shared.contract.OwnerBindingState
+import dev.tabbyrush.shared.contract.TaskAccessStatus
+import dev.tabbyrush.shared.contract.TaskRef
+import dev.tabbyrush.shared.contract.UserLookupResult
 import dev.tabbyrush.shared.contract.ApiResult
 import dev.tabbyrush.shared.contract.AuthState
 import dev.tabbyrush.shared.contract.BuildMode
@@ -356,9 +363,15 @@ class DesktopController(
 
         val token = SurfaceAccountToken(accountKey, gen)
 
+        val identity = authSession.currentIdentity.value
+            ?: throw IllegalStateException("Cannot create account runtime without authenticated AccountIdentity")
         val db = createJvmDatabaseBuilder(accountFiles.getDatabaseFile(accountKey)).build()
-        val store = RoomAccountStore(accountKey, authSession.currentIdentity.value?.userId ?: "default", db, hubConfig.appId)
-
+        val store = RoomAccountStore(accountKey, identity.userId, db, hubConfig.appId)
+        val bindingState = store.initializeOwnerBinding(identity)
+        if (bindingState != OwnerBindingState.BOUND) {
+            try { db.close() } catch (_: Exception) {}
+            throw IllegalStateException("Owner binding failed for $accountKey with identity ${identity.userId}")
+        }
         val deliveryGate = ReminderDeliveryGate(
             accountKey = accountKey,
             getPersistedGeneration = { accountFiles.readGeneration(accountKey) },
@@ -418,7 +431,6 @@ class DesktopController(
             uiDispatcher = Dispatchers.Main,
             onRestoreWindow = { showMainWindow() }
         )
-        val identity = authSession.currentIdentity.value ?: AccountIdentity(userId = "default", username = "user", email = "")
         remoteRuntime.start(identity, gen)
 
         val compositeCancelGate = CompositeDesktopLeaveCancelGate(
@@ -539,13 +551,47 @@ class DesktopController(
         val r = activeRuntime ?: return
         try {
             allTodos = r.store.loadTodos()
-            applyFilterAndCounts()
+            val evidence = r.store.listAccessLossEvidence()
+
+            // 1. Authoritative access loss: purge active editor if affected
+            val currentEditor = _uiState.value.editor
+            if (currentEditor?.taskRef != null) {
+                val currentTodo = allTodos.firstOrNull { it.taskRef == currentEditor.taskRef }
+                if (currentTodo == null || currentTodo.isDeleted || currentTodo.accessState?.status == TaskAccessStatus.Unavailable || evidence.any { it.ref == currentEditor.taskRef }) {
+                    _uiState.value = _uiState.value.copy(editor = null)
+                }
+            }
+
+            // 2. Authoritative access loss: purge delete candidate if affected
+            val currentDelete = _uiState.value.deleteCandidate
+            if (currentDelete != null) {
+                val currentTodo = allTodos.firstOrNull { it.taskRef == currentDelete.taskRef }
+                if (currentTodo == null || currentTodo.isDeleted || currentTodo.accessState?.status == TaskAccessStatus.Unavailable || evidence.any { it.ref == currentDelete.taskRef }) {
+                    _uiState.value = _uiState.value.copy(deleteCandidate = null)
+                }
+            }
+
+            // 3. Authoritative access loss: purge conflict if affected
+            val currentConflict = _uiState.value.conflict
+            if (currentConflict != null && evidence.any { it.ref == currentConflict.taskRef }) {
+                _uiState.value = _uiState.value.copy(conflict = null)
+            }
+
+            // 4. Cancel notifications and alarms for revoked tasks
+            for (ev in evidence) {
+                r.reminderScheduler.cancelAlarmsForTask(ev.ref)
+                if (reminderAdapter is DesktopReminderAdapter) {
+                    reminderAdapter.cancelNotificationsForTask(r.accountKey, ev.ref)
+                }
+            }
+
+            applyFilterAndCounts(evidence)
         } catch (ce: CancellationException) {
             throw ce
         } catch (_: Exception) {}
     }
 
-    private fun applyFilterAndCounts() {
+    private fun applyFilterAndCounts(evidence: List<AccessLossEvidence> = _uiState.value.accessLossEvidence) {
         val projection = dev.tabbyrush.shared.contract.TaskHierarchyProjector.projectHierarchy(
             todos = allTodos,
             filter = _uiState.value.filter
@@ -554,7 +600,8 @@ class DesktopController(
             items = projection.items.map { it.todo },
             hierarchicalItems = projection.items,
             counts = projection.counts,
-            unresolvedChildren = projection.unresolvedChildren
+            unresolvedChildren = projection.unresolvedChildren,
+            accessLossEvidence = evidence
         )
     }
 
@@ -565,7 +612,7 @@ class DesktopController(
                     _uiState.value = _uiState.value.copy(filter = action.filter)
                     applyFilterAndCounts()
                 }
-                is TodoAction.OpenCreate -> openCreate(action.initialTitle, action.parentTaskId, action.parentTitle)
+                is TodoAction.OpenCreate -> openCreate(action.initialTitle, action.parentTaskRef, action.parentTitle)
                 is TodoAction.ChangeDraftTitle -> onTitleChanged(action.rawTitle)
                 is TodoAction.UpdateEditorState -> _uiState.value = _uiState.value.copy(editor = action.editor)
                 is TodoAction.SubmitEditor -> submitEditor()
@@ -579,18 +626,63 @@ class DesktopController(
                 is TodoAction.ClockTick -> _uiState.value = _uiState.value.copy(nowEpochMs = action.nowEpochMs)
                 is TodoAction.ToggleCompleted -> toggleCompleted(action.todo)
                 is TodoAction.RequestDelete -> {
-                    val count = allTodos.count { it.parentTaskId == action.todo.id && !it.isDeleted }
+                    val store = activeRuntime?.store
+                    val isOwner = store != null && action.todo.taskRef.ownerUserId == store.userId
+                    val canDelete = if (isOwner) true else (action.todo.accessState?.canDeleteTask == true)
+                    if (!canDelete) {
+                        _uiState.value = _uiState.value.copy(
+                            safeError = SafeError.OperationForbidden("PERMISSION_DENIED", "Cannot delete task", action.todo.taskRef)
+                        )
+                        return@launch
+                    }
+                    val count = allTodos.count { it.parentTaskRef == action.todo.taskRef && !it.isDeleted }
                     _uiState.value = _uiState.value.copy(deleteCandidate = action.todo, deleteCandidateChildCount = count)
                 }
                 is TodoAction.ConfirmDelete -> confirmDelete()
                 is TodoAction.CancelDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = null)
                 is TodoAction.TriggerSync -> triggerSync()
                 is TodoAction.ReconcilePending -> activeRuntime?.coordinator?.reconcilePending()
-                is TodoAction.DiscardConflict -> resolveConflict { it.discardConflict(action.rowId) }
-                is TodoAction.ReapplyConflict -> resolveConflict { it.reapplyConflict(action.rowId) }
-                is TodoAction.CopyAsNew -> resolveConflict { it.copyAsNew(action.rowId) }
+                is TodoAction.DiscardConflict -> resolveConflict { it.discardConflict(action.taskRef) }
+                is TodoAction.ReapplyConflict -> resolveConflict { it.reapplyConflict(action.taskRef) }
+                is TodoAction.CopyAsNew -> resolveConflict { it.copyAsNew(action.taskRef) }
+                is TodoAction.AssignTask -> {
+                    val r = activeRuntime ?: return@launch
+                    val result = r.store.assignTaskLocally(action.intent)
+                    when (result) {
+                        is AssignmentSlotResult.Success -> {
+                            reloadTodos()
+                            triggerSync()
+                        }
+                        is AssignmentSlotResult.AccessDenied -> {
+                            _uiState.value = _uiState.value.copy(
+                                safeError = SafeError.OperationForbidden("PERMISSION_DENIED", "Cannot manage assignment for this task", action.intent.taskRef)
+                            )
+                        }
+                        is AssignmentSlotResult.VersionConflict -> {
+                            _uiState.value = _uiState.value.copy(
+                                safeError = SafeError.Conflict("SLOT_CONFLICT", "Assignment slot conflict", action.intent.taskRef)
+                            )
+                            triggerSync()
+                        }
+                        is AssignmentSlotResult.InvalidStructure -> {
+                            _uiState.value = _uiState.value.copy(
+                                safeError = SafeError.Validation("INVALID_STRUCTURE", result.message)
+                            )
+                        }
+                        AssignmentSlotResult.Missing -> {
+                            _uiState.value = _uiState.value.copy(
+                                safeError = SafeError.Validation("TASK_MISSING", "Task not found")
+                            )
+                        }
+                        AssignmentSlotResult.Unchanged -> { /* No-op */ }
+                    }
+                }
+                is TodoAction.DismissAccessLossNotice -> {
+                    val r = activeRuntime ?: return@launch
+                    r.store.dismissAccessLossEvidence(action.ref)
+                    reloadTodos()
+                }
                 is TodoAction.DismissError -> {
-                    activeRuntime?.coordinator?.dismissError()
                     _uiState.value = _uiState.value.copy(safeError = null)
                 }
                 is TodoAction.RequestLeave -> requestLeave()
@@ -614,6 +706,10 @@ class DesktopController(
         activeRuntime?.remoteRuntime?.dispatch(action)
     }
 
+    suspend fun lookupUser(username: String): ApiResult<UserLookupResult> {
+        return authSession.lookupUser(username)
+    }
+
     private fun openOsNotificationSettings() {
         try {
             val osName = System.getProperty("os.name")?.lowercase() ?: ""
@@ -633,13 +729,13 @@ class DesktopController(
         _uiState.value = _uiState.value.copy(editor = _uiState.value.editor?.copy(rawTitle = raw, error = err))
     }
 
-    private suspend fun openCreate(initialTitle: String, parentTaskId: String? = null, parentTitle: String? = null) {
+    private suspend fun openCreate(initialTitle: String, parentTaskRef: TaskRef? = null, parentTitle: String? = null) {
         val runtime = activeRuntime
         val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
         val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
         _uiState.value = _uiState.value.copy(
             editor = EditorState(
-                id = null,
+                taskRef = null,
                 rawTitle = initialTitle,
                 hasDeadline = false,
                 deadlineDate = "",
@@ -651,55 +747,60 @@ class DesktopController(
                 reminderLeadMinutes = settings.defaultReminderLeadMinutes,
                 reminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
                 reminderCount = settings.defaultReminderCount,
-                parentTaskId = parentTaskId,
-                parentTitle = parentTitle
+                parentTaskRef = parentTaskRef,
+                parentTitle = parentTitle,
+                canManageAssignment = true
             )
         )
     }
 
     private suspend fun openEdit(todo: Todo) {
-        val runtime = activeRuntime
-        val dl = todo.deadline
-        val parentTitle = if (todo.parentTaskId != null) allTodos.firstOrNull { it.id == todo.parentTaskId }?.title else null
-        val editor = if (dl != null) {
-            EditorState(
-                id = todo.id,
-                rawTitle = todo.title,
-                hasDeadline = true,
-                deadlineDate = dl.date,
-                hasTime = dl.time != null,
-                deadlineTime = dl.time ?: "",
-                deadlineZone = dl.zone,
-                chosenOffsetSeconds = dl.offsetSeconds,
-                reminderAnchorTime = dl.reminderAnchorTime ?: "09:00",
-                reminderEnabled = todo.reminderRule.enabled,
-                reminderLeadMinutes = todo.reminderRule.leadMinutes,
-                reminderIntervalMinutes = todo.reminderRule.intervalMinutes,
-                reminderCount = todo.reminderRule.count,
-                originalScheduleToken = todo.scheduleToken,
-                parentTaskId = todo.parentTaskId,
-                parentTitle = parentTitle
+        val runtime = activeRuntime ?: return
+        val currentTodo = runtime.store.getTodo(todo.taskRef) ?: todo
+        if (currentTodo.isDeleted) return
+        if (currentTodo.accessState?.status == TaskAccessStatus.Unavailable) return
+
+        val isChildOnly = currentTodo.accessState?.coverage == HierarchyCoverage.ChildOnly
+        val isOwner = currentTodo.taskRef.ownerUserId == runtime.store.userId
+        val canManageAssignment = if (isOwner) true else (currentTodo.accessState?.canManageAssignment == true)
+        val canEdit = if (isOwner) true else (currentTodo.accessState?.canEditContent == true)
+        if (!canEdit) {
+            _uiState.value = _uiState.value.copy(
+                safeError = SafeError.OperationForbidden("PERMISSION_DENIED", "Cannot edit this task", currentTodo.taskRef)
             )
-        } else {
-            val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
-            EditorState(
-                id = todo.id,
-                rawTitle = todo.title,
-                hasDeadline = false,
-                deadlineDate = "",
-                hasTime = false,
-                deadlineTime = "",
-                deadlineZone = localZone,
-                reminderAnchorTime = "09:00",
-                reminderEnabled = false,
-                reminderLeadMinutes = 0,
-                reminderIntervalMinutes = 15,
-                reminderCount = 1,
-                originalScheduleToken = null,
-                parentTaskId = todo.parentTaskId,
-                parentTitle = parentTitle
-            )
+            return
         }
+
+        val dl = currentTodo.deadline
+        val parentTitle = if (!isChildOnly && currentTodo.parentTaskRef != null) {
+            allTodos.firstOrNull { it.taskRef == currentTodo.parentTaskRef }?.title
+        } else null
+        val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
+        val assignment = runtime.store.getAssignmentSlot(currentTodo.taskRef)
+        val editor = EditorState(
+            taskRef = currentTodo.taskRef,
+            rawTitle = currentTodo.title,
+            hasDeadline = dl != null,
+            deadlineDate = dl?.date ?: "",
+            hasTime = dl?.time != null,
+            deadlineTime = dl?.time ?: "",
+            deadlineZone = dl?.zone ?: localZone,
+            chosenOffsetSeconds = dl?.offsetSeconds,
+            reminderAnchorTime = dl?.reminderAnchorTime ?: "09:00",
+            reminderEnabled = currentTodo.reminderRule.enabled,
+            reminderLeadMinutes = currentTodo.reminderRule.leadMinutes,
+            reminderIntervalMinutes = currentTodo.reminderRule.intervalMinutes,
+            reminderCount = currentTodo.reminderRule.count,
+            originalDeadline = dl,
+            originalReminderRule = currentTodo.reminderRule,
+            originalScheduleToken = currentTodo.scheduleToken,
+            parentTaskRef = if (!isChildOnly) currentTodo.parentTaskRef else null,
+            parentTitle = parentTitle,
+            assigneeUserId = assignment.recipientUserId,
+            expectedSlotVersion = assignment.slotVersion,
+            inheritedAssigneeUserId = assignment.inheritedRecipientUserId,
+            canManageAssignment = canManageAssignment
+        )
         _uiState.value = _uiState.value.copy(editor = editor)
     }
 
@@ -774,25 +875,41 @@ class DesktopController(
 
         val now = System.currentTimeMillis()
         val token = if (deadline != null) (editor.originalScheduleToken ?: UUID.randomUUID().toString()) else null
-        if (editor.id == null) {
-            val newTodo = if (deadline == null) {
-                createDefaultTodo(title, now).copy(parentTaskId = editor.parentTaskId)
-            } else {
-                Todo(
-                    id = UUID.randomUUID().toString().lowercase(),
-                    title = title,
-                    completed = false,
-                    createdAt = now,
-                    updatedAt = now,
-                    deadline = deadline,
-                    reminderRule = rule,
-                    scheduleToken = token,
-                    parentTaskId = editor.parentTaskId
+        if (editor.taskRef == null) {
+            val newRef = TaskRef(ownerUserId = runtime.store.userId, rowId = UUID.randomUUID().toString().lowercase())
+            val newTodo = Todo(
+                taskRef = newRef,
+                title = title,
+                completed = false,
+                createdAt = now,
+                updatedAt = now,
+                deadline = deadline,
+                reminderRule = rule,
+                scheduleToken = token,
+                parentTaskRef = editor.parentTaskRef
+            )
+            runtime.store.saveTodoLocally(newTodo)
+            if (editor.assigneeUserId != null) {
+                runtime.store.assignTaskLocally(
+                    dev.tabbyrush.shared.contract.AssignmentIntent(
+                        taskRef = newRef,
+                        desiredRecipientUserId = editor.assigneeUserId,
+                        expectedSlotVersion = 0L
+                    )
                 )
             }
-            runtime.store.saveTodoLocally(newTodo)
         } else {
-            val existing = allTodos.firstOrNull { it.id == editor.id } ?: return
+            val targetRef = editor.taskRef ?: return
+            val existing = runtime.store.getTodo(targetRef) ?: return
+            val isOwner = existing.taskRef.ownerUserId == runtime.store.userId
+            val canEdit = if (isOwner) true else (existing.accessState?.canEditContent == true)
+            if (!canEdit) {
+                _uiState.value = _uiState.value.copy(
+                    editor = null,
+                    safeError = SafeError.OperationForbidden("PERMISSION_DENIED", "Cannot edit revoked or unauthorized task", targetRef)
+                )
+                return
+            }
             runtime.store.saveTodoLocally(
                 existing.copy(
                     title = title,
@@ -810,8 +927,17 @@ class DesktopController(
 
     private suspend fun toggleCompleted(todo: Todo) {
         val r = activeRuntime ?: return
-        val desired = !todo.completed
-        val change = r.store.setCompletedLocally(todo.id, desired, System.currentTimeMillis())
+        val current = r.store.getTodo(todo.taskRef) ?: return
+        val isOwner = current.taskRef.ownerUserId == r.store.userId
+        val canEdit = if (isOwner) true else (current.accessState?.canEditContent == true)
+        if (!canEdit) {
+            _uiState.value = _uiState.value.copy(
+                safeError = SafeError.OperationForbidden("PERMISSION_DENIED", "Cannot toggle completion on revoked task", current.taskRef)
+            )
+            return
+        }
+        val desired = !current.completed
+        val change = r.store.setCompletedLocally(todo.taskRef, desired, System.currentTimeMillis())
         if (change == CompletionChange.Changed) {
             reloadTodos()
             triggerSync()
@@ -819,7 +945,15 @@ class DesktopController(
     }
 
     private suspend fun confirmDelete() {
-        _uiState.value.deleteCandidate?.let { activeRuntime?.store?.deleteTodoLocally(it.id) }
+        val candidate = _uiState.value.deleteCandidate ?: return
+        val r = activeRuntime ?: return
+        val isOwner = candidate.taskRef.ownerUserId == r.store.userId
+        val canDelete = if (isOwner) true else (candidate.accessState?.canDeleteTask == true)
+        if (!canDelete) {
+            _uiState.value = _uiState.value.copy(deleteCandidate = null)
+            return
+        }
+        r.store.deleteTodoLocally(candidate.taskRef)
         _uiState.value = _uiState.value.copy(deleteCandidate = null)
         reloadTodos()
         triggerSync()
@@ -827,10 +961,7 @@ class DesktopController(
 
     private fun triggerSync() {
         activeRuntime?.let { r ->
-            scope.launch {
-                r.coordinator.triggerSync()
-                syncScheduler.triggerImmediate(r.accountKey)
-            }
+            syncScheduler.triggerImmediate(r.accountKey)
         }
     }
 
@@ -838,6 +969,8 @@ class DesktopController(
         val entry = runtime.store.dao.getAllOutbox().firstOrNull {
             it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW
         } ?: return
+        val owner = entry.ownerUserId ?: runtime.store.userId
+        val taskRef = TaskRef(ownerUserId = owner, rowId = entry.rowId)
         val base = runtime.store.dao.getServerBase(entry.rowId)
         val bDate = base?.deadlineDate
         val bZone = base?.deadlineZone
@@ -866,7 +999,7 @@ class DesktopController(
 
         val remoteTodo = base?.let {
             Todo(
-                id = it.rowId,
+                taskRef = taskRef,
                 title = it.title,
                 completed = it.completed,
                 createdAt = it.createdAt,
@@ -875,7 +1008,8 @@ class DesktopController(
                 isDeleted = it.deleted,
                 deadline = remoteDeadline,
                 reminderRule = remoteRule,
-                scheduleToken = it.scheduleToken
+                scheduleToken = it.scheduleToken,
+                parentTaskRef = it.parentTaskId?.let { pId -> TaskRef(ownerUserId = owner, rowId = pId) }
             )
         }
 
@@ -904,8 +1038,8 @@ class DesktopController(
             )
         } else ReminderRule.DISABLED
 
-        val localTodo = allTodos.firstOrNull { it.id == entry.rowId } ?: Todo(
-            id = entry.rowId,
+        val localTodo = allTodos.firstOrNull { it.taskRef == taskRef } ?: Todo(
+            taskRef = taskRef,
             title = entry.title ?: "",
             completed = entry.completed ?: false,
             createdAt = entry.createdAt ?: 0L,
@@ -913,16 +1047,16 @@ class DesktopController(
             deadline = localDeadline,
             reminderRule = localRule,
             scheduleToken = entry.scheduleToken,
-            parentTaskId = entry.parentTaskId
+            parentTaskRef = entry.parentTaskId?.let { pId -> TaskRef(ownerUserId = owner, rowId = pId) }
         )
         val isPreservationConflict = entry.intentMask?.split("|")?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true
-        val isSubtaskConflict = entry.parentTaskId != null || localTodo.parentTaskId != null
-        val targetParentId = entry.parentTaskId ?: localTodo.parentTaskId
-        val parentBase = targetParentId?.let { runtime.store.dao.getServerBase(it) }
+        val isSubtaskConflict = entry.parentTaskId != null || localTodo.parentTaskRef != null
+        val targetParentRef = entry.parentTaskId?.let { TaskRef(ownerUserId = owner, rowId = it) } ?: localTodo.parentTaskRef
+        val parentBase = targetParentRef?.let { runtime.store.dao.getServerBase(it.rowId) }
         val isParentDeleted = isSubtaskConflict && (parentBase == null || parentBase.deleted)
         _uiState.value = _uiState.value.copy(
             conflict = ConflictState(
-                rowId = entry.rowId,
+                taskRef = taskRef,
                 localTodo = localTodo,
                 remoteTodo = remoteTodo,
                 requiresDeliveryReview = entry.deliveryState == OutboxEntity.STATE_REVIEW,
@@ -1155,7 +1289,8 @@ fun launchDesktop(
                     remoteInboxState = remoteInboxState,
                     onAction = { controller.onAction(it) },
                     onRemoteAction = { controller.onRemoteAction(it) },
-                    onAuthSubmit = { controller.onAuthSubmit(it) }
+                    onAuthSubmit = { controller.onAuthSubmit(it) },
+                    onLookupUser = { controller.lookupUser(it) }
                 )
             }
         }

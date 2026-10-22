@@ -7,6 +7,7 @@ import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.DeadlineSelectionKey
 import dev.tabbyrush.shared.contract.SurfaceAccountToken
 import dev.tabbyrush.shared.contract.TaskDeadline
+import dev.tabbyrush.shared.contract.TaskRef
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URLDecoder
@@ -47,6 +48,8 @@ object DeadlineSelectionKeyCodec {
 
         appendParam("acc", key.token.accountKey.value)
         appendParam("gen", key.token.generation.toString())
+        appendParam("owner", key.taskRef.ownerUserId)
+        appendParam("rowId", key.taskRef.rowId)
         appendParam("tid", key.taskId)
         appendParam("date", key.deadline.date)
         if (key.deadline.time != null) {
@@ -78,7 +81,9 @@ object DeadlineSelectionKeyCodec {
 
             val acc = map["acc"] ?: return null
             val gen = map["gen"]?.toLongOrNull() ?: return null
-            val tid = map["tid"] ?: return null
+            val owner = map["owner"] ?: return null
+            val rowId = map["rowId"] ?: map["tid"] ?: return null
+            if (owner.isBlank() || rowId.isBlank()) return null
             val date = map["date"] ?: return null
             val time = map["time"]
             val zone = map["zone"] ?: return null
@@ -98,7 +103,7 @@ object DeadlineSelectionKeyCodec {
             )
             DeadlineSelectionKey(
                 token = SurfaceAccountToken(AccountKey(acc), gen),
-                taskId = tid,
+                taskRef = TaskRef(ownerUserId = owner, rowId = rowId),
                 deadline = deadline
             )
         } catch (_: Exception) {

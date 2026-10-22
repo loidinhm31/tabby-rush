@@ -12,6 +12,35 @@ internal val syncWireJson = kotlinx.serialization.json.Json {
     explicitNulls = false
 }
 
+const val COLLABORATION_VERSION_1 = 1L
+const val ERROR_CODE_COLLABORATION_REQUIRED = "COLLABORATION_REQUIRED"
+const val ERROR_CODE_ACCESS_REVISION_CHANGED = "ACCESS_REVISION_CHANGED"
+const val ERROR_CODE_ACCESS_DENIED = "ACCESS_DENIED"
+const val ERROR_CODE_OPERATION_FORBIDDEN = "OPERATION_FORBIDDEN"
+
+@Serializable
+data class CanonicalRecordRefDto(
+    val ownerUserId: String,
+    val tableName: String,
+    val rowId: String
+)
+
+@Serializable
+data class TaskCapabilitiesDto(
+    val editContent: Boolean,
+    val manageAssignment: Boolean,
+    val deleteTask: Boolean,
+    val createChild: Boolean
+)
+
+@Serializable
+data class TaskAccessResultDto(
+    val ref: CanonicalRecordRefDto,
+    val status: String,
+    val capabilities: TaskCapabilitiesDto? = null,
+    val hierarchyCoverage: String? = null
+)
+
 @Serializable
 data class SyncCheckpointDto(val updatedAt: String, val id: String)
 
@@ -22,24 +51,40 @@ data class PushRecordDto(
     val data: JsonObject,
     val version: Long,
     val deleted: Boolean = false,
-    val assumedServerVersion: Long
+    val assumedServerVersion: Long,
+    val ownerUserId: String? = null
 )
 
 @Serializable
-data class PushRequestDto(val records: List<PushRecordDto>, val clientTimestamp: String? = null)
+data class PushRequestDto(
+    val records: List<PushRecordDto>,
+    val clientTimestamp: String? = null,
+    val collaborationVersion: Long? = null
+)
 
 @Serializable
-data class SyncedRecordDto(val tableName: String, val rowId: String, val version: Long)
+data class SyncedRecordDto(
+    val tableName: String,
+    val rowId: String,
+    val version: Long,
+    val ownerUserId: String? = null
+)
 
 @Serializable
-data class FailedRecordDto(val tableName: String, val rowId: String, val error: String)
+data class FailedRecordDto(
+    val tableName: String,
+    val rowId: String,
+    val error: String,
+    val ownerUserId: String? = null
+)
 
 @Serializable
 data class ConflictInfoDto(
     val tableName: String,
     val rowId: String,
     val clientVersion: Long,
-    val serverVersion: Long
+    val serverVersion: Long,
+    val ownerUserId: String? = null
 )
 
 @Serializable
@@ -49,14 +94,18 @@ data class PushResponseDto(
     val failures: List<FailedRecordDto> = emptyList(),
     val syncedRecords: List<SyncedRecordDto> = emptyList(),
     val serverTimestamp: String,
-    val schemaVersion: Long
+    val schemaVersion: Long,
+    val collaborationVersion: Long? = null
 )
 
 @Serializable
 data class PullRequestDto(
     val checkpoint: SyncCheckpointDto? = null,
     val batchSize: Int = 100,
-    val tables: List<String> = listOf("todos")
+    val tables: List<String>? = null,
+    val collaborationVersion: Long? = null,
+    val expectedAccessRevision: Long? = null,
+    val accessChecks: List<CanonicalRecordRefDto>? = null
 )
 
 @Serializable
@@ -66,7 +115,8 @@ data class PullRecordDto(
     val data: JsonElement,
     val version: Long,
     val syncedAt: String,
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    val ownerUserId: String? = null
 )
 
 @Serializable
@@ -75,7 +125,10 @@ data class PullResponseDto(
     val checkpoint: SyncCheckpointDto,
     val serverTimestamp: String,
     val hasMore: Boolean = false,
-    val schemaVersion: Long
+    val schemaVersion: Long,
+    val collaborationVersion: Long? = null,
+    val accessRevision: Long? = null,
+    val accessResults: List<TaskAccessResultDto>? = null
 )
 
 @Serializable

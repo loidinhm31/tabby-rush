@@ -1,7 +1,7 @@
 package dev.tabbyrush.shared.contract
 
 data class EditorState(
-    val id: String?,
+    val taskRef: TaskRef? = null,
     val rawTitle: String,
     val error: String? = null,
     val hasDeadline: Boolean = false,
@@ -18,9 +18,16 @@ data class EditorState(
     val originalDeadline: TaskDeadline? = null,
     val originalReminderRule: ReminderRule = ReminderRule.DISABLED,
     val originalScheduleToken: String? = null,
-    val parentTaskId: String? = null,
-    val parentTitle: String? = null
-)
+    val parentTaskRef: TaskRef? = null,
+    val parentTitle: String? = null,
+    val assigneeUserId: String? = null,
+    val expectedSlotVersion: Long = 0L,
+    val inheritedAssigneeUserId: String? = null,
+    val canManageAssignment: Boolean = true
+) {
+    val id: String? get() = taskRef?.rowId
+    val parentTaskId: String? get() = parentTaskRef?.rowId
+}
 
 data class ReminderSettingsState(
     val notificationsEnabled: Boolean = false,
@@ -34,14 +41,16 @@ data class ReminderSettingsState(
 )
 
 data class ConflictState(
-    val rowId: String,
+    val taskRef: TaskRef,
     val localTodo: Todo?,
     val remoteTodo: Todo?,
     val requiresDeliveryReview: Boolean = false,
     val isPreservationConflict: Boolean = false,
     val isSubtaskConflict: Boolean = false,
     val isParentDeleted: Boolean = false
-)
+) {
+    val rowId: String get() = taskRef.rowId
+}
 
 data class LeaveGuardState(
     val pendingCount: Int,
@@ -67,5 +76,6 @@ data class TodoUiState(
     val deleteCandidateChildCount: Int = 0,
     val leaveGuard: LeaveGuardState? = null,
     val safeError: SafeError? = null,
-    val nowEpochMs: Long = 0L
+    val nowEpochMs: Long = 0L,
+    val accessLossEvidence: List<AccessLossEvidence> = emptyList()
 )

@@ -3,6 +3,7 @@ package dev.tabbyrush.shared.data
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.ReminderRule
 import dev.tabbyrush.shared.contract.TaskDeadline
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.sync.RecordingNativeReminderAdapter
 import dev.tabbyrush.shared.sync.ReminderDeliveryGate
@@ -52,6 +53,7 @@ class ReminderSchedulingCoordinatorSqliteSmokeTest {
             getPersistedGeneration = { currentGeneration },
             hasPendingWipeMarker = { wipeMarkerPresent }
         )
+        store.deliveryGate = gate
 
         adapter = RecordingNativeReminderAdapter()
         val occurrenceStore = ReminderOccurrenceStore(accountKey, store.dao)
@@ -67,6 +69,7 @@ class ReminderSchedulingCoordinatorSqliteSmokeTest {
             clock = { 0L }
         )
     }
+    private fun taskRef(id: String) = TaskRef("user-smoke-test", id)
 
     @AfterTest
     fun tearDown() {
@@ -88,7 +91,7 @@ class ReminderSchedulingCoordinatorSqliteSmokeTest {
         val deadline = createDeadline(1_000_000L)
         val rule = ReminderRule(enabled = true, leadMinutes = 15L, intervalMinutes = null, count = 1L)
         val todo = Todo(
-            id = "task-1",
+            taskRef = taskRef("task-1"),
             title = "Test task",
             completed = false,
             createdAt = 1000L,
@@ -161,7 +164,7 @@ class ReminderSchedulingCoordinatorSqliteSmokeTest {
     fun testConcurrentCallbacksAndWipeRace() = runTest {
         val deadline = createDeadline(1_000_000L)
         val rule = ReminderRule(enabled = true, leadMinutes = 0L, intervalMinutes = null, count = 1L)
-        val todo = Todo(id = "task-race", title = "Race", completed = false, createdAt = 1000L, deadline = deadline, reminderRule = rule, scheduleToken = "token-race")
+        val todo = Todo(taskRef = taskRef("task-race"), title = "Race", completed = false, createdAt = 1000L, deadline = deadline, reminderRule = rule, scheduleToken = "token-race")
         store.saveTodoLocally(todo)
         val token = store.loadTodos().first { it.id == "task-race" }.scheduleToken!!
         coordinator.reconcile(nowEpochMs = 0L)
@@ -176,7 +179,7 @@ class ReminderSchedulingCoordinatorSqliteSmokeTest {
         assertEquals(1, adapter.postedCalls.size)
 
         // Wipe race vs post: test against a fresh unconsumed pending task
-        val todoWipe = Todo(id = "task-wipe", title = "Wipe test", completed = false, createdAt = 1000L, deadline = deadline, reminderRule = rule, scheduleToken = "token-wipe")
+        val todoWipe = Todo(taskRef = taskRef("task-wipe"), title = "Wipe test", completed = false, createdAt = 1000L, deadline = deadline, reminderRule = rule, scheduleToken = "token-wipe")
         store.saveTodoLocally(todoWipe)
         coordinator.reconcile(nowEpochMs = 0L)
         val wipeToken = store.loadTodos().first { it.id == "task-wipe" }.scheduleToken!!

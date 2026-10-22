@@ -1,9 +1,9 @@
 # TabbyRush Project Overview & Product Development Requirements
 
-Last Updated: 2026-10-20  
-Document Version: 2.0.0  
+Last Updated: 2026-10-21  
+Document Version: 2.1.0  
 Application Baseline: `1.0.17` (versionCode `18`)  
-Status: Standard sync is current; offline/API/runtime evidence is reported passed with interactive native and connected-device acceptance incomplete. Release remains blocked; production migration is unauthorized.  
+Status: Collaborative task assignees and Room v5 delivered (Phases 01–08); Phase 09 harnesses and docs delivered. G0 confirmed; G1 implemented and test-verified (625 reported passes). Current project integration status records Cycle 3 approval with noted findings. G2/G3 disposable runtime acceptance and G4/G5 device/interactive acceptance remain pending; G6 security/release audit is not evidenced. Release hold remains; production migration is unauthorized.
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Codebase Summary](./codebase-summary.md) · [Deployment Guide](./deployment-guide.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [API Contract](./api-contract.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Android Acceptance](./android-acceptance.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Acceptance](./windows-acceptance.md) · [Project Roadmap](./project-roadmap.md)
 
 ---
@@ -32,7 +32,7 @@ The current client uses standard Hub `push`, `pull`, and `delta` routes. It does
 | FR-10 | Native surfaces | Provide platform task surfaces that use account-scoped data and respect platform permissions/lifecycle. Interactive device behavior requires platform acceptance. |
 | FR-11 | Admin schema metadata | Use optimistic `expectedSchemaVersion`; effective changes increment, no-ops do not, stale changed writes do not overwrite newer schema. Version is informational to native features. |
 | FR-12 | Announcements | Provide a separate authenticated announcement inbox and generic notification transport, without durable offline announcement content or coupling to task sync. |
-
+| FR-13 | Collaborative task assignees | Keep task content in one creator-owned `todos` row; use one stable owner-scoped `taskAssignees` slot per task; restrict assignees to allowlisted content edits; preserve child-only privacy and full-group completion rules; bind Room v5 legacy rows only after verified account identity; purge revoked payloads without replay or content-bearing evidence. |
 ### 2.2 Non-Functional Requirements
 
 | ID | Category | Requirement |
@@ -50,10 +50,11 @@ The current client uses standard Hub `push`, `pull`, and `delta` routes. It does
 - `shared/` contains shared Compose UI, domain contracts, Room storage, auth, sync coordination, conflict handling, and schedule projection.
 - `androidApp/` integrates Android lifecycle, account runtime, WorkManager/alarm/notification services, and Glance task surfaces.
 - `desktopApp/` provides JVM desktop lifecycle and platform-specific Linux/Windows vault, reminder, notification, and task-surface providers.
-- `TabbyRushDatabase` is Room version 4 with explicit migrations 1→2→3→4. Room 3→4 losslessly archives SQLite legacy outbox values, including FLOAT bit patterns and BLOB bytes, in `legacy_sync_evidence` for review.
-- Standard push response accepts only explicit `(tableName,rowId,version)` acknowledgement as operation confirmation. Matching pulled state is convergence, not receipt proof; delta is push then pull and not atomic.
+- `TabbyRushDatabase` is Room version 5 with explicit migrations 1→2→3→4→5. Room 3→4 archives legacy outbox values in `legacy_sync_evidence`. Room 4→5 establishes canonical identities (`ownerUserId`, `tableName`, `rowId`), access rights, and two-stage legacy binding (`ownerBinding = LOCAL_ACCOUNT`) resolving from verified `AccountIdentity`.
+- Authoritative access loss enforces a privacy-first purge of active base, draft, and outbox payloads, retaining only non-replayable content-free evidence in `access_loss_evidence`.
+- Standard push response accepts only explicit `(ownerUserId, tableName, rowId, version)` acknowledgement as operation confirmation. Matching pulled state is convergence, not receipt proof; delta is push then pull and not atomic.
 - A 256 KiB serialized UTF-8 request body limit is enforced before freeze. A known single oversized record is actionable/conflicted and not sent; fitting records may be dispatched while others remain pending.
-- `schemaVersion` is informational Hub concurrency metadata; it does not trigger code generation, UI fields, feature gates, or Room migration.
+- `schemaVersion` is informational Hub concurrency metadata; collaborative task apps require `collaborationVersion: 1`. Requests lacking this capability on opted-in apps fail closed with HTTP 426 `COLLABORATION_REQUIRED`.
 - Strict runbooks and strict protocol phase documents are dated archives, not current implementation or deployment guidance.
 
 ## 4. Current Evidence and Acceptance Status
@@ -62,9 +63,9 @@ The current client uses standard Hub `push`, `pull`, and `delta` routes. It does
 |---|---|---|
 | Disposable Hub API/browser smoke | Ordinary provisioning, standard create/pull/delta/update/stale-conflict/delete, unknown JSON retention, and schema editor concurrency passed on disposable local services. Nullable `customNotes` advanced schemaVersion 1→2; no-op stayed 2; stale changed save returned 409 and retained the draft. | Not production migration, authorization, or native acceptance. |
 | Standalone Windows runtime smoke | Passed through strict Gradle JavaExec against disposable loopback services: Windows DPAPI, real HTTP auth, Room offline restart, two independent stores using actual coordinator push/pull/delta, schemaVersion 2, unknown nested JSON and `customNotes` preserved through native edit, parent/child sync, and group deletion. | Not interactive UI, connected Android, or complete platform acceptance. |
-| Offline Gradle/package suites | Parent reports current suites and package outputs passed. | Build/package success does not establish native UI/device acceptance. Exact counts are maintained by the parent verification report. |
+| Collaborative assignee suites | Cycle 3 reports 625 passing tests across seven suites: shared JVM 324, Desktop 145, Android 60, Hub sync 28, sync engine 6, Hub admin 50, and provisioning scripts 12. | Automated tests do not establish runtime/device acceptance; Cycle 3 review notes remain documented. |
 | Conversion operator | Parent reports 7/7 disposable-Mongo checks passed, including concurrency, deadline, and recovery. | No live database migration or authorization. |
-| Interactive UI / physical devices | UI provider approval timed out twice; connected-device acceptance was not run. | Native acceptance is not passed; release remains blocked. |
+| Runtime/device gates and release | G0 policy confirmed; G1 implementation and test verification reported complete. G2/G3 disposable runtime acceptance and G4/G5 device/interactive acceptance remain pending; G6 security/release audit is not evidenced. | Release remains blocked; production migration and operational policy enablement are unauthorized. |
 
 ## 5. Operator Safety Requirements
 

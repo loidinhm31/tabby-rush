@@ -135,12 +135,25 @@ class HubHttpClient(
             }
             return true
         }
+
+        private fun validateLookupQuery(queryString: String): Boolean {
+            if (queryString.isEmpty()) return false
+            val params = queryString.split("&")
+            if (params.size != 1) return false
+            val parts = params[0].split("=")
+            if (parts.size != 2) return false
+            if (parts[0] != "username") return false
+            return parts[1].isNotBlank()
+        }
     }
 
     fun classifyRoute(path: String): RouteClassification? {
         if (path.startsWith("api/v1/sync/")) return null
         if (path.contains('#') || path.contains('\\') || path.contains("://")) return null
-        if (path.contains('?') && !path.startsWith("/api/v1/apps/${config.appId}/announcements/inbox?")) return null
+        if (path.contains('?') &&
+            !path.startsWith("/api/v1/apps/${config.appId}/announcements/inbox?") &&
+            !path.startsWith("/api/v1/auth/lookup?")
+        ) return null
         val normalizedPath = if (path.startsWith("/")) path else "/$path"
         val pathWithoutQuery = normalizedPath.substringBefore('?')
         val queryString = if (normalizedPath.contains('?')) normalizedPath.substringAfter('?') else ""
@@ -148,6 +161,8 @@ class HubHttpClient(
         if (queryString.isNotEmpty()) {
             if (pathWithoutQuery == "/api/v1/apps/${config.appId}/announcements/inbox") {
                 if (!validateInboxQuery(queryString)) return null
+            } else if (pathWithoutQuery == "/api/v1/auth/lookup") {
+                if (!validateLookupQuery(queryString)) return null
             } else {
                 return null
             }
@@ -159,6 +174,7 @@ class HubHttpClient(
             "/api/v1/auth/refresh" -> RouteClassification.AUTH_PUBLIC
 
             "/api/v1/auth/me",
+            "/api/v1/auth/lookup",
             "/api/v1/apps/access-requests",
             "/api/v1/apps/access-requests/me" -> RouteClassification.BEARER_ONLY
 
@@ -296,9 +312,9 @@ class HubHttpClient(
             HttpStatusCode.Forbidden -> {
                 val serverCode = extractErrorCode(rawBody)
                 val serverMsg = extractErrorMessage(rawBody)
-                if (serverCode == "appAccessRevoked") {
-                    SafeError.AccessPending(
-                        code = "appAccessRevoked",
+                if (serverCode == "appAccessRevoked" || serverCode == "MEMBERSHIP_DENIED") {
+                    SafeError.MembershipDenied(
+                        code = serverCode,
                         message = serverMsg ?: "Application access revoked (HTTP 403)"
                     )
                 } else {
@@ -311,7 +327,12 @@ class HubHttpClient(
             HttpStatusCode.Conflict -> {
                 val serverMsg = extractErrorMessage(rawBody)
                 val serverCode = extractErrorCode(rawBody)
-                if (path.contains("/auth/")) {
+                if (serverCode == "ACCESS_REVISION_CHANGED") {
+                    SafeError.AccessRevisionChanged(
+                        code = serverCode,
+                        message = serverMsg ?: "Access revision changed during synchronization (HTTP 409)"
+                    )
+                } else if (path.contains("/auth/")) {
                     SafeError.Validation(
                         code = serverCode ?: "CONFLICT",
                         message = serverMsg ?: "Email or username already in use (HTTP 409)"
@@ -329,10 +350,21 @@ class HubHttpClient(
                     )
                 }
             }
-            HttpStatusCode.UpgradeRequired -> SafeError.ProtocolIncompatible(
-                code = "PROTOCOL_INCOMPATIBLE",
-                message = "Server rejected protocol version (HTTP 426)"
-            )
+            HttpStatusCode.UpgradeRequired -> {
+                val serverCode = extractErrorCode(rawBody)
+                val serverMsg = extractErrorMessage(rawBody)
+                if (serverCode == "COLLABORATION_REQUIRED" || path.startsWith("/api/v1/sync/")) {
+                    SafeError.CollaborationRequired(
+                        code = serverCode ?: "COLLABORATION_REQUIRED",
+                        message = serverMsg ?: "Application upgrade required for collaboration (HTTP 426)"
+                    )
+                } else {
+                    SafeError.ProtocolIncompatible(
+                        code = "PROTOCOL_INCOMPATIBLE",
+                        message = "Server rejected protocol version (HTTP 426)"
+                    )
+                }
+            }
             HttpStatusCode.NotFound -> {
                 val serverMsg = extractErrorMessage(rawBody)
                 val serverCode = extractErrorCode(rawBody)

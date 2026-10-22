@@ -387,11 +387,13 @@ class DesktopTaskSurfacesTest {
         val files = JvmAccountFiles(baseDir = tempDir)
         val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
 
+        val vault = InMemoryCredentialVault()
         val controller = DesktopController(
             mode = BuildMode.DEBUG,
             scope = scope,
             instanceGuard = guard,
-            accountFiles = files
+            accountFiles = files,
+            vaultOverride = vault
         )
         try {
             val identity = AccountIdentity("test-user", "test-user", "test-user@example.com")
@@ -443,11 +445,13 @@ class DesktopTaskSurfacesTest {
         val files = JvmAccountFiles(baseDir = tempDir)
         val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
 
+        val vault = InMemoryCredentialVault()
         val controller = DesktopController(
             mode = BuildMode.DEBUG,
             scope = scope,
             instanceGuard = guard,
-            accountFiles = files
+            accountFiles = files,
+            vaultOverride = vault
         )
         try {
             val identity = AccountIdentity("test-user", "test-user", "test-user@example.com")
@@ -500,11 +504,13 @@ class DesktopTaskSurfacesTest {
         val files = JvmAccountFiles(baseDir = tempDir)
         val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
 
+        val vault = InMemoryCredentialVault()
         val controller = DesktopController(
             mode = BuildMode.DEBUG,
             scope = scope,
             instanceGuard = guard,
-            accountFiles = files
+            accountFiles = files,
+            vaultOverride = vault
         )
         try {
             val identity = AccountIdentity("test-user", "test-user", "test-user@example.com")
@@ -1318,13 +1324,15 @@ class DesktopTaskSurfacesTest {
             )
         )
 
+        val vault = InMemoryCredentialVault()
         val controller = DesktopController(
             mode = BuildMode.DEBUG,
             scope = scope,
             instanceGuard = guard,
             accountFiles = files,
             preferences = preferences,
-            initialStickyPresentation = preferences.load()
+            initialStickyPresentation = preferences.load(),
+            vaultOverride = vault
         )
 
         try {
@@ -1370,13 +1378,15 @@ class DesktopTaskSurfacesTest {
         val preferences = StickyWindowPreferences(prefsFile)
         val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
 
+        val vault = InMemoryCredentialVault()
         val controller = DesktopController(
             mode = BuildMode.DEBUG,
             scope = scope,
             instanceGuard = guard,
             accountFiles = files,
             preferences = preferences,
-            initialStickyPresentation = preferences.load()
+            initialStickyPresentation = preferences.load(),
+            vaultOverride = vault
         )
 
         try {

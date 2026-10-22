@@ -30,6 +30,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.tabbyrush.shared.auth.HubAuthSession
+import dev.tabbyrush.shared.contract.CredentialVault
 import dev.tabbyrush.shared.contract.AccessRequestInfo
 import dev.tabbyrush.shared.contract.AccessLossEvidence
 import dev.tabbyrush.shared.contract.AccountIdentity
@@ -131,7 +132,8 @@ class DesktopController(
     val preferences: StickyWindowPreferences = StickyWindowPreferences(File(accountFiles.baseDir, "sticky-window.properties")),
     val platform: DesktopSurfacePlatform = DesktopSurfacePlatformDispatcher.current(),
     initialStickyPresentation: StickyWindowPresentation = preferences.load(),
-    remoteAdapterOverride: RemoteNotificationAdapter? = null
+    remoteAdapterOverride: RemoteNotificationAdapter? = null,
+    vaultOverride: CredentialVault? = null
 ) {
     val dotEnv = DotEnvLoader.load(baseDir = accountFiles.baseDir)
     val origin = System.getenv("APPROVED_HUB_ORIGIN")?.takeIf { it.isNotBlank() }
@@ -151,7 +153,7 @@ class DesktopController(
         appApiKey = apiKey,
         buildMode = mode
     )
-    val vault = PlatformVaultDispatcher.createVault(accountFiles)
+    val vault: CredentialVault = vaultOverride ?: PlatformVaultDispatcher.createVault(accountFiles)
     val authSession = HubAuthSession(config = hubConfig, vault = vault)
     val reminderAdapter = PlatformReminderDispatcher.createAdapter()
     val remoteAdapter: RemoteNotificationAdapter = remoteAdapterOverride ?: DesktopRemotePlatformDispatcher.createAdapter(

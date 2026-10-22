@@ -58,15 +58,6 @@ class DesktopReminderControllerLifecycleTest {
         }
         override suspend fun cancelNotificationsForTask(accountKey: AccountKey, taskRef: dev.tabbyrush.shared.contract.TaskRef) {}
     }
-    private class InMemoryVault : CredentialVault {
-        val clearedKeys = mutableListOf<AccountKey>()
-        override val status: VaultStatus = VaultStatus.READY
-        override suspend fun store(accountKey: AccountKey, bundle: dev.tabbyrush.shared.contract.CredentialBundle) {}
-        override suspend fun load(accountKey: AccountKey): dev.tabbyrush.shared.contract.CredentialBundle? = null
-        override suspend fun clear(accountKey: AccountKey) {
-            clearedKeys.add(accountKey)
-        }
-    }
 
     @BeforeTest
     fun setup() {
@@ -81,7 +72,7 @@ class DesktopReminderControllerLifecycleTest {
     @Test
     fun testStartupWipeRecoveryCancelsPlatformNotificationsBeforeClearingMarker() = runTest {
         val accountFiles = JvmAccountFiles(baseDir = tempDir)
-        val vault = InMemoryVault()
+        val vault = InMemoryCredentialVault()
         val adapter = RecordingReminderAdapter()
 
         // Create an account with a pending wipe marker
@@ -116,7 +107,7 @@ class DesktopReminderControllerLifecycleTest {
     @Test
     fun testStartupWipeRecoveryRetainsMarkerWhenReminderCancellationFails() = runTest {
         val accountFiles = JvmAccountFiles(baseDir = tempDir)
-        val vault = InMemoryVault()
+        val vault = InMemoryCredentialVault()
         val failingAdapter = object : DesktopReminderAdapter {
             override fun setScheduleListener(listener: ((AccountKey, Long, List<ScheduledAlarmHandle>) -> Unit)?) {}
             override suspend fun queryCapabilities(): ReminderCapabilities = ReminderCapabilities(true, true, true)
@@ -169,7 +160,8 @@ class DesktopReminderControllerLifecycleTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
         try {
-            val controller = DesktopController(BuildMode.DEBUG, scope, instanceGuard, accountFiles = accountFiles)
+            val vault = InMemoryCredentialVault()
+            val controller = DesktopController(BuildMode.DEBUG, scope, instanceGuard, accountFiles = accountFiles, vaultOverride = vault)
             val identity = AccountIdentity("test-user", "test-user", "test-user@example.com")
             val key = AccountKey.create(controller.hubConfig.canonicalOrigin, identity.userId)
             controller.vault.store(key, CredentialBundle("test-access-token", "test-refresh-token"))
@@ -191,7 +183,8 @@ class DesktopReminderControllerLifecycleTest {
         val accountFiles = JvmAccountFiles(baseDir = tempDir)
         val instanceGuard = SingleInstanceGuard.tryAcquire(File(tempDir, "tabbyrush.lock"))!!
         val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
-        val controller = DesktopController(BuildMode.DEBUG, scope, instanceGuard, accountFiles = accountFiles)
+        val vault = InMemoryCredentialVault()
+        val controller = DesktopController(BuildMode.DEBUG, scope, instanceGuard, accountFiles = accountFiles, vaultOverride = vault)
         try {
             // Establish the runtime before advancing controller observers, without making a network request.
             val runtime = runBlocking {

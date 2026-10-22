@@ -1,207 +1,134 @@
-# TabbyRush API & Strict Sync Protocol Contract
+# TabbyRush API & Standard Sync Contract
 
-Date: 2026-10-14  
-Phase: Phase 03 Strict Server & Legacy Isolation (Implementation Complete; Runtime Acceptance Pending)  
-Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse`  
+Date: 2026-10-22  
+Status: Standard sync is the current TabbyRush client protocol, including collaborative task assignment on existing push/pull/delta routes. Strict-sync contracts below are historical and do not describe the current binary.  
 Related Docs: [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Toolchain Versions](./toolchain-versions.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Hub Compatibility Acceptance](./hub-compatibility-acceptance.md)
 
 ---
 
-## 1. Scope, Origin & Authentication Overview
+## 1. Origin, Prefix & Authentication
 
-TabbyRush reuses the existing Glean Hub authentication service, app schema registry, and dual-layer authorization (JWT Bearer token + App API Key). TabbyRush exclusively uses the opt-in strict synchronization protocol (`syncMode: "strict-v1"`).
+TabbyRush uses Glean Hub's ordinary app registration, account authentication, and standard sync routes. It does not use strict-v1/strict-v2/strict-v3 bootstrap or operation endpoints.
 
-### 1.1 Endpoint & Origin Policy
-- **Base Origin**: Canonical origin only (scheme, host, optional port). Zero path, query, fragment, or user credentials.
-- **API Prefix**: `/api/v1` for sync operations; root path for Hub auth (`/auth/*`, `/apps/*`).
-- **Release Mode**: HTTPS required. No HTTP, cleartext, or self-signed bypass permitted.
-- **Debug Mode**: Permits HTTPS plus loopback HTTP targets:
-  - `http://localhost:3000`
-  - `http://127.0.0.1:3000`
-  - `http://10.0.2.2:3000` (Android emulator loopback)
-- **Timeouts**: Connect 10s, Request 20s. Zero automatic mutation retries at transport level.
+- The configured Hub origin is a canonical origin (scheme, host, optional port), without path, query, fragment, or user credentials.
+- API routes use the `/api/v1` prefix, including authentication, app, and sync routes. Do not omit `/api/v1` from auth paths.
+- Sync requests use `Authorization: Bearer <accessToken>`, `X-API-Key: <appApiKey>`, and `X-App-Id: <appId>`.
+- Release mode requires HTTPS. Debug mode additionally permits the configured loopback development origins; redirects are not followed for sync requests.
+- The client caps a serialized sync request body at 256 KiB. This is a client-side transport limit, not an atomicity guarantee.
+- Credentials are held in platform-backed storage: Android Keystore, Linux Secret Service, and Windows DPAPI. No plaintext credential fallback is intended.
 
-### 1.2 Account Identity & Vault Protection
-- **AccountKey**: Canonical hash:
-  `SHA-256(u32_be(origin.length) + origin_utf8 + u32_be(userId.length) + userId_utf8)`
-- **Vault Integration**:
-  - Android: Android Keystore with AES-256-GCM encrypted bundle.
-  - Linux Desktop: Secret Service D-Bus API.
-  - Windows: User-scoped DPAPI with restricted file ACLs.
-- Zero plaintext credential fallback; memory-only lifetime for unpersisted successor tokens.
+### 1.1 Authentication Routes
 
----
+Payloads use JSON camelCase. These paths are relative to `/api/v1`.
 
-## 2. Hub Authentication Routes
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/auth/register` | Register an account |
+| `POST` | `/auth/login` | Authenticate and obtain account/app access data |
+| `POST` | `/auth/refresh` | Exchange refresh credentials |
+| `GET` | `/auth/me` | Read authenticated account identity |
+| `POST` | `/apps/access-requests` | Request app access |
+| `GET` | `/apps/access-requests/me` | Read the account's access requests |
+| `GET` | `/auth/lookup?username={username}` | Username identity lookup used by the assignee picker; lookup alone does not grant app membership or task access |
 
-All request/response payloads use JSON camelCase.
-
-| Method | Path | Request Body | Response (Success 200) | Notes |
-|---|---|---|---|---|
-| `POST` | `/auth/register` | `{username, email, password}` | `{userId, accessToken, refreshToken}` | Password never logged; email trimmed/lowercased |
-| `POST` | `/auth/login` | `{email, password}` | `{userId, accessToken, refreshToken, apps, isAdmin}` | App access verified via `apps` array |
-| `POST` | `/auth/refresh` | `{refreshToken}` | `{accessToken, refreshToken}` | Single-flight execution; atomic bundle replacement |
-| `GET` | `/auth/me` | Bearer auth header | `{userId, username, email, apps, isAdmin, ...}` | Server identity check |
-| `POST` | `/apps/access-requests` | `{appId: "tabby-rush", message?}` | `AccessRequestInfo` | Explicit access request if `tabbyrush` not granted |
-| `GET` | `/apps/access-requests/me` | Bearer auth header | `AccessRequestInfo[]` | Query status: pending, approved, rejected |
-
-### 2.1 Admin Strict App Registration & Schema Management
-
-Strict apps require administrative registration and immutable schema binding:
-
-| Method | Path | Request Body | Response (Success 200/201) | Notes |
-|---|---|---|---|---|
-| `POST` | `/api/v1/strict-apps` | `{appId, syncMode: "strict-v1", schema}` | `{appId, apiKey, syncMode, strictEpoch}` | Admin-only; generates canonical UUID epoch, provisions storage, publishes last |
-| `GET` | `/api/v1/apps/:app_id` | *(none)* | `{appId, schema, syncMode, strictEpoch, sharing?}` | Mandatory read-back verification echoing mode and epoch |
-| `PUT` | `/api/v1/apps/:app_id/schema` | `{schema}` | *400 Bad Request* | Schema mutation rejected (`syncMode $exists: false` predicate rejects strict apps) |
+Exact server response fields are governed by the deployed Hub contract; do not infer them from this route summary.
 
 ---
 
-## 3. Strict Sync Endpoints (`strict-v1`)
+## 2. Standard Sync Routes
 
-Sync routes require dual authentication headers:
-- `Authorization: Bearer <accessToken>`
-- `X-API-Key: <appApiKey>`
-- `X-App-Id: tabbyrush`
+All paths below are relative to `/api/v1`. The `{app_id}` path segment is the Hub app identifier. Sync requests use the dual-auth headers above.
 
-### 3.1 Bootstrap: `POST /api/v1/sync/:app_id/strong/bootstrap`
-- **Request**: `{}`
-- **Response**:
-  ```json
-  {
-    "protocol": "strict-v1",
-    "appId": "tabby-rush",
-    "epoch": "550e8400-e29b-41d4-a716-446655440000",
-    "tables": ["todos"]
-  }
-  ```
-- **Epoch Invariant**: If client has established local data with a different epoch, sync pauses in `ResetRequired` state. Never auto-rebase.
+### Collaborative Assignment Data
 
-### 3.2 Push: `POST /api/v1/sync/:app_id/strong/push`
-- **Request**:
-  ```json
-  {
-    "protocol": "strict-v1",
-    "epoch": "550e8400-e29b-41d4-a716-446655440000",
-    "operations": [
-      {
-        "opId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
-        "epoch": "550e8400-e29b-41d4-a716-446655440000",
-        "tableName": "todos",
-        "rowId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-        "kind": "create",
-        "expectedRevision": 0,
-        "data": {
-          "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-          "title": "Clean workspace",
-          "completed": false,
-          "createdAt": 1791840000000
-        }
-      }
-    ]
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    "protocol": "strict-v1",
-    "epoch": "550e8400-e29b-41d4-a716-446655440000",
-    "results": [
-      {
-        "opId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
-        "rowId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-        "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "status": "accepted",
-        "acceptedRevision": 1
-      }
-    ]
-  }
-  ```
-- **Operation Status Codes**:
-  - `accepted`: Mutation conditionally applied, server revision bumped by 1.
-  - `replayed`: Idempotent match of identical opId + digest with durable confirmation.
-  - `revisionConflict`: Concurrent modification detected (`expectedRevision` mismatch).
-  - `missingRecord`: Attempted update/delete on non-existent record.
-  - `deletedRecord`: Attempted update on existing tombstone.
-  - `opIdReuse`: Reused opId with differing payload digest (protocol violation).
-  - `invalidRecord`: Validation failure (schema, Unicode, scalar bounds).
-  - `retryableFailure`: Storage or confirmation timeout; client treats as uncertain outcome.
+The native client adds no dedicated assignment route. Assignment policy is configured in the ordinary app `SharingConfig`; the current [Hub schema input](../integration/glean-hub/tabbyrush-schema.json) defines `todos.parentTaskId` as a nullable string and `taskAssignees` with required string columns `id`, `taskId`, and `userId` (`id` is the primary key). The sharing mapping uses `sharingTable: "taskAssignees"`, `parentIdField: "taskId"`, `userIdField: "userId"`, `parentTable: "todos"`, and `childTables: []`. See [Hub Schema Integration](./hub-schema-integration.md) for the policy configuration.
 
-### 3.3 Pull: `POST /api/v1/sync/:app_id/strong/pull`
-- **Request**:
-  ```json
-  {
-    "protocol": "strict-v1",
-    "epoch": "550e8400-e29b-41d4-a716-446655440000",
-    "tableName": "todos",
-    "cursor": null,
-    "batchSize": 100
-  }
-  ```
-- **Response**:
-  ```json
-  {
-    "protocol": "strict-v1",
-    "epoch": "550e8400-e29b-41d4-a716-446655440000",
-    "records": [
-      {
-        "tableName": "todos",
-        "rowId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-        "revision": 1,
-        "deleted": false,
-        "data": { ... }
-      }
-    ],
-    "cursor": "opaque-cursor-token",
-    "hasMore": false
-  }
-  ```
+`assignmentPolicy` version 1 sets `hierarchyParentField: "parentTaskId"` and allows assignee content edits only to `title`, `completed`, `deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, and `scheduleToken`. Structural `parentTaskId` changes and assignment management are not in that allowlist.
 
-### 3.4 Strict Sync Error Envelopes
-
-Errors emitted by strict sync route handlers and middleware follow a consistent structured JSON envelope:
+A live assignment is represented by the ordinary push record envelope and one owner-scoped relationship slot:
 
 ```json
 {
-  "error": "Descriptive human-readable error message",
-  "code": "machineErrorCode"
+  "tableName": "taskAssignees",
+  "rowId": "<taskId>",
+  "ownerUserId": "<creatorUserId>",
+  "data": {
+    "id": "<taskId>",
+    "taskId": "<taskId>",
+    "userId": "<recipientUserId>"
+  }
 }
 ```
 
-| HTTP Status | Machine Code | Cause |
-|---|---|---|
-| `400 Bad Request` | `invalidRequest` | Schema validation failure, malformed payload, or `X-App-Id` header mismatched with route path. |
-| `401 Unauthorized` | `unauthorized` | Missing or invalid user JWT token or app API key. |
-| `404 Not Found` | `appNotFound` | Specified `app_id` is not registered on the Hub. |
-| `409 Conflict` | `epochMismatch` | Request epoch does not match the active server epoch in `_schemas`. |
-| `426 Upgrade Required` | `protocolUnsupported` | Strict app accessed via legacy sync routes, or unsupported protocol requested. |
-| `500 Internal Server Error` | `internalError` | Database error or unexpected server-side processing exception. |
-| `503 Service Unavailable` | `notAdmitted` | App storage, topology, or index structure failed admission validation. |
+For this slot, `ownerUserId` qualifies the canonical task owner and `rowId == data.id == data.taskId`. Reassignment updates the same slot. Unassignment is a deleted relationship record (`deleted: true`) at that same identity; its tombstone is retained to prevent stale recreation. The client may include `userId: null` in tombstone data, but a live assignment has a string `userId`. Task content remains in the creator-owned `todos` row; the relationship record does not copy task content to the recipient.
 
-*Note on Framework Errors:* Axum framework JSON extraction errors (e.g. HTTP 415 `Unsupported Media Type` or HTTP 422 `Unprocessable Entity`) and raw transport dropouts are generated by framework layers prior to strict route dispatch and do not use the `StrictSyncError` envelope.
+The native client sends assignment changes as standard records through `POST /sync/{app_id}/push` or the `push` portion of `POST /sync/{app_id}/delta`; it reconciles shared task data and access through the standard pull route. No dedicated assignment sync endpoint is added.
+
+### 2.1 Push — `POST /sync/{app_id}/push`
+
+`PushRequestDto` contains `records`, optional `clientTimestamp`, and optional `collaborationVersion` (must be 1 for collaborative apps). Each record has `tableName` (defaults to `todos`), `rowId`, optional `ownerUserId` (mandatory for collaborative apps), raw JSON `data`, `version`, `deleted` (defaults to `false`), and `assumedServerVersion`.
+
+The response contains `synced`, `conflicts`, optional `failures` and `syncedRecords`, `serverTimestamp`, informational `schemaVersion`, and `collaborationVersion: 1` when enabled. Conflict entries identify the table, row, and client/server versions. `syncedRecords` names exact accepted `(ownerUserId, tableName, rowId, version)` tuples.
+
+Only an explicit accepted tuple is confirmation that a particular submitted version was accepted. A later pull that happens to match local content is desired-state convergence, not an operation receipt.
+
+### 2.2 Pull — `POST /sync/{app_id}/pull`
+
+`PullRequestDto` contains an optional `{updatedAt, id}` checkpoint, `batchSize` (defaults to 100), `tables` (Hub default `["todos"]`; the native collaborative client explicitly requests `["todos", "taskAssignees"]`), optional `collaborationVersion: 1`, optional `expectedAccessRevision`, and optional `accessChecks: [{ownerUserId, tableName, rowId}]`.
+
+When `accessChecks` is present, pull runs in validation-only mode:
+- Bounded to <= 100 keys and 256 KiB body limit.
+- The response contains `accessRevision` and `accessResults` matching each requested record: `{ref, status: "accessible", capabilities: {editContent, manageAssignment, deleteTask, createChild}, hierarchyCoverage: "full-group" | "child-only" | "standalone"}` or `{ref, status: "unavailable"}`.
+- Checkpoint is unchanged, hasMore is false, and no content rows are returned.
+- An empty array `accessChecks: []` serves as the final confirmation boundary at access revision E.
+
+When `accessChecks` is omitted, pull performs a normal data scan returning records, the next checkpoint, `serverTimestamp`, `hasMore`, `schemaVersion`, and `accessRevision`. In collaborative mode, tie-breaker sorting uses unique stored record ID, not row ID.
+
+### 2.3 Delta — `POST /sync/{app_id}/delta`
+
+The request has optional `push` and `pull` bodies; the response has optional `push` and `pull` results. Delta performs push followed by pull; it is not a transaction and does not make the two phases atomic. For collaborative apps, both parts require `collaborationVersion: 1`.
+
+### 2.4 Collaboration Capability Cutoff & Guard
+
+For apps with an active `assignmentPolicy`:
+- **Capability Cutoff**: Any request to `/push`, `/pull`, or `/delta` lacking `collaborationVersion: 1` fails immediately with HTTP 426 `COLLABORATION_REQUIRED` before processing any records or reading content. No unsafe private-only fallback is attempted.
+- **Single App Guard**: All collaborative mutations are serialized using an internal MongoDB document in `_sync_assignment_fences` per app. Any grant, hierarchy, or visibility change increments `accessRevision`.
+- **Revision Mismatch**: An in-flight change returning HTTP 409 `ACCESS_REVISION_CHANGED` invalidates current scan/validation staging and forces a restart from a null checkpoint.
+### 2.5 Version and Schema Semantics
+- `schemaVersion` is positive exact-integer Hub metadata (bounded by JavaScript's safe-integer range), used for schema concurrency; it is not a native feature gate or a request to generate UI/database fields.
+- Admin schema updates use `PUT /api/v1/apps/{app_id}/schema` with `schema` and `expectedSchemaVersion`. A changed schema commits only against the exact current version; a stale edit conflicts. An effective no-op does not increment the version.
+- TabbyRush preserves unknown JSON fields when applying intent-selected local changes. Hub schema additions do not generate Kotlin models, Room columns, or native UI automatically.
+- For the admin editor, a stale changed save returns 409 and retains the draft; the latest server schema is read-only until the user explicitly discards/reloads. A stale request whose effective schema is already current may return the authoritative current state.
 
 ---
 
-## 4. Canonical SHA-256 Digest Encoding
+## 3. Standard Sync Guarantees & Limits
 
-To prevent cross-platform ambiguity between Kotlin Multiplatform and backend Rust, digest encoding uses length-framed big-endian fields. **Crucially, all length prefixes represent the byte count of the UTF-8 encoded byte array (`u32_be(utf8_bytes.len)`), never Unicode character or scalar counts:**
+Standard sync is a desired-state synchronization protocol, not the retired strict operation-receipt protocol. It does not provide strict exact-revision compare-and-swap receipts, server-enforced hierarchy, permanent tombstones, or transactional group writes. Do not rely on convergence, a matching version, or matching full JSON as proof that an individual operation was accepted.
 
-1. `u32_be(utf8("strict-v1").len)` + UTF-8 `"strict-v1"`
-2. `u32_be(utf8(appId).len)` + UTF-8 `appId`
-3. `u32_be(utf8(userId).len)` + UTF-8 `userId`
-4. `u32_be(utf8(epoch).len)` + UTF-8 `epoch`
-5. `u32_be(utf8(tableName).len)` + UTF-8 `tableName`
-6. `u32_be(utf8(rowId).len)` + UTF-8 `rowId`
-7. `u32_be(utf8(opId).len)` + UTF-8 `opId`
-8. `u32_be(utf8(kind).len)` + UTF-8 `kind` (`"create"`, `"update"`, `"delete"`)
-9. `u64_be(expectedRevision)`
-10. Payload:
-    - If `create` or `update`:
-      - `u32_be(utf8(id).len)` + UTF-8 `id`
-      - `u32_be(utf8(title).len)` + UTF-8 `title`
-      - `u8(completed ? 1 : 0)`
-      - `u64_be(createdAt)`
-    - If `delete`: zero additional payload bytes.
+In collaborative mode, content remains in creator-owned `todos` rows; `taskAssignees` relationship rows use `rowId == data.id == taskId`. Assignment tombstones are exempt from generic cleanup to prevent stale recreations. Direct child grants require an internally live same-owner root parent on the server; child-only recipients lack the parent locally due to privacy, not server absence.
+
+Authoritative access loss purges active base, draft, and outbox payloads locally, retaining non-replayable content-free evidence in `access_loss_evidence`. Regrant hydrates the live task fresh without replaying purged unsent edits.
+
+---
+
+## 4. Admin App Registration & Schema Management
+
+TabbyRush uses ordinary app registration, not `/strict-apps` provisioning. The current provisioning script creates a new ordinary registration and must not be used to convert an existing strict registration.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/v1/apps` | Create an ordinary app registration (admin) |
+| `GET` | `/api/v1/apps/{app_id}` | Read registered app/schema metadata |
+| `PUT` | `/api/v1/apps/{app_id}/schema` | Conditionally update schema using `expectedSchemaVersion` |
+
+On Windows, provisioning requires an existing private, non-symlink output directory whose protected DACL and owner restrict access to the current user, `SYSTEM`, and `Administrators`. The script refuses an unsuitable directory and does not change its permissions. It applies/verifies the generated file's DACL before sending the registration request.
+
+---
+
+## 5. Historical Strict Protocol
+
+The strict bootstrap, strong push/pull, operation digest, epoch, and error-envelope descriptions formerly in this section described the historical strict implementation. They are not routes or guarantees used by the current TabbyRush binary. Former strict runbooks and scripts have been retired.
 
 ---
 

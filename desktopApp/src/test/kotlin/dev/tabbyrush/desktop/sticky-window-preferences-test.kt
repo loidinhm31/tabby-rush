@@ -41,6 +41,7 @@ class StickyWindowPreferencesTest {
         assertEquals(DEFAULT_STICKY_HEIGHT_DP, presentation.geometry.heightDp)
         assertEquals(1.0, presentation.geometry.savedScaleX)
         assertEquals(1.0, presentation.geometry.savedScaleY)
+        assertEquals(DEFAULT_STICKY_FONT_SCALE, presentation.fontScale)
     }
 
     @Test
@@ -68,6 +69,7 @@ class StickyWindowPreferencesTest {
         assertEquals(original.geometry.heightDp, loaded.geometry.heightDp)
         assertEquals(original.geometry.savedScaleX, loaded.geometry.savedScaleX)
         assertEquals(original.geometry.savedScaleY, loaded.geometry.savedScaleY)
+        assertEquals(original.fontScale, loaded.fontScale)
     }
 
     @Test
@@ -78,6 +80,7 @@ class StickyWindowPreferencesTest {
         assertFalse(loaded.visible)
         assertEquals(DEFAULT_STICKY_WIDTH_DP, loaded.geometry.widthDp)
         assertEquals(DEFAULT_STICKY_HEIGHT_DP, loaded.geometry.heightDp)
+        assertEquals(DEFAULT_STICKY_FONT_SCALE, loaded.fontScale)
     }
 
     @Test
@@ -101,6 +104,94 @@ class StickyWindowPreferencesTest {
         assertEquals(DEFAULT_STICKY_WIDTH_DP, loaded.geometry.widthDp)
         assertEquals(DEFAULT_STICKY_HEIGHT_DP, loaded.geometry.heightDp)
         assertEquals(1.0, loaded.geometry.savedScaleX)
+    }
+
+    @Test
+    fun testFontScaleRoundTripAndBounds() {
+        // 1. Explicit valid fontScale round-trip
+        val presWithFont = StickyWindowPresentation(
+            visible = true,
+            geometry = StickyWindowGeometry(10.0, 20.0, 360.0, 520.0, 1.0, 1.0),
+            fontScale = 0.625f
+        )
+        preferences.save(presWithFont)
+        val loaded = preferences.load()
+        assertEquals(0.625f, loaded.fontScale)
+        assertTrue(loaded.visible)
+        assertEquals(360.0, loaded.geometry.widthDp)
+        // 2. Legacy properties file with no fontScale falls back to default 1.0f
+        prefsFile.writeText(
+            """
+            version=1
+            visible=true
+            xDp=50.0
+            yDp=50.0
+            widthDp=380.0
+            heightDp=500.0
+            savedScaleX=1.0
+            savedScaleY=1.0
+            """.trimIndent()
+        )
+        val legacyLoaded = preferences.load()
+        assertEquals(DEFAULT_STICKY_FONT_SCALE, legacyLoaded.fontScale)
+        assertEquals(380.0, legacyLoaded.geometry.widthDp)
+        assertTrue(legacyLoaded.visible)
+
+        // 3. Out-of-bounds fontScale (< 0.50 or > 1.50) recovers to default without corrupting geometry
+        prefsFile.writeText(
+            """
+            version=1
+            visible=true
+            xDp=50.0
+            yDp=50.0
+            widthDp=380.0
+            heightDp=500.0
+            savedScaleX=1.0
+            savedScaleY=1.0
+            fontScale=0.40
+            """.trimIndent()
+        )
+        val outOfBoundsLoaded = preferences.load()
+        assertEquals(DEFAULT_STICKY_FONT_SCALE, outOfBoundsLoaded.fontScale)
+        assertEquals(380.0, outOfBoundsLoaded.geometry.widthDp)
+        assertTrue(outOfBoundsLoaded.visible)
+
+        // 4. Non-finite values (NaN, Infinity) recover to default
+        for (nonFinite in listOf("NaN", "Infinity", "-Infinity")) {
+            prefsFile.writeText(
+                """
+                version=1
+                visible=true
+                xDp=50.0
+                yDp=50.0
+                widthDp=380.0
+                heightDp=500.0
+                savedScaleX=1.0
+                savedScaleY=1.0
+                fontScale=$nonFinite
+                """.trimIndent()
+            )
+            val nonFiniteLoaded = preferences.load()
+            assertEquals(DEFAULT_STICKY_FONT_SCALE, nonFiniteLoaded.fontScale)
+            assertEquals(380.0, nonFiniteLoaded.geometry.widthDp)
+        }
+
+        // 5. Property alias sticky.window.font_scale is supported
+        prefsFile.writeText(
+            """
+            version=1
+            visible=true
+            xDp=50.0
+            yDp=50.0
+            widthDp=380.0
+            heightDp=500.0
+            savedScaleX=1.0
+            savedScaleY=1.0
+            sticky.window.font_scale=1.25
+            """.trimIndent()
+        )
+        val aliasLoaded = preferences.load()
+        assertEquals(1.25f, aliasLoaded.fontScale)
     }
 
     @Test

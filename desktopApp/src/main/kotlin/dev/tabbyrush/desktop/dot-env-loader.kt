@@ -16,6 +16,12 @@ object DotEnvLoader {
      * 5. Optional baseDir
      */
     fun load(customFile: File? = null, baseDir: File? = null): Map<String, String> {
+        if (System.getProperty("tabbyrush.isolatedTestConfig") == "true") {
+            // Tests may name a disposable fixture explicitly; never probe working/profile directories.
+            return customFile?.let(::parse)
+                ?: System.getProperty("tabbyrush.env.file")?.let { parse(File(it)) }
+                ?: emptyMap()
+        }
         val candidates = mutableListOf<File>()
         if (customFile != null) {
             candidates.add(customFile)

@@ -1,8 +1,8 @@
 # TabbyRush Code Standards & Implementation Guidelines
 
-Last Updated: 2026-10-18
-Phase: Server Admin Announcements Phase 12 delivered & verified (Score 8/10, 0 critical issues); staged pilot ready (Android/Linux/Web Admin); Windows desktop runtime held at Gate G5; inherited release holds (G2/G3/G6/G7) remain open
-Related Docs: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Announcement Contract](./announcement-contract.md) · [Remote Notification Setup](./remote-notification-setup.md) · [Admin Announcements Acceptance](./evidence/admin-announcements-acceptance.md)
+Last Updated: 2026-10-21
+Status: Collaborative task assignees and Room v5 delivered (Phases 01–08); dedicated smoke harnesses prepared in Phase 09. G0 policy validation confirmed 2026-10-21. Native acceptance remains incomplete; production migration is unauthorized.
+Related Docs: [Standard Sync Design](./standard-sync-cutover-design.md) · [System Architecture](./system-architecture.md) · [Project Roadmap](./project-roadmap.md) · [Codebase Summary](./codebase-summary.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md) · [Headless Android Setup](./headless-android-setup.md) · [Host Tooling Evidence](./host-tooling-evidence.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Sync Acceptance](./sync-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Announcement Contract](./announcement-contract.md) · [Remote Notification Setup](./remote-notification-setup.md) · [Admin Announcements Acceptance](./evidence/admin-announcements-acceptance.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ---
 
@@ -72,7 +72,7 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
   - Contracts & models: `dev.tabbyrush.shared.contract.*`
   - Authentication & session: `dev.tabbyrush.shared.auth.*`
   - Local database & persistence: `dev.tabbyrush.shared.data.*`
-  - Strict sync protocol: `dev.tabbyrush.shared.sync.*`
+  - Standard sync client: `dev.tabbyrush.shared.sync.*`
   - Theme & tokens: `dev.tabbyrush.shared.theme.*`
   - Compose UI components: `dev.tabbyrush.shared.ui.*`
 - Android application: `dev.tabbyrush.android.*`
@@ -99,10 +99,13 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
 - Constants and enum entries: UPPER_SNAKE_CASE or PascalCase for type-safe sealed objects.
 - Source file names: `kebab-case.kt` for Kotlin files, `kebab-case.sh` for shell scripts, `kebab-case.md` for documentation.
 
-### 3.4 Strict Sync & Digest Invariants
-- Common contract interfaces must not leak concrete database (Room) or HTTP (Ktor) dependencies into domain signatures.
-- Canonical digest calculation must use explicit length-framed big-endian fields matching the backend Rust implementation.
-- Credentials (`CredentialBundle`, session tokens, passwords) must never be serialized to unencrypted storage, diagnostic logs, or `toString()` output; structured serialization is restricted exclusively to authorized transport payloads and encrypted vault containers.
+### 3.4 Shared Core, Authentication & Standard Sync Invariants
+- Common domain contracts must not leak concrete database (Room) or HTTP (Ktor) dependencies into domain signatures.
+- Sync/auth routes use the `/api/v1` prefix; sync requests use the approved Bearer, `X-API-Key`, and `X-App-Id` header policy. Mutating POSTs are not automatically replayed after token refresh.
+- Preserve unknown raw JSON and apply only fields named by a valid explicit intent mask. Ambiguous legacy intent requires review; never fall back to all-known-field replay.
+- Begin every sync round/reconnect with a null-checkpoint full scan; discard stale scan-generation staging after restart. Do not infer deletion from an incomplete scan.
+- Clear a submitted local version only for an explicit accepted `(tableName,rowId,version)` tuple. A matching pulled projection is convergence, not operation receipt proof.
+- Keep credentials out of unencrypted storage, logs, and `toString()` output; structured serialization is restricted to authorized transport payloads and encrypted vault containers.
 
 ### 3.5 Compose UI, Accessibility & Theme Guidelines
 - **WCAG 2.1 AA Palette Contrast**: All functional text pairings must mathematically satisfy the WCAG 2.1 AA baseline contrast threshold of >= 4.5:1 (>= 3.0:1 for non-text interactive borders). Dynamic device theming is disabled; rendered UI contrast requires platform device validation.
@@ -112,13 +115,11 @@ exec emulator -avd "${AVD_NAME}" -port "${PORT}" ...
 - **Transient Credential Privacy**: Passwords in UI forms must use `PasswordVisualTransformation` visual masking, emit `semantics { password() }`, and be dereferenced from memory upon form submission, mode toggling, or composable disposal. Password strings in `AuthSubmitAction.toString()` must be redacted with `[REDACTED]`. (JVM string immutability precludes guaranteed memory erasure; device screen-reader behavior unverified).
 - **Responsive Hierarchy**: UI must adapt cleanly across breakpoints (<840dp compact vertical stack, >=840dp two-column desktop sidebar).
 
-### 3.6 Strict-v2 Temporal Model & Checked Arithmetic Standards
-- **Checked 64-bit Integer Arithmetic**: All time and duration conversions (e.g. lead minutes to milliseconds, repeat count interval offsets, first/last occurrence anchors) must use checked arithmetic (`safeMultiply`, `safeSubtract`, `safeAdd` in Kotlin; `checked_mul`, `checked_sub`, `checked_add` in Rust; boundary range checks in Node.js). Integer overflow wrapping at intermediate or terminal calculations must fail closed and reject the record.
-- **Strict Validation Over Normalization**: Wire payloads must reject malformed, out-of-bounds, or contradictory states (e.g. non-repeating `reminderCount == 1` with non-null `reminderIntervalMinutes`, repeating `reminderCount > 1` with null or interval < 15 minutes, negative `createdAt` or `reminderLeadMinutes`, last scheduled reminder exceeding deadline anchor). Implementations must never silently normalize or coerce invalid wire values.
-- **Canonical Binary Digest Preimages**:
-  - Framed identity prefix: 8 length-prefixed strings (domain `strict-v2`, appId, userId, epoch, tableName, rowId, opId, kind) + 8-byte big-endian signed 64-bit revision.
-  - Data payload: Exactly 0 bytes for `DELETE` operations. For `CREATE` and `UPDATE`, 4 base fields followed by 12 strict-v2 fields in canonical table order with explicit 1-byte presence tags (`0x00`/`0x01`).
-- **Automated Schema Fingerprint Parity**: Automated test runners across all platforms must assert that SHA-256 digests derived from canonical JSON schema definitions match frozen constants (`3361a80f...` for v1, `5f539551...` for v2) preventing unreviewed schema drift.
+### 3.6 Temporal Models & Checked Arithmetic Standards
+- **Checked 64-bit Integer Arithmetic**: Timestamp and duration calculations must detect overflow rather than wrap, truncate, or silently clamp.
+- **Strict Validation Over Normalization**: Reject malformed, out-of-bounds, or contradictory task/deadline/reminder states instead of inventing values or silently coercing them.
+- **Timezone & DST Semantics**: Reject impossible calendar dates and nonexistent local times; require explicit offset selection for ambiguous overlaps. Use calendar-aware boundaries rather than fixed 24-hour assumptions.
+- **Protocol Scope**: The current Hub client uses standard sync, not strict digest preimages or epoch/fingerprint admission. Do not introduce strict-protocol digest requirements into current sync paths.
 ### 3.7 Task Surface Contracts & Projection Standards
 - Keep task-surface value contracts and pure projections in `shared/src/commonMain`; do not introduce platform APIs, Room, or HTTP dependencies into them.
 - **Admission:** Bind every surface read, mutation, navigation request, and publication to `SurfaceAccountToken(accountKey, generation)`. Obtain readiness through `TaskSurfaceAccess`; require the matching active token before acting or publishing. Reject stale-generation work and do not route a surface action to an arbitrary or newly selected account.
@@ -148,8 +149,9 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - Provide consistent CLI flag parsing with documented defaults and environment variable fallbacks:
   - Origin: `--origin` flag, fallback `process.env.GLEAN_ORIGIN || 'http://127.0.0.1:3000'`.
   - Admin JWT: `--token` flag, fallback `process.env.GLEAN_ADMIN_TOKEN`.
-  - App ID: `--app-id` flag, fallback `process.env.TABBYRUSH_APP_ID || 'tabbyrush'`.
+  - App ID: `--app-id` flag, fallback `process.env.TABBYRUSH_APP_ID || 'tabby-rush'`.
   - API Key: `--api-key` flag, fallback `process.env.TABBYRUSH_API_KEY`.
+- **Environment Variable Custody**: While scripts accept `--token` for diagnostic and mock test runners, production automation and CI workflows **MUST** provide credentials via protected environment variables (`GLEAN_ADMIN_TOKEN`, `TABBYRUSH_API_KEY`) rather than bare `argv` parameters, strictly adhering to Section 8 Invariant 12 to prevent exposure in process tables (`/proc/<pid>/cmdline`, `ps`).
 - Implement a `--help` / `-h` flag printing usage instructions and exit with code 0.
 
 ### 4.3 Key Custody & Security
@@ -222,6 +224,7 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - Run desktop tests on the matching native host/target (`-PdesktopTarget=linux` on Linux; `-PdesktopTarget=windows` on Windows); the platform-specific vault suite must exercise the real OS API where available.
 - Resolve dependencies from the target-specific lockfile. Use `--write-locks` only when intentionally regenerating a reviewed lockfile, not for ordinary builds.
 - Run the corresponding package smoke harness against the distributable and MSI/RPM artifact. Static class/metadata inspection is not a substitute for interactive install, runtime, vault, or accessibility acceptance.
+- **Windows Packaging BOM-Free Standard**: All WiX source files (`*.wxs`), launcher configuration files (`TabbyRush.cfg`), and packaged configuration files (`.env`) must be encoded in strictly BOM-free UTF-8. The presence of a UTF-8 BOM (`0xEF 0xBB 0xBF`) causes the native `jpackage` launcher to fail (`Fail to launch JVM`). The packaging pipeline (`scripts/build-windows-remote-msi.ps1`) normalizes these files, and `scripts/windows-package-smoke.ps1` verifies the absence of UTF-8 BOMs.
 
 ---
 
@@ -237,8 +240,9 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 8. **Windows Credential Scope**: Desktop Windows tokens must use current-user DPAPI; machine-wide protection and plaintext file/registry/preferences fallback are prohibited.
 9. **Windows ACL Must Not Be Overclaimed**: An ACL helper that suppresses unsupported-view or owner/permission failures cannot be documented as guaranteeing restrictive ACL enforcement; verify native ACLs separately.
 10. **Artifact Signing Status**: Report MSI Authenticode status and digest accurately. An unsigned development installer is not a trusted production release.
-11. **Quarantine of Strict-v1 Fresh-Epoch Script**: `scripts/hub-strict-recovery.js` is operationally quarantined for legacy `strict-v1` emergency cold disaster recovery only. It must never be executed against a `strict-v2` deployment.
-12. **CLI Credential Custody on `argv`**: Administrative tokens, database URIs, and passwords must never be passed as bare command-line arguments. Process-table observation via `/proc/<pid>/cmdline` or `ps` must be prevented by reading credentials from protected environment variables or secured configuration files.
+11. **Retired Strict Tooling**: Strict-v1/v2/v3 upgrade, rehearsal, and recovery scripts cited by historical docs are removed. The current binary uses ordinary registration and standard sync; strict runbooks are archives only.
+12. **Windows Provisioning Directory**: Before credential-file creation, provisioning requires an existing private, non-symlink output directory with protected DACL/owner limited to the current user, `SYSTEM`, and `Administrators`. The script refuses an unsafe directory without changing its permissions; it sets/verifies file DACL before registration POST.
+13. **CLI Credential Custody on `argv`**: Administrative tokens, database URIs, and passwords must never be passed as bare command-line arguments. Use protected environment variables or secured configuration files.
 
 ---
 
@@ -262,12 +266,11 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 ### 9.4 Coordinated Quiescence & Teardown
 - Account logout or leave must execute composite ordered quiescence (`CompositeLeaveSchedulerCancelGate` on Android, `CompositeDesktopLeaveCancelGate` on Desktop) draining delivery gates before cancelling observers, schedulers, and native notifications.
 
-### 9.5 Cutover & In-Place Migration Standards
-- Operator tooling (`hub-strict-upgrade.mjs`, `strict-v2-cutover-rehearsal.mjs`) must pass sensitive tokens via protected environment variables (`$GLEAN_ADMIN_TOKEN`), never on command-line `argv`.
-- Log outputs and error strings must sanitize tokens via `sanitizeLog()`.
-- Resumed migrations must use the identical `migrationId`.
-- Contract assertions must verify 16 canonical columns, SHA-256 fingerprint, and active epoch invariance before exit 0.
-- Downward migration or restoring v1 backups after v2 publication is forbidden. Forward repair under fence is the only approved remediation.
+### 9.5 Standard Conversion & In-Place Mutation Safety
+- The conversion operator is source-built separately from the TabbyRush client; tests are not permission to act on a live database.
+- A failed mutating run of any kind leaves an exclusive durable claim. There is no automatic expiry or takeover. Recover only through `maintenance.executionRecovery` for the exact `expectedExecutionId`, with `executorStopped: true` plus `executorStopEvidence`, `mongoOperationsDrained: true` plus `mongoDrainEvidence`, and `authorizedActions` containing `"recoverExecution"`.
+- Renew and verify the maintenance window before each collection rename and registry compare-and-swap. Do not automatically restart services, release external isolation, or roll back after publication.
+- Live cutover requires separate explicit approval, verified backup/restore scope, and an isolation plan. Strict-v2/v3 runbooks are historical archives.
 
 ---
 
@@ -298,6 +301,15 @@ Integration, provisioning, and smoke testing scripts (`scripts/*.mjs`) must foll
 - If delivery gate drainage times out, teardown must log and fail closed rather than proceeding with uncoordinated database closure.
 
 Current implementation divergence: Android `closeRuntimeInternal()` catches and logs a drain-timeout exception, then returns before observer-job cancellation or Room closure; `closeActiveRuntime()` nevertheless clears `activeRuntime`. This remains an open safety finding, not acceptable teardown behavior.
+
+### 10.5 Desktop Sticky Companion Compact Sizing & Typography Scaling Exception
+- **Desktop Companion Control Sizing**: As an explicit desktop-companion-only exception to the universal 48dp minimum touch target rule (§3.5), desktop sticky window controls use dense mouse/keyboard-appropriate dimensions:
+  - Checkboxes and subtask expander toggles render at 22–24dp (`size(22.dp)`).
+  - Quick-add input uses compact `BasicTextField` with 32dp minimum height.
+  - Header actions ("Open", "Quit", zoom buttons) use compact buttons (24–28dp minimum height).
+  - Task row container uses 28dp minimum height (`defaultMinSize(minHeight = 28.dp)`).
+- **Accessibility Invariant**: Compact desktop sizing is scoped strictly to the desktop sticky companion window. Semantic labels (`contentDescription`), state descriptions (`stateDescription`), keyboard navigation (Tab/Shift-Tab, Space, Enter), and focus rings remain strictly required.
+- **Dynamic & Responsive Text Scaling**: Sticky window provides persistent text zoom (0.50x to 1.50x, step 0.125x) via `CompositionLocalProvider(LocalDensity provides customDensity)`. Stored in presentation properties (`fontScale`). Keyboard shortcuts (`Ctrl+=`, `Ctrl+-`, `Ctrl+0`) and header zoom controls (`A−`, `reset to automatic`, `A+`) provide zero-dependency scaling. When sticky window dimensions change, text automatically scales responsively relative to standard width (360dp) combined with manual zoom (`computeEffectiveStickyFontScale`).
 
 ---
 
@@ -346,3 +358,34 @@ Current implementation divergence: Android `closeRuntimeInternal()` catches and 
 ### 11.8 Staged Pilot Boundaries & Platform Scopes
 - **Restricted Pilot Scope**: Restricted pilot encompasses Android mobile, Linux desktop, and Web Admin console for cohort sizes $\le 500$ recipients per send.
 - **Full Rollout Hold**: Full multiplatform rollout requires native Windows desktop acceptance; Windows MSI packaging and WinRT toast integration are held at Gate G5 on Linux build hosts pending verified clean-host Windows proof.
+
+### 11.9 Release Security Auditor & Widget Provider Invariants
+- **Fail-Closed Verification**: `scripts/release-security-check.mjs` enforces Fail-Closed release gating; absence of release artifacts or required Android SDK tools halts release pipelines with exit code 1.
+- **Widget Provider Metadata Formats**: `TabbyRushTaskWidgetReceiver` metadata must declare `android.appwidget.provider` pointing to either raw `@xml/task-widget-info` / `@xml/task_widget_info` or compiled `@ref/0x[0-9a-fA-F]+` resource identifiers produced by `apkanalyzer manifest print`. Malformed resource formats (e.g. bare hex, missing `@xml/`, or foreign attributes) fail closed.
+- **Permitted AndroidX System Components**: Transitive AndroidX system receivers protected by `android.permission.DUMP` (`DiagnosticsReceiver`, `ProfileInstallReceiver`) and services protected by system permissions (`GlanceRemoteViewsService` with `BIND_REMOTEVIEWS`, `SystemJobService` with `BIND_JOB_SERVICE`) are permitted; all other exported services, receivers, and content providers are strictly prohibited.
+
+---
+
+## 12. Collaborative Task Assignment & Identity Standards (Phases 01–09)
+
+### 12.1 Canonical Identity & TaskRef Everywhere
+- **Explicit Value Types**: Use `TaskRef(ownerUserId, rowId)` for task references and `CanonicalRecordRef(appId, ownerUserId, tableName, rowId)` for generic sync records. Bare String row IDs or bare integer keys are strictly prohibited across store methods, view models, intent extras, reminder delivery suppression, Glance widgets, and desktop surfaces.
+- **Owner Namespace Isolation**: An assignee's store never treats incoming collaborative tasks as caller-owned; `ownerUserId` identifies the canonical creator. Duplicate row IDs under different owners represent entirely distinct tasks and never collide.
+
+### 12.2 Two-Stage Room v5 Legacy Binding
+- **Preserve Legacy State**: Migration 4→5 marks pre-existing private rows with `ownerBinding = LOCAL_ACCOUNT` and nullable `ownerUserId`.
+- **Cryptographic Match Gate**: Store initialization requires an authenticated or restored `AccountIdentity` and verifies `AccountKey.create(origin, userId)` matches the partition before binding legacy rows atomically.
+- **Local-Only Boundary**: Unresolved legacy rows display offline for continuity, but fail closed against outgoing sync dispatch or shared assignment actions.
+
+### 12.3 Privacy-First Revocation Purge & Non-Replayable Evidence
+- **Authoritative Access Loss**: When access is revoked or denied, the client immediately removes the active task projection, cancels scheduled reminders and notifications, and purges `server_base`, `editor_drafts`, and pending `outbox` records for that task from active storage.
+- **Zero Retained Task Content**: `access_loss_evidence` stores only audit metadata: `ownerUserId`, `tableName`, `rowId`, `opId`, `baseVersion`, `submittedVersion`, `occurredEpochMs`, and `reason` (`REVOCATION`). Retaining task titles, deadlines, notes, or raw JSON payloads in evidence tables is strictly prohibited.
+- **No Auto-Replay on Regrant**: A fresh grant restores the live canonical task as currently stored on the server. Purged unsent drafts or outbox operations are never resurrected or automatically replayed.
+
+### 12.4 Assignee Capability & Privilege Invariants
+- **Editable Allowlist**: Assignees may edit only fields explicitly registered in `assignmentPolicy.editableFields` (`title`, `completed`, `deadlineDate`, `deadlineTime`, etc.). Modifying non-editable, structural, or unknown JSON fields is rejected.
+- **Creator-Only Operations**: Creating subtasks, reparenting, task deletion, tombstone restoration, and assignee management (`taskAssignees`) are strictly creator-only.
+- **Error Code Typing**: Privileged mutation attempts while retaining read access return `OPERATION_FORBIDDEN` (preserving valid local access). Loss of read access returns `ACCESS_DENIED` and triggers local purge.
+
+### 12.5 Whole-App Capability Cutoff (HTTP 426)
+- **Pre-Mutation Enforcement**: When `assignmentPolicy` version 1 is active on Glean Hub, any `/push`, `/pull`, or `/delta` request lacking `collaborationVersion: 1` fails closed with HTTP 426 `COLLABORATION_REQUIRED` before processing any records. Downgrading to unsafe private sync is prohibited.

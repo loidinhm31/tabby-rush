@@ -1,172 +1,143 @@
 package dev.tabbyrush.shared.sync
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonElement
 
-@Serializable
-data class StrictTodoDataDto(
-    val id: String = "",
-    val title: String = "",
-    val completed: Boolean = false,
-    val createdAt: Long = 0L
-)
-
-@Serializable
-data class StrictV2TodoDataDto(
-    val id: String = "",
-    val title: String = "",
-    val completed: Boolean = false,
-    val createdAt: Long = 0L,
-    val deadlineDate: String? = null,
-    val deadlineTime: String? = null,
-    val deadlineZone: String? = null,
-    val deadlineOffsetSeconds: Long? = null,
-    val reminderAnchorTime: String? = null,
-    val deadlineAnchorEpochMs: Long? = null,
-    val deadlineOverdueEpochMs: Long? = null,
-    val reminderEnabled: Boolean = false,
-    val reminderLeadMinutes: Long = 0L,
-    val reminderIntervalMinutes: Long? = null,
-    val reminderCount: Long = 1L,
-    val scheduleToken: String? = null
-)
-
-@Serializable
-data class StrictV2OperationDto(
-    val opId: String,
-    val epoch: String,
-    val tableName: String = "todos",
-    val rowId: String,
-    val kind: String, // "create", "update", "delete"
-    val expectedRevision: Long,
-    val data: StrictV2TodoDataDto? = null
-)
-
-@Serializable
-data class StrictV2PushRequestDto(
-    val protocol: String = "strict-v2",
-    val epoch: String,
-    val operations: List<StrictV2OperationDto>
-)
-
-object LegacyReceiptStatus {
-    const val PROVEN_ACCEPTED = "provenAccepted"
-    const val PROVEN_NOT_ACCEPTED = "provenNotAccepted"
-    const val UNKNOWN_SUPERSEDED = "unknownSuperseded"
-    const val INTEGRITY_FAILURE = "integrityFailure"
+const val MAX_EXACT_VERSION = 9_007_199_254_740_991L
+internal const val MAX_SYNC_BODY_BYTES = 256 * 1024
+internal val syncWireJson = kotlinx.serialization.json.Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+    explicitNulls = false
 }
 
+const val COLLABORATION_VERSION_1 = 1L
+const val ERROR_CODE_COLLABORATION_REQUIRED = "COLLABORATION_REQUIRED"
+const val ERROR_CODE_ACCESS_REVISION_CHANGED = "ACCESS_REVISION_CHANGED"
+const val ERROR_CODE_ACCESS_DENIED = "ACCESS_DENIED"
+const val ERROR_CODE_OPERATION_FORBIDDEN = "OPERATION_FORBIDDEN"
+
 @Serializable
-data class LegacyReceiptItemDto(
-    val opId: String,
-    val tableName: String = "todos",
-    val rowId: String,
-    val kind: String,
-    val expectedRevision: Long,
-    val digest: String,
-    val data: StrictTodoDataDto? = null
+data class CanonicalRecordRefDto(
+    val ownerUserId: String,
+    val tableName: String,
+    val rowId: String
 )
 
 @Serializable
-data class LegacyReceiptsRequestDto(
-    val protocol: String = "strict-v1",
-    val epoch: String,
-    val receipts: List<LegacyReceiptItemDto>
+data class TaskCapabilitiesDto(
+    val editContent: Boolean,
+    val manageAssignment: Boolean,
+    val deleteTask: Boolean,
+    val createChild: Boolean
 )
 
 @Serializable
-data class LegacyReceiptResultDto(
-    val opId: String,
-    val rowId: String,
+data class TaskAccessResultDto(
+    val ref: CanonicalRecordRefDto,
     val status: String,
-    val acceptedRevision: Long? = null,
-    val current: StrictCurrentRecordDto? = null
+    val capabilities: TaskCapabilitiesDto? = null,
+    val hierarchyCoverage: String? = null
 )
 
 @Serializable
-data class LegacyReceiptsResponseDto(
-    val protocol: String,
-    val epoch: String,
-    val results: List<LegacyReceiptResultDto>
-)
+data class SyncCheckpointDto(val updatedAt: String, val id: String)
 
 @Serializable
-data class StrictOperationDto(
-    val opId: String,
-    val epoch: String,
+data class PushRecordDto(
     val tableName: String = "todos",
     val rowId: String,
-    val kind: String, // "create", "update", "delete"
-    val expectedRevision: Long,
-    val data: StrictTodoDataDto? = null
+    val data: JsonObject,
+    val version: Long,
+    val deleted: Boolean = false,
+    val assumedServerVersion: Long,
+    val ownerUserId: String? = null
 )
 
 @Serializable
-data class StrictCurrentRecordDto(
-    val revision: Long,
-    val deleted: Boolean
+data class PushRequestDto(
+    val records: List<PushRecordDto>,
+    val clientTimestamp: String? = null,
+    val collaborationVersion: Long? = null
 )
 
 @Serializable
-data class StrictOperationResultDto(
-    val opId: String,
-    val rowId: String,
-    val digest: String,
-    val status: String,
-    val acceptedRevision: Long? = null,
-    val current: StrictCurrentRecordDto? = null
-)
-
-@Serializable
-data class BootstrapResponseDto(
-    val protocol: String,
-    val appId: String,
-    val epoch: String,
-    val tables: List<String>
-)
-
-@Serializable
-data class StrictPushRequestDto(
-    val protocol: String,
-    val epoch: String,
-    val operations: List<StrictOperationDto>
-)
-
-@Serializable
-data class StrictPushResponseDto(
-    val protocol: String,
-    val epoch: String,
-    val results: List<StrictOperationResultDto>
-)
-
-@Serializable
-data class StrictPullRequestDto(
-    val protocol: String,
-    val epoch: String,
-    val tableName: String = "todos",
-    val cursor: String? = null,
-    val batchSize: Int = 100
-)
-
-@Serializable
-data class StrictPullRecordDto(
+data class SyncedRecordDto(
     val tableName: String,
     val rowId: String,
-    val revision: Long,
-    val deleted: Boolean,
-    val data: StrictV2TodoDataDto? = null
+    val version: Long,
+    val ownerUserId: String? = null
 )
 
 @Serializable
-data class StrictPullResponseDto(
-    val protocol: String,
-    val epoch: String,
-    val records: List<StrictPullRecordDto>,
-    val cursor: String? = null,
-    val hasMore: Boolean
-)
-
-@Serializable
-data class StrictSyncErrorDto(
+data class FailedRecordDto(
+    val tableName: String,
+    val rowId: String,
     val error: String,
-    val code: String? = null
+    val ownerUserId: String? = null
+)
+
+@Serializable
+data class ConflictInfoDto(
+    val tableName: String,
+    val rowId: String,
+    val clientVersion: Long,
+    val serverVersion: Long,
+    val ownerUserId: String? = null
+)
+
+@Serializable
+data class PushResponseDto(
+    val synced: Int,
+    val conflicts: List<ConflictInfoDto>,
+    val failures: List<FailedRecordDto> = emptyList(),
+    val syncedRecords: List<SyncedRecordDto> = emptyList(),
+    val serverTimestamp: String,
+    val schemaVersion: Long,
+    val collaborationVersion: Long? = null
+)
+
+@Serializable
+data class PullRequestDto(
+    val checkpoint: SyncCheckpointDto? = null,
+    val batchSize: Int = 100,
+    val tables: List<String>? = null,
+    val collaborationVersion: Long? = null,
+    val expectedAccessRevision: Long? = null,
+    val accessChecks: List<CanonicalRecordRefDto>? = null
+)
+
+@Serializable
+data class PullRecordDto(
+    val tableName: String,
+    val rowId: String,
+    val data: JsonElement,
+    val version: Long,
+    val syncedAt: String,
+    val deleted: Boolean = false,
+    val ownerUserId: String? = null
+)
+
+@Serializable
+data class PullResponseDto(
+    val records: List<PullRecordDto>,
+    val checkpoint: SyncCheckpointDto,
+    val serverTimestamp: String,
+    val hasMore: Boolean = false,
+    val schemaVersion: Long,
+    val collaborationVersion: Long? = null,
+    val accessRevision: Long? = null,
+    val accessResults: List<TaskAccessResultDto>? = null
+)
+
+@Serializable
+data class DeltaRequestDto(val push: PushRequestDto? = null, val pull: PullRequestDto? = null)
+
+@Serializable
+data class DeltaResponseDto(
+    val push: PushResponseDto? = null,
+    val pull: PullResponseDto? = null,
+    @kotlinx.serialization.Transient val pushError: String? = null,
+    @kotlinx.serialization.Transient val pullError: String? = null
 )

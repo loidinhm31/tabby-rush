@@ -11,6 +11,8 @@ import dev.tabbyrush.shared.contract.CredentialVault
 import dev.tabbyrush.shared.contract.HubConfig
 import dev.tabbyrush.shared.contract.SafeError
 import dev.tabbyrush.shared.contract.VaultStatus
+import dev.tabbyrush.shared.contract.UserLookupResult
+import dev.tabbyrush.shared.contract.UserLookupCache
 import io.ktor.client.engine.HttpClientEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,6 +76,7 @@ class HubAuthSession(
         _currentIdentity.value = identity
         _currentAccountKey.value = key
         _state.value = AuthState.AUTHENTICATED
+        UserLookupCache.remember(identity.userId, identity.username)
         return true
     }
 
@@ -204,7 +207,7 @@ class HubAuthSession(
                         inMemoryBundle = bundle
                         _currentIdentity.value = identity
                         _currentAccountKey.value = accountKey
-
+                        UserLookupCache.remember(identity.userId, identity.username)
                         if (me.hasTabbyRushAccess(config.appId)) {
                             _state.value = AuthState.AUTHENTICATED
                         } else {
@@ -429,12 +432,63 @@ class HubAuthSession(
         }
     }
 
+    override suspend fun lookupUser(username: String): ApiResult<UserLookupResult> {
+        val (token, gen) = sessionMutex.withLock {
+            if (_state.value != AuthState.AUTHENTICATED) {
+                return ApiResult.Failure(
+                    SafeError.Unauthorized(
+                        code = "UNAUTHENTICATED",
+                        message = "Operation requires an authenticated session"
+                    )
+                )
+            }
+            Pair(inMemoryBundle?.accessToken, currentGeneration)
+        }
+        if (token == null) {
+            return ApiResult.Failure(
+                SafeError.Unauthorized(
+                    code = "UNAUTHENTICATED",
+                    message = "Operation requires an authenticated session"
+                )
+            )
+        }
+        val result = authClient.lookupUser(token, username)
+        sessionMutex.withLock {
+            if (currentGeneration != gen || _state.value != AuthState.AUTHENTICATED) {
+                return ApiResult.Failure(
+                    SafeError.Unauthorized(
+                        code = "ACCOUNT_CHANGED",
+                        message = "Account session changed during user lookup"
+                    )
+                )
+            }
+        }
+        return when (result) {
+            is ApiResult.Success -> {
+                val user = result.value.user
+                if (user != null) {
+                    UserLookupCache.remember(user.userId, user.username)
+                    ApiResult.Success(UserLookupResult(userId = user.userId, username = user.username))
+                } else {
+                    ApiResult.Failure(
+                        SafeError.Validation(
+                            code = "USER_NOT_FOUND",
+                            message = "User not found: $username"
+                        )
+                    )
+                }
+            }
+            is ApiResult.Failure -> result
+        }
+    }
+
     /**
      * Executes an authorized operation.
      * Enforces the critical invariant: HTTP auth layer NEVER automatically replays a POST
      * after token refresh. Caller coordinator retains frozen operation intent.
      */
     suspend fun <T> authorizedRequest(
+        expectedAccountKey: AccountKey? = null,
         block: suspend (accessToken: String) -> ApiResult<T>
     ): ApiResult<T> {
         val (token, gen) = sessionMutex.withLock {
@@ -445,6 +499,9 @@ class HubAuthSession(
                         message = "Operation requires an authenticated session"
                     )
                 )
+            }
+            if (expectedAccountKey != null && _currentAccountKey.value != expectedAccountKey) {
+                return ApiResult.Failure(SafeError.Unauthorized("ACCOUNT_FENCED", "Request belongs to a different account"))
             }
             Pair(inMemoryBundle?.accessToken, currentGeneration)
         }
@@ -472,6 +529,10 @@ class HubAuthSession(
                 ) {
                     return firstAttempt
                 }
+                val admissionChanged = sessionMutex.withLock {
+                    currentGeneration != gen || (expectedAccountKey != null && _currentAccountKey.value != expectedAccountKey)
+                }
+                if (admissionChanged) return ApiResult.Failure(SafeError.Unauthorized("ACCOUNT_FENCED", "Account changed before refresh"))
 
                 // 401 is ambiguous: JWT expiry, missing grant, or bad key.
                 // Perform at most one single-flight refresh recovery:
@@ -567,6 +628,7 @@ class HubAuthSession(
         _currentIdentity.value = null
         _currentAccountKey.value = null
         _state.value = AuthState.UNAUTHENTICATED
+        UserLookupCache.clear()
     }
 
     /**

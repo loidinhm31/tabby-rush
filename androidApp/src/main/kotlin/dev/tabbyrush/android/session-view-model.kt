@@ -1,5 +1,6 @@
 package dev.tabbyrush.android
 import android.util.Log
+import kotlin.coroutines.cancellation.CancellationException
 import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -28,8 +29,14 @@ import dev.tabbyrush.shared.contract.RemoteInboxAvailability
 import dev.tabbyrush.shared.contract.RemoteInboxState
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.ReminderRule
+import dev.tabbyrush.shared.contract.TaskRef
+import dev.tabbyrush.shared.contract.AssignmentIntent
+import dev.tabbyrush.shared.contract.AssignmentSlotResult
+import dev.tabbyrush.shared.contract.TaskMutationResult
+import dev.tabbyrush.shared.contract.AccessLossEvidence
+import dev.tabbyrush.shared.contract.UserLookupResult
+import dev.tabbyrush.shared.contract.UserLookupCache
 import java.time.ZoneId
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -82,12 +89,17 @@ class SessionViewModel : ViewModel() {
     private fun onAuthenticated() {
         accountJob?.cancel()
         val accountKey = app.authSession.currentAccountKey.value ?: return
-        app.authSession.currentIdentity.value?.let { app.saveActiveAccount(it, accountKey) }
+        val identity = app.authSession.currentIdentity.value
+        if (identity != null) {
+            app.saveActiveAccount(identity, accountKey)
+        }
 
         accountJob = viewModelScope.launch {
             try {
                 val runtime = app.getOrCreateAccountRuntime(accountKey)
-                syncJob?.cancel()
+                if (identity != null) {
+                    runtime.store.initializeOwnerBinding(identity)
+                }
                 syncJob = launch {
                     runtime.coordinator.progress.collect { p ->
                         _uiState.value = _uiState.value.copy(syncProgress = p, safeError = p.safeError)
@@ -130,10 +142,20 @@ class SessionViewModel : ViewModel() {
     private suspend fun reloadTodos() {
         val runtime = app.getActiveRuntime() ?: return
         try {
-            val isV2 = runtime.store.isAccountV2()
-            allTodos = runtime.store.loadTodos(); applyFilterAndCounts()
-            _uiState.value = _uiState.value.copy(isAccountV2 = isV2)
+            allTodos = runtime.store.loadTodos()
+            val evidence = runtime.store.listAccessLossEvidence()
+            applyFilterAndCounts(evidence)
             isTodosLoaded = true
+
+            // Clear in-memory revoked editor content on authoritative invalidation
+            val currentEditor = _uiState.value.editor
+            if (currentEditor?.taskRef != null) {
+                val stillAccessible = allTodos.any { it.taskRef == currentEditor.taskRef && !it.isDeleted }
+                if (!stillAccessible) {
+                    _uiState.value = _uiState.value.copy(editor = null)
+                }
+            }
+
             pendingTarget?.let { (k, t) -> dispatchTaskSelection(k, t) }
             pendingIntentAction?.let { action ->
                 pendingIntentAction = null
@@ -142,22 +164,25 @@ class SessionViewModel : ViewModel() {
         } catch (ce: CancellationException) { throw ce } catch (_: Exception) {}
     }
 
-    private fun applyFilterAndCounts() {
-        val total = allTodos.size; val completed = allTodos.count { it.completed }
-        val counts = TodoCounts(all = total, active = total - completed, completed = completed)
-        val filtered = when (_uiState.value.filter) {
-            TodoFilter.ALL -> allTodos
-            TodoFilter.ACTIVE -> allTodos.filter { !it.completed }
-            TodoFilter.COMPLETED -> allTodos.filter { it.completed }
-        }
-        _uiState.value = _uiState.value.copy(items = filtered, counts = counts)
+    private fun applyFilterAndCounts(evidence: List<AccessLossEvidence> = _uiState.value.accessLossEvidence) {
+        val projection = dev.tabbyrush.shared.contract.TaskHierarchyProjector.projectHierarchy(
+            todos = allTodos,
+            filter = _uiState.value.filter
+        )
+        _uiState.value = _uiState.value.copy(
+            items = projection.items.map { it.todo },
+            hierarchicalItems = projection.items,
+            counts = projection.counts,
+            unresolvedChildren = projection.unresolvedChildren,
+            accessLossEvidence = evidence
+        )
     }
 
     fun onAction(action: TodoAction) = viewModelScope.launch {
         try {
             when (action) {
                 is TodoAction.SelectFilter -> { _uiState.value = _uiState.value.copy(filter = action.filter); applyFilterAndCounts() }
-                is TodoAction.OpenCreate -> openCreate(action.initialTitle)
+                is TodoAction.OpenCreate -> openCreate(action.initialTitle, action.parentTaskRef, action.parentTitle)
                 is TodoAction.ChangeDraftTitle -> onTitleChanged(action.rawTitle)
                 is TodoAction.UpdateEditorState -> _uiState.value = _uiState.value.copy(editor = action.editor)
                 is TodoAction.SubmitEditor -> submitEditor()
@@ -170,21 +195,66 @@ class SessionViewModel : ViewModel() {
                 is TodoAction.OpenNotificationSettings -> openNotificationSettings()
                 is TodoAction.ClockTick -> _uiState.value = _uiState.value.copy(nowEpochMs = action.nowEpochMs)
                 is TodoAction.ToggleCompleted -> toggleCompleted(action.todo)
-                is TodoAction.RequestDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = action.todo)
+                is TodoAction.RequestDelete -> {
+                    val currentUserId = app.authSession.currentIdentity.value?.userId ?: ""
+                    val isOwner = currentUserId.isNotEmpty() && action.todo.ownerUserId == currentUserId
+                    val canDelete = if (isOwner) true else (action.todo.accessState?.canDeleteTask == true)
+                    if (!canDelete) {
+                        _uiState.value = _uiState.value.copy(safeError = SafeError.OperationForbidden(message = "Delete forbidden for assignee", taskRef = action.todo.taskRef))
+                    } else {
+                        val count = allTodos.count { it.parentTaskRef == action.todo.taskRef && !it.isDeleted }
+                        _uiState.value = _uiState.value.copy(deleteCandidate = action.todo, deleteCandidateChildCount = count)
+                    }
+                }
                 is TodoAction.ConfirmDelete -> confirmDelete()
                 is TodoAction.CancelDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = null)
                 is TodoAction.TriggerSync -> triggerSync()
                 is TodoAction.ReconcilePending -> app.getActiveRuntime()?.coordinator?.reconcilePending()
-                is TodoAction.DiscardConflict -> resolveConflict { it.discardConflict(action.rowId) }
-                is TodoAction.ReapplyConflict -> resolveConflict { it.reapplyConflict(action.rowId) }
-                is TodoAction.CopyAsNew -> resolveConflict { it.copyAsNew(action.rowId) }
+                is TodoAction.DiscardConflict -> resolveConflict { it.discardConflict(action.taskRef) }
+                is TodoAction.ReapplyConflict -> resolveConflict { it.reapplyConflict(action.taskRef) }
+                is TodoAction.CopyAsNew -> resolveConflict { it.copyAsNew(action.taskRef) }
                 is TodoAction.DismissError -> { app.getActiveRuntime()?.coordinator?.dismissError(); _uiState.value = _uiState.value.copy(safeError = null) }
                 is TodoAction.RequestLeave -> requestLeave()
                 is TodoAction.ConfirmLeave -> if (app.getActiveRuntime()?.leaveProtocol?.discardAndLeave() == true) { app.clearActiveAccount(); app.closeActiveRuntime(); _uiState.value = _uiState.value.copy(leaveGuard = null) }
                 is TodoAction.CancelLeave -> _uiState.value = _uiState.value.copy(leaveGuard = null)
+                is TodoAction.AssignTask -> assignTask(action.intent)
+                is TodoAction.DismissAccessLossNotice -> dismissAccessLossNotice(action.ref)
             }
         } catch (ce: CancellationException) { throw ce }
         catch (_: Exception) { _uiState.value = _uiState.value.copy(safeError = SafeError.Internal("INTERNAL_ERROR", "Action execution failed")) }
+    }
+
+    private suspend fun assignTask(intent: AssignmentIntent) {
+        val runtime = app.getActiveRuntime() ?: return
+        when (val result = runtime.store.assignTaskLocally(intent)) {
+            is AssignmentSlotResult.Success -> {
+                reloadTodos()
+                triggerSync()
+            }
+            is AssignmentSlotResult.VersionConflict -> {
+                _uiState.value = _uiState.value.copy(safeError = SafeError.Internal("VERSION_CONFLICT", "Assignment version conflict on task"))
+                reloadTodos()
+            }
+            AssignmentSlotResult.Missing -> {
+                _uiState.value = _uiState.value.copy(safeError = SafeError.Internal("TASK_NOT_FOUND", "Task not found for assignment"))
+                reloadTodos()
+            }
+            AssignmentSlotResult.AccessDenied -> {
+                _uiState.value = _uiState.value.copy(safeError = SafeError.AccessDenied(taskRef = intent.taskRef))
+                reloadTodos()
+            }
+            is AssignmentSlotResult.InvalidStructure -> {
+                _uiState.value = _uiState.value.copy(safeError = SafeError.Validation("INVALID_STRUCTURE", result.message))
+                reloadTodos()
+            }
+            AssignmentSlotResult.Unchanged -> { /* No-op */ }
+        }
+    }
+
+    private suspend fun dismissAccessLossNotice(ref: TaskRef) {
+        val runtime = app.getActiveRuntime() ?: return
+        runtime.store.dismissAccessLossEvidence(ref)
+        reloadTodos()
     }
 
     private fun onTitleChanged(raw: String) {
@@ -193,14 +263,17 @@ class SessionViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(editor = _uiState.value.editor?.copy(rawTitle = raw, error = err))
     }
 
-    private suspend fun openCreate(initialTitle: String) {
+    private suspend fun openCreate(
+        initialTitle: String,
+        parentTaskRef: TaskRef? = null,
+        parentTitle: String? = null
+    ) {
         val runtime = app.getActiveRuntime()
         val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
-        val isV2 = runtime?.store?.isAccountV2() ?: true
         val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
         _uiState.value = _uiState.value.copy(
             editor = EditorState(
-                id = null,
+                taskRef = null,
                 rawTitle = initialTitle,
                 hasDeadline = false,
                 deadlineDate = "",
@@ -212,19 +285,32 @@ class SessionViewModel : ViewModel() {
                 reminderLeadMinutes = settings.defaultReminderLeadMinutes,
                 reminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
                 reminderCount = settings.defaultReminderCount,
-                isAccountV2 = isV2
+                parentTaskRef = parentTaskRef,
+                parentTitle = parentTitle,
+                canManageAssignment = true
             )
         )
     }
 
     private suspend fun openEdit(todo: Todo) {
         val runtime = app.getActiveRuntime()
-        val isV2 = runtime?.store?.isAccountV2() ?: true
         val localZone = try { ZoneId.systemDefault().id } catch (_: Exception) { "UTC" }
         val dl = todo.deadline
+        val parentTitle = if (todo.parentTaskRef != null) allTodos.firstOrNull { it.taskRef == todo.parentTaskRef }?.title else null
+        val currentUserId = app.authSession.currentIdentity.value?.userId ?: ""
+        val isOwner = currentUserId.isNotEmpty() && todo.ownerUserId == currentUserId
+        val canManage = if (isOwner) true else (todo.accessState?.canManageAssignment == true)
+        val canEdit = if (isOwner) true else (todo.accessState?.canEditContent == true)
+        if (!canEdit) {
+            _uiState.value = _uiState.value.copy(
+                safeError = SafeError.OperationForbidden("PERMISSION_DENIED", "Cannot edit this task", todo.taskRef)
+            )
+            return
+        }
+        val assignment = runtime?.store?.getAssignmentSlot(todo.taskRef)
         val editor = if (dl != null) {
             EditorState(
-                id = todo.id,
+                taskRef = todo.taskRef,
                 rawTitle = todo.title,
                 hasDeadline = true,
                 deadlineDate = dl.date,
@@ -237,15 +323,22 @@ class SessionViewModel : ViewModel() {
                 reminderLeadMinutes = todo.reminderRule.leadMinutes,
                 reminderIntervalMinutes = todo.reminderRule.intervalMinutes,
                 reminderCount = todo.reminderRule.count,
-                isAccountV2 = isV2,
                 originalDeadline = dl,
                 originalReminderRule = todo.reminderRule,
-                originalScheduleToken = todo.scheduleToken
+                originalScheduleToken = todo.scheduleToken,
+                parentTaskRef = todo.parentTaskRef,
+                parentTitle = parentTitle,
+                assigneeUserId = assignment?.recipientUserId,
+                assigneeUsername = UserLookupCache.getUsername(assignment?.recipientUserId),
+                expectedSlotVersion = assignment?.slotVersion ?: 0L,
+                inheritedAssigneeUserId = assignment?.inheritedRecipientUserId,
+                inheritedAssigneeUsername = UserLookupCache.getUsername(assignment?.inheritedRecipientUserId),
+                canManageAssignment = canManage
             )
         } else {
             val settings = runtime?.store?.getLocalSettings() ?: AccountLocalSettingsEntity()
             EditorState(
-                id = todo.id,
+                taskRef = todo.taskRef,
                 rawTitle = todo.title,
                 hasDeadline = false,
                 deadlineDate = "",
@@ -257,10 +350,17 @@ class SessionViewModel : ViewModel() {
                 reminderLeadMinutes = settings.defaultReminderLeadMinutes,
                 reminderIntervalMinutes = settings.defaultReminderIntervalMinutes,
                 reminderCount = settings.defaultReminderCount,
-                isAccountV2 = isV2,
                 originalDeadline = null,
                 originalReminderRule = ReminderRule.DISABLED,
-                originalScheduleToken = null
+                originalScheduleToken = null,
+                parentTaskRef = todo.parentTaskRef,
+                parentTitle = parentTitle,
+                assigneeUserId = assignment?.recipientUserId,
+                assigneeUsername = UserLookupCache.getUsername(assignment?.recipientUserId),
+                expectedSlotVersion = assignment?.slotVersion ?: 0L,
+                inheritedAssigneeUserId = assignment?.inheritedRecipientUserId,
+                inheritedAssigneeUsername = UserLookupCache.getUsername(assignment?.inheritedRecipientUserId),
+                canManageAssignment = canManage
             )
         }
         _uiState.value = _uiState.value.copy(editor = editor)
@@ -353,10 +453,6 @@ class SessionViewModel : ViewModel() {
         val deadline: TaskDeadline?
         val rule: ReminderRule
         if (editor.hasDeadline) {
-            if (!editor.isAccountV2) {
-                _uiState.value = _uiState.value.copy(editor = editor.copy(error = "Strict-v2 account upgrade required to save deadlines or reminders."))
-                return
-            }
             when (val dRes = DeadlineCalculatorHelpers.validateAndComputeDeadline(editor)) {
                 is DeadlineValidationResult.Valid -> {
                     deadline = dRes.deadline
@@ -376,32 +472,62 @@ class SessionViewModel : ViewModel() {
             rule = ReminderRule.DISABLED
         }
 
+        val currentUserId = app.authSession.currentIdentity.value?.userId ?: return
         val now = System.currentTimeMillis()
         val token = if (deadline != null) (editor.originalScheduleToken ?: UUID.randomUUID().toString()) else null
-        if (editor.id == null) {
-            runtime.store.saveTodoLocally(
+        if (editor.taskRef == null) {
+            val newRef = TaskRef(currentUserId, UUID.randomUUID().toString().lowercase())
+            val res = runtime.store.saveTodoLocally(
                 Todo(
-                    id = UUID.randomUUID().toString().lowercase(),
+                    taskRef = newRef,
                     title = title,
                     completed = false,
                     createdAt = now,
                     updatedAt = now,
                     deadline = deadline,
                     reminderRule = rule,
-                    scheduleToken = token
+                    scheduleToken = token,
+                    parentTaskRef = editor.parentTaskRef
                 )
             )
+            if (res is TaskMutationResult.AccessDenied) {
+                _uiState.value = _uiState.value.copy(safeError = SafeError.AccessDenied(taskRef = newRef))
+                return
+            }
+            if (editor.assigneeUserId != null) {
+                runtime.store.assignTaskLocally(
+                    dev.tabbyrush.shared.contract.AssignmentIntent(
+                        taskRef = newRef,
+                        desiredRecipientUserId = editor.assigneeUserId,
+                        expectedSlotVersion = 0L
+                    )
+                )
+            }
         } else {
-            val existing = allTodos.firstOrNull { it.id == editor.id } ?: return
-            runtime.store.saveTodoLocally(
+            val existing = allTodos.firstOrNull { it.taskRef == editor.taskRef } ?: return
+            val isOwner = currentUserId.isNotEmpty() && existing.ownerUserId == currentUserId
+            val canEdit = if (isOwner) true else (existing.accessState?.canEditContent == true)
+            if (!canEdit) {
+                _uiState.value = _uiState.value.copy(
+                    editor = null,
+                    safeError = SafeError.OperationForbidden(message = "Cannot edit revoked or unauthorized task", taskRef = existing.taskRef)
+                )
+                return
+            }
+            val res = runtime.store.saveTodoLocally(
                 existing.copy(
                     title = title,
                     updatedAt = maxOf(now, existing.createdAt),
                     deadline = deadline,
                     reminderRule = rule,
-                    scheduleToken = token
+                    scheduleToken = token,
+                    parentTaskRef = editor.parentTaskRef
                 )
             )
+            if (res is TaskMutationResult.AccessDenied) {
+                _uiState.value = _uiState.value.copy(safeError = SafeError.AccessDenied(taskRef = editor.taskRef))
+                return
+            }
         }
         _uiState.value = _uiState.value.copy(editor = null)
         reloadTodos()
@@ -410,9 +536,18 @@ class SessionViewModel : ViewModel() {
 
     private suspend fun toggleCompleted(todo: Todo) {
         val runtime = app.getActiveRuntime() ?: return
+        val currentUserId = app.authSession.currentIdentity.value?.userId ?: ""
+        val isOwner = currentUserId.isNotEmpty() && todo.ownerUserId == currentUserId
+        val canEdit = if (isOwner) true else (todo.accessState?.canEditContent == true)
+        if (!canEdit) {
+            _uiState.value = _uiState.value.copy(
+                safeError = SafeError.OperationForbidden(message = "Cannot toggle completion on revoked task", taskRef = todo.taskRef)
+            )
+            return
+        }
         val desired = !todo.completed
         val now = System.currentTimeMillis()
-        val change = runtime.store.setCompletedLocally(todo.id, desired, now)
+        val change = runtime.store.setCompletedLocally(todo.taskRef, desired, now)
         if (change == dev.tabbyrush.shared.contract.CompletionChange.Changed) {
             reloadTodos()
             triggerSync()
@@ -420,17 +555,33 @@ class SessionViewModel : ViewModel() {
     }
 
     private suspend fun confirmDelete() {
-        _uiState.value.deleteCandidate?.let { app.getActiveRuntime()?.store?.deleteTodoLocally(it.id) }
-        _uiState.value = _uiState.value.copy(deleteCandidate = null); reloadTodos(); triggerSync()
+        val candidate = _uiState.value.deleteCandidate ?: return
+        val runtime = app.getActiveRuntime() ?: return
+        val currentUserId = app.authSession.currentIdentity.value?.userId ?: ""
+        val isOwner = currentUserId.isNotEmpty() && candidate.ownerUserId == currentUserId
+        val canDelete = if (isOwner) true else (candidate.accessState?.canDeleteTask == true)
+        if (!canDelete) {
+            _uiState.value = _uiState.value.copy(deleteCandidate = null)
+            return
+        }
+        runtime.store.deleteTodoLocally(candidate.taskRef)
+        _uiState.value = _uiState.value.copy(deleteCandidate = null)
+        reloadTodos()
+        triggerSync()
     }
 
     private fun triggerSync() {
-        app.getActiveRuntime()?.let { r -> viewModelScope.launch { r.coordinator.triggerSync(); app.syncScheduler.triggerImmediate(r.accountKey) } }
+        app.getActiveRuntime()?.let { r ->
+            viewModelScope.launch {
+                r.coordinator.triggerSync()
+                app.syncScheduler.triggerImmediate(r.accountKey)
+            }
+        }
     }
 
     private suspend fun inspectAndShowConflict(runtime: AccountRuntime) {
         val entry = runtime.store.dao.getAllOutbox().firstOrNull {
-            it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED
+            it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW
         } ?: return
         val base = runtime.store.dao.getServerBase(entry.rowId)
         val bDate = base?.deadlineDate
@@ -458,18 +609,22 @@ class SessionViewModel : ViewModel() {
             )
         } else ReminderRule.DISABLED
 
+        val ownerUserId = entry.ownerUserId ?: (app.authSession.currentIdentity.value?.userId ?: "")
+        val taskRef = TaskRef(ownerUserId = ownerUserId, rowId = entry.rowId)
+        val parentTaskRef = entry.parentTaskId?.let { TaskRef(ownerUserId = ownerUserId, rowId = it) }
         val remoteTodo = base?.let {
             Todo(
-                id = it.rowId,
+                taskRef = taskRef,
                 title = it.title,
                 completed = it.completed,
                 createdAt = it.createdAt,
-                updatedAt = it.updatedAt,
+                updatedAt = if (it.updatedAt >= it.createdAt) it.updatedAt else it.createdAt,
                 serverRevision = it.serverRevision,
                 isDeleted = it.deleted,
                 deadline = remoteDeadline,
                 reminderRule = remoteRule,
-                scheduleToken = it.scheduleToken
+                scheduleToken = if (remoteDeadline != null) it.scheduleToken else null,
+                parentTaskRef = parentTaskRef
             )
         }
 
@@ -498,24 +653,37 @@ class SessionViewModel : ViewModel() {
             )
         } else ReminderRule.DISABLED
 
-        val localTodo = allTodos.firstOrNull { it.id == entry.rowId } ?: Todo(
-            id = entry.rowId,
+        val localTodo = allTodos.firstOrNull { it.taskRef == taskRef } ?: Todo(
+            taskRef = taskRef,
             title = entry.title ?: "",
             completed = entry.completed ?: false,
             createdAt = entry.createdAt ?: 0L,
             updatedAt = entry.createdAt ?: 0L,
             deadline = localDeadline,
             reminderRule = localRule,
-            scheduleToken = entry.scheduleToken
+            scheduleToken = if (localDeadline != null) entry.scheduleToken else null,
+            parentTaskRef = parentTaskRef
         )
+        val isPreservationConflict = entry.intentMask?.split("|")?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true
+        val isSubtaskConflict = entry.parentTaskId != null || localTodo.parentTaskRef != null
+        val targetParentRef = parentTaskRef ?: localTodo.parentTaskRef
+        val parentBase = targetParentRef?.let { runtime.store.dao.getServerBase(it.rowId) }
+        val isParentDeleted = isSubtaskConflict && (parentBase == null || parentBase.deleted)
         _uiState.value = _uiState.value.copy(
             conflict = ConflictState(
-                rowId = entry.rowId,
+                taskRef = taskRef,
                 localTodo = localTodo,
                 remoteTodo = remoteTodo,
-                isUnknownSuperseded = entry.deliveryState == OutboxEntity.STATE_UNKNOWN_SUPERSEDED
+                requiresDeliveryReview = entry.deliveryState == OutboxEntity.STATE_REVIEW,
+                isPreservationConflict = isPreservationConflict,
+                isSubtaskConflict = isSubtaskConflict,
+                isParentDeleted = isParentDeleted
             )
         )
+    }
+
+    suspend fun lookupUser(username: String): ApiResult<UserLookupResult> {
+        return app.authSession.lookupUser(username)
     }
 
     private suspend fun resolveConflict(block: suspend (dev.tabbyrush.shared.sync.AccountSyncCoordinator) -> Unit) {
@@ -542,31 +710,31 @@ class SessionViewModel : ViewModel() {
 
     private fun handleAuth(res: ApiResult<*>) { if (res is ApiResult.Failure) _uiState.value = _uiState.value.copy(safeError = res.error) }
     private fun handleAccess(res: ApiResult<*>) { if (res is ApiResult.Failure) _uiState.value = _uiState.value.copy(safeError = res.error) else if (res is ApiResult.Success) _uiState.value = _uiState.value.copy(accessRequest = res.value as? AccessRequestInfo) }
-    fun selectTaskFromNotification(accountKey: String, taskId: String) = viewModelScope.launch {
-        selectTaskFromIntent(accountKey, -1L, taskId)
+    fun selectTaskFromNotification(accountKey: String, taskRef: TaskRef) = viewModelScope.launch {
+        selectTaskFromIntent(accountKey, -1L, taskRef)
     }
 
     fun selectTaskFromIntent(
         accountKey: String?,
         generation: Long,
-        taskId: String,
+        taskRef: TaskRef,
         isSurfaceAction: Boolean = true
     ) = viewModelScope.launch {
         if (app.authSession.currentAccountKey.value?.value == null || !isTodosLoaded) {
             pendingIntentAction = {
                 viewModelScope.launch {
-                    dispatchTaskSelectionWithToken(accountKey, generation, taskId, isSurfaceAction)
+                    dispatchTaskSelectionWithToken(accountKey, generation, taskRef, isSurfaceAction)
                 }
             }
             return@launch
         }
-        dispatchTaskSelectionWithToken(accountKey, generation, taskId, isSurfaceAction)
+        dispatchTaskSelectionWithToken(accountKey, generation, taskRef, isSurfaceAction)
     }
 
     private suspend fun dispatchTaskSelectionWithToken(
         accountKey: String?,
         generation: Long,
-        taskId: String,
+        taskRef: TaskRef,
         isSurfaceAction: Boolean
     ) {
         val readiness = app.taskSurfaces.access.readiness.value
@@ -582,10 +750,10 @@ class SessionViewModel : ViewModel() {
                 return
             }
         }
-        val isValid = app.taskSurfaces.access.validateNavigation(currentToken, taskId)
+        val isValid = app.taskSurfaces.access.validateNavigation(currentToken, taskRef)
         if (!isValid) return
 
-        val task = allTodos.find { it.id == taskId && !it.isDeleted } ?: return
+        val task = allTodos.find { it.taskRef == taskRef && !it.isDeleted } ?: return
         openEdit(task)
     }
 
@@ -700,10 +868,11 @@ class SessionViewModel : ViewModel() {
         val validTitle = validation.value
 
         val runtime = app.getActiveRuntime() ?: return@launch
-        val id = UUID.randomUUID().toString()
+        val currentUserId = app.authSession.currentIdentity.value?.userId ?: return@launch
+        val newRef = TaskRef(ownerUserId = currentUserId, rowId = UUID.randomUUID().toString().lowercase())
         val now = System.currentTimeMillis()
         val newTodo = Todo(
-            id = id,
+            taskRef = newRef,
             title = validTitle,
             completed = false,
             createdAt = now,

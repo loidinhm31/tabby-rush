@@ -1,201 +1,368 @@
 #!/usr/bin/env node
-/**
- * TabbyRush Hub Schema Provisioning Script
- * Provisions strict-v1 app schema on Glean Hub, performs mandatory read-back verification,
- * and outputs the provisioned credentials with strict mode 0600 key custody.
- */
+/** Register an ordinary Hub app; never convert an existing strict registration. */
+import { openSync, writeFileSync, fsyncSync, closeSync, unlinkSync, readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual, parseArgs } from 'node:util';
+import { spawnSync } from 'node:child_process';
 
-import { readFileSync, writeFileSync, chmodSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
-
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const options = {
-    origin: process.env.GLEAN_ORIGIN || 'http://127.0.0.1:3000',
-    token: process.env.GLEAN_ADMIN_TOKEN || '',
-    schemaPath: resolve(process.cwd(), 'integration/glean-hub/tabbyrush-schema.json'),
-    outPath: null,
-  };
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--origin' && args[i + 1]) {
-      options.origin = args[++i];
-    } else if (args[i] === '--token' && args[i + 1]) {
-      options.token = args[++i];
-    } else if (args[i] === '--schema' && args[i + 1]) {
-      options.schemaPath = resolve(process.cwd(), args[++i]);
-    } else if (args[i] === '--out' && args[i + 1]) {
-      options.outPath = resolve(process.cwd(), args[++i]);
-    } else if (args[i] === '--help' || args[i] === '-h') {
-      console.log('Usage: node hub-schema-provision.mjs [--origin <url>] [--token <jwt>] [--schema <path>] [--out <credentials.json>]');
-      process.exit(0);
+function requirePrivateOutputDirectory(path) {
+  if (process.platform !== 'win32') return;
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+    $ErrorActionPreference = 'Stop'
+    $directory = Get-Item -LiteralPath $env:TABBYRUSH_CREDENTIAL_DIRECTORY
+    if (!$directory.PSIsContainer -or ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unsafe directory' }
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $allowed = @($identity, 'S-1-5-18', 'S-1-5-32-544')
+    $acl = Get-Acl -LiteralPath $directory.FullName
+    if (!$acl.AreAccessRulesProtected -or $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -notin $allowed) {
+      throw 'Directory must have private protected ownership and permissions'
     }
-  }
-
-  return options;
+    $rules = $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+    if ($rules.Count -eq 0) { throw 'Directory has no explicit access rules' }
+    foreach ($rule in $rules) {
+      if ($rule.IsInherited -or $rule.AccessControlType -ne 'Allow' -or $rule.IdentityReference.Value -notin $allowed) {
+        throw 'Directory permits unexpected access'
+      }
+    }
+  `], { env: { ...process.env, TABBYRUSH_CREDENTIAL_DIRECTORY: path }, encoding: 'utf8', windowsHide: true });
+  if (result.error || result.status !== 0) throw new Error('Windows --out requires an existing private directory with protected ACLs limited to this user, SYSTEM and Administrators; registration was not attempted');
 }
 
-const V1_COLUMNS = [
-  { name: 'id', type: 'string', nullable: false },
-  { name: 'title', type: 'string', nullable: false },
-  { name: 'completed', type: 'boolean', nullable: false },
-  { name: 'createdAt', type: 'integer', nullable: false },
-];
-
-const V2_COLUMNS = [
-  { name: 'id', type: 'string', nullable: false },
-  { name: 'title', type: 'string', nullable: false },
-  { name: 'completed', type: 'boolean', nullable: false },
-  { name: 'createdAt', type: 'integer', nullable: false },
-  { name: 'deadlineDate', type: 'string', nullable: true },
-  { name: 'deadlineTime', type: 'string', nullable: true },
-  { name: 'deadlineZone', type: 'string', nullable: true },
-  { name: 'deadlineOffsetSeconds', type: 'integer', nullable: true },
-  { name: 'reminderAnchorTime', type: 'string', nullable: true },
-  { name: 'deadlineAnchorEpochMs', type: 'integer', nullable: true },
-  { name: 'deadlineOverdueEpochMs', type: 'integer', nullable: true },
-  { name: 'reminderEnabled', type: 'boolean', nullable: false },
-  { name: 'reminderLeadMinutes', type: 'integer', nullable: false },
-  { name: 'reminderIntervalMinutes', type: 'integer', nullable: true },
-  { name: 'reminderCount', type: 'integer', nullable: false },
-  { name: 'scheduleToken', type: 'string', nullable: true },
-];
-
-function validateSchemaColumns(schema, expectedVersion = 'strict-v1') {
-  const todos = schema?.todos;
-  if (!todos) {
-    throw new Error("Missing 'todos' table in schema definition");
-  }
-  if (todos.primaryKey !== 'id') {
-    throw new Error(`Invalid primaryKey '${todos.primaryKey}', expected 'id'`);
-  }
-
-  const expectedColumns = expectedVersion === 'strict-v2' ? V2_COLUMNS : V1_COLUMNS;
-
-  if (!Array.isArray(todos.columns) || todos.columns.length !== expectedColumns.length) {
-    throw new Error(`Expected exactly ${expectedColumns.length} columns in 'todos' for ${expectedVersion}, found ${todos.columns?.length}`);
-  }
-
-  for (const expected of expectedColumns) {
-    const col = todos.columns.find(c => c.name === expected.name);
-    if (!col) {
-      throw new Error(`Missing expected column '${expected.name}' for ${expectedVersion}`);
+function secureCredentialFile(path) {
+  if (process.platform !== 'win32') return;
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+    $ErrorActionPreference = 'Stop'
+    $path = $env:TABBYRUSH_CREDENTIAL_OUTPUT
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    $allowed = @($identity.Value, 'S-1-5-18', 'S-1-5-32-544')
+    $acl = New-Object System.Security.AccessControl.FileSecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($sid in $allowed) {
+      $principal = New-Object System.Security.Principal.SecurityIdentifier($sid)
+      $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($principal, 'FullControl', 'Allow')
+      $acl.AddAccessRule($rule)
     }
-    if (col.type !== expected.type || Boolean(col.nullable) !== expected.nullable) {
-      throw new Error(`Column '${expected.name}' mismatch: type=${col.type} (expected ${expected.type}), nullable=${col.nullable} (expected ${expected.nullable})`);
+    [System.IO.File]::SetAccessControl($path, $acl)
+    $actual = Get-Acl -LiteralPath $path
+    if (!$actual.AreAccessRulesProtected) { throw 'Inherited permissions remain enabled' }
+    $rules = $actual.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
+    if ($rules.Count -ne 3) { throw 'Unexpected credential access rules' }
+    foreach ($rule in $rules) {
+      if ($rule.IsInherited -or $rule.AccessControlType -ne 'Allow' -or $rule.IdentityReference.Value -notin $allowed) {
+        throw 'Credential file permits unexpected access'
+      }
     }
-  }
+  `], { env: { ...process.env, TABBYRUSH_CREDENTIAL_OUTPUT: path }, encoding: 'utf8', windowsHide: true });
+  if (result.error || result.status !== 0) throw new Error('Cannot establish private Windows credential-file permissions; registration was not attempted');
 }
 
-async function main() {
-  const { origin, token, schemaPath, outPath } = parseArgs();
+/** Structural, identity, and system fields forbidden from editable allowlists */
+export const FORBIDDEN_EDITABLE_FIELDS = {
+  id: true,
+  createdAt: true,
+  userId: true,
+  ownerUserId: true,
+  taskId: true,
+  syncVersion: true,
+  syncedAt: true,
+  deleted: true,
+  deletedAt: true,
+};
 
-  if (!token) {
-    console.error('Error: Admin token required via GLEAN_ADMIN_TOKEN env variable or --token parameter');
-    process.exit(1);
+export function validateAssignmentPolicy(policy, parentTableSchema) {
+  if (typeof policy !== 'object' || policy === null || Array.isArray(policy)) {
+    throw new Error('assignmentPolicy must be a non-null object');
+  }
+  if (typeof policy.version !== 'number' || !Number.isSafeInteger(policy.version) || policy.version !== 1) {
+    throw new Error(`Unsupported assignmentPolicy version: ${String(policy.version)}. Version 1 is required.`);
+  }
+  if (typeof policy.hierarchyParentField !== 'string' || !policy.hierarchyParentField.trim()) {
+    throw new Error('assignmentPolicy.hierarchyParentField must be a non-empty string');
+  }
+  const hierarchyParentField = policy.hierarchyParentField.trim();
+
+  if (!Array.isArray(policy.editableFields)) {
+    throw new Error('assignmentPolicy.editableFields must be an array of string field names');
+  }
+  if (policy.editableFields.length === 0) {
+    throw new Error('assignmentPolicy.editableFields cannot be empty');
+  }
+  const editableFields = [];
+  const seen = new Set();
+  for (const field of policy.editableFields) {
+    if (typeof field !== 'string' || !field.trim()) {
+      throw new Error('assignmentPolicy.editableFields entries must be non-empty strings');
+    }
+    const cleanField = field.trim();
+    if (seen.has(cleanField)) {
+      throw new Error(`Duplicate field '${cleanField}' in assignmentPolicy.editableFields`);
+    }
+    seen.add(cleanField);
+    if (Boolean(FORBIDDEN_EDITABLE_FIELDS[cleanField]) || cleanField === hierarchyParentField) {
+      throw new Error(
+        `assignmentPolicy.editableFields cannot include structural, identity, or hierarchy field '${cleanField}'`,
+      );
+    }
+    editableFields.push(cleanField);
   }
 
-  let schemaPayload;
-  try {
-    const raw = readFileSync(schemaPath, 'utf8');
-    schemaPayload = JSON.parse(raw);
-  } catch (err) {
-    console.error(`Error reading schema file at ${schemaPath}:`, err.message);
-    process.exit(1);
-  }
-
-  const expectedVersion = schemaPayload.syncMode || 'strict-v1';
-  validateSchemaColumns(schemaPayload.schema, expectedVersion);
-
-  console.log(`[Provision] Registering strict app '${schemaPayload.appId}' at ${origin}/api/v1/strict-apps...`);
-
-  let apiKey = null;
-  let strictEpoch = null;
-
-  // 1. POST /api/v1/strict-apps
-  const regRes = await fetch(`${origin}/api/v1/strict-apps`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify(schemaPayload),
-  });
-
-  if (regRes.status === 409) {
-    console.log(`[Provision] App '${schemaPayload.appId}' is already registered; verifying existing registration idempotently...`);
-  } else if (!regRes.ok) {
-    const text = await regRes.text();
-    console.error(`[Provision] Registration failed with status ${regRes.status}:`, text);
-    process.exit(1);
-  } else {
-    const regData = await regRes.json();
-    apiKey = regData.apiKey;
-    strictEpoch = regData.strictEpoch;
-    console.log(`[Provision] Registered new app: appId=${regData.appId}, epoch=${strictEpoch}`);
-
-    // Capture and persist key IMMEDIATELY before read-back
-    if (apiKey) {
-      if (outPath) {
-        const creds = {
-          appId: regData.appId,
-          syncMode: regData.syncMode,
-          epoch: strictEpoch,
-          apiKey,
-        };
-        writeFileSync(outPath, JSON.stringify(creds, null, 2), { mode: 0o600 });
-        try { chmodSync(outPath, 0o600); } catch (_) {}
-        console.log(`[Provision] Credentials written securely to ${outPath} (mode 0600)`);
-      } else {
-        console.log(`[Provision] Key issued: ${apiKey}`);
+  if (parentTableSchema) {
+    const colMap = new Map((parentTableSchema.columns || []).map((c) => [c.name, c]));
+    const hierarchyCol = colMap.get(hierarchyParentField);
+    if (!hierarchyCol) {
+      throw new Error(
+        `assignmentPolicy.hierarchyParentField '${hierarchyParentField}' does not exist in parent table`,
+      );
+    }
+    if (!hierarchyCol.nullable) {
+      throw new Error(
+        `assignmentPolicy.hierarchyParentField '${hierarchyParentField}' must be nullable`,
+      );
+    }
+    if (hierarchyCol.type !== 'string') {
+      throw new Error(
+        `assignmentPolicy.hierarchyParentField '${hierarchyParentField}' must have type 'string'`,
+      );
+    }
+    for (const ef of editableFields) {
+      const col = colMap.get(ef);
+      if (!col) {
+        throw new Error(`assignmentPolicy.editableField '${ef}' does not exist in parent table`);
+      }
+      if (ef === parentTableSchema.primaryKey) {
+        throw new Error(
+          `assignmentPolicy.editableFields cannot include parent table primary key '${ef}'`,
+        );
       }
     }
   }
 
-  // 2. Mandatory Read-Back: GET /api/v1/apps/:app_id
-  console.log(`[Provision] Performing mandatory schema read-back from ${origin}/api/v1/apps/${schemaPayload.appId}...`);
-  const readBackRes = await fetch(`${origin}/api/v1/apps/${schemaPayload.appId}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
+  return {
+    version: 1,
+    hierarchyParentField,
+    editableFields,
+  };
+}
 
-  if (!readBackRes.ok) {
-    const text = await readBackRes.text();
-    console.error(`[Provision] Read-back failed with status ${readBackRes.status}:`, text);
-    process.exit(1);
+export function validateSharingConfig(sharing, schema) {
+  if (typeof sharing !== 'object' || sharing === null || Array.isArray(sharing)) {
+    throw new Error('sharing config must be a non-null object');
+  }
+  const {
+    sharingTable,
+    parentIdField,
+    userIdField,
+    parentTable,
+    childTables,
+    assignmentPolicy,
+    ...unknownRest
+  } = sharing;
+
+  if (typeof sharingTable !== 'string' || !sharingTable.trim()) {
+    throw new Error('sharing.sharingTable must be a non-empty string');
+  }
+  if (typeof parentIdField !== 'string' || !parentIdField.trim()) {
+    throw new Error('sharing.parentIdField must be a non-empty string');
+  }
+  if (typeof userIdField !== 'string' || !userIdField.trim()) {
+    throw new Error('sharing.userIdField must be a non-empty string');
+  }
+  if (typeof parentTable !== 'string' || !parentTable.trim()) {
+    throw new Error('sharing.parentTable must be a non-empty string');
+  }
+  if (!Array.isArray(childTables) || !childTables.every((t) => typeof t === 'string')) {
+    throw new Error('sharing.childTables must be an array of table name strings');
   }
 
-  const readBackData = await readBackRes.json();
+  const cleanSharingTable = sharingTable.trim();
+  const cleanParentIdField = parentIdField.trim();
+  const cleanUserIdField = userIdField.trim();
+  const cleanParentTable = parentTable.trim();
+  const cleanChildTables = childTables.map((t) => t.trim());
 
-  const isAlreadyUpgraded = regRes.status === 409 && readBackData.syncMode === 'strict-v2';
-  if (readBackData.syncMode !== expectedVersion && !isAlreadyUpgraded) {
-    console.error(`[Provision] Read-back validation failure: syncMode is '${readBackData.syncMode}', expected '${expectedVersion}'`);
-    process.exit(1);
+  if (cleanSharingTable === cleanParentTable) {
+    throw new Error(`sharingTable '${cleanSharingTable}' cannot be the same as parentTable`);
+  }
+  if (cleanChildTables.includes(cleanSharingTable)) {
+    throw new Error(`sharingTable '${cleanSharingTable}' cannot be included in childTables`);
+  }
+  if (cleanChildTables.includes(cleanParentTable)) {
+    throw new Error(`parentTable '${cleanParentTable}' cannot be included in childTables`);
   }
 
-  if (!readBackData.strictEpoch) {
-    console.error('[Provision] Read-back validation failure: strictEpoch is missing');
-    process.exit(1);
+  let parentTableSchema;
+  if (schema) {
+    if (!schema[cleanParentTable]) {
+      throw new Error(`sharing.parentTable '${cleanParentTable}' not found in schema`);
+    }
+    if (!schema[cleanSharingTable]) {
+      throw new Error(`sharing.sharingTable '${cleanSharingTable}' not found in schema`);
+    }
+    for (const ct of cleanChildTables) {
+      if (!schema[ct]) {
+        throw new Error(`sharing.childTable '${ct}' not found in schema`);
+      }
+    }
+
+    const sharingCols = new Map((schema[cleanSharingTable].columns || []).map((c) => [c.name, c]));
+    if (!sharingCols.has('id')) {
+      throw new Error(`sharingTable '${cleanSharingTable}' must have an 'id' column`);
+    }
+    if (!sharingCols.has(cleanParentIdField)) {
+      throw new Error(
+        `sharingTable '${cleanSharingTable}' must have column '${cleanParentIdField}' matching parentIdField`,
+      );
+    }
+    if (!sharingCols.has(cleanUserIdField)) {
+      throw new Error(
+        `sharingTable '${cleanSharingTable}' must have column '${cleanUserIdField}' matching userIdField`,
+      );
+    }
+
+    parentTableSchema = schema[cleanParentTable];
   }
 
-  if (strictEpoch && readBackData.strictEpoch !== strictEpoch) {
-    console.error(`[Provision] Read-back validation failure: strictEpoch mismatch (${readBackData.strictEpoch} != ${strictEpoch})`);
-    process.exit(1);
+  let validatedPolicy;
+  if (assignmentPolicy !== undefined && assignmentPolicy !== null) {
+    validatedPolicy = validateAssignmentPolicy(assignmentPolicy, parentTableSchema);
   }
-  strictEpoch = readBackData.strictEpoch;
 
-  validateSchemaColumns(readBackData.schema, readBackData.syncMode);
+  return {
+    ...unknownRest,
+    sharingTable: cleanSharingTable,
+    parentIdField: cleanParentIdField,
+    userIdField: cleanUserIdField,
+    parentTable: cleanParentTable,
+    childTables: cleanChildTables,
+    ...(validatedPolicy ? { assignmentPolicy: validatedPolicy } : {}),
+  };
+}
 
-  console.log('[Provision] Read-back verified successfully. App is admitted and ready.');
+export function validateProvisioningInput(input, confirmApp) {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new Error('Schema input must be a non-null object');
+  }
+  if (!input.appId || (confirmApp !== undefined && input.appId !== confirmApp)) {
+    throw new Error('Schema must contain appId/schema and --confirm-app must match');
+  }
+  if (!input.schema || typeof input.schema !== 'object' || Array.isArray(input.schema)) {
+    throw new Error('Schema must contain appId/schema and --confirm-app must match');
+  }
+  if ('syncMode' in input || 'strictEpoch' in input || 'schemaVersion' in input) {
+    throw new Error('Use an ordinary schema envelope without strict metadata or a client-assigned schemaVersion');
+  }
+  for (const [tableName, tableDef] of Object.entries(input.schema)) {
+    if (typeof tableDef !== 'object' || tableDef === null || Array.isArray(tableDef)) {
+      throw new Error(`Table '${tableName}' definition must be an object`);
+    }
+    if (typeof tableDef.primaryKey !== 'string' || !tableDef.primaryKey.trim()) {
+      throw new Error(`Table '${tableName}' must have a string primaryKey`);
+    }
+    if (!Array.isArray(tableDef.columns) || tableDef.columns.length === 0) {
+      throw new Error(`Table '${tableName}' columns must be a non-empty array`);
+    }
+  }
 
-  if (outPath && !apiKey && existsSync(outPath)) {
-    console.log(`[Provision] Preserving existing credentials file at ${outPath}`);
+  let validatedSharing;
+  if (input.sharing !== undefined && input.sharing !== null) {
+    validatedSharing = validateSharingConfig(input.sharing, input.schema);
+  }
+
+  return {
+    appId: input.appId,
+    schema: input.schema,
+    ...(validatedSharing !== undefined ? { sharing: validatedSharing } : {}),
+  };
+}
+
+export function isMainModule() {
+  if (!process.argv[1]) return false;
+  try {
+    const scriptPath = resolve(process.argv[1]).toLowerCase();
+    const currentPath = fileURLToPath(import.meta.url).toLowerCase();
+    return scriptPath === currentPath;
+  } catch {
+    return false;
   }
 }
 
-main().catch(err => {
-  console.error('[Provision] Uncaught exception:', err);
-  process.exit(1);
-});
+if (isMainModule()) {
+  const { values } = parseArgs({ options: {
+    origin: { type: 'string' }, schema: { type: 'string' }, out: { type: 'string' },
+    'confirm-app': { type: 'string' }, help: { type: 'boolean', short: 'h' },
+  } });
+  if (values.help) {
+    console.log('Usage: node scripts/hub-schema-provision.mjs --origin <origin> --schema <file> --out <new-credentials-file> --confirm-app <appId>');
+    console.log('Set GLEAN_ADMIN_TOKEN in the environment. Registers a normal app; never updates/converts an existing app. Credentials are never printed.');
+    console.log('Windows: --out must be inside an existing private, non-symlink directory with protected ACLs limited to the current user, SYSTEM and Administrators.');
+    process.exit(0);
+  }
+
+  let fd;
+  let credentialsSaved = false;
+  let outputPath;
+  try {
+    const token = process.env.GLEAN_ADMIN_TOKEN;
+    if (!token || !values.origin || !values.schema || !values.out) throw new Error('Explicit origin/schema/out and GLEAN_ADMIN_TOKEN are required');
+    const origin = new URL(values.origin);
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
+    if ((origin.protocol !== 'https:' && !(origin.protocol === 'http:' && loopback)) ||
+        origin.username || origin.password || origin.search || origin.hash || origin.pathname !== '/') {
+      throw new Error('Origin must be HTTPS (or loopback HTTP), without credentials, path, query or fragment');
+    }
+    const rawInput = JSON.parse(readFileSync(resolve(values.schema), 'utf8'));
+    const validated = validateProvisioningInput(rawInput, values['confirm-app']);
+    outputPath = resolve(values.out);
+    // Secure parent custody first: tightening a newly created file cannot revoke an already opened read handle.
+    requirePrivateOutputDirectory(dirname(outputPath));
+    // Reserve a new private file before requesting a one-time key. Never overwrite custody.
+    fd = openSync(outputPath, 'wx', 0o600);
+    secureCredentialFile(outputPath);
+    const request = async (method, path, body) => {
+      const response = await fetch(new URL(path, origin), {
+        method, redirect: 'error', signal: AbortSignal.timeout(15000),
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      return response;
+    };
+    const payload = {
+      appId: validated.appId,
+      schema: validated.schema,
+      ...(validated.sharing === undefined ? {} : { sharing: validated.sharing }),
+    };
+    const registration = await request('POST', '/api/v1/apps', payload);
+    if (registration.ok) {
+      const issued = await registration.json();
+      if (issued.appId !== validated.appId || typeof issued.apiKey !== 'string' || !issued.apiKey) throw new Error('Registration returned invalid credentials');
+      // Persist the issued key before any subsequent request, including failed read-back.
+      writeFileSync(fd, JSON.stringify({ appId: issued.appId, apiKey: issued.apiKey, schemaVersion: issued.schemaVersion }, null, 2) + '\n');
+      credentialsSaved = true;
+      fsyncSync(fd);
+    } else if (registration.status !== 409) {
+      throw new Error(`Registration rejected (HTTP ${registration.status}); no update attempted`);
+    }
+    const response = await request('GET', `/api/v1/apps/${encodeURIComponent(validated.appId)}`);
+    if (!response.ok) throw new Error(`Schema read-back failed (HTTP ${response.status})`);
+    const current = await response.json();
+    if (current.appId !== validated.appId || current.syncMode != null || current.strictEpoch != null ||
+        !Number.isSafeInteger(current.schemaVersion) || current.schemaVersion < 1 ||
+        !isDeepStrictEqual(current.schema, validated.schema) ||
+        (validated.sharing !== undefined && !isDeepStrictEqual(current.sharing, validated.sharing))) {
+      throw new Error('Read-back differs from the requested ordinary schema; registration is not an existing-app migration/update');
+    }
+    console.log(`Verified ordinary app ${validated.appId}; schemaVersion=${current.schemaVersion}.`);
+    console.log(credentialsSaved ? `Credentials saved privately to ${outputPath}.` : 'Existing registration verified; no key reissued and no credentials file created.');
+  } catch (error) {
+    // Do not reflect server bodies, raw network errors or credentials in diagnostics.
+    const message = error instanceof Error && !['TypeError', 'SyntaxError'].includes(error.name) ? error.message : 'Request or schema parsing failed';
+    console.error(`[Provision] ${message}`);
+    if (credentialsSaved) console.error('[Provision] Issued credentials were retained; inspect schema before retrying.');
+    process.exitCode = 1;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+    if (fd !== undefined && !credentialsSaved) unlinkSync(outputPath);
+  }
+}
+

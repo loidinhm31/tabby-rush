@@ -1,9 +1,10 @@
 # Windows Desktop & Installed MSI Acceptance Specification
 
-**Document Version**: 1.3.0
-**Phase**: Sticky Task Surfaces Phase 07 documentation and automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08
-**Status**: Desktop sticky-window/tray implementation and automated tests delivered; native sticky-surface hardware acceptance remains pending Gate G2. The native WinRT/COM toast bridge is an unimplemented candidate stub; installed MSI acceptance and Gate G7 production cutover remain blocked.
-**Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
+**Document Version**: 1.4.0
+**Last Updated**: 2026-10-21
+**Phase**: Collaborative Task Assignees & Room v5 delivered (Phases 01–08); dedicated smoke wiring added in Phase 09 (`runTaskAssigneesRuntimeSmoke`)
+**Status**: G0 policy validation confirmed 2026-10-21. Dedicated Windows-compatible runtime harness prepared in Phase 09. Gate G5 (Windows Desktop Runtime & interactive sticky surfaces) is **NOT RUN / pending** per project delegation rules. Interactive native UI acceptance remains unpassed; release remains blocked and production migration unauthorized.
+**Related Documents**: [Plan](../plans/261021-1552-tabbyrush-task-assignees/phase-09-integrated-acceptance-and-documentation.md) · [System Architecture](./system-architecture.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ---
 
@@ -36,12 +37,16 @@ Phase 10 implementation scope includes the desktop application module (`:desktop
 6. **Immutable Mode & Launchers**:
    - `MainKt.main` enforces `BuildMode.RELEASE` (HTTPS only, strict endpoint validation).
    - `DevelopmentLauncher.main` enables `BuildMode.DEBUG` (HTTP 127.0.0.1:3000 permitted) via custom `runDebug` task.
-
+7. **Collaborative Task Surfaces & Invariants**:
+   - Desktop task surfaces (`DesktopTaskSurfaces`, `DesktopTaskSurfaceAccess`, `StickyTaskContent`) use canonical `TaskRef(ownerUserId, rowId)`.
+   - Child-only assigned tasks render flat in the sticky window without synthetic parent roots or sibling disclosures.
+   - Surface admission and mutations re-resolve `accessGeneration` and current rights; on authoritative revocation, sticky items and associated toast reminders are immediately cleared fail-closed.
+   - Standalone runtime smoke registered as `:desktopApp:runTaskAssigneesRuntimeSmoke` executes Room v5 migration, independent coordinator sync, and revocation purge inspection against disposable loopback Hub.
 ---
 
 ## 2. Verification Evidence Matrix
 
-Status cells are transcribed from `docs/evidence/windows-test-summary.md`; commands in the matrix are suggested verification methods, not recorded invocations. The report records 121/121 combined desktop and shared JVM tests passing but does not record exact invocations or dependency-verification mode; no clean-user MSI installation is recorded.
+The following matrix is a historical evidence snapshot transcribed from `docs/evidence/windows-test-summary.md`; its old counts and statuses are not current acceptance results. The 149-unmatched-checksum hold shown below is a historical finding. Parent-reported validation of 50 official dependency checksum entries is separate evidence; the counts are not directly comparable, so do not infer current status from this old matrix. See the [current verification report](../plans/261020-1717-standard-sync-schema-version/reports/verification-final.md) for the parent-reported current evidence.
 
 | Gate | Requirement | Suggested Verification / Reported Result | Status |
 |---|---|---|---|
@@ -98,6 +103,25 @@ Status cells are transcribed from `docs/evidence/windows-test-summary.md`; comma
 Phase 07 credit is 6h / 12h; project progress is 118h / 132h (89.4%). Native Android and Windows acceptance remains conditionally held at Gate G2. The 149 unmatched classpath checksums and separate Glance provenance hold remain open; Linux session acceptance is pending Phase 08, and production release gates G3, G6, and G7 remain open.
 ---
 
+### 2.4 Phase 05 — Grouped Sticky Mode & Deadline Presentation Status (Parent/Child Tasks)
+
+| Gate | Requirement | Verification Method | Status |
+|---|---|---|---|
+| **Whole Compact Groups (Model)** | Mixed groups intact under Active; all-done groups under Completed; pure projection | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testWholeCompactGroupsMixedGroupIntactInActive`, `testFullyCompleteGroupMigratesToCompletedSection`) |
+| **Grouped Row Layout (UI)** | `SpacingLarge` child indentation, 2-line title clamping, >=48dp touch bounds | Source inspection (`sticky-task-content.kt`) | Layout provisions implemented; rendered Compose layout and native visual scaling deferred to Phase 06 |
+| **Absolute Own Deadlines (Model)** | Stored date/time/zone; no inheritance; overdue badge supplements date | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testIndependentOwnDeadlinesAndClockRefresh`) |
+| **Deadline & Overdue Badging (UI)** | `FlowRow` layout, error-colored overdue text on `TabbyRushCoralSurface`, full semantics | Source inspection (`sticky-task-content.kt`) | Implemented with `clearAndSetSemantics`; screen-reader audio traversal deferred to Phase 06 |
+| **Automatic Parent Completion (Model)** | Read-only checkbox on parent with live children; store admission rejects direct parent toggle | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testDirectParentCompletionRejectedNoMutationOrSync`) |
+| **Automatic Parent Semantics (UI)** | Disabled checkbox, `"Subtasks: X/Y completed"` visual label, Narrator descriptions | Source inspection (`sticky-task-content.kt`) | Implemented in source; assistive technology verification deferred to Phase 06 |
+| **Child Desired-State Toggle** | Leaf child completion toggle updates parent effective status and triggers sync | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testChildDesiredStateCompletionUpdatesParentAndTriggersSync`) |
+| **Independent Root Quick-Add** | Creates independent root (`parentTaskId = null`); does not mutate main editor; preserves typing | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testQuickAddAlwaysCreatesIndependentRoot`, `testQuickAddDoesNotMutateMainEditor`, `testEditingQuickAddWhileSavePendingPreservesNewText`) |
+| **Admission & Token Fencing** | Actions fenced by `SurfaceAccountToken`; stale token rejected fail-closed | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testStaleTokenRejected`, `testAccountSwitchingWhileSubmitPendingRejectsStalePublish`) |
+| **Periodic Deadline Refresh** | 30s Compose ticker dispatches `RefreshDeadlines`; controller updates projection with clock | Unit suite & source | Reported unit coverage PASS (controller clock/update unit tested; Compose 30s ticker inspected in source) |
+| **Native Windows Session Acceptance** | Native window stacking, tray operation, multi-monitor/DPI restoration, and Narrator semantics | Interactive Windows x64 session | HELD at Gate G2 / DEFERRED to Phase 06 (requires physical Windows testbed) |
+
+Reported verification: 127 `:desktopApp:test` unit tests passed (including 20 `DesktopTaskSurfacesTest` assertions), 341 `:shared:jvmTest`, and 50 `:androidApp:testDebugUnitTest` (518 Gradle unit tests total, executed with `--dependency-verification=off`; see QA report `plans/reports/qa-261020-0200-phase-05-desktop-sticky-review-fixes.md`). Native Windows desktop acceptance (always-on-top stacking, native tray menu, multi-monitor DPI scaling, Narrator screen-reader) remains held at Gate G2 and deferred to Phase 06 of plan `plans/261019-1511-parent-child-tasks-deadline-surfaces`.
+---
+
 ## 3. UI Evidence Matrix
 
 The Phase 10 visual baseline consists of seven high-fidelity 960x720 design renders displaying the Windows 11 Fluent chrome and ForumFlash light theme tokens. These serve as styling and color-contrast references; live interactive screen captures and Windows Narrator audio verification remain pending human operator runtime execution:
@@ -143,6 +167,7 @@ The Phase 10 visual baseline consists of seven high-fidelity 960x720 design rend
 - **Click After Quit**: No cold COM activator is registered. Clicking an un-cleared toast after process crash does not launch an unintended process or leak private announcement content.
 - **Silent Reopen Catch-up**: On restart, the app clears the `tr-remote` group before establishing the SSE connection. Active unexpired announcements are caught up silently via baseline hydration without re-toasting historical alerts.
 
-### 5.3 Gate G5 Held Status & Staged Pilot Policy
-- **Environment Hold**: Linux host environment cannot compile MSVC C++20 WinRT or execute MSI installations. Gate G5 (Windows Desktop Runtime) is formally HELD.
-- **Staged Rollout Policy**: In accordance with the execution plan (report04/report05), restricted internal pilot enablement on Android and Linux does NOT require clearing Gate G5. Full organization-wide delivery remains blocked until Gate G5 is executed and evidenced on an installed Windows x64 testbed.
+### 5.3 Gate G5 Held Status & Release Boundary
+- **Environment Hold**: Interactive Windows desktop UI testing, installed MSI execution, and native notification inspection remain held at Gate G5.
+- **Collaborative Runtime Harness**: Task assignees runtime smoke (`:desktopApp:runTaskAssigneesRuntimeSmoke`) is prepared and verified in build wiring, but unexecuted (NOT RUN) during subagent phase.
+- **Release Boundary**: Staged pilot notes from historical announcements work do not apply to collaborative task sync. Organization-wide release and production migration remain strictly blocked until Gate G5 and connected platform gates are executed and evidenced.

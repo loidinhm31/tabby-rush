@@ -3,8 +3,9 @@ package dev.tabbyrush.shared.data
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.CompletionChange
 import dev.tabbyrush.shared.contract.PersistedTaskSchedule
-import dev.tabbyrush.shared.contract.StrictOperationKind
+import dev.tabbyrush.shared.contract.TaskOperationKind
 import dev.tabbyrush.shared.contract.TaskDeadline
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.selectNextDeadline
 import kotlinx.coroutines.CompletableDeferred
@@ -44,6 +45,7 @@ class TaskSurfaceSyncSqliteTest {
             appId = "tabby-rush"
         )
     }
+    private fun taskRef(id: String) = TaskRef("user-sync-test", id)
 
     @AfterTest
     fun tearDown() {
@@ -65,7 +67,7 @@ class TaskSurfaceSyncSqliteTest {
     fun testReconcileAcceptedEmitsUpdatedStateInObservers() = runBlocking {
         val now = 10_000L
         val todo = Todo(
-            id = "t1",
+            taskRef = taskRef("t1"),
             title = "Task to Reconcile",
             completed = false,
             createdAt = now,
@@ -98,6 +100,8 @@ class TaskSurfaceSyncSqliteTest {
 
         try {
             initialEmitted.await()
+            val reconciliation = dev.tabbyrush.shared.sync.OutboxReconciliation(store)
+            reconciliation.prepareAndFreezeBatch(outbox)
             // Acknowledge the operation via reconcileAccepted
             store.reconcileAccepted(opId = opId, serverRevision = 1L)
             withTimeout(3000) {
@@ -142,8 +146,7 @@ class TaskSurfaceSyncSqliteTest {
                     title = "Promoted Task",
                     completed = false,
                     createdAt = 5000L,
-                    updatedAt = 5000L,
-                    epoch = "ep-1"
+                    updatedAt = 5000L
                 )
                 store.dao.upsertServerBase(base)
             }
@@ -161,26 +164,22 @@ class TaskSurfaceSyncSqliteTest {
     @Test
     fun testOutboxConflictHeadEmitsHasUnresolvedConflict() = runBlocking {
         val dl = createTimedDeadline(overdueEpochMs = 50_000L)
-        val base = ServerBaseEntity(
-            rowId = "conflict-1",
-            serverRevision = 1L,
-            deleted = false,
-            title = "Conflict Task",
-            completed = false,
-            createdAt = 1000L,
-            updatedAt = 1000L,
-            epoch = "ep-1",
-            deadlineDate = dl.date,
-            deadlineTime = dl.time,
-            deadlineZone = dl.zone,
-            deadlineOffsetSeconds = dl.offsetSeconds,
-            deadlineAnchorEpochMs = dl.anchorEpochMs,
-            deadlineOverdueEpochMs = dl.overdueEpochMs,
-            reminderEnabled = false,
-            reminderLeadMinutes = 0L,
-            reminderCount = 1L,
-            scheduleToken = "tok-1"
-        )
+        val base = ServerBaseEntity(rowId = "conflict-1",
+        serverRevision = 1L,
+        deleted = false,
+        title = "Conflict Task",
+        completed = false,
+        createdAt = 1000L,
+        updatedAt = 1000L, deadlineDate = dl.date,
+        deadlineTime = dl.time,
+        deadlineZone = dl.zone,
+        deadlineOffsetSeconds = dl.offsetSeconds,
+        deadlineAnchorEpochMs = dl.anchorEpochMs,
+        deadlineOverdueEpochMs = dl.overdueEpochMs,
+        reminderEnabled = false,
+        reminderLeadMinutes = 0L,
+        reminderCount = 1L,
+        scheduleToken = "tok-1")
         store.dao.upsertServerBase(base)
 
         val initialEmitted = CompletableDeferred<Unit>()
@@ -204,21 +203,13 @@ class TaskSurfaceSyncSqliteTest {
             initialEmitted.await()
             // Inject outbox conflict head
             store.withMutationLock {
-                val conflictOp = OutboxEntity(
-                    opId = "op-conflict",
-                    epoch = "ep-1",
-                    tableName = "todos",
-                    rowId = "conflict-1",
-                    kind = StrictOperationKind.UPDATE.wireName,
-                    expectedRevision = 1L,
-                    title = "Conflict Title",
-                    completed = false,
-                    createdAt = 1000L,
-                    digest = "digest-hex",
-                    localRevision = 2L,
-                    deliveryState = OutboxEntity.STATE_CONFLICT,
-                    createdAtEpochMs = 2000L
-                )
+                val conflictOp = OutboxEntity(opId = "op-conflict", tableName = "todos",
+                rowId = "conflict-1",
+                kind = TaskOperationKind.UPDATE.wireName, title = "Conflict Title",
+                completed = false,
+                createdAt = 1000L, localRevision = 2L,
+                deliveryState = OutboxEntity.STATE_CONFLICT,
+                createdAtEpochMs = 2000L)
                 store.dao.upsertOutbox(conflictOp)
             }
             withTimeout(3000) {
@@ -241,7 +232,7 @@ class TaskSurfaceSyncSqliteTest {
     fun testConcurrentTitleEditPreservedBySetCompletedLocally() = runBlocking {
         val now = 10_000L
         val original = Todo(
-            id = "t1",
+            taskRef = taskRef("t1"),
             title = "Original Title",
             completed = false,
             createdAt = now,
@@ -256,7 +247,7 @@ class TaskSurfaceSyncSqliteTest {
         store.saveTodoLocally(edited)
 
         // Complete the task via setCompletedLocally
-        val result = store.setCompletedLocally("t1", completed = true, nowEpochMs = now + 5000L)
+        val result = store.setCompletedLocally(taskRef("t1"), completed = true, nowEpochMs = now + 5000L)
         assertEquals(CompletionChange.Changed, result)
 
         val loaded = store.loadTodos().first { it.id == "t1" }

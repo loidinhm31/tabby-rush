@@ -33,7 +33,7 @@ data class AccountKey(val value: String) {
             userBytes.copyInto(buffer, offset)
             offset += userBytes.size
 
-            val hashHex = StrictSyncDigest.sha256Hex(buffer)
+            val hashHex = Sha256.sha256Hex(buffer)
             return AccountKey(hashHex)
         }
     }

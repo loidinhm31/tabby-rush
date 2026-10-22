@@ -1,15 +1,16 @@
 # Linux Desktop & Installed RPM Acceptance Specification
 
-**Document Version**: 1.3.0
-**Phase**: 12 — Coordinated cutover, recovery runbook and release documentation
-**Status**: Desktop Multiplatform Implementation, Process-Scoped Scheduler, and D-Bus Adapter Delivered; Gate G2 Live Desktop Visual Display & Gate G7 Production Cutover Pending Operator/Testbed Prerequisites
-**Related Documents**: [Plan](../plans/261015-0752-task-deadlines-reminders-strict-upgrades/phase-09-desktop-scheduler-and-native-notifications.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md)
+**Document Version**: 1.4.0
+**Last Updated**: 2026-10-21
+**Phase**: Collaborative Task Assignees & Room v5 delivered (Phases 01–08); dedicated smoke wiring added in Phase 09 (`runTaskAssigneesRuntimeSmoke`)
+**Status**: G0 policy validation confirmed 2026-10-21. Dedicated Linux-compatible runtime harness prepared in Phase 09. Collaborative native desktop acceptance (Gate G5) is **NOT RUN / pending** per project delegation rules. Interactive UI approval timed out twice, connected-Android acceptance was not run, and production migration is unauthorized.
+**Related Documents**: [Plan](../plans/261021-1552-tabbyrush-task-assignees/phase-09-integrated-acceptance-and-documentation.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ---
 
 ## 1. Scope & Acceptance Criteria
 
-Phase 09 delivers the desktop application module (`:desktopApp`) configured for Linux x86_64 with Compose Multiplatform 1.7.3, hardware-backed credential custody via Secret Service, foreground sync coordination, single instance locking, and fail-closed account leave lifecycle.
+Phase 09 delivered the desktop application module (`:desktopApp`) configured for Linux x86_64 with Compose Multiplatform 1.7.3, OS Secret Service–backed credential custody, foreground sync coordination, single instance locking, and fail-closed account leave lifecycle.
 
 ### Acceptance Invariants
 1. **Target Isolation**:
@@ -33,10 +34,16 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 6. **Immutable Mode & Launchers**:
    - `MainKt.main` enforces `BuildMode.RELEASE` (HTTPS only, strict endpoint validation).
    - `DevelopmentLauncher.main` enables `BuildMode.DEBUG` (HTTP 127.0.0.1:3000 permitted) via custom `runDebug` task.
-
+7. **Collaborative Task Surfaces & Invariants**:
+   - Desktop task surfaces (`DesktopTaskSurfaces`, `DesktopTaskSurfaceAccess`, `TodoList`) use canonical `TaskRef(ownerUserId, rowId)`.
+   - Child-only assigned tasks render flat without synthetic parent roots or sibling disclosures.
+   - Surface admission and mutations re-resolve `accessGeneration` and current rights; on authoritative revocation, active items and pending D-Bus notifications are immediately cleared fail-closed.
+   - Dedicated runtime smoke registered as `:desktopApp:runTaskAssigneesRuntimeSmoke` executes Room v5 migration, independent coordinator sync, and revocation purge inspection on Linux (`-PdesktopTarget=linux`).
 ---
 
-## 2. Verification Evidence Matrix
+## 2. Historical Verification Evidence Matrix
+
+The following results are retained as a historical snapshot; they do not establish current native, standard-sync, or production acceptance. See [Release Acceptance](./release-acceptance.md) for current status.
 
 | Gate | Requirement | Verification Method | Status |
 |---|---|---|---|
@@ -80,6 +87,25 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 
 ---
 
+### 2.3 Phase 05 — Grouped Sticky Mode & Deadline Presentation Status (Parent/Child Tasks)
+
+| Gate | Requirement | Verification Method | Status |
+|---|---|---|---|
+| **Whole Compact Groups (Model)** | Mixed groups intact under Active; all-done groups under Completed; pure projection | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testWholeCompactGroupsMixedGroupIntactInActive`, `testFullyCompleteGroupMigratesToCompletedSection`) |
+| **Grouped Row Layout (UI)** | `SpacingLarge` child indentation, 2-line title clamping, >=48dp touch bounds | Source inspection (`sticky-task-content.kt`) | Layout provisions implemented; rendered Compose layout and native visual scaling deferred to Phase 06 |
+| **Absolute Own Deadlines (Model)** | Stored date/time/zone; no inheritance; overdue badge supplements date | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testIndependentOwnDeadlinesAndClockRefresh`) |
+| **Deadline & Overdue Badging (UI)** | `FlowRow` layout, error-colored overdue text on `TabbyRushCoralSurface`, full semantics | Source inspection (`sticky-task-content.kt`) | Implemented with `clearAndSetSemantics`; screen-reader audio traversal deferred to Phase 06 |
+| **Automatic Parent Completion (Model)** | Read-only checkbox on parent with live children; store admission rejects direct parent toggle | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testDirectParentCompletionRejectedNoMutationOrSync`) |
+| **Automatic Parent Semantics (UI)** | Disabled checkbox, `"Subtasks: X/Y completed"` visual label, TalkBack/Orca descriptions | Source inspection (`sticky-task-content.kt`) | Implemented in source; assistive technology verification deferred to Phase 06 |
+| **Child Desired-State Toggle** | Leaf child completion toggle updates parent effective status and triggers sync | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testChildDesiredStateCompletionUpdatesParentAndTriggersSync`) |
+| **Independent Root Quick-Add** | Creates independent root (`parentTaskId = null`); does not mutate main editor; preserves typing | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testQuickAddAlwaysCreatesIndependentRoot`, `testQuickAddDoesNotMutateMainEditor`, `testEditingQuickAddWhileSavePendingPreservesNewText`) |
+| **Admission & Token Fencing** | Actions fenced by `SurfaceAccountToken`; stale token rejected fail-closed | `DesktopTaskSurfacesTest` | Reported unit coverage PASS (`testStaleTokenRejected`, `testAccountSwitchingWhileSubmitPendingRejectsStalePublish`) |
+| **Periodic Deadline Refresh** | 30s Compose ticker dispatches `RefreshDeadlines`; controller updates projection with clock | Unit suite & source | Reported unit coverage PASS (controller clock/update unit tested; Compose 30s ticker inspected in source) |
+| **Live Desktop Session Display** | Visual window rendering, DPI scaling, always-on-top, and tray recovery in live Linux GUI session | Interactive Linux desktop session | DEFERRED to Phase 06 acceptance gate (requires live desktop testbed; Gate G2 holds remain open) |
+
+Reported verification: 127 `:desktopApp:test` unit tests passed (including 20 `DesktopTaskSurfacesTest` assertions), 341 `:shared:jvmTest`, and 50 `:androidApp:testDebugUnitTest` (518 Gradle unit tests total, executed with `--dependency-verification=off`; see QA report `plans/reports/qa-261020-0200-phase-05-desktop-sticky-review-fixes.md`). Native Linux GUI session acceptance (always-on-top, Wayland/X11 tray, 200% scaling, Orca screen-reader) remains deferred to Phase 06 of plan `plans/261019-1511-parent-child-tasks-deadline-surfaces` (distinct from historical Phase 08 of plan `plans/261016-1409-sticky-task-surfaces`).
+---
+
 ## 3. Disclosed Limitations & Operator Prerequisites
 
 1. **Host `rpm-build` Package**:
@@ -102,6 +128,6 @@ Phase 09 delivers the desktop application module (`:desktopApp`) configured for 
 - **Signal Handling & Dispatch**: Subscribes to `ActionInvoked` and `NotificationClosed`. When the user clicks the notification, the adapter extracts the message ID and generation, marshals to the Compose UI dispatcher, requests window focus/restoration, and opens the announcement detail view.
 - **Tray Integration & Full-Quit**: When minimized to tray, the SSE stream remains active. On explicit Quit (`quitSuspend()`), active remote notifications are closed, the SSE stream is terminated, and D-Bus signal subscriptions are unregistered. Reopening catches up silently via baseline hydration.
 
-### 4.2 Gate G4 Acceptance & Pilot Status
-- **Gate G4 Status**: **PASS**. Automated contract vectors, D-Bus session communication, and SSE handshake framing verified.
-- **Pilot Readiness**: Linux desktop runtime is approved for the restricted internal pilot along with Android. Historical reminder visual bubble hold (Gate G2) remains separately open for task reminders.
+### 4.2 Gate G5 Acceptance & Release Boundary
+- **Collaborative Assignees Gate (G5)**: Dedicated runtime harness (`:desktopApp:runTaskAssigneesRuntimeSmoke -PdesktopTarget=linux`) prepared; runtime verification is **NOT RUN / pending** during subagent phase per delegation rules.
+- **Pilot & Release Boundary**: The earlier restricted internal pilot statement applies only to announcements scope. It is not approval for collaborative task sync release or production migration; native acceptance remains unpassed and release remains blocked.

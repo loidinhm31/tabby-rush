@@ -240,8 +240,6 @@ class RemoteInboxClientTest {
 
         val result = client.markRead("baf6dc3e-3099-4ae0-8767-985552ef0b82")
         assertIs<ApiResult.Failure>(result)
-        // Must NOT be SafeError.ResetRequired(EPOCH_MISMATCH)!
-        assertFalse(result.error is SafeError.ResetRequired)
         assertIs<SafeError.Validation>(result.error)
         assertEquals("staleInstallOperation", result.error.code)
     }

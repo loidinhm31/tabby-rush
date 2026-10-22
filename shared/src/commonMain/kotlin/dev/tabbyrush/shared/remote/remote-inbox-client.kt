@@ -172,12 +172,12 @@ class RemoteInboxClient(
     private suspend fun <T> executeWithRetry(
         block: suspend (accessToken: String) -> ApiResult<T>
     ): ApiResult<T> {
-        val firstAttempt = authSession.authorizedRequest(block)
+        val firstAttempt = authSession.authorizedRequest(block = block)
         if (firstAttempt is ApiResult.Failure &&
             firstAttempt.error is SafeError.Unauthorized &&
             firstAttempt.error.code == "TOKEN_REFRESHED"
         ) {
-            return authSession.authorizedRequest(block)
+            return authSession.authorizedRequest(block = block)
         }
         return firstAttempt
     }

@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import dev.tabbyrush.shared.contract.TaskRef
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -93,7 +95,8 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onRemoteAction = viewModel::onRemoteAction,
-                    onAuthSubmit = viewModel::onAuthSubmit
+                    onAuthSubmit = viewModel::onAuthSubmit,
+                    onLookupUser = viewModel::lookupUser
                 )
 
                 if (surfaceCreateVisible) {
@@ -174,13 +177,52 @@ class MainActivity : ComponentActivity() {
                     TaskWidgetActionKeys.EXTRA_GENERATION,
                     intent.getLongExtra(TaskSurfaceIntents.EXTRA_GENERATION, -1L)
                 )
-                val taskId = intent.getStringExtra(TaskWidgetActionKeys.EXTRA_TASK_ID)
+                val ownerUserId = intent.getStringExtra(TaskWidgetActionKeys.EXTRA_OWNER_USER_ID)
+                    ?: intent.getStringExtra(TaskSurfaceIntents.EXTRA_OWNER_USER_ID)
+                    ?: intent.getStringExtra(AndroidNotificationIntentFactory.EXTRA_OWNER_USER_ID)
+                val taskId = intent.getStringExtra(TaskWidgetActionKeys.EXTRA_ROW_ID)
+                    ?: intent.getStringExtra(TaskSurfaceIntents.EXTRA_ROW_ID)
+                    ?: intent.getStringExtra(AndroidNotificationIntentFactory.EXTRA_ROW_ID)
+                    ?: intent.getStringExtra(TaskWidgetActionKeys.EXTRA_TASK_ID)
                     ?: intent.getStringExtra(TaskSurfaceIntents.EXTRA_TASK_ID)
                     ?: intent.getStringExtra(AndroidNotificationIntentFactory.EXTRA_TASK_ID)
 
-                if (!taskId.isNullOrBlank()) {
+                val dataUri = intent.data
+                var uriOwner: String? = null
+                var uriTaskId: String? = null
+                if (dataUri != null) {
+                    val scheme = dataUri.scheme
+                    val authority = dataUri.authority
+                    val segments = dataUri.pathSegments
+                    if (scheme == "tabbyrush" && authority == "task-widget" && segments != null && segments.size >= 5 && segments[0] == "view") {
+                        uriOwner = segments[3]
+                        uriTaskId = segments[4]
+                    } else if (scheme == "tabbyrush" && authority == "task-surface" && segments != null && segments.size >= 5 && segments[0] == "open") {
+                        uriOwner = segments[3]
+                        uriTaskId = segments[4]
+                    } else if (scheme == "tabbyrush" && authority == "task" && segments != null && segments.size >= 3) {
+                        uriOwner = segments[1]
+                        uriTaskId = segments[2]
+                    }
+                }
+                val effectiveOwner = uriOwner ?: ownerUserId
+                val effectiveTaskId = uriTaskId ?: taskId
+
+                if (uriOwner != null && ownerUserId != null && uriOwner != ownerUserId) {
+                    Log.w(TAG, "Data URI and extras owner mismatch ($uriOwner vs $ownerUserId); dropping intent")
+                    return
+                }
+                if (uriTaskId != null && taskId != null && uriTaskId != taskId) {
+                    Log.w(TAG, "Data URI and extras taskId mismatch ($uriTaskId vs $taskId); dropping intent")
+                    return
+                }
+
+                if (!effectiveOwner.isNullOrBlank() && !effectiveTaskId.isNullOrBlank()) {
                     val isSurfaceAction = action != ACTION_VIEW_TASK_LEGACY
-                    viewModel.selectTaskFromIntent(accountKey, generation, taskId, isSurfaceAction)
+                    val taskRef = TaskRef(effectiveOwner, effectiveTaskId)
+                    viewModel.selectTaskFromIntent(accountKey, generation, taskRef, isSurfaceAction)
+                } else {
+                    Log.w(TAG, "Dropping task view intent with missing canonical owner or rowId")
                 }
             }
 
@@ -199,6 +241,7 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val TAG = "MainActivity"
         const val ACTION_VIEW_TASK_LEGACY = "dev.tabbyrush.android.ACTION_VIEW_TASK"
         const val ACTION_OPEN_TASK = "dev.tabbyrush.android.ACTION_OPEN"
         const val ACTION_ADD_TASK = "dev.tabbyrush.android.ACTION_ADD_TASK"

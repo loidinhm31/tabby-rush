@@ -12,13 +12,15 @@ import androidx.glance.appwidget.action.ActionCallback
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.SurfaceAccountToken
 import dev.tabbyrush.shared.contract.SurfaceResult
-
+import dev.tabbyrush.shared.contract.TaskRef
 /**
  * Immutable parameters and callback handling for Glance widget interactions.
  */
 object TaskWidgetActionKeys {
     val PARAM_ACCOUNT_KEY = ActionParameters.Key<String>("account_key")
     val PARAM_GENERATION = ActionParameters.Key<Long>("generation")
+    val PARAM_OWNER_USER_ID = ActionParameters.Key<String>("owner_user_id")
+    val PARAM_ROW_ID = ActionParameters.Key<String>("row_id")
     val PARAM_TASK_ID = ActionParameters.Key<String>("task_id")
     val PARAM_DESIRED_COMPLETED = ActionParameters.Key<Boolean>("desired_completed")
 
@@ -26,25 +28,28 @@ object TaskWidgetActionKeys {
     const val ACTION_WIDGET_ADD_TASK = "dev.tabbyrush.android.ACTION_ADD_TASK"
     const val EXTRA_ACCOUNT_KEY = "extra_account_key"
     const val EXTRA_GENERATION = "extra_generation"
+    const val EXTRA_OWNER_USER_ID = "extra_owner_user_id"
+    const val EXTRA_ROW_ID = "extra_row_id"
     const val EXTRA_TASK_ID = "extra_task_id"
-
     private const val TAG = "TaskWidgetActions"
 
     fun toggleTaskParameters(
         token: SurfaceAccountToken,
-        taskId: String,
+        taskRef: TaskRef,
         desiredCompleted: Boolean
     ): ActionParameters {
         return actionParametersOf(
             PARAM_ACCOUNT_KEY to token.accountKey.value,
             PARAM_GENERATION to token.generation,
-            PARAM_TASK_ID to taskId,
+            PARAM_OWNER_USER_ID to taskRef.ownerUserId,
+            PARAM_ROW_ID to taskRef.rowId,
+            PARAM_TASK_ID to taskRef.rowId,
             PARAM_DESIRED_COMPLETED to desiredCompleted
         )
     }
 
-    fun getOpenTaskRequestCode(token: SurfaceAccountToken, taskId: String): Int {
-        return (token.accountKey.value + ":" + token.generation + ":" + taskId + ":open").hashCode() and 0x7FFFFFFF
+    fun getOpenTaskRequestCode(token: SurfaceAccountToken, taskRef: TaskRef): Int {
+        return (token.accountKey.value + ":" + token.generation + ":" + taskRef.ownerUserId + ":" + taskRef.rowId + ":open").hashCode() and 0x7FFFFFFF
     }
 
     fun getAddTaskRequestCode(token: SurfaceAccountToken): Int {
@@ -68,13 +73,15 @@ class ToggleTaskActionCallback : ActionCallback {
     ) {
         val accountKeyStr = parameters[TaskWidgetActionKeys.PARAM_ACCOUNT_KEY]
         val generation = parameters[TaskWidgetActionKeys.PARAM_GENERATION]
-        val taskId = parameters[TaskWidgetActionKeys.PARAM_TASK_ID]
+        val ownerUserId = parameters[TaskWidgetActionKeys.PARAM_OWNER_USER_ID]
+        val rowId = parameters[TaskWidgetActionKeys.PARAM_ROW_ID] ?: parameters[TaskWidgetActionKeys.PARAM_TASK_ID]
         val desiredCompleted = parameters[TaskWidgetActionKeys.PARAM_DESIRED_COMPLETED]
 
-        if (accountKeyStr.isNullOrBlank() || generation == null || taskId.isNullOrBlank() || desiredCompleted == null) {
-            Log.w(TAG, "Rejecting malformed or incomplete widget action parameters: $parameters")
+        if (accountKeyStr.isNullOrBlank() || generation == null || ownerUserId.isNullOrBlank() || rowId.isNullOrBlank() || desiredCompleted == null) {
+            Log.w(TAG, "Rejecting malformed or legacy owner-less widget action parameters: $parameters")
             return
         }
+        val taskRef = TaskRef(ownerUserId, rowId)
 
         val hostOwner = context.applicationContext as? TaskSurfaceHostOwner
         if (hostOwner == null) {
@@ -86,9 +93,9 @@ class ToggleTaskActionCallback : ActionCallback {
         val token = SurfaceAccountToken(AccountKey(accountKeyStr), generation)
         val nowEpochMs = System.currentTimeMillis()
 
-        when (val result = host.access.setCompleted(token, taskId, desiredCompleted, nowEpochMs)) {
+        when (val result = host.access.setCompleted(token, taskRef, desiredCompleted, nowEpochMs)) {
             is SurfaceResult.Value -> {
-                Log.d(TAG, "Widget setCompleted succeeded for task $taskId (change: ${result.value})")
+                Log.d(TAG, "Widget setCompleted succeeded for task $taskRef (change: ${result.value})")
                 host.refresh(SurfaceRefreshReason.Widget)
                 TaskWidgetUpdater.refreshAll(context, host)
             }
@@ -111,13 +118,23 @@ class ToggleTaskActionCallback : ActionCallback {
 /**
  * Creates an explicit Intent targeting MainActivity to open and view a specific task.
  */
-fun createOpenTaskIntent(context: Context, token: SurfaceAccountToken, taskId: String): Intent {
+fun createOpenTaskIntent(context: Context, token: SurfaceAccountToken, taskRef: TaskRef): Intent {
     return Intent(context, MainActivity::class.java).apply {
         action = TaskWidgetActionKeys.ACTION_WIDGET_VIEW_TASK
-        data = Uri.parse("tabbyrush://task-widget/view?account=${token.accountKey.value}&gen=${token.generation}&taskId=$taskId")
+        data = Uri.Builder()
+            .scheme("tabbyrush")
+            .authority("task-widget")
+            .appendPath("view")
+            .appendPath(token.accountKey.value)
+            .appendPath(token.generation.toString())
+            .appendPath(taskRef.ownerUserId)
+            .appendPath(taskRef.rowId)
+            .build()
         putExtra(TaskWidgetActionKeys.EXTRA_ACCOUNT_KEY, token.accountKey.value)
         putExtra(TaskWidgetActionKeys.EXTRA_GENERATION, token.generation)
-        putExtra(TaskWidgetActionKeys.EXTRA_TASK_ID, taskId)
+        putExtra(TaskWidgetActionKeys.EXTRA_OWNER_USER_ID, taskRef.ownerUserId)
+        putExtra(TaskWidgetActionKeys.EXTRA_ROW_ID, taskRef.rowId)
+        putExtra(TaskWidgetActionKeys.EXTRA_TASK_ID, taskRef.rowId)
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
 }
@@ -125,9 +142,9 @@ fun createOpenTaskIntent(context: Context, token: SurfaceAccountToken, taskId: S
 /**
  * Creates an immutable PendingIntent targeting MainActivity to open and view a specific task.
  */
-fun createOpenTaskPendingIntent(context: Context, token: SurfaceAccountToken, taskId: String): PendingIntent {
-    val intent = createOpenTaskIntent(context, token, taskId)
-    val requestCode = TaskWidgetActionKeys.getOpenTaskRequestCode(token, taskId)
+fun createOpenTaskPendingIntent(context: Context, token: SurfaceAccountToken, taskRef: TaskRef): PendingIntent {
+    val intent = createOpenTaskIntent(context, token, taskRef)
+    val requestCode = TaskWidgetActionKeys.getOpenTaskRequestCode(token, taskRef)
     return PendingIntent.getActivity(
         context,
         requestCode,
@@ -142,8 +159,13 @@ fun createOpenTaskPendingIntent(context: Context, token: SurfaceAccountToken, ta
 fun createAddTaskIntent(context: Context, token: SurfaceAccountToken): Intent {
     return Intent(context, MainActivity::class.java).apply {
         action = TaskWidgetActionKeys.ACTION_WIDGET_ADD_TASK
-        data = Uri.parse("tabbyrush://task-widget/add?account=${token.accountKey.value}&gen=${token.generation}")
-        putExtra(TaskWidgetActionKeys.EXTRA_ACCOUNT_KEY, token.accountKey.value)
+        data = Uri.Builder()
+            .scheme("tabbyrush")
+            .authority("task-widget")
+            .appendPath("add")
+            .appendPath(token.accountKey.value)
+            .appendPath(token.generation.toString())
+            .build()
         putExtra(TaskWidgetActionKeys.EXTRA_GENERATION, token.generation)
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
@@ -169,8 +191,11 @@ fun createAddTaskPendingIntent(context: Context, token: SurfaceAccountToken): Pe
 fun createOpenAppIntent(context: Context): Intent {
     return Intent(context, MainActivity::class.java).apply {
         action = Intent.ACTION_MAIN
-        data = Uri.parse("tabbyrush://task-widget/main")
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        data = Uri.Builder()
+            .scheme("tabbyrush")
+            .authority("task-widget")
+            .appendPath("main")
+            .build()
     }
 }
 

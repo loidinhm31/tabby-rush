@@ -316,7 +316,7 @@ class DesktopRemoteRuntimeTest {
                 object : dev.tabbyrush.shared.contract.NativeReminderAdapter {
                     override suspend fun queryCapabilities() = dev.tabbyrush.shared.contract.ReminderCapabilities(true, true, true)
                     override suspend fun reconcileSchedule(a: AccountKey, g: Long, d: List<dev.tabbyrush.shared.contract.ScheduledAlarmHandle>) {}
-                    override suspend fun postOwnedNotification(a: AccountKey, g: Long, t: String, s: String, o: Int, ti: String, d: Long) = "id"
+                    override suspend fun postOwnedNotification(accountKey: AccountKey, generation: Long, taskRef: dev.tabbyrush.shared.contract.TaskRef, scheduleToken: String, occurrenceIndex: Int, title: String, dueEpochMs: Long): String? = "id"
                     override suspend fun removeOwnedNotification(a: AccountKey, p: String) {}
                     override suspend fun cancelAllForAccount(a: AccountKey) {}
                 },

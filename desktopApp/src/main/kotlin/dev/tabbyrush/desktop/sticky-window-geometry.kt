@@ -33,9 +33,45 @@ data class MonitorWorkArea(
  */
 data class StickyWindowPresentation(
     val visible: Boolean,
-    val geometry: StickyWindowGeometry
+    val geometry: StickyWindowGeometry,
+    val fontScale: Float = DEFAULT_STICKY_FONT_SCALE
 )
 
+const val DEFAULT_STICKY_FONT_SCALE = 1.0f
+const val MIN_STICKY_FONT_SCALE = 0.50f
+const val MAX_STICKY_FONT_SCALE = 1.50f
+const val STICKY_FONT_SCALE_STEP = 0.125f
+
+/**
+ * Validates whether the given font scale is finite and within allowed bounds.
+ */
+fun isValidStickyFontScale(scale: Float): Boolean {
+    return scale.isFinite() && scale in MIN_STICKY_FONT_SCALE..MAX_STICKY_FONT_SCALE
+}
+
+/**
+ * Computes effective sticky font scale derived from current unscaled window width
+ * relative to [referenceWidthDp] multiplied by user manual zoom preference.
+ *
+ * Typography uses width-driven scaling so shortening vertical height does not shrink
+ * text into unreadable sizes while vertical scroll containment handles height constraints.
+ */
+fun computeEffectiveStickyFontScale(
+    windowWidthDp: Double,
+    manualZoom: Float = DEFAULT_STICKY_FONT_SCALE,
+    referenceWidthDp: Double = DEFAULT_STICKY_WIDTH_DP,
+    minScale: Float = MIN_STICKY_FONT_SCALE,
+    maxScale: Float = MAX_STICKY_FONT_SCALE
+): Float {
+    val safeManual = if (isValidStickyFontScale(manualZoom)) manualZoom else DEFAULT_STICKY_FONT_SCALE
+    val windowFactor = if (referenceWidthDp > 0.0 && windowWidthDp.isFinite() && windowWidthDp > 0.0) {
+        (windowWidthDp / referenceWidthDp).toFloat()
+    } else {
+        1.0f
+    }
+    val rawEffective = windowFactor * safeManual
+    return rawEffective.coerceIn(minScale, maxScale)
+}
 const val DEFAULT_STICKY_WIDTH_DP = 360.0
 const val DEFAULT_STICKY_HEIGHT_DP = 520.0
 const val MIN_STICKY_WIDTH_DP = 280.0

@@ -74,7 +74,7 @@ compose.desktop {
             targetFormats(TargetFormat.Rpm, TargetFormat.Msi)
             packageName = if (desktopTarget == "linux") "tabbyrush" else "TabbyRush"
             packageVersion = configuredVersion
-            description = "TabbyRush personal task management with strict-v1 Glean Hub synchronization"
+            description = "TabbyRush personal task management with standard Glean Hub synchronization"
             vendor = "TabbyRush Team"
             copyright = "Copyright 2026 TabbyRush"
 
@@ -113,11 +113,35 @@ tasks.register<JavaExec>("runDebug") {
     description = "Runs TabbyRush Desktop in debug mode with local HTTP allowed"
     mainClass.set("dev.tabbyrush.desktop.DevelopmentLauncher")
     classpath = sourceSets["main"].runtimeClasspath
+    if (providers.gradleProperty("isolatedTestConfig").orNull == "true") {
+        systemProperty("tabbyrush.isolatedTestConfig", "true")
+    }
+}
+
+tasks.register<JavaExec>("runTaskAssigneesRuntimeSmoke") {
+    group = "verification"
+    description = "Runs TabbyRush collaborative task assignees standalone runtime smoke against disposable Hub"
+    mainClass.set("dev.tabbyrush.desktop.TaskAssigneesRuntimeSmoke")
+    classpath = sourceSets["test"].runtimeClasspath
+    dependsOn(tasks.named("testClasses"))
+    if (providers.gradleProperty("isolatedTestConfig").orNull == "true") {
+        systemProperty("tabbyrush.isolatedTestConfig", "true")
+    }
 }
 
 tasks.withType<Test> {
+    if (providers.gradleProperty("isolatedTestConfig").orNull == "true") {
+        systemProperty("tabbyrush.isolatedTestConfig", "true")
+    }
+    // Sanitize host credentials so unit tests run in clean hermetic test sandbox
+    environment("APPROVED_HUB_ORIGIN", "")
+    environment("TABBYRUSH_API_KEY", "")
     testLogging {
         events("passed", "skipped", "failed")
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
 }
 

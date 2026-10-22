@@ -62,7 +62,7 @@ class AccountLeaveProtocol(
                 store.dao.countOutboxByState(OutboxEntity.STATE_DISPATCHING)
         val uncertainCount = store.dao.countOutboxByState(OutboxEntity.STATE_UNCERTAIN)
         val conflictCount = store.dao.countOutboxByState(OutboxEntity.STATE_CONFLICT)
-        val unknownSupersededCount = store.dao.countOutboxByState(OutboxEntity.STATE_UNKNOWN_SUPERSEDED)
+        val unknownSupersededCount = store.dao.countOutboxByState(OutboxEntity.STATE_REVIEW)
 
         return LeaveReviewCounts(
             draftCount = draftCount,

@@ -1,30 +1,30 @@
 # Hub Authentication & Protected Session Acceptance Criteria
 
-Date: 2026-10-14  
-Status: Active  
-Phase: Phase 04 Auth & Protected Session  
-Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-04-auth-session.md`  
+Date: 2026-10-20  
+Status: Current auth-session acceptance criteria; Phase 04 evidence is historical and does not establish connected-device acceptance.
+Phase reference: Historical Phase 04 Auth & Protected Session
+Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse/phase-04-auth-session.md`
 
 ---
 
 ## 1. Scope & Verification Strategy
 
-This document establishes the acceptance criteria for Phase 04 Hub Authentication & Protected Session. Acceptance separates:
-1. **Deterministic Unit/Mock Test Suite**: Executed against controlled transport mock engines, validating DTO serialization, allowlisted routing, headers, single-flight refresh concurrency, generation fencing, and safe error classifications.
-2. **Android Keystore Instrumented Acceptance**: Executed on real Android devices or emulators during Phase 07, proving hardware-backed key generation, AES-256-GCM encryption with fresh nonces, AAD binding, and corrupt/tampered file handling.
-3. **Live Server Integration Acceptance**: Executed against live Glean Hub instance during Phase 07/08, proving real login, register, token refresh rotation, access requests, admin approvals, and network recovery.
+This document specifies authentication and protected-session acceptance criteria. It separates:
+1. **Deterministic Unit/Mock Tests**: Validate DTO serialization, allowlisted routing, headers, single-flight refresh concurrency, generation fencing, and safe error classifications.
+2. **Android Keystore Instrumented Acceptance**: Device or emulator runs must establish platform-backed key custody, encryption behavior, and corrupt/tampered-file handling. Source/unit tests alone are insufficient.
+3. **Hub Integration Acceptance**: A disposable or explicitly authorized Hub target must establish registration, login, token refresh, access requests, and network recovery. No production target is authorized by this document.
 
 ---
 
 ## 2. Test Cases & Verification Matrix
 
 ### 2.1 Route Policy & Header Verification
-- `AUTH_ACCEPT_01`: Public routes (`/auth/register`, `/auth/login`, `/auth/refresh`) omit Authorization, X-API-Key, and X-App-Id headers.
-- `AUTH_ACCEPT_02`: Bearer routes (`/auth/me`, `/apps/access-requests*`) send `Authorization: Bearer <token>`, omit X-API-Key/X-App-Id.
-- `AUTH_ACCEPT_03`: Strict routes (`/sync/{appId}/strong/*`) send Bearer + X-API-Key + X-App-Id headers.
-- `AUTH_ACCEPT_04`: Legacy sync routes (`/api/v1/sync/:app_id`) and non-allowlisted paths return local `SafeError.ProtocolIncompatible`.
-- `AUTH_ACCEPT_05`: Strict origin validation rejects mismatched hosts, schemas, and query/fragment parameters.
-- `AUTH_ACCEPT_06`: Redirects are strictly disabled (`followRedirects = false`).
+- `AUTH_ACCEPT_01`: Public auth routes (`POST /api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/refresh`) omit Authorization, X-API-Key, and X-App-Id headers.
+- `AUTH_ACCEPT_02`: Bearer routes (`GET /api/v1/auth/me`, `/api/v1/apps/access-requests*`) send `Authorization: Bearer <token>` and omit X-API-Key/X-App-Id.
+- `AUTH_ACCEPT_03`: Standard sync routes (`/api/v1/sync/{app_id}/{push,pull,delta}`) send Bearer + X-API-Key + X-App-Id headers.
+- `AUTH_ACCEPT_04`: Requests outside the current allowlist, including obsolete strict sync routes, fail closed with local `SafeError.ProtocolIncompatible`.
+- `AUTH_ACCEPT_05`: Canonical origin validation rejects mismatched hosts/schemes and query/fragment parameters.
+- `AUTH_ACCEPT_06`: Redirects are disabled (`followRedirects = false`).
 
 ### 2.2 HubAuthClient & Session Transitions
 - `AUTH_ACCEPT_07`: Registration normalizes email (trim + lowercase), validates byte lengths, and preserves raw transient password.
@@ -37,7 +37,7 @@ This document establishes the acceptance criteria for Phase 04 Hub Authenticatio
 - `AUTH_ACCEPT_12`: Multiple concurrent requests trigger exactly ONE network refresh call; all waiters receive successor bundle.
 - `AUTH_ACCEPT_13`: Refresh failure returns `SafeError.Unauthorized` and transitions session to `AuthState.REAUTH_REQUIRED`.
 - `AUTH_ACCEPT_14`: Session quiescence or logout increments generation counter; in-flight refresh completions with stale generation are discarded without vault write.
-- `AUTH_ACCEPT_15`: Successful refresh does NOT automatically replay strict POST requests; coordinator receives `TOKEN_REFRESHED` to manage idempotent frozen replay.
+- `AUTH_ACCEPT_15`: Successful refresh does not automatically replay mutating POST requests; the coordinator explicitly manages retry/reconciliation.
 - `AUTH_ACCEPT_16`: Local logout deletes vault bundle and resets session to `AuthState.UNAUTHENTICATED`.
 
 ### 2.4 Android Keystore Vault
@@ -51,10 +51,12 @@ This document establishes the acceptance criteria for Phase 04 Hub Authenticatio
 
 ## 3. Acceptance Status
 
-| Test Suite | Location | Target | Gate |
+| Validation suite | Recorded location | Target | Phase provenance |
 |---|---|---|---|
-| Hub Auth Client Test | `dev.tabbyrush.shared.auth.HubAuthClientTest` | Common JVM / Mock | Phase 04 |
-| Single-Flight Refresh Test | `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Common JVM / Mock | Phase 04 |
-| Hub Auth Session Test | `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Common JVM / Mock | Phase 04 |
-| Android Keystore Test | `dev.tabbyrush.shared.auth.AndroidKeystoreVaultTest` | Android Instrumented | Phase 07 |
-| Live Hub Sync Integration | `scripts/hub-compatibility-smoke.mjs` | Node / Glean Hub | Phase 07/08 |
+| Hub Auth Client Test | `dev.tabbyrush.shared.auth.HubAuthClientTest` | Common JVM / Mock | Historical Phase 04 |
+| Single-Flight Refresh Test | `dev.tabbyrush.shared.auth.SingleFlightRefreshTest` | Common JVM / Mock | Historical Phase 04 |
+| Hub Auth Session Test | `dev.tabbyrush.shared.auth.HubAuthSessionTest` | Common JVM / Mock | Historical Phase 04 |
+| Android Keystore Test | `dev.tabbyrush.shared.auth.AndroidKeystoreVaultTest` | Android Instrumented | Historical Phase 07 |
+| Hub compatibility smoke | Former `scripts/hub-compatibility-smoke.mjs` reference is obsolete; the script is absent | Node / Glean Hub | Historical Phase 07/08 reference; not a current check |
+>
+> Parent reports a separate standalone Windows runtime smoke through strict Gradle JavaExec using real HTTP auth against disposable loopback services. This does not establish interactive UI or connected-Android acceptance. Native acceptance is not passed; production migration is unauthorized.

@@ -3,6 +3,15 @@ package dev.tabbyrush.shared.data
 import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
+import androidx.sqlite.use
+import androidx.sqlite.SQLITE_DATA_INTEGER
+import androidx.sqlite.SQLITE_DATA_FLOAT
+import androidx.sqlite.SQLITE_DATA_TEXT
+import androidx.sqlite.SQLITE_DATA_BLOB
+import androidx.sqlite.SQLITE_DATA_NULL
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Explicit migrations catalog for TabbyRushDatabase.
@@ -143,9 +152,490 @@ object DatabaseMigrations {
             )
         }
     }
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(connection: SQLiteConnection) {
+            connection.execSQL("ALTER TABLE `server_base` ADD COLUMN `parentTaskId` TEXT DEFAULT NULL")
+            connection.execSQL("ALTER TABLE `editor_drafts` ADD COLUMN `parentTaskId` TEXT DEFAULT NULL")
+            connection.execSQL("ALTER TABLE `scan_staging` ADD COLUMN `parentTaskId` TEXT DEFAULT NULL")
+            connection.execSQL("ALTER TABLE `outbox` ADD COLUMN `parentTaskId` TEXT DEFAULT NULL")
+        }
+    }
+
+    /** Room wraps this migration in its upgrade transaction. No SQLite JSON extension required. */
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(connection: SQLiteConnection) {
+            connection.execSQL("CREATE TABLE `legacy_sync_evidence` (`sourceOpId` TEXT NOT NULL, `rowId` TEXT NOT NULL, `originalJson` TEXT NOT NULL, `outcome` TEXT NOT NULL, `translatedOpId` TEXT, PRIMARY KEY(`sourceOpId`))")
+            val columns = columns(connection, "outbox")
+            connection.prepare("SELECT * FROM `outbox`").use { rows ->
+                connection.prepare("INSERT INTO `legacy_sync_evidence` VALUES (?, ?, ?, 'PENDING_REVIEW', NULL)").use { insert ->
+                    while (rows.step()) {
+                        val values = columns.mapIndexed { index, column ->
+                            column.name to when (rows.getColumnType(index)) {
+                                SQLITE_DATA_NULL -> JsonNull
+                                SQLITE_DATA_INTEGER -> JsonPrimitive(rows.getLong(index))
+                                SQLITE_DATA_TEXT -> JsonPrimitive(rows.getText(index))
+                                SQLITE_DATA_FLOAT -> JsonObject(mapOf("sqliteFloatBits" to JsonPrimitive(rows.getDouble(index).toBits())))
+                                SQLITE_DATA_BLOB -> JsonObject(mapOf("sqliteBlobHex" to JsonPrimitive(rows.getBlob(index).joinToString("") {
+                                    (it.toInt() and 255).toString(16).padStart(2, '0')
+                                })))
+                                else -> error("Unsupported SQLite storage type; migration cancelled without discarding evidence")
+                            }
+                        }.toMap()
+                        insert.bindText(1, rows.getText(columns.indexOfFirst { it.name == "opId" }))
+                        insert.bindText(2, rows.getText(columns.indexOfFirst { it.name == "rowId" }))
+                        insert.bindText(3, JsonObject(values).toString())
+                        insert.step()
+                        insert.reset()
+                    }
+                }
+            }
+            rebuild(connection, "server_base", setOf("epoch"), listOf(
+                AddedColumn("rawJson", "TEXT", "NULL"), AddedColumn("syncedAt", "TEXT", "NULL"),
+                AddedColumn("standardConfirmed", "INTEGER NOT NULL", "0"), AddedColumn("projectionError", "TEXT", "NULL")
+            ))
+            rebuild(connection, "scan_staging", setOf("epoch"), listOf(
+                AddedColumn("rawJson", "TEXT", "NULL"), AddedColumn("syncedAt", "TEXT", "NULL"),
+                AddedColumn("scanGeneration", "INTEGER NOT NULL", "0"), AddedColumn("projectionError", "TEXT", "NULL")
+            ))
+            rebuild(connection, "account_sync_meta", setOf("activeEpoch"), listOf(
+                AddedColumn("hubSchemaVersion", "INTEGER", "NULL"),
+                AddedColumn("checkpointUpdatedAt", "TEXT", "NULL"), AddedColumn("checkpointId", "TEXT", "NULL"),
+                AddedColumn("scanGeneration", "INTEGER NOT NULL", "0"), AddedColumn("scanState", "TEXT NOT NULL", "'REQUIRED'"),
+                AddedColumn("scanCheckpointUpdatedAt", "TEXT", "NULL"), AddedColumn("scanCheckpointId", "TEXT", "NULL"),
+                AddedColumn("lastCompletedCatchUpEpochMs", "INTEGER", "NULL")
+            ))
+            rebuild(connection, "outbox", setOf("epoch", "digest", "expectedRevision", "contractVersion", "transitionCheckpoint", "dispatchHistory"), listOf(
+                AddedColumn("dispatchHistory", "TEXT NOT NULL", "'LEGACY_EVIDENCE'"),
+                AddedColumn("payloadJson", "TEXT NOT NULL", "'{}'"), AddedColumn("envelopeJson", "TEXT", "NULL"),
+                AddedColumn("version", "INTEGER", "NULL"), AddedColumn("assumedServerVersion", "INTEGER", "NULL"),
+                AddedColumn("legacyEvidenceId", "TEXT", "`opId`"), AddedColumn("resolution", "TEXT", "NULL")
+            ), mapOf("deliveryState" to "'REVIEW'"))
+            connection.execSQL("CREATE UNIQUE INDEX `index_outbox_legacyEvidenceId` ON `outbox` (`legacyEvidenceId`)")
+        }
+    }
+
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(connection: SQLiteConnection) {
+            // 1. New tables
+            connection.execSQL(
+                "CREATE TABLE IF NOT EXISTS `task_access` (" +
+                    "`ownerUserId` TEXT NOT NULL, " +
+                    "`tableName` TEXT NOT NULL, " +
+                    "`rowId` TEXT NOT NULL, " +
+                    "`revision` INTEGER NOT NULL, " +
+                    "`status` TEXT NOT NULL, " +
+                    "`editContent` INTEGER NOT NULL, " +
+                    "`manageAssignment` INTEGER NOT NULL, " +
+                    "`deleteTask` INTEGER NOT NULL, " +
+                    "`createChild` INTEGER NOT NULL, " +
+                    "`hierarchyCoverage` TEXT NOT NULL, " +
+                    "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`ownerUserId`, `tableName`, `rowId`)" +
+                ")"
+            )
+            connection.execSQL(
+                "CREATE TABLE IF NOT EXISTS `access_check_staging` (" +
+                    "`scanGeneration` INTEGER NOT NULL, " +
+                    "`ownerUserId` TEXT NOT NULL, " +
+                    "`tableName` TEXT NOT NULL, " +
+                    "`rowId` TEXT NOT NULL, " +
+                    "`revision` INTEGER NOT NULL, " +
+                    "`status` TEXT NOT NULL, " +
+                    "`editContent` INTEGER NOT NULL, " +
+                    "`manageAssignment` INTEGER NOT NULL, " +
+                    "`deleteTask` INTEGER NOT NULL, " +
+                    "`createChild` INTEGER NOT NULL, " +
+                    "`hierarchyCoverage` TEXT NOT NULL, " +
+                    "PRIMARY KEY(`scanGeneration`, `ownerUserId`, `tableName`, `rowId`)" +
+                ")"
+            )
+            connection.execSQL(
+                "CREATE TABLE IF NOT EXISTS `access_loss_evidence` (" +
+                    "`evidenceId` TEXT NOT NULL, " +
+                    "`ownerUserId` TEXT NOT NULL, " +
+                    "`tableName` TEXT NOT NULL, " +
+                    "`rowId` TEXT NOT NULL, " +
+                    "`opId` TEXT, " +
+                    "`baseVersion` INTEGER, " +
+                    "`submittedVersion` INTEGER, " +
+                    "`timestamp` INTEGER NOT NULL, " +
+                    "`reason` TEXT NOT NULL, " +
+                    "PRIMARY KEY(`evidenceId`)" +
+                ")"
+            )
+            connection.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_access_loss_evidence_ownerUserId_tableName_rowId` " +
+                    "ON `access_loss_evidence` (`ownerUserId`, `tableName`, `rowId`)"
+            )
+
+            // 2. Rebuild server_base
+            connection.execSQL(
+                "CREATE TABLE `server_base_v5` (" +
+                    "`bindingKey` TEXT NOT NULL, " +
+                    "`ownerBinding` TEXT NOT NULL, " +
+                    "`ownerUserId` TEXT, " +
+                    "`tableName` TEXT NOT NULL, " +
+                    "`rowId` TEXT NOT NULL, " +
+                    "`serverRevision` INTEGER NOT NULL, " +
+                    "`deleted` INTEGER NOT NULL, " +
+                    "`title` TEXT NOT NULL, " +
+                    "`completed` INTEGER NOT NULL, " +
+                    "`createdAt` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, " +
+                    "`deadlineDate` TEXT, " +
+                    "`deadlineTime` TEXT, " +
+                    "`deadlineZone` TEXT, " +
+                    "`deadlineOffsetSeconds` INTEGER, " +
+                    "`reminderAnchorTime` TEXT, " +
+                    "`deadlineAnchorEpochMs` INTEGER, " +
+                    "`deadlineOverdueEpochMs` INTEGER, " +
+                    "`reminderEnabled` INTEGER NOT NULL, " +
+                    "`reminderLeadMinutes` INTEGER NOT NULL, " +
+                    "`reminderIntervalMinutes` INTEGER, " +
+                    "`reminderCount` INTEGER NOT NULL, " +
+                    "`scheduleToken` TEXT, " +
+                    "`parentTaskId` TEXT, " +
+                    "`rawJson` TEXT, " +
+                    "`syncedAt` TEXT, " +
+                    "`standardConfirmed` INTEGER NOT NULL, " +
+                    "`projectionError` TEXT, " +
+                    "PRIMARY KEY(`bindingKey`, `tableName`, `rowId`)" +
+                ")"
+            )
+            connection.execSQL(
+                "INSERT INTO `server_base_v5` (" +
+                    "`bindingKey`, `ownerBinding`, `ownerUserId`, `tableName`, `rowId`, " +
+                    "`serverRevision`, `deleted`, `title`, `completed`, `createdAt`, `updatedAt`, " +
+                    "`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, " +
+                    "`reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, " +
+                    "`reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, " +
+                    "`scheduleToken`, `parentTaskId`, `rawJson`, `syncedAt`, `standardConfirmed`, `projectionError`" +
+                ") SELECT " +
+                    "'LOCAL_ACCOUNT', 'LOCAL_ACCOUNT', NULL, 'todos', `rowId`, " +
+                    "`serverRevision`, `deleted`, `title`, `completed`, `createdAt`, `updatedAt`, " +
+                    "`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, " +
+                    "`reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, " +
+                    "`reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, " +
+                    "`scheduleToken`, `parentTaskId`, `rawJson`, `syncedAt`, `standardConfirmed`, `projectionError` " +
+                "FROM `server_base`"
+            )
+            connection.execSQL("DROP TABLE `server_base`")
+            connection.execSQL("ALTER TABLE `server_base_v5` RENAME TO `server_base`")
+
+            // 3. Rebuild outbox
+            connection.execSQL(
+                "CREATE TABLE `outbox_v5` (" +
+                    "`opId` TEXT NOT NULL, " +
+                    "`bindingKey` TEXT NOT NULL, " +
+                    "`ownerBinding` TEXT NOT NULL, " +
+                    "`ownerUserId` TEXT, " +
+                    "`tableName` TEXT NOT NULL, " +
+                    "`rowId` TEXT NOT NULL, " +
+                    "`kind` TEXT NOT NULL, " +
+                    "`title` TEXT, " +
+                    "`completed` INTEGER, " +
+                    "`createdAt` INTEGER, " +
+                    "`localRevision` INTEGER NOT NULL, " +
+                    "`deliveryState` TEXT NOT NULL, " +
+                    "`createdAtEpochMs` INTEGER NOT NULL, " +
+                    "`errorMessage` TEXT, " +
+                    "`consecutiveFailures` INTEGER NOT NULL, " +
+                    "`deadlineDate` TEXT, " +
+                    "`deadlineTime` TEXT, " +
+                    "`deadlineZone` TEXT, " +
+                    "`deadlineOffsetSeconds` INTEGER, " +
+                    "`reminderAnchorTime` TEXT, " +
+                    "`deadlineAnchorEpochMs` INTEGER, " +
+                    "`deadlineOverdueEpochMs` INTEGER, " +
+                    "`reminderEnabled` INTEGER NOT NULL, " +
+                    "`reminderLeadMinutes` INTEGER NOT NULL, " +
+                    "`reminderIntervalMinutes` INTEGER, " +
+                    "`reminderCount` INTEGER NOT NULL, " +
+                    "`scheduleToken` TEXT, " +
+                    "`dispatchHistory` TEXT NOT NULL, " +
+                    "`intentMask` TEXT, " +
+                    "`parentTaskId` TEXT, " +
+                    "`payloadJson` TEXT NOT NULL, " +
+                    "`envelopeJson` TEXT, " +
+                    "`version` INTEGER, " +
+                    "`assumedServerVersion` INTEGER, " +
+                    "`legacyEvidenceId` TEXT, " +
+                    "`resolution` TEXT, " +
+                    "PRIMARY KEY(`opId`)" +
+                ")"
+            )
+            connection.execSQL(
+                "INSERT INTO `outbox_v5` (" +
+                    "`opId`, `bindingKey`, `ownerBinding`, `ownerUserId`, `tableName`, `rowId`, `kind`, " +
+                    "`title`, `completed`, `createdAt`, `localRevision`, `deliveryState`, `createdAtEpochMs`, " +
+                    "`errorMessage`, `consecutiveFailures`, `deadlineDate`, `deadlineTime`, `deadlineZone`, " +
+                    "`deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, " +
+                    "`reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, " +
+                    "`scheduleToken`, `dispatchHistory`, `intentMask`, `parentTaskId`, `payloadJson`, `envelopeJson`, " +
+                    "`version`, `assumedServerVersion`, `legacyEvidenceId`, `resolution`" +
+                ") SELECT " +
+                    "`opId`, 'LOCAL_ACCOUNT', 'LOCAL_ACCOUNT', NULL, `tableName`, `rowId`, `kind`, " +
+                    "`title`, `completed`, `createdAt`, `localRevision`, `deliveryState`, `createdAtEpochMs`, " +
+                    "`errorMessage`, `consecutiveFailures`, `deadlineDate`, `deadlineTime`, `deadlineZone`, " +
+                    "`deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, " +
+                    "`reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, " +
+                    "`scheduleToken`, `dispatchHistory`, `intentMask`, `parentTaskId`, `payloadJson`, `envelopeJson`, " +
+                    "`version`, `assumedServerVersion`, `legacyEvidenceId`, `resolution` " +
+                "FROM `outbox`"
+            )
+            connection.execSQL("DROP TABLE `outbox`")
+            connection.execSQL("ALTER TABLE `outbox_v5` RENAME TO `outbox`")
+            connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_outbox_legacyEvidenceId` ON `outbox` (`legacyEvidenceId`)")
+            connection.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_bindingKey_tableName_rowId` ON `outbox` (`bindingKey`, `tableName`, `rowId`)")
+
+            // 4. Rebuild editor_drafts
+            connection.execSQL(
+                "CREATE TABLE `editor_drafts_v5` (" +
+                    "`bindingKey` TEXT NOT NULL, " +
+                    "`ownerBinding` TEXT NOT NULL, " +
+                    "`ownerUserId` TEXT, " +
+                    "`tableName` TEXT NOT NULL, " +
+                    "`rowId` TEXT NOT NULL, " +
+                    "`draftTitle` TEXT NOT NULL, " +
+                    "`draftCompleted` INTEGER NOT NULL, " +
+                    "`localRevision` INTEGER NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, " +
+                    "`isDeleted` INTEGER NOT NULL, " +
+                    "`deadlineDate` TEXT, " +
+                    "`deadlineTime` TEXT, " +
+                    "`deadlineZone` TEXT, " +
+                    "`deadlineOffsetSeconds` INTEGER, " +
+                    "`reminderAnchorTime` TEXT, " +
+                    "`deadlineAnchorEpochMs` INTEGER, " +
+                    "`deadlineOverdueEpochMs` INTEGER, " +
+                    "`reminderEnabled` INTEGER NOT NULL, " +
+                    "`reminderLeadMinutes` INTEGER NOT NULL, " +
+                    "`reminderIntervalMinutes` INTEGER, " +
+                    "`reminderCount` INTEGER NOT NULL, " +
+                    "`scheduleToken` TEXT, " +
+                    "`parentTaskId` TEXT, " +
+                    "PRIMARY KEY(`bindingKey`, `tableName`, `rowId`)" +
+                ")"
+            )
+            connection.execSQL(
+                "INSERT INTO `editor_drafts_v5` (" +
+                    "`bindingKey`, `ownerBinding`, `ownerUserId`, `tableName`, `rowId`, `draftTitle`, " +
+                    "`draftCompleted`, `localRevision`, `updatedAt`, `isDeleted`, `deadlineDate`, `deadlineTime`, " +
+                    "`deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, " +
+                    "`deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, " +
+                    "`reminderCount`, `scheduleToken`, `parentTaskId`" +
+                ") SELECT " +
+                    "'LOCAL_ACCOUNT', 'LOCAL_ACCOUNT', NULL, 'todos', `rowId`, `draftTitle`, " +
+                    "`draftCompleted`, `localRevision`, `updatedAt`, `isDeleted`, `deadlineDate`, `deadlineTime`, " +
+                    "`deadlineZone`, `deadlineOffsetSeconds`, `reminderAnchorTime`, `deadlineAnchorEpochMs`, " +
+                    "`deadlineOverdueEpochMs`, `reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, " +
+                    "`reminderCount`, `scheduleToken`, `parentTaskId` " +
+                "FROM `editor_drafts`"
+            )
+            connection.execSQL("DROP TABLE `editor_drafts`")
+            connection.execSQL("ALTER TABLE `editor_drafts_v5` RENAME TO `editor_drafts`")
+
+            // 5. Rebuild scan_staging
+            connection.execSQL(
+                "CREATE TABLE `scan_staging_v5` (" +
+                    "`bindingKey` TEXT NOT NULL, " +
+                    "`ownerBinding` TEXT NOT NULL, " +
+                    "`ownerUserId` TEXT, " +
+                    "`tableName` TEXT NOT NULL, " +
+                    "`rowId` TEXT NOT NULL, " +
+                    "`serverRevision` INTEGER NOT NULL, " +
+                    "`deleted` INTEGER NOT NULL, " +
+                    "`title` TEXT NOT NULL, " +
+                    "`completed` INTEGER NOT NULL, " +
+                    "`createdAt` INTEGER NOT NULL, " +
+                    "`deadlineDate` TEXT, " +
+                    "`deadlineTime` TEXT, " +
+                    "`deadlineZone` TEXT, " +
+                    "`deadlineOffsetSeconds` INTEGER, " +
+                    "`reminderAnchorTime` TEXT, " +
+                    "`deadlineAnchorEpochMs` INTEGER, " +
+                    "`deadlineOverdueEpochMs` INTEGER, " +
+                    "`reminderEnabled` INTEGER NOT NULL, " +
+                    "`reminderLeadMinutes` INTEGER NOT NULL, " +
+                    "`reminderIntervalMinutes` INTEGER, " +
+                    "`reminderCount` INTEGER NOT NULL, " +
+                    "`scheduleToken` TEXT, " +
+                    "`parentTaskId` TEXT, " +
+                    "`rawJson` TEXT, " +
+                    "`syncedAt` TEXT, " +
+                    "`scanGeneration` INTEGER NOT NULL, " +
+                    "`projectionError` TEXT, " +
+                    "PRIMARY KEY(`bindingKey`, `tableName`, `rowId`)" +
+                ")"
+            )
+            connection.execSQL(
+                "INSERT INTO `scan_staging_v5` (" +
+                    "`bindingKey`, `ownerBinding`, `ownerUserId`, `tableName`, `rowId`, " +
+                    "`serverRevision`, `deleted`, `title`, `completed`, `createdAt`, " +
+                    "`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, " +
+                    "`reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, " +
+                    "`reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, " +
+                    "`scheduleToken`, `parentTaskId`, `rawJson`, `syncedAt`, `scanGeneration`, `projectionError`" +
+                ") SELECT " +
+                    "'LOCAL_ACCOUNT', 'LOCAL_ACCOUNT', NULL, `tableName`, `rowId`, " +
+                    "`serverRevision`, `deleted`, `title`, `completed`, `createdAt`, " +
+                    "`deadlineDate`, `deadlineTime`, `deadlineZone`, `deadlineOffsetSeconds`, " +
+                    "`reminderAnchorTime`, `deadlineAnchorEpochMs`, `deadlineOverdueEpochMs`, " +
+                    "`reminderEnabled`, `reminderLeadMinutes`, `reminderIntervalMinutes`, `reminderCount`, " +
+                    "`scheduleToken`, `parentTaskId`, `rawJson`, `syncedAt`, `scanGeneration`, `projectionError` " +
+                "FROM `scan_staging`"
+            )
+            connection.execSQL("DROP TABLE `scan_staging`")
+            connection.execSQL("ALTER TABLE `scan_staging_v5` RENAME TO `scan_staging`")
+
+            // 6. Rebuild reminder_delivery_ledger
+            connection.execSQL(
+                "CREATE TABLE `reminder_delivery_ledger_v5` (" +
+                    "`accountKey` TEXT NOT NULL, " +
+                    "`generation` INTEGER NOT NULL, " +
+                    "`bindingKey` TEXT NOT NULL, " +
+                    "`ownerBinding` TEXT NOT NULL, " +
+                    "`ownerUserId` TEXT, " +
+                    "`tableName` TEXT NOT NULL, " +
+                    "`taskId` TEXT NOT NULL, " +
+                    "`scheduleToken` TEXT NOT NULL, " +
+                    "`occurrenceIndex` INTEGER NOT NULL, " +
+                    "`dueEpochMs` INTEGER NOT NULL, " +
+                    "`claimOutcome` TEXT NOT NULL, " +
+                    "`claimedAtEpochMs` INTEGER, " +
+                    "`postedPlatformId` TEXT, " +
+                    "`cancellationState` TEXT NOT NULL, " +
+                    "`updatedAtEpochMs` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`accountKey`, `generation`, `bindingKey`, `tableName`, `taskId`, `scheduleToken`, `occurrenceIndex`)" +
+                ")"
+            )
+            connection.execSQL(
+                "INSERT INTO `reminder_delivery_ledger_v5` (" +
+                    "`accountKey`, `generation`, `bindingKey`, `ownerBinding`, `ownerUserId`, `tableName`, " +
+                    "`taskId`, `scheduleToken`, `occurrenceIndex`, `dueEpochMs`, `claimOutcome`, " +
+                    "`claimedAtEpochMs`, `postedPlatformId`, `cancellationState`, `updatedAtEpochMs`" +
+                ") SELECT " +
+                    "`accountKey`, `generation`, 'LOCAL_ACCOUNT', 'LOCAL_ACCOUNT', NULL, 'todos', " +
+                    "`taskId`, `scheduleToken`, `occurrenceIndex`, `dueEpochMs`, `claimOutcome`, " +
+                    "`claimedAtEpochMs`, `postedPlatformId`, `cancellationState`, `updatedAtEpochMs` " +
+                "FROM `reminder_delivery_ledger`"
+            )
+            connection.execSQL("DROP TABLE `reminder_delivery_ledger`")
+            connection.execSQL("ALTER TABLE `reminder_delivery_ledger_v5` RENAME TO `reminder_delivery_ledger`")
+            connection.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_reminder_delivery_ledger_accountKey_generation_bindingKey_tableName_taskId` " +
+                    "ON `reminder_delivery_ledger` (`accountKey`, `generation`, `bindingKey`, `tableName`, `taskId`)"
+            )
+            connection.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_reminder_delivery_ledger_dueEpochMs` " +
+                    "ON `reminder_delivery_ledger` (`dueEpochMs`)"
+            )
+
+            // 7. Rebuild legacy_sync_evidence
+            connection.execSQL(
+                "CREATE TABLE `legacy_sync_evidence_v5` (" +
+                    "`sourceOpId` TEXT NOT NULL, " +
+                    "`bindingKey` TEXT NOT NULL, " +
+                    "`ownerBinding` TEXT NOT NULL, " +
+                    "`ownerUserId` TEXT, " +
+                    "`tableName` TEXT NOT NULL, " +
+                    "`rowId` TEXT NOT NULL, " +
+                    "`originalJson` TEXT NOT NULL, " +
+                    "`outcome` TEXT NOT NULL, " +
+                    "`translatedOpId` TEXT, " +
+                    "PRIMARY KEY(`sourceOpId`)" +
+                ")"
+            )
+            connection.execSQL(
+                "INSERT INTO `legacy_sync_evidence_v5` (" +
+                    "`sourceOpId`, `bindingKey`, `ownerBinding`, `ownerUserId`, `tableName`, `rowId`, " +
+                    "`originalJson`, `outcome`, `translatedOpId`" +
+                ") SELECT " +
+                    "`sourceOpId`, 'LOCAL_ACCOUNT', 'LOCAL_ACCOUNT', NULL, 'todos', `rowId`, " +
+                    "`originalJson`, `outcome`, `translatedOpId` " +
+                "FROM `legacy_sync_evidence`"
+            )
+            connection.execSQL("DROP TABLE `legacy_sync_evidence`")
+            connection.execSQL("ALTER TABLE `legacy_sync_evidence_v5` RENAME TO `legacy_sync_evidence`")
+
+            // 8. Rebuild account_sync_meta
+            connection.execSQL(
+                "CREATE TABLE `account_sync_meta_v5` (" +
+                    "`id` TEXT NOT NULL, " +
+                    "`lastSyncTime` INTEGER, " +
+                    "`localRevisionCounter` INTEGER NOT NULL, " +
+                    "`syncStatus` TEXT NOT NULL, " +
+                    "`safeErrorCode` TEXT, " +
+                    "`safeErrorMessage` TEXT, " +
+                    "`consecutiveFailedRounds` INTEGER NOT NULL, " +
+                    "`credentialPersistencePending` INTEGER NOT NULL, " +
+                    "`hubSchemaVersion` INTEGER, " +
+                    "`checkpointUpdatedAt` TEXT, " +
+                    "`checkpointId` TEXT, " +
+                    "`scanGeneration` INTEGER NOT NULL, " +
+                    "`scanState` TEXT NOT NULL, " +
+                    "`scanCheckpointUpdatedAt` TEXT, " +
+                    "`scanCheckpointId` TEXT, " +
+                    "`lastCompletedCatchUpEpochMs` INTEGER, " +
+                    "`accessGeneration` INTEGER NOT NULL, " +
+                    "`ownerBindingState` TEXT NOT NULL, " +
+                    "`boundOwnerUserId` TEXT, " +
+                    "`accessRevision` INTEGER, " +
+                    "PRIMARY KEY(`id`)" +
+                ")"
+            )
+            connection.execSQL(
+                "INSERT INTO `account_sync_meta_v5` (" +
+                    "`id`, `lastSyncTime`, `localRevisionCounter`, `syncStatus`, `safeErrorCode`, " +
+                    "`safeErrorMessage`, `consecutiveFailedRounds`, `credentialPersistencePending`, " +
+                    "`hubSchemaVersion`, `checkpointUpdatedAt`, `checkpointId`, `scanGeneration`, " +
+                    "`scanState`, `scanCheckpointUpdatedAt`, `scanCheckpointId`, `lastCompletedCatchUpEpochMs`, " +
+                    "`accessGeneration`, `ownerBindingState`, `boundOwnerUserId`, `accessRevision`" +
+                ") SELECT " +
+                    "`id`, `lastSyncTime`, `localRevisionCounter`, `syncStatus`, `safeErrorCode`, " +
+                    "`safeErrorMessage`, `consecutiveFailedRounds`, `credentialPersistencePending`, " +
+                    "`hubSchemaVersion`, `checkpointUpdatedAt`, `checkpointId`, `scanGeneration`, " +
+                    "`scanState`, `scanCheckpointUpdatedAt`, `scanCheckpointId`, `lastCompletedCatchUpEpochMs`, " +
+                    "0, 'UNRESOLVED_LOCAL', NULL, NULL " +
+                "FROM `account_sync_meta`"
+            )
+            connection.execSQL("DROP TABLE `account_sync_meta`")
+            connection.execSQL("ALTER TABLE `account_sync_meta_v5` RENAME TO `account_sync_meta`")
+        }
+    }
+
+    private data class Column(val name: String, val type: String, val notNull: Boolean, val primaryKey: Int)
+    private data class AddedColumn(val name: String, val declaration: String, val initial: String)
+
+    private fun columns(connection: SQLiteConnection, table: String): List<Column> {
+        val result = mutableListOf<Column>()
+        connection.prepare("PRAGMA table_info(`$table`)").use { statement ->
+            while (statement.step()) result.add(Column(statement.getText(1), statement.getText(2), statement.getLong(3) != 0L, statement.getLong(5).toInt()))
+        }
+        return result
+    }
+
+    private fun rebuild(
+        connection: SQLiteConnection,
+        table: String,
+        removed: Set<String>,
+        added: List<AddedColumn>,
+        overrides: Map<String, String> = emptyMap()
+    ) {
+        val retained = columns(connection, table).filter { it.name !in removed }
+        val definitions = retained.map { "`${it.name}` ${it.type}${if (it.notNull) " NOT NULL" else ""}" } +
+            added.map { "`${it.name}` ${it.declaration}" } +
+            "PRIMARY KEY(${retained.filter { it.primaryKey > 0 }.sortedBy { it.primaryKey }.joinToString { "`${it.name}`" }})"
+        connection.execSQL("CREATE TABLE `${table}_standard` (${definitions.joinToString()})")
+        val names = retained.map { it.name } + added.map { it.name }
+        val selected = retained.map { overrides[it.name] ?: "`${it.name}`" } + added.map { it.initial }
+        connection.execSQL("INSERT INTO `${table}_standard` (${names.joinToString { "`$it`" }}) SELECT ${selected.joinToString()} FROM `$table`")
+        connection.execSQL("DROP TABLE `$table`")
+        connection.execSQL("ALTER TABLE `${table}_standard` RENAME TO `$table`")
+    }
 
     /**
      * All registered migrations for TabbyRushDatabase.
      */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2)
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 }

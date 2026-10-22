@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.tabbyrush.shared.contract.ConflictState
+import dev.tabbyrush.shared.contract.TaskAccessStatus
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
@@ -65,7 +66,7 @@ fun ConflictReview(
                     modifier = Modifier.semantics { heading() }
                 )
                 Text(
-                    text = "ID: ${conflict.rowId.take(8)}…",
+                    text = "ID: ${conflict.taskRef.ownerUserId}:${conflict.taskRef.rowId.take(8)}…",
                     style = MaterialTheme.typography.labelSmall,
                     color = TabbyRushThemeTokens.customColors.muted
                 )
@@ -74,12 +75,12 @@ fun ConflictReview(
             Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
 
             Text(
-                text = "A change was made on another client while you had pending offline edits. Review both versions and choose how to proceed.",
+                text = "Task rows synchronize independently, so a group cleanup can be partial or conflicted. Local work is retained. Refresh and review before choosing how to proceed.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            if (conflict.isUnknownSuperseded) {
+            if (conflict.requiresDeliveryReview) {
                 Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
                 Card(
                     colors = CardDefaults.cardColors(
@@ -90,7 +91,70 @@ fun ConflictReview(
                         .border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small)
                 ) {
                     Text(
-                        text = "Warning: This operation was in-flight and may have already been accepted on the server before being superseded by another client. Reapplying or copying as new may duplicate prior edits.",
+                        text = "Delivery history cannot establish whether these edits reached the server. Reapplying or copying as new may duplicate earlier edits; nothing is replayed automatically.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
+                    )
+                }
+            }
+
+            if (conflict.isPreservationConflict) {
+                Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = TabbyRushThemeTokens.customColors.mintSurface
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, TabbyRushThemeTokens.customColors.primaryDeep, MaterialTheme.shapes.small)
+                ) {
+                    Text(
+                        text = "Subtask Completion Conflict: This parent task has an automatic completion state derived from subtasks that conflicted with an update on the server. Discarding will clear the local completion barrier and adopt the server version without undoing accepted subtask deletions. Overwriting will push your local completion state to the server.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TabbyRushThemeTokens.customColors.primaryDeep,
+                        modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
+                    )
+                }
+            }
+
+            val isSlotConflict = conflict.localTodo?.accessState != null &&
+                (conflict.localTodo.accessState != conflict.remoteTodo?.accessState)
+            if (isSlotConflict) {
+                Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = TabbyRushThemeTokens.customColors.coralSurface
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small)
+                ) {
+                    Text(
+                        text = "Assignment Conflict: Task capabilities or assignment permissions differ between your device and the server. Discarding will adopt the server's authoritative access state.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
+                    )
+                }
+            }
+
+            if (conflict.isSubtaskConflict) {
+                Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = TabbyRushThemeTokens.customColors.coralSurface
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.small)
+                ) {
+                    Text(
+                        text = if (conflict.isParentDeleted) {
+                            "Orphaned Subtask Notice: The parent task for this subtask was deleted on the server. Because subtasks cannot exist without a live parent, you cannot overwrite the server version. You can keep your work as a new independent root task, or discard these edits."
+                        } else {
+                            "Subtask Outcome Notice: Subtask operations synchronize independently from their parent. Overwriting will apply this subtask version to the server, while discarding will adopt the server version."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
@@ -128,57 +192,61 @@ fun ConflictReview(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(TabbyRushThemeTokens.SpacingSmall)
             ) {
-                // Copy As New: retains local edits as a fresh task UUID
-                Button(
-                    onClick = { onAction(TodoAction.CopyAsNew(conflict.rowId)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text(
-                        text = "Keep Both (Copy Local as New Task)",
-                        style = MaterialTheme.typography.labelLarge
-                    )
+                val remoteIsUnavailable = conflict.remoteTodo?.accessState?.status == TaskAccessStatus.Unavailable
+                val remoteIsDeleted = conflict.remoteTodo == null || conflict.remoteTodo.isDeleted
+                val canReapply = !remoteIsDeleted && !conflict.isParentDeleted && !remoteIsUnavailable
+
+                // Copy As New: retains local edits as a fresh root task UUID, only when access is not revoked
+                if (!remoteIsUnavailable) {
+                    Button(
+                        onClick = { onAction(TodoAction.CopyAsNew(conflict.taskRef)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Text(
+                            text = "Keep Both (Copy Local as New Root Task)",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
                 }
 
-                // Reapply: if remote item is not deleted
-                val remoteIsDeleted = conflict.remoteTodo == null || conflict.remoteTodo.isDeleted
-                if (!remoteIsDeleted) {
+                // Reapply: if remote item is not deleted AND parent is not deleted AND access is not unavailable
+                if (canReapply) {
                     OutlinedButton(
-                        onClick = { onAction(TodoAction.ReapplyConflict(conflict.rowId)) },
+                        onClick = { onAction(TodoAction.ReapplyConflict(conflict.taskRef)) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize),
                         shape = MaterialTheme.shapes.small
                     ) {
                         Text(
-                            text = "Overwrite Server with My Version",
+                            text = "Reapply My Changed Fields",
                             style = MaterialTheme.typography.labelLarge,
                             color = TabbyRushThemeTokens.customColors.primaryDeep
                         )
                     }
                 }
 
-                // Discard: accepts remote server version, drops local edits
+                // Discard: accepts remote server version, drops local edits / clears preservation barrier
                 OutlinedButton(
-                    onClick = { onAction(TodoAction.DiscardConflict(conflict.rowId)) },
+                    onClick = { onAction(TodoAction.DiscardConflict(conflict.taskRef)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize),
                     shape = MaterialTheme.shapes.small
                 ) {
                     Text(
-                        text = "Discard My Edits (Accept Server)",
+                        text = if (conflict.isPreservationConflict) "Discard Local Barrier (Accept Server)" else "Discard My Edits (Accept Server)",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
-
                 // Close / Decide Later
                 OutlinedButton(
                     onClick = { onAction(TodoAction.DismissError) },
@@ -254,6 +322,15 @@ private fun VersionCard(
                     text = "Rev: ${todo.serverRevision}",
                     style = MaterialTheme.typography.bodySmall,
                     color = TabbyRushThemeTokens.customColors.muted
+                )
+            }
+            val access = todo.accessState
+            if (access != null) {
+                Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
+                Text(
+                    text = "Access: ${access.coverage} (${if (access.capabilities.manageAssignment) "Creator" else "Assignee"})",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TabbyRushThemeTokens.customColors.primaryDeep
                 )
             }
 

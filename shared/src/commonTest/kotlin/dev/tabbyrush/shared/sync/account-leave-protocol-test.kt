@@ -126,21 +126,13 @@ class AccountLeaveProtocolTest {
 
         // Insert pending outbox conflict
         store.dao.upsertOutbox(
-            OutboxEntity(
-                opId = "op-c",
-                epoch = "epoch-1",
-                tableName = "todos",
-                rowId = "row-c",
-                kind = "create",
-                expectedRevision = 0L,
-                title = "Conflicted",
-                completed = false,
-                createdAt = 1000L,
-                digest = "d-c",
-                localRevision = 1L,
-                deliveryState = OutboxEntity.STATE_CONFLICT,
-                createdAtEpochMs = 1000L
-            )
+            OutboxEntity(opId = "op-c", tableName = "todos",
+            rowId = "row-c",
+            kind = "create", title = "Conflicted",
+            completed = false,
+            createdAt = 1000L, localRevision = 1L,
+            deliveryState = OutboxEntity.STATE_CONFLICT,
+            createdAtEpochMs = 1000L)
         )
 
         var markerWritten = false

@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -231,15 +232,15 @@ class HubAuthClientTest {
         val engine = TestHttpEngine { request ->
             recordedApiKey = request.headers["X-API-Key"]
             recordedAppId = request.headers["X-App-Id"]
-            Pair(HttpStatusCode.OK, """{"protocol":"strict-v1","appId":"tabby-rush","epoch":"epoch-1","tables":["todos"]}""")
+            Pair(HttpStatusCode.OK, "{}")
         }
 
         val client = HubAuthClient(debugConfig, engine)
 
-        // Strict endpoint receives dual auth headers
+        // Only exact standard sync endpoints receive application credentials.
         val strictResult = client.httpClient.executeRaw(
             method = HttpMethod.Post,
-            path = "/api/v1/sync/tabby-rush/strong/bootstrap",
+            path = "/api/v1/sync/tabby-rush/pull",
             accessToken = "token-abc"
         )
         assertIs<ApiResult.Success<*>>(strictResult)
@@ -264,5 +265,43 @@ class HubAuthClientTest {
         assertFalse(sanitized.contains("<"))
         assertFalse(sanitized.contains(">"))
         assertTrue(sanitized.contains("Bad Gateway"))
+    }
+
+    @Test
+    fun testLookupUserRouteAndHeaders() = runTest {
+        var recordedAuth: String? = null
+        var recordedApiKey: String? = null
+        var recordedAppId: String? = null
+        var requestedPath: String? = null
+
+        val engine = TestHttpEngine { req ->
+            recordedAuth = req.headers[HttpHeaders.Authorization]
+            recordedApiKey = req.headers["X-API-Key"]
+            recordedAppId = req.headers["X-App-Id"]
+            requestedPath = req.url.encodedPathAndQuery
+            Pair(HttpStatusCode.OK, """{"user":{"userId":"usr-bob","username":"bob_the_cat"}}""")
+        }
+
+        val client = HubAuthClient(debugConfig, engine)
+        val result = client.lookupUser("jwt-token-123", "bob_the_cat")
+
+        assertIs<ApiResult.Success<LookupUserResponse>>(result)
+        assertEquals("usr-bob", result.value.user?.userId)
+        assertEquals("bob_the_cat", result.value.user?.username)
+
+        // Verified JWT only: Bearer token present, but NO app API key or app ID headers
+        assertEquals("Bearer jwt-token-123", recordedAuth)
+        assertNull(recordedApiKey)
+        assertNull(recordedAppId)
+        assertEquals("/api/v1/auth/lookup?username=bob_the_cat", requestedPath)
+    }
+
+    @Test
+    fun testLookupUserBlankFailsValidation() = runTest {
+        val client = HubAuthClient(debugConfig)
+        val result = client.lookupUser("token", "   ")
+        assertIs<ApiResult.Failure>(result)
+        assertIs<SafeError.Validation>(result.error)
+        assertEquals("INVALID_USERNAME", result.error.code)
     }
 }

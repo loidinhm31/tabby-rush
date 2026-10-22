@@ -10,9 +10,12 @@ import dev.tabbyrush.android.AndroidNotificationIntentFactory.ACTION_DELIVER_REM
 import dev.tabbyrush.android.AndroidNotificationIntentFactory.EXTRA_ACCOUNT_KEY
 import dev.tabbyrush.android.AndroidNotificationIntentFactory.EXTRA_GENERATION
 import dev.tabbyrush.android.AndroidNotificationIntentFactory.EXTRA_OCCURRENCE_INDEX
+import dev.tabbyrush.android.AndroidNotificationIntentFactory.EXTRA_OWNER_USER_ID
+import dev.tabbyrush.android.AndroidNotificationIntentFactory.EXTRA_ROW_ID
 import dev.tabbyrush.android.AndroidNotificationIntentFactory.EXTRA_SCHEDULE_TOKEN
 import dev.tabbyrush.android.AndroidNotificationIntentFactory.EXTRA_TASK_ID
 import dev.tabbyrush.shared.contract.AccountKey
+import dev.tabbyrush.shared.contract.TaskRef
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -36,16 +39,33 @@ class TabbyRushAlarmReceiver : BroadcastReceiver() {
         // 2. Parse identity extras (no user text in OS intent payload)
         val accountKeyStr = intent.getStringExtra(EXTRA_ACCOUNT_KEY)
         val generation = intent.getLongExtra(EXTRA_GENERATION, -1L)
-        val taskId = intent.getStringExtra(EXTRA_TASK_ID)
+        val ownerUserId = intent.getStringExtra(EXTRA_OWNER_USER_ID)
+        val taskId = intent.getStringExtra(EXTRA_ROW_ID) ?: intent.getStringExtra(EXTRA_TASK_ID)
         val scheduleToken = intent.getStringExtra(EXTRA_SCHEDULE_TOKEN)
         val occurrenceIndex = intent.getLongExtra(EXTRA_OCCURRENCE_INDEX, -1L).toInt()
 
-        if (accountKeyStr.isNullOrBlank() || generation < 0L || taskId.isNullOrBlank() ||
-            scheduleToken.isNullOrBlank() || occurrenceIndex < 0
+        if (accountKeyStr.isNullOrBlank() || generation < 0L || ownerUserId.isNullOrBlank() ||
+            taskId.isNullOrBlank() || scheduleToken.isNullOrBlank() || occurrenceIndex < 0
         ) {
-            Log.w(TAG, "Malformed reminder alarm intent payload; dropped")
+            Log.w(TAG, "Malformed or legacy owner-less reminder alarm intent payload; dropped")
             return
         }
+
+        val dataUri = intent.data
+        if (dataUri != null && dataUri.scheme == "tabbyrush" && dataUri.authority == "alarm") {
+            val segments = dataUri.pathSegments
+            if (segments != null && segments.size >= 6) {
+                val uriAccount = segments[0]
+                val uriGen = segments[1].toLongOrNull()
+                val uriOwner = segments[2]
+                val uriTaskId = segments[3]
+                if (uriAccount != accountKeyStr || uriGen != generation || uriOwner != ownerUserId || uriTaskId != taskId) {
+                    Log.w(TAG, "Data URI and extras mismatch in reminder alarm intent; dropped")
+                    return
+                }
+            }
+        }
+        val taskRef = TaskRef(ownerUserId, taskId)
 
         val app = context.applicationContext as? TabbyRushApplication ?: return
         val accountKey = AccountKey(accountKeyStr)

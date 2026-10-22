@@ -21,7 +21,7 @@ import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.NativeReminderAdapter
 import dev.tabbyrush.shared.contract.ReminderCapabilities
 import dev.tabbyrush.shared.contract.ScheduledAlarmHandle
-
+import dev.tabbyrush.shared.contract.TaskRef
 /**
  * Android native reminder adapter managing AlarmManager scheduling and NotificationManager alerts.
  * Implements NativeReminderAdapter with fail-closed permission snapshots and private visibility.
@@ -50,14 +50,18 @@ class AndroidNotificationAdapter(
         val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val currentKeys = alarmRegistry.getScheduledAlarmKeys(accountKey)
         val desiredMap = desiredAlarms.associateBy {
-            AndroidAlarmRegistry.formatAlarmKey(it.generation, it.taskId, it.scheduleToken, it.occurrenceIndex)
+            AndroidAlarmRegistry.formatAlarmKey(it.generation, it.taskRef, it.scheduleToken, it.occurrenceIndex)
         }
 
         // Cancel obsolete alarms
         val obsoleteKeys = currentKeys - desiredMap.keys
         for (obsoleteKey in obsoleteKeys) {
             val parsed = AndroidAlarmRegistry.parseAlarmKey(obsoleteKey) ?: continue
-            cancelAlarmHandle(am, accountKey, parsed.generation, parsed.taskId, parsed.scheduleToken, parsed.occurrenceIndex)
+            if (parsed.isLegacy) {
+                cancelLegacyAlarmHandle(am, accountKey, parsed.generation, parsed.legacyTaskId!!, parsed.scheduleToken, parsed.occurrenceIndex)
+            } else {
+                cancelAlarmHandle(am, accountKey, parsed.generation, parsed.taskRef!!, parsed.scheduleToken, parsed.occurrenceIndex)
+            }
         }
 
         // Schedule desired alarms
@@ -71,7 +75,7 @@ class AndroidNotificationAdapter(
     override suspend fun postOwnedNotification(
         accountKey: AccountKey,
         generation: Long,
-        taskId: String,
+        taskRef: TaskRef,
         scheduleToken: String,
         occurrenceIndex: Int,
         title: String,
@@ -89,7 +93,7 @@ class AndroidNotificationAdapter(
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
 
-        val clickPendingIntent = createViewTaskPendingIntent(context, accountKey, taskId)
+        val clickPendingIntent = createViewTaskPendingIntent(context, accountKey, taskRef)
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             ?: Settings.System.DEFAULT_NOTIFICATION_URI
         val audioAttributes = AudioAttributes.Builder()
@@ -111,9 +115,8 @@ class AndroidNotificationAdapter(
             .setDefaults(Notification.DEFAULT_ALL)
             .build()
 
-        val notifId = (accountKey.value + taskId).hashCode() and 0x7FFFFFFF
+        val notifId = (accountKey.value + ":" + taskRef.ownerUserId + ":" + taskRef.rowId).hashCode() and 0x7FFFFFFF
         val tag = getAccountNotificationTag(accountKey)
-
         return try {
             nm.notify(tag, notifId, notification)
             alarmRegistry.recordActiveNotificationId(accountKey, notifId.toString())
@@ -143,7 +146,11 @@ class AndroidNotificationAdapter(
             val scheduledKeys = alarmRegistry.getScheduledAlarmKeys(accountKey)
             for (key in scheduledKeys) {
                 val parsed = AndroidAlarmRegistry.parseAlarmKey(key) ?: continue
-                cancelAlarmHandle(am, accountKey, parsed.generation, parsed.taskId, parsed.scheduleToken, parsed.occurrenceIndex)
+                if (parsed.isLegacy) {
+                    cancelLegacyAlarmHandle(am, accountKey, parsed.generation, parsed.legacyTaskId!!, parsed.scheduleToken, parsed.occurrenceIndex)
+                } else {
+                    cancelAlarmHandle(am, accountKey, parsed.generation, parsed.taskRef!!, parsed.scheduleToken, parsed.occurrenceIndex)
+                }
             }
         }
 
@@ -160,7 +167,7 @@ class AndroidNotificationAdapter(
 
     private fun scheduleAlarmHandle(am: AlarmManager, accountKey: AccountKey, alarm: ScheduledAlarmHandle) {
         val pendingIntent = createAlarmPendingIntent(
-            context, accountKey, alarm.generation, alarm.taskId, alarm.scheduleToken, alarm.occurrenceIndex
+            context, accountKey, alarm.generation, alarm.taskRef, alarm.scheduleToken, alarm.occurrenceIndex
         )
         val canExact = AndroidReminderCapabilitiesChecker.canScheduleExactAlarms(context)
         try {
@@ -182,14 +189,14 @@ class AndroidNotificationAdapter(
         am: AlarmManager,
         accountKey: AccountKey,
         generation: Long,
-        taskId: String,
+        taskRef: TaskRef,
         scheduleToken: String,
         occurrenceIndex: Int
     ) {
-        val dummyIntent = createAlarmIntent(context, accountKey, generation, taskId, scheduleToken, occurrenceIndex)
+        val dummyIntent = createAlarmIntent(context, accountKey, generation, taskRef, scheduleToken, occurrenceIndex)
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            getAlarmRequestCode(accountKey, taskId, scheduleToken, occurrenceIndex),
+            getAlarmRequestCode(accountKey, taskRef, scheduleToken, occurrenceIndex),
             dummyIntent,
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
@@ -197,6 +204,21 @@ class AndroidNotificationAdapter(
             am.cancel(pendingIntent)
             pendingIntent.cancel()
         }
+    }
+
+    private fun cancelLegacyAlarmHandle(
+        am: AlarmManager,
+        accountKey: AccountKey,
+        generation: Long,
+        taskId: String,
+        scheduleToken: String,
+        occurrenceIndex: Int
+    ) {
+        val pendingIntent = AndroidNotificationIntentFactory.createLegacyAlarmPendingIntent(
+            context, accountKey, generation, taskId, scheduleToken, occurrenceIndex
+        )
+        am.cancel(pendingIntent)
+        pendingIntent.cancel()
     }
 
     companion object {

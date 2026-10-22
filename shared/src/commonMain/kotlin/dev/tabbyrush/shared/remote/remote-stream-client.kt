@@ -221,13 +221,13 @@ class RemoteStreamClient(
             }
         }
 
-        var result = authSession.authorizedRequest(block)
+        var result = authSession.authorizedRequest(block = block)
         if (result is ApiResult.Failure &&
             result.error is SafeError.Unauthorized &&
             result.error.code == "TOKEN_REFRESHED"
         ) {
             // Replay open at most once after TOKEN_REFRESHED
-            result = authSession.authorizedRequest(block)
+            result = authSession.authorizedRequest(block = block)
         }
 
         if (result is ApiResult.Failure) {

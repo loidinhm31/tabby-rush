@@ -1,417 +1,247 @@
 package dev.tabbyrush.shared.data
 
-import dev.tabbyrush.shared.contract.AccountKey
-import dev.tabbyrush.shared.contract.ReminderRule
-import dev.tabbyrush.shared.contract.StrictOperationKind
-import dev.tabbyrush.shared.contract.StrictOperationStatus
-import dev.tabbyrush.shared.contract.StrictSyncV2Contract
-import dev.tabbyrush.shared.contract.StrictSyncV2Digest
-import dev.tabbyrush.shared.contract.TaskDeadline
-import dev.tabbyrush.shared.contract.Todo
-import dev.tabbyrush.shared.sync.OutboxReconciliation
-import dev.tabbyrush.shared.sync.StrictOperationResultDto
-import dev.tabbyrush.shared.sync.StrictPushResponseDto
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
+import dev.tabbyrush.shared.auth.*
+import dev.tabbyrush.shared.contract.*
+import dev.tabbyrush.shared.sync.*
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.TextContent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.*
 import java.io.File
 import java.nio.file.Files
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import kotlin.test.*
 
 class AdversarialSyncSqliteTest {
-
-    private lateinit var tempDir: File
-    private lateinit var accountFiles: JvmAccountFiles
-    private lateinit var dbFile: File
+    private lateinit var directory: File
+    private lateinit var file: File
     private lateinit var store: RoomAccountStore
-    private lateinit var database: TabbyRushDatabase
+    private val config = HubConfig("http://localhost:3100", "tabby-rush", "test-only-key", BuildMode.DEBUG)
+    private val key = AccountKey.create(config.canonicalOrigin, "sqlite-user")
+    private val stamp = "2026-10-20T00:00:00.123456789Z"
+    @BeforeTest fun setup() {
+        directory = Files.createTempDirectory("standard-adversarial").toFile(); file = File(directory, "account.db")
+        store = open()
+    }
+    private fun open() = RoomAccountStore(key, "sqlite-user", createJvmDatabaseBuilder(file).build(), config.appId)
+    @AfterTest fun cleanup() { store.close(); directory.deleteRecursively() }
+    private fun record(id: String, title: String = "Remote", version: Long = 1L) = PullRecordDto("todos", id, TaskJsonMerge.encode(Todo(TaskRef("sqlite-user", id), title, false, 1000L)), version, stamp)
+    private fun sql(statement: String) {
+        val connection = BundledSQLiteDriver().open(file.absolutePath)
+        try { connection.execSQL(statement) } finally { connection.close() }
+    }
+    private suspend fun session(engine: TestHttpEngine): HubAuthSession {
+        val vault = FakeCredentialVault(); vault.store(key, CredentialBundle("access", "refresh"))
+        val identity = AccountIdentity("sqlite-user", "test", "test@example.com")
+        store.initializeOwnerBinding(identity)
+        return HubAuthSession(config, vault, engine).also { it.restoreSession(identity, key) }
+    }
+    private fun pullResponse(request: PullRequestDto, records: List<PullRecordDto>, schemaVersion: Long): String {
+        val rows = if (request.accessChecks == null && request.checkpoint == null) records else emptyList()
+        return syncWireJson.encodeToString(PullResponseDto(
+            records = rows.map { it.copy(ownerUserId = "sqlite-user") },
+            checkpoint = request.checkpoint ?: SyncCheckpointDto(stamp, rows.lastOrNull()?.rowId ?: ""),
+            serverTimestamp = stamp,
+            schemaVersion = schemaVersion,
+            collaborationVersion = 1L,
+            accessRevision = 1L,
+            accessResults = request.accessChecks?.map {
+                TaskAccessResultDto(it, "accessible", TaskCapabilitiesDto(true, true, true, true), "full-group")
+            }
+        ))
+    }
 
-    private val accountKey = AccountKey.create("http://localhost:3000", "user-adv-sqlite-test")
-
-    @BeforeTest
-    fun setUp() {
-        tempDir = Files.createTempDirectory("tabbyrush-adv-sqlite-test").toFile()
-        accountFiles = JvmAccountFiles(tempDir)
-        dbFile = accountFiles.getDatabaseFile(accountKey)
-        database = createJvmDatabaseBuilder(dbFile).build()
-        store = RoomAccountStore(
-            accountKey = accountKey,
-            userId = "user-adv-sqlite-test",
-            database = database,
-            appId = "tabby-rush"
-        )
-        kotlinx.coroutines.runBlocking {
-            store.dao.upsertMeta(
-                AccountSyncMetaEntity(
-                    syncStatus = "ready-v2",
-                    activeEpoch = "epoch-v2",
-                    localRevisionCounter = 0L
-                )
-            )
+    @Test fun pageAndCheckpointRollbackTogetherThenRestartFreshAfterDowntime() = runTest {
+        val generation = store.dao.beginScanAtomic().scanGeneration
+        sql("CREATE TRIGGER abort_scan BEFORE INSERT ON scan_staging WHEN NEW.rowId = 'b' BEGIN SELECT RAISE(ABORT, 'injected page failure'); END")
+        assertFailsWith<Exception> {
+            store.dao.commitPageAtomic(listOf(TaskJsonMerge.project(record("a")), TaskJsonMerge.project(record("b"))), stamp, "b", 2L, generation, true, 1L)
         }
-    }
-
-    @AfterTest
-    fun tearDown() {
-        if (!store.isFrozen) {
-            store.close()
+        assertEquals(0, store.dao.countStagedRecords()); assertNull(store.dao.getMeta()?.scanCheckpointUpdatedAt)
+        sql("DROP TRIGGER abort_scan")
+        store.dao.commitPageAtomic(listOf(TaskJsonMerge.project(record("a"))), stamp, "a", 2L, generation, true, 1L)
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "local"), "Concurrent scan edit", false, 1000L))
+        store.close(); store = open()
+        assertEquals(stamp, store.dao.getMeta()?.scanCheckpointUpdatedAt)
+        assertEquals(1, store.dao.countStagedRecords()); assertEquals("Concurrent scan edit", store.loadTodos().single().title)
+        val restarted = store.dao.beginScanAtomic().scanGeneration
+        assertTrue(restarted > generation)
+        assertNull(store.dao.getMeta()?.scanCheckpointUpdatedAt)
+        assertEquals(0, store.dao.countStagedRecords())
+        assertFailsWith<IllegalStateException> {
+            store.dao.commitPageAtomic(emptyList(), stamp, "a", 3L, generation, false, 2L)
         }
-        tempDir.deleteRecursively()
+        store.dao.commitPageAtomic(listOf(TaskJsonMerge.project(record("a")), TaskJsonMerge.project(record("b"))),
+            stamp, "b", 3L, restarted, false, 2L)
+        store.dao.promoteCompletedScanAtomic(restarted, 2L)
+        assertEquals(setOf("a", "b", "local"), store.loadTodos().map { it.id }.toSet())
+        assertEquals(stamp, store.dao.getMeta()?.checkpointUpdatedAt); assertEquals(3L, store.dao.getMeta()?.hubSchemaVersion)
+        assertEquals(1, store.dao.countOutbox())
     }
 
-    private fun reopenDatabase() {
-        store.close()
-        database = createJvmDatabaseBuilder(dbFile).build()
-        store = RoomAccountStore(
-            accountKey = accountKey,
-            userId = "user-adv-sqlite-test",
-            database = database,
-            appId = "tabby-rush"
-        )
+    @Test fun incompleteScanCannotDeleteAndPromotionRollsBackAtomically() = runTest {
+        store.dao.upsertServerBase(TaskJsonMerge.project(record("old")))
+        val generation = store.dao.beginScanAtomic().scanGeneration
+        store.dao.commitPageAtomic(listOf(TaskJsonMerge.project(record("new"))), stamp, "new", 1L, generation, true, 1L)
+        assertFalse(store.dao.getServerBase("old")!!.deleted)
+        assertFailsWith<IllegalStateException> { store.dao.promoteCompletedScanAtomic(generation, 1L) }
+        store.dao.commitPageAtomic(emptyList(), stamp, "new", 1L, generation, false, 2L)
+        sql("CREATE TRIGGER abort_promotion BEFORE INSERT ON account_sync_meta WHEN NEW.scanState = 'READY' BEGIN SELECT RAISE(ABORT, 'injected promotion failure'); END")
+        assertFailsWith<Exception> { store.dao.promoteCompletedScanAtomic(generation, 2L) }
+        assertFalse(store.dao.getServerBase("old")!!.deleted); assertNull(store.dao.getServerBase("new"))
+        assertEquals("COMPLETE", store.dao.getMeta()?.scanState)
+        sql("DROP TRIGGER abort_promotion")
+        store.dao.promoteCompletedScanAtomic(generation, 2L)
+        assertTrue(store.dao.getServerBase("old")!!.deleted); assertNotNull(store.dao.getServerBase("new"))
     }
 
-    @Test
-    fun testReopenAfterCrashPreservesExactTemporalPayloadAndOutbox() = runTest {
-        val now = 1793500000000L
-        val deadline = TaskDeadline(
-            date = "2026-11-01",
-            time = "14:00",
-            zone = "America/New_York",
-            offsetSeconds = -18000L,
-            anchorEpochMs = 1793559600000L,
-            overdueEpochMs = 1793559600000L
-        )
-        val rule = ReminderRule(enabled = true, leadMinutes = 15L, intervalMinutes = null, count = 1L)
-        val todo = Todo(
-            id = "task-crash-1",
-            title = "Crash Resistance Task",
-            completed = false,
-            createdAt = now,
-            updatedAt = now,
-            serverRevision = 0L,
-            deadline = deadline,
-            reminderRule = rule,
-            scheduleToken = "tok-initial-crash"
-        )
-
-        store.saveTodoLocally(todo)
-
-        // Verify state before simulated crash
-        val outboxBefore = store.dao.getOutboxByRowId("task-crash-1")
-        assertEquals(1, outboxBefore.size)
-        val op = outboxBefore[0]
-        assertEquals("2026-11-01", op.deadlineDate)
-        assertEquals("tok-initial-crash", op.scheduleToken)
-
-        // Crash and reopen database from disk
-        reopenDatabase()
-
-        // Verify state restored cleanly from SQLite
-        val loaded = store.loadTodos()
-        assertEquals(1, loaded.size)
-        val restored = loaded[0]
-        assertEquals("task-crash-1", restored.id)
-        assertEquals("Crash Resistance Task", restored.title)
-        assertNotNull(restored.deadline)
-        assertEquals("2026-11-01", restored.deadline?.date)
-        assertEquals("America/New_York", restored.deadline?.zone)
-        assertEquals(-18000L, restored.deadline?.offsetSeconds)
-        assertEquals(1793559600000L, restored.deadline?.anchorEpochMs)
-        assertTrue(restored.reminderRule.enabled)
-        assertEquals(15L, restored.reminderRule.leadMinutes)
-        assertEquals("tok-initial-crash", restored.scheduleToken)
-        assertTrue(restored.isPending)
-
-        val outboxAfter = store.dao.getOutboxByRowId("task-crash-1")
-        assertEquals(1, outboxAfter.size)
-        assertEquals(op.opId, outboxAfter[0].opId)
-        assertEquals(op.localRevision, outboxAfter[0].localRevision)
-        assertEquals(op.deadlineAnchorEpochMs, outboxAfter[0].deadlineAnchorEpochMs)
+    @Test fun opaqueJsonSurvivesFifoRebaseAndOlderAckCannotClearNewerEdit() = runTest {
+        val raw = JsonObject(record("a").data.jsonObject.toMutableMap().apply { put("future", TaskJsonMerge.json.parseToJsonElement("""{"nested":[1,null,{"x":true}]}""")) })
+        store.dao.upsertServerBase(TaskJsonMerge.project(record("a").copy(data = raw)))
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "a"), "First local", false, 1000L))
+        val reconciliation = OutboxReconciliation(store)
+        val first = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).single()
+        assertEquals(raw["future"], reconciliation.toDto(first).data["future"])
+        store.saveTodoLocally(store.loadTodos().single().copy(title = "Second local"))
+        assertTrue(reconciliation.getEligibleDispatchBatch().isEmpty())
+        reconciliation.reconcilePushResults(listOf(first), PushResponseDto(1, emptyList(), syncedRecords = listOf(SyncedRecordDto("todos", "a", 2L)), serverTimestamp = stamp, schemaVersion = 2L))
+        assertEquals("Second local", store.loadTodos().single().title)
+        val second = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).single()
+        assertEquals(3L, second.version); assertEquals(raw["future"], reconciliation.toDto(second).data["future"])
+        store.reconcileAccepted(first.opId, 2L)
+        assertEquals(OutboxEntity.STATE_DISPATCHING, store.dao.getOutboxEntry(second.opId)?.deliveryState)
     }
 
-    @Test
-    fun testFrozenRetryRetainsExactIdentityDigestAndTemporalPayload() = runTest {
-        val now = 1793500000000L
-        val deadline = TaskDeadline(
-            date = "2026-11-01",
-            time = "14:00",
-            zone = "America/New_York",
-            offsetSeconds = -18000L,
-            anchorEpochMs = 1793559600000L,
-            overdueEpochMs = 1793559600000L
-        )
-        val rule = ReminderRule(enabled = true, leadMinutes = 15L, intervalMinutes = null, count = 1L)
-        val todo = Todo(
-            id = "task-retry-1",
-            title = "Frozen Retry Invariance",
-            completed = false,
-            createdAt = now,
-            updatedAt = now,
-            serverRevision = 0L,
-            deadline = deadline,
-            reminderRule = rule,
-            scheduleToken = "tok-freeze-retry"
-        )
-        store.saveTodoLocally(todo)
-
-        val reconciliation = OutboxReconciliation(store, activeEpoch = "epoch-v2-test")
-        val eligible = reconciliation.getEligibleDispatchBatch()
-        assertEquals(1, eligible.size)
-
-        // Freeze batch
-        val frozenBatch = reconciliation.prepareAndFreezeBatch(eligible)
-        assertEquals(1, frozenBatch.size)
-        val frozenOp = frozenBatch[0]
-
-        // Snapshot all invariant properties
-        val capturedOpId = frozenOp.opId
-        val capturedDigest = frozenOp.digest
-        val capturedContractVersion = frozenOp.contractVersion
-        val capturedDate = frozenOp.deadlineDate
-        val capturedTime = frozenOp.deadlineTime
-        val capturedZone = frozenOp.deadlineZone
-        val capturedOffset = frozenOp.deadlineOffsetSeconds
-        val capturedAnchor = frozenOp.deadlineAnchorEpochMs
-        val capturedOverdue = frozenOp.deadlineOverdueEpochMs
-        val capturedRemEnabled = frozenOp.reminderEnabled
-        val capturedRemLead = frozenOp.reminderLeadMinutes
-        val capturedRemInterval = frozenOp.reminderIntervalMinutes
-        val capturedRemCount = frozenOp.reminderCount
-        val capturedToken = frozenOp.scheduleToken
-
-        assertTrue(capturedDigest.isNotEmpty(), "Frozen operation must have computed digest")
-
-        // Simulate network disconnect / timeout without server response
-        // Reopen database to simulate restart while dispatching
-        reopenDatabase()
-
-        // Verify outbox entry in database remains in STATE_DISPATCHING or can be safely retried
-        val inDb = store.dao.getOutboxEntry(capturedOpId)
-        assertNotNull(inDb)
-        assertEquals(OutboxEntity.STATE_DISPATCHING, inDb.deliveryState)
-
-        // Invariant: Exact identity, digest, contract version, and all 12 temporal fields remain bit-for-bit unchanged
-        assertEquals(capturedOpId, inDb.opId)
-        assertEquals(capturedDigest, inDb.digest)
-        assertEquals(capturedContractVersion, inDb.contractVersion)
-        assertEquals(capturedDate, inDb.deadlineDate)
-        assertEquals(capturedTime, inDb.deadlineTime)
-        assertEquals(capturedZone, inDb.deadlineZone)
-        assertEquals(capturedOffset, inDb.deadlineOffsetSeconds)
-        assertEquals(capturedAnchor, inDb.deadlineAnchorEpochMs)
-        assertEquals(capturedOverdue, inDb.deadlineOverdueEpochMs)
-        assertEquals(capturedRemEnabled, inDb.reminderEnabled)
-        assertEquals(capturedRemLead, inDb.reminderLeadMinutes)
-        assertEquals(capturedRemInterval, inDb.reminderIntervalMinutes)
-        assertEquals(capturedRemCount, inDb.reminderCount)
-        assertEquals(capturedToken, inDb.scheduleToken)
+    @Test fun matchingLostDeliveryConvergesWithoutReceiptOrReplay() = runTest {
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "a"), "Local", false, 1000L))
+        val reconciliation = OutboxReconciliation(store)
+        val frozen = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).single()
+        reconciliation.markBatchUncertain(listOf(frozen), "lost response")
+        val envelope = reconciliation.toDto(frozen)
+        store.dao.upsertServerBase(TaskJsonMerge.project(PullRecordDto("todos", "a", envelope.data, envelope.version, stamp)))
+        store.close(); store = open()
+        OutboxReconciliation(store).reconcileUncertain()
+        assertTrue(store.dao.getAllOutbox().isEmpty())
+        assertEquals("DESIRED_STATE_CONVERGENCE_NOT_RECEIPT", store.dao.getOutboxEntry(frozen.opId)?.resolution)
+        assertNull(store.dao.getDraft("a"))
     }
 
-    @Test
-    fun testIntentMaskedRebaseOfV1TitleOverRemoteV2Deadline() = runTest {
-        // Setup existing server base with remote v2 deadline and reminder
-        val baseEntity = ServerBaseEntity(
-            rowId = "task-rebase-v2",
-            serverRevision = 1L,
-            deleted = false,
-            title = "Remote V2 Task",
-            completed = false,
-            createdAt = 1000L,
-            updatedAt = 1000L,
-            epoch = "epoch-v2",
-            deadlineDate = "2026-11-01",
-            deadlineTime = "15:00",
-            deadlineZone = "America/New_York",
-            deadlineOffsetSeconds = -18000L,
-            deadlineAnchorEpochMs = 1793563200000L,
-            deadlineOverdueEpochMs = 1793563200000L,
-            reminderEnabled = true,
-            reminderLeadMinutes = 30L,
-            reminderCount = 1L,
-            scheduleToken = "tok-remote-v2"
-        )
-        store.dao.upsertServerBase(baseEntity)
-
-        // Offline legacy client or partial edit only updates title
-        val v1TitleOp = OutboxEntity(
-            opId = "op-v1-title-edit",
-            epoch = "epoch-v2",
-            tableName = "todos",
-            rowId = "task-rebase-v2",
-            kind = StrictOperationKind.UPDATE.wireName,
-            expectedRevision = 1L,
-            title = "Updated Title From Client",
-            completed = null, // untouched
-            createdAt = 1000L,
-            digest = "v1-digest",
-            localRevision = 2L,
-            deliveryState = OutboxEntity.STATE_DISPATCHING,
-            createdAtEpochMs = 1100L,
-            contractVersion = OutboxEntity.CONTRACT_VERSION_V1,
-            intentMask = OutboxEntity.INTENT_TITLE
-        )
-        store.dao.upsertOutbox(v1TitleOp)
-
-        // Push succeeds, reconciling accepted at revision 2
-        store.reconcileAccepted(v1TitleOp.opId, serverRevision = 2L)
-
-        // Verify updated base in SQLite
-        val updatedBase = store.dao.getServerBase("task-rebase-v2")
-        assertNotNull(updatedBase)
-        assertEquals(2L, updatedBase.serverRevision)
-        assertEquals("Updated Title From Client", updatedBase.title)
-
-        // Critical Invariant: Remote v2 temporal fields MUST NOT be erased by v1 edit
-        assertEquals("2026-11-01", updatedBase.deadlineDate)
-        assertEquals("15:00", updatedBase.deadlineTime)
-        assertEquals("America/New_York", updatedBase.deadlineZone)
-        assertEquals(-18000L, updatedBase.deadlineOffsetSeconds)
-        assertEquals(1793563200000L, updatedBase.deadlineAnchorEpochMs)
-        assertTrue(updatedBase.reminderEnabled)
-        assertEquals(30L, updatedBase.reminderLeadMinutes)
-        assertEquals("tok-remote-v2", updatedBase.scheduleToken)
-
-        // Verify loaded projection preserves full deadline and reminder
-        val todos = store.loadTodos()
-        assertEquals(1, todos.size)
-        assertEquals("Updated Title From Client", todos[0].title)
-        assertNotNull(todos[0].deadline)
-        assertEquals("2026-11-01", todos[0].deadline?.date)
-        assertTrue(todos[0].reminderRule.enabled)
-        assertEquals("tok-remote-v2", todos[0].scheduleToken)
+    @Test fun supersededUncertainAndMissingConfirmedNeverBecomeCreates() = runTest {
+        store.dao.upsertServerBase(TaskJsonMerge.project(record("a")))
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "a"), "Local", false, 1000L))
+        val reconciliation = OutboxReconciliation(store)
+        val frozen = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).single()
+        reconciliation.markBatchUncertain(listOf(frozen), "lost response")
+        val generation = store.dao.beginScanAtomic().scanGeneration
+        store.dao.commitPageAtomic(emptyList(), stamp, "", 1L, generation, false, 1L)
+        store.dao.promoteCompletedScanAtomic(generation, 1L)
+        reconciliation.reconcileUncertain()
+        assertEquals(OutboxEntity.STATE_REVIEW, store.dao.getAllOutbox().single().deliveryState)
+        assertTrue(reconciliation.getEligibleDispatchBatch().isEmpty()); assertTrue(store.dao.getServerBase("a")!!.deleted)
+        assertNotNull(store.dao.getDraft("a"))
     }
 
-    @Test
-    fun testLocalDeadlineRemovalDoesNotResurrectBaseDeadline() = runTest {
-        // Base task has a deadline
-        val baseEntity = ServerBaseEntity(
-            rowId = "task-clear-dl",
-            serverRevision = 1L,
-            deleted = false,
-            title = "Task To Clear",
-            completed = false,
-            createdAt = 1000L,
-            updatedAt = 1000L,
-            epoch = "epoch-v2",
-            deadlineDate = "2026-11-01",
-            deadlineTime = "10:00",
-            deadlineZone = "UTC",
-            deadlineOffsetSeconds = 0L,
-            deadlineAnchorEpochMs = 1793534400000L,
-            deadlineOverdueEpochMs = 1793534400000L,
-            reminderEnabled = true,
-            reminderLeadMinutes = 15L,
-            reminderCount = 1L,
-            scheduleToken = "tok-before-clear"
-        )
-        store.dao.upsertServerBase(baseEntity)
-
-        // User clears deadline locally
-        val clearedTodo = Todo(
-            id = "task-clear-dl",
-            title = "Task To Clear",
-            completed = false,
-            createdAt = 1000L,
-            updatedAt = 1200L,
-            serverRevision = 1L,
-            deadline = null,
-            reminderRule = ReminderRule.DISABLED,
-            scheduleToken = null
-        )
-        store.saveTodoLocally(clearedTodo)
-
-        // Loaded projection MUST reflect cleared deadline immediately (no resurrection)
-        val loaded = store.loadTodos()
-        assertEquals(1, loaded.size)
-        assertNull(loaded[0].deadline, "Cleared deadline must not be resurrected from base")
-        assertFalse(loaded[0].reminderRule.enabled)
-        assertNull(loaded[0].scheduleToken)
-        assertTrue(loaded[0].isPending)
-
-        // Verify outbox op records clear deadline intent
-        val outbox = store.dao.getOutboxByRowId("task-clear-dl")
-        assertEquals(1, outbox.size)
-        assertNull(outbox[0].deadlineDate)
-        assertNull(outbox[0].scheduleToken)
-        assertTrue(outbox[0].intentMask!!.contains(OutboxEntity.INTENT_DEADLINE))
+    @Test fun legacyTranslationRollsBackWithEvidenceAndIsRestartIdempotent() = runTest {
+        val legacy = OutboxEntity("old", rowId = "a", kind = "update", title = "Intent", completed = false, createdAt = 1000L,
+            localRevision = 1L, deliveryState = "REVIEW", createdAtEpochMs = 1000L, intentMask = "TITLE", legacyEvidenceId = "old")
+        val provenance = buildJsonObject {
+            put("opId", "old"); put("rowId", "a"); put("kind", "update")
+            put("expectedRevision", 1L); put("contractVersion", "strict-v3")
+            put("deliveryState", "PENDING"); put("consecutiveFailures", 0L); put("intentMask", "TITLE")
+            put("transitionCheckpoint", JsonNull); put("dispatchHistory", """{"createdUnsent":true,"dispatchCount":0}""")
+        }
+        store.dao.upsertOutbox(legacy)
+        store.dao.upsertLegacyEvidence(LegacySyncEvidenceEntity(sourceOpId = "old", rowId = "a", originalJson = provenance.toString()))
+        store.dao.upsertServerBase(TaskJsonMerge.project(record("a")))
+        store.dao.upsertMeta(AccountSyncMetaEntity(scanState = "READY"))
+        sql("CREATE TRIGGER abort_translation BEFORE INSERT ON legacy_sync_evidence WHEN NEW.outcome = 'TRANSLATED_INTENT_ONLY' BEGIN SELECT RAISE(ABORT, 'injected translation failure'); END")
+        assertFailsWith<Exception> { LegacyStandardIntentMigration(store).translateAfterCompletedScan() }
+        assertEquals("REVIEW", store.dao.getAllOutbox().single().deliveryState)
+        assertEquals("PENDING_REVIEW", store.dao.getLegacyEvidence().single().outcome)
+        sql("DROP TRIGGER abort_translation")
+        LegacyStandardIntentMigration(store).translateAfterCompletedScan()
+        assertEquals("PENDING", store.dao.getAllOutbox().single().deliveryState)
+        store.close(); store = open()
+        LegacyStandardIntentMigration(store).translateAfterCompletedScan()
+        assertEquals(1, store.dao.getAllOutbox().size)
+        assertEquals("old", store.dao.getLegacyEvidence().single().translatedOpId)
     }
 
-    @Test
-    fun testUnknownSupersededExplicitConflictLockPersistsAcrossRestart() = runTest {
-        val op = OutboxEntity(
-            opId = "op-superseded-sql",
-            epoch = "epoch-1",
-            tableName = "todos",
-            rowId = "row-superseded-1",
-            kind = StrictOperationKind.UPDATE.wireName,
-            expectedRevision = 1L,
-            title = "Conflicted Edit",
-            completed = false,
-            createdAt = 1000L,
-            digest = "frozen-digest-1",
-            localRevision = 2L,
-            deliveryState = OutboxEntity.STATE_DISPATCHING,
-            createdAtEpochMs = 1100L,
-            contractVersion = OutboxEntity.CONTRACT_VERSION_V1,
-            dispatchHistory = """{"dispatched":true,"uncertain":true}"""
-        )
-        store.dao.upsertServerBase(
-            ServerBaseEntity(
-                rowId = "row-superseded-1",
-                serverRevision = 1L,
-                deleted = false,
-                title = "Base Task Title",
-                completed = false,
-                createdAt = 1000L,
-                updatedAt = 1000L,
-                epoch = "epoch-1"
-            )
-        )
-        store.dao.upsertOutbox(op)
-        val reconciliation = OutboxReconciliation(store, activeEpoch = "epoch-1")
-        val response = StrictPushResponseDto(
-            protocol = "strict-v1",
-            epoch = "epoch-1",
-            results = listOf(
-                StrictOperationResultDto(
-                    opId = "op-superseded-sql",
-                    rowId = "row-superseded-1",
-                    digest = "frozen-digest-1",
-                    status = StrictOperationStatus.REVISION_CONFLICT.wireName,
-                    acceptedRevision = null
-                )
-            )
-        )
-        reconciliation.reconcilePushResults(listOf(op), response)
+    @Test fun coordinatorScansBeforeEachReconnectAndLostDeltaIsNotReplayed() = runTest {
+        val remote = mutableListOf<PullRecordDto>()
+        var deltaCalls = 0
+        var fullPulls = 0
+        val engine = TestHttpEngine { request ->
+            assertFalse(request.url.encodedPath.contains("strong"))
+            val body = (request.body as TextContent).text
+            when {
+                request.url.encodedPath.endsWith("/pull") -> {
+                    val pull = TaskJsonMerge.json.decodeFromString<PullRequestDto>(body)
+                    if (pull.checkpoint == null && pull.accessChecks == null) fullPulls++
+                    HttpStatusCode.OK to pullResponse(pull, remote, 3L)
+                }
+                request.url.encodedPath.endsWith("/delta") -> {
+                    deltaCalls++
+                    val delta = TaskJsonMerge.json.decodeFromString<DeltaRequestDto>(body)
+                    for (outgoing in delta.push!!.records) remote.add(PullRecordDto("todos", outgoing.rowId, outgoing.data, outgoing.version, stamp, outgoing.deleted))
+                    HttpStatusCode.OK to "response deliberately lost after push"
+                }
+                else -> HttpStatusCode.NotFound to "{}"
+            }
+        }
+        val session = session(engine)
+        val coordinator = AccountSyncCoordinator(store, session)
+        store.saveTodoLocally(Todo(TaskRef("sqlite-user", "a"), "Local", false, 1000L))
+        coordinator.triggerSync()
+        assertEquals(1, deltaCalls); assertEquals("UNCERTAIN", store.dao.getAllOutbox().single().deliveryState)
+        coordinator.triggerSync()
+        assertEquals(1, deltaCalls); assertEquals(2, fullPulls)
+        assertEquals(0, store.dao.countOutbox()); assertEquals(3L, store.dao.getMeta()?.hubSchemaVersion)
+        assertEquals("Local", store.loadTodos().single().title)
+    }
 
-        // Verify locked in UNKNOWN_SUPERSEDED
-        val marked = store.dao.getOutboxEntry("op-superseded-sql")
-        assertNotNull(marked)
-        assertEquals(OutboxEntity.STATE_UNKNOWN_SUPERSEDED, marked.deliveryState)
+    @Test fun explicitReapplyMintsEnvelopeOverRefreshedOpaqueBaseOnlyChangedFields() = runTest {
+        val anchor = StrictTimeZoneResolver.default.resolveInstant("UTC", "2026-10-20", "10:00")
+        val deadline = TaskDeadline("2026-10-20", "10:00", "UTC", 0L, anchorEpochMs = anchor, overdueEpochMs = anchor)
+        val raw = JsonObject(TaskJsonMerge.encode(Todo(TaskRef("sqlite-user", "a"), "Remote", true, 1000L, deadline = deadline, scheduleToken = "remote-token"))
+            .toMutableMap().apply { put("future", TaskJsonMerge.json.parseToJsonElement("""{"nested":[null,true]}""")) })
+        val remote = PullRecordDto("todos", "a", raw, 5L, stamp)
+        store.dao.upsertServerBase(TaskJsonMerge.project(record("a")))
+        store.dao.upsertOutbox(OutboxEntity("conflict", rowId = "a", kind = "update", title = "Local title", completed = false,
+            createdAt = 1000L, localRevision = 1L, deliveryState = "CONFLICT", createdAtEpochMs = 1000L, intentMask = "TITLE"))
+        val engine = TestHttpEngine { request ->
+            val pull = TaskJsonMerge.json.decodeFromString<PullRequestDto>((request.body as TextContent).text)
+            HttpStatusCode.OK to pullResponse(pull, listOf(remote), 4L)
+        }
+        val coordinator = AccountSyncCoordinator(store, session(engine))
+        coordinator.reapplyConflict(TaskRef("sqlite-user", "a"))
+        assertEquals("DISCARDED", store.dao.getOutboxEntry("conflict")?.deliveryState)
+        val reconciliation = OutboxReconciliation(store)
+        val fresh = reconciliation.prepareAndFreezeBatch(reconciliation.getEligibleDispatchBatch()).single()
+        val envelope = reconciliation.toDto(fresh)
+        assertEquals(6L, envelope.version); assertEquals(5L, envelope.assumedServerVersion)
+        assertEquals(JsonPrimitive("Local title"), envelope.data["title"])
+        assertEquals(JsonPrimitive(true), envelope.data["completed"])
+        assertEquals(raw["future"], envelope.data["future"])
+        assertEquals(raw["deadlineDate"], envelope.data["deadlineDate"])
+        assertNotEquals("conflict", fresh.opId)
+    }
 
-        // Close and reopen database
-        reopenDatabase()
-
-        // Reassert state after restart
-        val restored = store.dao.getOutboxEntry("op-superseded-sql")
-        assertNotNull(restored)
-        assertEquals(OutboxEntity.STATE_UNKNOWN_SUPERSEDED, restored.deliveryState)
-        assertEquals("frozen-digest-1", restored.digest) // NEVER rehashed
-        assertEquals("op-superseded-sql", restored.opId) // NEVER re-ID'd
-
-        // The operation is quarantined in UNKNOWN_SUPERSEDED and excluded from normal pending dispatch
-        assertEquals(1, store.dao.countOutboxByState(OutboxEntity.STATE_UNKNOWN_SUPERSEDED))
-        assertEquals(0, store.dao.countOutboxByState(OutboxEntity.STATE_PENDING))
-        assertEquals(0, store.dao.countOutboxByState(OutboxEntity.STATE_DISPATCHING))
-
-        // Other tasks can continue loading and syncing
-        val todos = store.loadTodos()
-        assertEquals(1, todos.size)
-        assertFalse(todos[0].isPending, "Quarantined conflict is not marked as pending dispatch")
-}
+    @Test fun explicitCopyOfUnresolvedChildCreatesNewRootWithoutReusingIdentity() = runTest {
+        val parent = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        val child = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        store.dao.upsertOutbox(OutboxEntity("review-child", rowId = child, kind = "update", title = "Retained child", completed = true,
+            createdAt = 1000L, localRevision = 1L, deliveryState = "REVIEW", createdAtEpochMs = 1000L,
+            intentMask = "TITLE", parentTaskId = parent))
+        val engine = TestHttpEngine { error("Copy-as-new is a local decision; no network required") }
+        AccountSyncCoordinator(store, session(engine)).copyAsNew(TaskRef("sqlite-user", child))
+        val copy = store.loadTodos().single()
+        assertNotEquals(child, copy.id)
+        assertNull(copy.parentTaskId)
+        assertEquals("Retained child", copy.title)
+        assertEquals("create", store.dao.getAllOutbox().single().kind)
+        assertEquals("DISCARDED", store.dao.getOutboxEntry("review-child")?.deliveryState)
+    }
 }

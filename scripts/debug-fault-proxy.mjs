@@ -5,10 +5,10 @@
  * Dedicated loopback proxy for Android and multiplatform sync fault-injection testing.
  * Invariants:
  * - Binds strictly to 127.0.0.1 (never 0.0.0.0 or public interfaces).
- * - Allowlisted strict auth and strong sync route paths only.
+ * - Allowlisted auth and standard sync route paths only.
  * - Zero payload, token, or header logging.
  * - Redacted rejected path logging to prevent sensitive text disclosure.
- * - Deterministic fault injection: drop-push-response, drop-refresh-response, drop-legacy-receipts-response.
+ * - Deterministic fault injection: drop-push-response, drop-refresh-response, drop-delta-response.
  * - Robust stream-error and client-abort lifecycle handling.
  */
 
@@ -23,15 +23,14 @@ export const ALLOWLISTED_PATHS = new Set([
   '/api/v1/auth/me',
   '/api/v1/apps/access-requests',
   '/api/v1/apps/access-requests/me',
-  '/api/v1/sync/tabby-rush/strong/bootstrap',
-  '/api/v1/sync/tabby-rush/strong/pull',
-  '/api/v1/sync/tabby-rush/strong/push',
-  '/api/v1/sync/tabby-rush/strong/legacy-receipts'
+  '/api/v1/sync/tabby-rush/pull',
+  '/api/v1/sync/tabby-rush/push',
+  '/api/v1/sync/tabby-rush/delta'
 ]);
 
 export function createFaultProxy({
   upstreamHost = '127.0.0.1',
-  upstreamPort = 3001,
+  upstreamPort = 3100,
   scenario = 'pass-through',
   quiet = false,
   upstreamTimeoutMs = 30000
@@ -73,15 +72,15 @@ export function createFaultProxy({
       timeout: upstreamTimeoutMs
     }, (upstreamRes) => {
       const is2xx = upstreamRes.statusCode >= 200 && upstreamRes.statusCode < 300;
-      const isPushRoute = pathname === '/api/v1/sync/tabby-rush/strong/push';
+      const isPushRoute = pathname === '/api/v1/sync/tabby-rush/push';
       const isRefreshRoute = pathname === '/api/v1/auth/refresh';
-      const isLegacyReceiptsRoute = pathname === '/api/v1/sync/tabby-rush/strong/legacy-receipts';
+      const isDeltaRoute = pathname === '/api/v1/sync/tabby-rush/delta';
 
       const shouldDropPush = is2xx && scenario === 'drop-push-response' && isPushRoute && !faultInjected;
       const shouldDropRefresh = is2xx && scenario === 'drop-refresh-response' && isRefreshRoute && !faultInjected;
-      const shouldDropReceipts = is2xx && scenario === 'drop-legacy-receipts-response' && isLegacyReceiptsRoute && !faultInjected;
+      const shouldDropDelta = is2xx && scenario === 'drop-delta-response' && isDeltaRoute && !faultInjected;
 
-      if (shouldDropPush || shouldDropRefresh || shouldDropReceipts) {
+      if (shouldDropPush || shouldDropRefresh || shouldDropDelta) {
         faultInjected = true;
         if (!quiet) console.log(`[FaultProxy] INJECTING FAULT (${scenario}) for ${clientReq.method} ${pathname} (upstream status: ${upstreamRes.statusCode})`);
         upstreamRes.resume();
@@ -149,8 +148,8 @@ export function createFaultProxy({
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
   const options = {
-    port: { type: 'string', default: '3000' },
-    'upstream-port': { type: 'string', default: '3001' },
+    port: { type: 'string', default: '3101' },
+    'upstream-port': { type: 'string', default: '3100' },
     'upstream-host': { type: 'string', default: '127.0.0.1' },
     scenario: { type: 'string', default: 'pass-through' },
     help: { type: 'boolean', short: 'h' }
@@ -162,14 +161,14 @@ if (isMain) {
     console.log(`Usage: node scripts/debug-fault-proxy.mjs [options]
 
 Options:
-  --port <PORT>             Proxy listen port (default: 3000, 127.0.0.1 only)
-  --upstream-port <PORT>    Upstream Hub port (default: 3001)
+  --port <PORT>             Proxy listen port (default: 3101, 127.0.0.1 only)
+  --upstream-port <PORT>    Upstream Hub port (default: 3100)
   --upstream-host <HOST>    Upstream Hub host (default: 127.0.0.1)
   --scenario <NAME>         Fault scenario:
                               - pass-through (default)
                               - drop-push-response
                               - drop-refresh-response
-                              - drop-legacy-receipts-response
+                              - drop-delta-response
   -h, --help                Show this help
 `);
     process.exit(0);

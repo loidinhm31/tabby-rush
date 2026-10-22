@@ -1,8 +1,6 @@
 package dev.tabbyrush.shared.contract
 
-import dev.tabbyrush.shared.data.EditorDraftEntity
-import dev.tabbyrush.shared.data.OutboxEntity
-import dev.tabbyrush.shared.data.ServerBaseEntity
+// Decoupled from Room entities
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -98,7 +96,7 @@ class AdversarialSchedulerBoundaryTest {
     fun testDateOnlyMorningIsNotOverdue() {
         // Compute date-only deadline via production helper
         val editor = EditorState(
-            id = "task-adv-1",
+            taskRef = TaskRef("user-1", "task-adv-1"),
             rawTitle = "Date-only task",
             hasDeadline = true,
             hasTime = false,
@@ -177,15 +175,13 @@ class AdversarialSchedulerBoundaryTest {
 
     @Test
     fun testDraftIsolationInPersistedProjection() {
-        val base = ServerBaseEntity(
+        val base = SimplePersistedBaseRecord(
+            ownerUserId = "user-1",
+            tableName = "todos",
             rowId = "task-proj-1",
-            serverRevision = 1L,
             deleted = false,
             title = "Committed Base Task",
             completed = false,
-            createdAt = 1000L,
-            updatedAt = 1000L,
-            epoch = "epoch-1",
             deadlineDate = "2026-11-01",
             deadlineTime = "15:00",
             deadlineZone = "America/New_York",
@@ -199,20 +195,15 @@ class AdversarialSchedulerBoundaryTest {
         )
 
         // Outbox operation submitted by user modifying lead to 30m
-        val outboxOp = OutboxEntity(
-            opId = "op-mod-lead",
-            epoch = "epoch-1",
+        val outboxOp = SimplePersistedOutboxRecord(
+            ownerUserId = "user-1",
             tableName = "todos",
             rowId = "task-proj-1",
-            kind = StrictOperationKind.UPDATE.wireName,
-            expectedRevision = 1L,
+            kind = TaskOperationKind.UPDATE.wireName,
             title = "Committed Base Task",
             completed = false,
-            createdAt = 1000L,
-            digest = "dig-123",
             localRevision = 2L,
-            deliveryState = OutboxEntity.STATE_PENDING,
-            createdAtEpochMs = 1100L,
+            deliveryState = OutboxDeliveryStates.PENDING,
             deadlineDate = "2026-11-01",
             deadlineTime = "15:00",
             deadlineZone = "America/New_York",
@@ -223,27 +214,11 @@ class AdversarialSchedulerBoundaryTest {
             reminderLeadMinutes = 30L,
             reminderCount = 1L,
             scheduleToken = "tok-outbox-456",
-            intentMask = OutboxEntity.INTENT_REMINDER
+            intentMask = OutboxIntentMasks.REMINDER
         )
 
-        // Uncommitted draft in editor_drafts with completely different values (never projected)
-        val uncommittedDraft = EditorDraftEntity(
-            rowId = "task-proj-1",
-            draftTitle = "Unsaved Draft Title",
-            draftCompleted = true,
-            localRevision = 3L,
-            updatedAt = 1200L,
-            deadlineDate = "2027-01-01",
-            deadlineTime = "08:00",
-            deadlineZone = "UTC",
-            deadlineOffsetSeconds = 0L,
-            deadlineAnchorEpochMs = 9999999999999L,
-            deadlineOverdueEpochMs = 9999999999999L,
-            reminderEnabled = false,
-            scheduleToken = "tok-draft-IGNORE-ME"
-        )
-
-        // Projector observes only base and outbox, ignoring uncommittedDraft
+        // Uncommitted draft in editor state with completely different values (never projected)
+        // Projector observes only base and outbox, completely ignoring uncommitted editor drafts
         val scheduledList = PersistedScheduleProjector.computeProjection(
             serverBases = listOf(base),
             outboxEntries = listOf(outboxOp)
@@ -262,15 +237,13 @@ class AdversarialSchedulerBoundaryTest {
 
     @Test
     fun testCancellationBarrierOnSavedState() {
-        val completedBase = ServerBaseEntity(
+        val completedBase = SimplePersistedBaseRecord(
+            ownerUserId = "user-1",
+            tableName = "todos",
             rowId = "task-comp",
-            serverRevision = 1L,
             deleted = false,
             title = "Completed Task",
             completed = true,
-            createdAt = 1000L,
-            updatedAt = 1000L,
-            epoch = "epoch-1",
             deadlineDate = "2026-11-01",
             deadlineTime = "15:00",
             deadlineZone = "America/New_York",
@@ -318,15 +291,13 @@ class AdversarialSchedulerBoundaryTest {
 
     @Test
     fun testScheduleTokenAssignmentAndPreservation() {
-        val base = ServerBaseEntity(
+        val base = SimplePersistedBaseRecord(
+            ownerUserId = "user-1",
+            tableName = "todos",
             rowId = "task-tok-1",
-            serverRevision = 1L,
             deleted = false,
             title = "Original Title",
             completed = false,
-            createdAt = 1000L,
-            updatedAt = 1000L,
-            epoch = "epoch-1",
             deadlineDate = "2026-11-01",
             deadlineTime = "15:00",
             deadlineZone = "America/New_York",
@@ -340,66 +311,51 @@ class AdversarialSchedulerBoundaryTest {
         )
 
         // 1. Non-temporal update (e.g. title only) must preserve existing scheduleToken without churn
-        val titleOp = OutboxEntity(
-            opId = "op-title",
-            epoch = "epoch-1",
+        val titleOp = SimplePersistedOutboxRecord(
+            ownerUserId = "user-1",
             tableName = "todos",
             rowId = "task-tok-1",
-            kind = StrictOperationKind.UPDATE.wireName,
-            expectedRevision = 1L,
+            kind = TaskOperationKind.UPDATE.wireName,
             title = "Updated Title Only",
             completed = false,
-            createdAt = 1000L,
-            digest = "dig-title",
             localRevision = 2L,
-            deliveryState = OutboxEntity.STATE_PENDING,
-            createdAtEpochMs = 1100L,
-            intentMask = OutboxEntity.INTENT_TITLE
+            deliveryState = OutboxDeliveryStates.PENDING,
+            intentMask = OutboxIntentMasks.TITLE
         )
         val proj1 = PersistedScheduleProjector.computeProjection(listOf(base), listOf(titleOp))
         assertEquals(1, proj1.size)
         assertEquals("tok-initial", proj1[0].scheduleToken, "Non-temporal edit must preserve existing scheduleToken")
 
         // 2. Reminder rule edit with new schedule token must advance scheduleToken
-        val reminderOp = OutboxEntity(
-            opId = "op-rem",
-            epoch = "epoch-1",
+        val reminderOp = SimplePersistedOutboxRecord(
+            ownerUserId = "user-1",
             tableName = "todos",
             rowId = "task-tok-1",
-            kind = StrictOperationKind.UPDATE.wireName,
-            expectedRevision = 1L,
+            kind = TaskOperationKind.UPDATE.wireName,
             title = "Updated Title Only",
             completed = false,
-            createdAt = 1000L,
-            digest = "dig-rem",
             localRevision = 3L,
-            deliveryState = OutboxEntity.STATE_PENDING,
-            createdAtEpochMs = 1200L,
+            deliveryState = OutboxDeliveryStates.PENDING,
             reminderEnabled = true,
             reminderLeadMinutes = 30L,
             reminderCount = 1L,
             scheduleToken = "tok-reminder-update",
-            intentMask = OutboxEntity.INTENT_REMINDER
+            intentMask = OutboxIntentMasks.REMINDER
         )
         val proj2 = PersistedScheduleProjector.computeProjection(listOf(base), listOf(titleOp, reminderOp))
         assertEquals(1, proj2.size)
         assertEquals("tok-reminder-update", proj2[0].scheduleToken, "Reminder edit must advance scheduleToken")
 
         // 3. Deadline clearing must reset scheduleToken to null
-        val clearDeadlineOp = OutboxEntity(
-            opId = "op-clear-dl",
-            epoch = "epoch-1",
+        val clearDeadlineOp = SimplePersistedOutboxRecord(
+            ownerUserId = "user-1",
             tableName = "todos",
             rowId = "task-tok-1",
-            kind = StrictOperationKind.UPDATE.wireName,
-            expectedRevision = 1L,
+            kind = TaskOperationKind.UPDATE.wireName,
             title = "Updated Title Only",
             completed = false,
-            createdAt = 1000L,
-            digest = "dig-clear",
             localRevision = 4L,
-            deliveryState = OutboxEntity.STATE_PENDING,
-            createdAtEpochMs = 1300L,
+            deliveryState = OutboxDeliveryStates.PENDING,
             deadlineDate = null,
             deadlineTime = null,
             deadlineZone = null,
@@ -407,7 +363,7 @@ class AdversarialSchedulerBoundaryTest {
             deadlineAnchorEpochMs = null,
             deadlineOverdueEpochMs = null,
             scheduleToken = null,
-            intentMask = OutboxEntity.INTENT_DEADLINE
+            intentMask = OutboxIntentMasks.DEADLINE
         )
         val proj3 = PersistedScheduleProjector.computeProjection(listOf(base), listOf(titleOp, reminderOp, clearDeadlineOp))
         assertEquals(1, proj3.size)

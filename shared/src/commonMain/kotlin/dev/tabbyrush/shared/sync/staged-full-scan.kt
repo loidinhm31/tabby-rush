@@ -1,399 +1,373 @@
 package dev.tabbyrush.shared.sync
 
+import dev.tabbyrush.shared.contract.ASSIGNMENT_TABLE_NAME
+import dev.tabbyrush.shared.contract.AccessLossReason
 import dev.tabbyrush.shared.contract.ApiResult
+import dev.tabbyrush.shared.contract.CanonicalRecordRef
+import dev.tabbyrush.shared.contract.CanonicalRecordSnapshot
+import dev.tabbyrush.shared.contract.HierarchyCoverage
 import dev.tabbyrush.shared.contract.SafeError
-import dev.tabbyrush.shared.contract.StrictSyncContract
+import dev.tabbyrush.shared.contract.TaskAccessState
+import dev.tabbyrush.shared.contract.TaskAccessStatus
+import dev.tabbyrush.shared.contract.TaskCapabilities
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.data.RoomAccountStore
-import dev.tabbyrush.shared.data.ScanStagingEntity
-import dev.tabbyrush.shared.data.ServerBaseEntity
+import kotlinx.datetime.Instant
 
 /**
- * StagedFullScan manages cursor-based stable rowId pagination from Hub,
- * stages records in SQLite, validates pre-scan confirmed identity invariants,
- * verifies rowId ordering / payload integrity (C8), and performs monotonic
- * promotion to server_base upon reaching terminal page via an atomic transaction (C1).
+ * Executes revision-bound staged full-scan and collaboration reconciliation.
+ *
+ * Lifecycle:
+ * 1. Discards un-promoted staging state and captures starting access generation.
+ * 2. Starts null full-scan requesting todos and taskAssignees with collaborationVersion = 1.
+ * 3. Binds stable access revision E from page 1.
+ * 4. Stages all content pages in durable storage, validating checkpoint progression and E consistency.
+ * 5. Enumerates union of staged, previously accessible, and draft/outbox task refs
+ *    (excluding private unsent owner-created tasks).
+ * 6. Validates access in bounded batches (<= 100) at revision E.
+ *    Authoritative unavailable / ACCESS_DENIED immediately invokes privacy-first invalidation.
+ * 7. Sends explicit empty accessChecks: [] at revision E to confirm boundary.
+ * 8. Atomically promotes staged reconciliation in Room.
+ * 9. On 409 ACCESS_REVISION_CHANGED, discards staging and signals caller to restart.
  */
 class StagedFullScan(
     val syncClient: HubSyncClient,
     val store: RoomAccountStore,
-    val activeEpoch: String,
-    val protocol: String = StrictSyncContract.PROTOCOL_VERSION,
-    val isMigration: Boolean = false,
-    val tableName: String = StrictSyncContract.DEFAULT_TABLE_NAME,
     val batchSize: Int = 100,
     val maxPageBudget: Int = 1000,
+    val displayedTaskRefs: Set<TaskRef> = emptySet(),
     val isFenced: (() -> Boolean)? = null
 ) {
+    suspend fun executeScan(): ApiResult<Unit> {
+        if (syncClient.expectedAccountKey != store.accountKey || isFenced?.invoke() == true) {
+            return fenced()
+        }
 
-    suspend fun executeScan(): ApiResult<Int> {
-        // 1. Capture snapshot of pre-scan confirmed base records
-        val preScanConfirmed = store.dao.getAllServerBase().associateBy { it.rowId }
+        var scanGeneration = store.accessGeneration
+        store.clearStagedReconciliation()
+        val scanTables = listOf("todos", ASSIGNMENT_TABLE_NAME)
 
-        // 2. Clear staging table before beginning pagination
-        store.dao.clearStaging()
+        // Page 1: begin null scan and bind access revision E
+        val firstResult = syncClient.pull(
+            PullRequestDto(
+                checkpoint = null,
+                batchSize = batchSize,
+                tables = scanTables,
+                collaborationVersion = COLLABORATION_VERSION_1
+            )
+        )
 
-        var cursor: String? = null
-        var pageCount = 0
-        var lastSeenRowId: String? = null
-        val seenCursors = mutableSetOf<String>()
-        val seenRowIds = mutableSetOf<String>()
+        val firstResponse = when (firstResult) {
+            is ApiResult.Failure -> {
+                handleFailure(firstResult.error)
+                return firstResult
+            }
+            is ApiResult.Success -> firstResult.value
+        }
 
-        // 3. Pagination loop
-        while (true) {
-            if (cursor != null) {
-                if (!seenCursors.add(cursor)) {
-                    store.dao.clearStaging()
-                    return ApiResult.Failure(
-                        SafeError.ProtocolIncompatible(
-                            code = "CURSOR_LOOP",
-                            message = "Cursor loop or repetition detected: $cursor"
-                        )
-                    )
-                }
+        if (isFenced?.invoke() == true || store.accessGeneration != scanGeneration) return fenced()
+
+        val expectedRevision = firstResponse.accessRevision ?: return ApiResult.Failure(
+            SafeError.ProtocolIncompatible("MISSING_ACCESS_REVISION", "Server omitted accessRevision in collaboration mode")
+        )
+
+        val stagedTaskRefs = mutableSetOf<TaskRef>()
+        var checkpoint: SyncCheckpointDto? = null
+
+        // Stage page 1
+        try {
+            validatePage(firstResponse, null)
+            stagePage(expectedRevision, firstResponse, stagedTaskRefs)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            store.clearStagedReconciliation()
+            throw cancelled
+        } catch (_: Exception) {
+            store.clearStagedReconciliation()
+            return ApiResult.Failure(
+                SafeError.ProtocolIncompatible("INVALID_PULL_PAGE", "Pull page rejected; saved checkpoint and local work retained")
+            )
+        }
+
+        checkpoint = firstResponse.checkpoint
+        var currentPage = firstResponse
+        var pageCount = 1
+
+        // Drain remaining data pages
+        while (currentPage.hasMore) {
+            if (pageCount >= maxPageBudget) {
+                store.clearStagedReconciliation()
+                return ApiResult.Failure(SafeError.Network("SCAN_PAGE_LIMIT", "Catch-up paused; next round must restart a fresh scan"))
+            }
+            if (isFenced?.invoke() == true || store.accessGeneration != scanGeneration) {
+                store.clearStagedReconciliation()
+                return fenced()
             }
 
-            val pullResult = syncClient.pull(
-                epoch = activeEpoch,
-                protocol = protocol,
-                tableName = tableName,
-                cursor = cursor,
-                batchSize = batchSize
+            val nextResult = syncClient.pull(
+                PullRequestDto(
+                    checkpoint = checkpoint,
+                    batchSize = batchSize,
+                    tables = scanTables,
+                    collaborationVersion = COLLABORATION_VERSION_1,
+                    expectedAccessRevision = expectedRevision
+                )
             )
 
-            when (pullResult) {
+            currentPage = when (nextResult) {
                 is ApiResult.Failure -> {
-                    store.dao.clearStaging()
-                    return pullResult
+                    handleFailure(nextResult.error)
+                    store.clearStagedReconciliation()
+                    return nextResult
                 }
-                is ApiResult.Success -> {
-                    val response = pullResult.value
-
-                    // Epoch check on every page
-                    if (response.epoch != activeEpoch) {
-                        store.dao.clearStaging()
-                        return ApiResult.Failure(
-                            SafeError.ResetRequired(
-                                code = "EPOCH_MISMATCH",
-                                message = "Server returned epoch ${response.epoch} during scan (expected $activeEpoch)"
-                            )
-                        )
-                    }
-
-                    if (response.records.size > batchSize) {
-                        store.dao.clearStaging()
-                        return ApiResult.Failure(
-                            SafeError.ProtocolIncompatible(
-                                code = "BATCH_OVERFLOW",
-                                message = "Server returned ${response.records.size} records, exceeding batchSize $batchSize"
-                            )
-                        )
-                    }
-
-                    // Empty page with hasMore check (C8)
-                    if (response.records.isEmpty() && response.hasMore) {
-                        store.dao.clearStaging()
-                        return ApiResult.Failure(
-                            SafeError.ProtocolIncompatible(
-                                code = "NON_PROGRESSING_CURSOR",
-                                message = "Server returned empty records page while hasMore was true"
-                            )
-                        )
-                    }
-
-                    val stagingEntities = mutableListOf<ScanStagingEntity>()
-                    for (record in response.records) {
-                        if (record.tableName != tableName) {
-                            store.dao.clearStaging()
-                            return ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "TABLE_MISMATCH",
-                                    message = "Record tableName ${record.tableName} mismatched requested $tableName"
-                                )
-                            )
-                        }
-                        if (record.revision <= 0L) {
-                            store.dao.clearStaging()
-                            return ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "INVALID_REVISION",
-                                    message = "Record revision ${record.revision} must be positive"
-                                )
-                            )
-                        }
-
-                        // Payload validation (C8)
-                        if (!record.deleted) {
-                            val data = record.data
-                            if (data == null || data.id != record.rowId || data.title.isBlank() || data.createdAt < 0) {
-                                store.dao.clearStaging()
-                                return ApiResult.Failure(
-                                    SafeError.ProtocolIncompatible(
-                                        code = "INVALID_RECORD",
-                                        message = "Active record ${record.rowId} had missing or invalid payload"
-                                    )
-                                )
-                            }
-                        }
-
-                        // Row ordering and uniqueness check (C8)
-                        val lastId = lastSeenRowId
-                        if (lastId != null && record.rowId <= lastId) {
-                            store.dao.clearStaging()
-                            return ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "ROW_ORDER_VIOLATION",
-                                    message = "RowId ${record.rowId} was not strictly greater than previous rowId $lastId"
-                                )
-                            )
-                        }
-                        if (!seenRowIds.add(record.rowId)) {
-                            store.dao.clearStaging()
-                            return ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "DUPLICATE_ROW_ID",
-                                    message = "Duplicate rowId ${record.rowId} received during scan"
-                                )
-                            )
-                        }
-                        lastSeenRowId = record.rowId
-
-                        stagingEntities.add(
-                            ScanStagingEntity(
-                                rowId = record.rowId,
-                                tableName = record.tableName,
-                                serverRevision = record.revision,
-                                deleted = record.deleted,
-                                title = record.data?.title ?: "",
-                                completed = record.data?.completed ?: false,
-                                createdAt = record.data?.createdAt ?: 0L,
-                                epoch = response.epoch,
-                                deadlineDate = record.data?.deadlineDate,
-                                deadlineTime = record.data?.deadlineTime,
-                                deadlineZone = record.data?.deadlineZone,
-                                deadlineOffsetSeconds = record.data?.deadlineOffsetSeconds,
-                                reminderAnchorTime = record.data?.reminderAnchorTime,
-                                deadlineAnchorEpochMs = record.data?.deadlineAnchorEpochMs,
-                                deadlineOverdueEpochMs = record.data?.deadlineOverdueEpochMs,
-                                reminderEnabled = record.data?.reminderEnabled ?: false,
-                                reminderLeadMinutes = record.data?.reminderLeadMinutes ?: 0L,
-                                reminderIntervalMinutes = record.data?.reminderIntervalMinutes,
-                                reminderCount = record.data?.reminderCount ?: 1L,
-                                scheduleToken = record.data?.scheduleToken
-                            )
-                        )
-                    }
-
-                    if (stagingEntities.isNotEmpty()) {
-                        store.dao.upsertStaging(stagingEntities)
-                    }
-
-                    if (!response.hasMore) {
-                        // Reached terminal page successfully
-                        break
-                    }
-
-                    val nextCursor = response.cursor
-                    if (nextCursor.isNullOrBlank()) {
-                        store.dao.clearStaging()
-                        return ApiResult.Failure(
-                            SafeError.ProtocolIncompatible(
-                                code = "MISSING_CURSOR",
-                                message = "hasMore is true but response cursor is null or empty"
-                            )
-                        )
-                    }
-
-                    cursor = nextCursor
-                    pageCount++
-                    if (pageCount >= maxPageBudget) {
-                        store.dao.clearStaging()
-                        return ApiResult.Failure(
-                            SafeError.ProtocolIncompatible(
-                                code = "PAGE_BUDGET_EXCEEDED",
-                                message = "Full scan exceeded maximum page budget of $maxPageBudget"
-                            )
-                        )
-                    }
-                }
+                is ApiResult.Success -> nextResult.value
             }
-        }
 
-        // 4. Validate pre-scan confirmed identity invariants and promote atomically (C1)
-        val promotionResult = promoteStaging(preScanConfirmed)
-        return promotionResult
-    }
+            if (isFenced?.invoke() == true || store.accessGeneration != scanGeneration) {
+                store.clearStagedReconciliation()
+                return fenced()
+            }
 
-    private suspend fun promoteStaging(
-        preScanConfirmed: Map<String, ServerBaseEntity>
-    ): ApiResult<Int> = store.withMutationLock {
-        val stagedRecords = store.dao.getAllStagedRecords()
-        val stagedByRowId = stagedRecords.associateBy { it.rowId }
+            if (currentPage.accessRevision != expectedRevision) {
+                store.clearStagedReconciliation()
+                return ApiResult.Failure(SafeError.AccessRevisionChanged())
+            }
 
-        // Check for missing pre-scan confirmed identities in the same epoch (C8)
-        for ((rowId, preScanRecord) in preScanConfirmed) {
-            if (preScanRecord.epoch == activeEpoch && !stagedByRowId.containsKey(rowId)) {
-                store.dao.clearStaging()
-                return@withMutationLock ApiResult.Failure(
-                    SafeError.ResetRequired(
-                        code = "CONSISTENCY_ERROR",
-                        message = "Pre-scan confirmed record $rowId in epoch $activeEpoch missing from full scan"
-                    )
+            try {
+                validatePage(currentPage, checkpoint)
+                stagePage(expectedRevision, currentPage, stagedTaskRefs)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                store.clearStagedReconciliation()
+                throw cancelled
+            } catch (_: Exception) {
+                store.clearStagedReconciliation()
+                return ApiResult.Failure(
+                    SafeError.ProtocolIncompatible("INVALID_PULL_PAGE", "Pull page rejected; saved checkpoint and local work retained")
                 )
             }
+
+            checkpoint = currentPage.checkpoint
+            pageCount++
         }
 
-        // Monotonic promotion collection
-        val basesToUpsert = mutableListOf<ServerBaseEntity>()
+        // Terminal scan complete. Enumerate exact union of task refs for access validation.
+        val unionRefs = computeAccessCheckUnion(stagedTaskRefs)
 
-        for (staged in stagedRecords) {
-            val currentBase = store.dao.getServerBase(staged.rowId)
+        // Execute bounded access checks (<= 100 per batch) at expectedRevision
+        val checkBatches = unionRefs.chunked(100)
+        for (batch in checkBatches) {
+            if (isFenced?.invoke() == true || store.accessGeneration != scanGeneration) {
+                store.clearStagedReconciliation()
+                return fenced()
+            }
 
-            if (currentBase == null) {
-                // New record from server
-                basesToUpsert.add(
-                    ServerBaseEntity(
-                        rowId = staged.rowId,
-                        serverRevision = staged.serverRevision,
-                        deleted = staged.deleted,
-                        title = staged.title,
-                        completed = staged.completed,
-                        createdAt = staged.createdAt,
-                        updatedAt = System.currentTimeMillis(),
-                        epoch = staged.epoch,
-                        deadlineDate = staged.deadlineDate,
-                        deadlineTime = staged.deadlineTime,
-                        deadlineZone = staged.deadlineZone,
-                        deadlineOffsetSeconds = staged.deadlineOffsetSeconds,
-                        reminderAnchorTime = staged.reminderAnchorTime,
-                        deadlineAnchorEpochMs = staged.deadlineAnchorEpochMs,
-                        deadlineOverdueEpochMs = staged.deadlineOverdueEpochMs,
-                        reminderEnabled = staged.reminderEnabled,
-                        reminderLeadMinutes = staged.reminderLeadMinutes,
-                        reminderIntervalMinutes = staged.reminderIntervalMinutes,
-                        reminderCount = staged.reminderCount,
-                        scheduleToken = staged.scheduleToken
-                    )
+            val checkDtos = batch.map { CanonicalRecordRefDto(ownerUserId = it.ownerUserId, tableName = "todos", rowId = it.rowId) }
+            val checkRequest = PullRequestDto(
+                collaborationVersion = COLLABORATION_VERSION_1,
+                expectedAccessRevision = expectedRevision,
+                accessChecks = checkDtos
+            )
+
+            val checkResult = syncClient.pull(checkRequest)
+            val checkResponse = when (checkResult) {
+                is ApiResult.Failure -> {
+                    handleFailure(checkResult.error)
+                    store.clearStagedReconciliation()
+                    return checkResult
+                }
+                is ApiResult.Success -> checkResult.value
+            }
+
+            if (checkResponse.accessRevision != expectedRevision) {
+                store.clearStagedReconciliation()
+                return ApiResult.Failure(SafeError.AccessRevisionChanged())
+            }
+
+            val results = checkResponse.accessResults ?: emptyList()
+            val requestedSet = checkDtos.map { Triple(it.ownerUserId, it.tableName, it.rowId) }.toSet()
+            val returnedSet = results.map { Triple(it.ref.ownerUserId, it.ref.tableName, it.ref.rowId) }
+
+            if (returnedSet.size != results.size || returnedSet.toSet() != requestedSet) {
+                store.clearStagedReconciliation()
+                return ApiResult.Failure(
+                    SafeError.ProtocolIncompatible("INVALID_ACCESS_RESULTS", "Access check results do not match requested refs exactly")
                 )
-            } else {
-                when {
-                    staged.serverRevision > currentBase.serverRevision -> {
-                        // Higher confirmed revision: promote!
-                        basesToUpsert.add(
-                            ServerBaseEntity(
-                                rowId = staged.rowId,
-                                serverRevision = staged.serverRevision,
-                                deleted = staged.deleted,
-                                title = staged.title,
-                                completed = staged.completed,
-                                createdAt = staged.createdAt,
-                                updatedAt = System.currentTimeMillis(),
-                                epoch = staged.epoch,
-                                deadlineDate = staged.deadlineDate,
-                                deadlineTime = staged.deadlineTime,
-                                deadlineZone = staged.deadlineZone,
-                                deadlineOffsetSeconds = staged.deadlineOffsetSeconds,
-                                reminderAnchorTime = staged.reminderAnchorTime,
-                                deadlineAnchorEpochMs = staged.deadlineAnchorEpochMs,
-                                deadlineOverdueEpochMs = staged.deadlineOverdueEpochMs,
-                                reminderEnabled = staged.reminderEnabled,
-                                reminderLeadMinutes = staged.reminderLeadMinutes,
-                                reminderIntervalMinutes = staged.reminderIntervalMinutes,
-                                reminderCount = staged.reminderCount,
-                                scheduleToken = staged.scheduleToken
-                            )
+            }
+
+            val stagedAccessStates = mutableListOf<TaskAccessState>()
+            for (res in results) {
+                val ref = TaskRef(res.ref.ownerUserId, res.ref.rowId)
+                if (res.status == "accessible") {
+                    val caps = res.capabilities?.let {
+                        TaskCapabilities(
+                            editContent = it.editContent,
+                            manageAssignment = it.manageAssignment,
+                            deleteTask = it.deleteTask,
+                            createChild = it.createChild
                         )
+                    } ?: TaskCapabilities.NONE
+                    val coverage = when (res.hierarchyCoverage) {
+                        "child-only" -> HierarchyCoverage.ChildOnly
+                        "full-group" -> HierarchyCoverage.FullGroup
+                        else -> HierarchyCoverage.Standalone
                     }
-                    staged.serverRevision == currentBase.serverRevision -> {
-                        // Same revision: verify logical equivalence
-                        val titlesEqual = staged.title == currentBase.title
-                        val completedEqual = staged.completed == currentBase.completed
-                        val createdAtEqual = staged.createdAt == currentBase.createdAt
-                        val deletedEqual = staged.deleted == currentBase.deleted
-
-                        val baseHasTemporal = currentBase.deadlineDate != null ||
-                                currentBase.reminderEnabled || currentBase.scheduleToken != null
-                        val stagedHasTemporal = staged.deadlineDate != null ||
-                                staged.reminderEnabled || staged.scheduleToken != null
-
-                        val temporalEqual = if (isMigration && !baseHasTemporal) {
-                            // In explicit migration transition only: normalize legacy v1 null/default extension
-                            true
-                        } else {
-                            staged.deadlineDate == currentBase.deadlineDate &&
-                                    staged.deadlineTime == currentBase.deadlineTime &&
-                                    staged.deadlineZone == currentBase.deadlineZone &&
-                                    staged.deadlineOffsetSeconds == currentBase.deadlineOffsetSeconds &&
-                                    staged.reminderAnchorTime == currentBase.reminderAnchorTime &&
-                                    staged.deadlineAnchorEpochMs == currentBase.deadlineAnchorEpochMs &&
-                                    staged.deadlineOverdueEpochMs == currentBase.deadlineOverdueEpochMs &&
-                                    staged.reminderEnabled == currentBase.reminderEnabled &&
-                                    staged.reminderLeadMinutes == currentBase.reminderLeadMinutes &&
-                                    staged.reminderIntervalMinutes == currentBase.reminderIntervalMinutes &&
-                                    staged.reminderCount == currentBase.reminderCount &&
-                                    staged.scheduleToken == currentBase.scheduleToken
-                        }
-
-                        val logicallyEqual = deletedEqual && (staged.deleted ||
-                                (titlesEqual && completedEqual && createdAtEqual && temporalEqual))
-
-                        if (!logicallyEqual) {
-                            store.dao.clearStaging()
-                            return@withMutationLock ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "DIVERGENT_REVISION",
-                                    message = "Same revision ${staged.serverRevision} with differing logical data for row ${staged.rowId}"
-                                )
-                            )
-                        }
-
-                        if (isMigration && stagedHasTemporal && !baseHasTemporal) {
-                            // Enrich local base with migrated server temporal metadata
-                            basesToUpsert.add(
-                                ServerBaseEntity(
-                                    rowId = staged.rowId,
-                                    serverRevision = staged.serverRevision,
-                                    deleted = staged.deleted,
-                                    title = staged.title,
-                                    completed = staged.completed,
-                                    createdAt = staged.createdAt,
-                                    updatedAt = System.currentTimeMillis(),
-                                    epoch = staged.epoch,
-                                    deadlineDate = staged.deadlineDate,
-                                    deadlineTime = staged.deadlineTime,
-                                    deadlineZone = staged.deadlineZone,
-                                    deadlineOffsetSeconds = staged.deadlineOffsetSeconds,
-                                    reminderAnchorTime = staged.reminderAnchorTime,
-                                    deadlineAnchorEpochMs = staged.deadlineAnchorEpochMs,
-                                    deadlineOverdueEpochMs = staged.deadlineOverdueEpochMs,
-                                    reminderEnabled = staged.reminderEnabled,
-                                    reminderLeadMinutes = staged.reminderLeadMinutes,
-                                    reminderIntervalMinutes = staged.reminderIntervalMinutes,
-                                    reminderCount = staged.reminderCount,
-                                    scheduleToken = staged.scheduleToken
-                                )
-                            )
-                        }
-                    }
-                    else -> {
-                        // staged.serverRevision < currentBase.serverRevision: retain higher confirmed revision
-                    }
+                    stagedAccessStates.add(
+                        TaskAccessState(
+                            ref = ref,
+                            revision = expectedRevision,
+                            capabilities = caps,
+                            coverage = coverage,
+                            status = TaskAccessStatus.Accessible
+                        )
+                    )
+                } else {
+                    // Authoritative unavailable/ACCESS_DENIED: immediately purge content & write evidence
+                    store.invalidateAccess(ref, AccessLossReason.UNAVAILABLE, System.currentTimeMillis())
+                    scanGeneration = store.accessGeneration
+                    stagedAccessStates.add(
+                        TaskAccessState(
+                            ref = ref,
+                            revision = expectedRevision,
+                            capabilities = TaskCapabilities.NONE,
+                            coverage = HierarchyCoverage.Standalone,
+                            status = TaskAccessStatus.Unavailable
+                        )
+                    )
                 }
             }
+
+            store.stageAccessResults(expectedRevision, stagedAccessStates)
         }
 
-        // Fencing check right before atomic promotion
-        if (store.isFrozen || isFenced?.invoke() == true) {
-            store.dao.clearStaging()
-            return@withMutationLock ApiResult.Failure(
-                SafeError.Unauthorized(
-                    code = "STORE_FROZEN",
-                    message = "Store frozen or fenced before scan promotion"
+        // Terminal validation-only request: explicit empty accessChecks = [] at revision E
+        if (isFenced?.invoke() == true || store.accessGeneration != scanGeneration) {
+            store.clearStagedReconciliation()
+            return fenced()
+        }
+
+        val terminalResult = syncClient.pull(
+            PullRequestDto(
+                collaborationVersion = COLLABORATION_VERSION_1,
+                expectedAccessRevision = expectedRevision,
+                accessChecks = emptyList()
+            )
+        )
+
+        val terminalResponse = when (terminalResult) {
+            is ApiResult.Failure -> {
+                handleFailure(terminalResult.error)
+                store.clearStagedReconciliation()
+                return terminalResult
+            }
+            is ApiResult.Success -> terminalResult.value
+        }
+
+        if (terminalResponse.accessRevision != expectedRevision) {
+            store.clearStagedReconciliation()
+            return ApiResult.Failure(SafeError.AccessRevisionChanged())
+        }
+
+        // Persist terminal data checkpoint into scanCheckpoint metadata under mutation lock
+        store.withMutationLock {
+            val meta = store.dao.getMeta() ?: dev.tabbyrush.shared.data.AccountSyncMetaEntity()
+            store.dao.upsertMeta(
+                meta.copy(
+                    scanCheckpointUpdatedAt = checkpoint?.updatedAt,
+                    scanCheckpointId = checkpoint?.id
                 )
             )
         }
 
-        // Atomic promotion and staging clear under mutation lock (C1, Phase 07)
-        store.dao.promoteStagingAtomic(basesToUpsert)
-        ApiResult.Success(stagedRecords.size)
+        // Atomic promotion in Room
+        val promoted = store.promoteReconciliation(expectedRevision, System.currentTimeMillis())
+        if (!promoted) {
+            store.clearStagedReconciliation()
+            return ApiResult.Failure(SafeError.AccessRevisionChanged())
+        }
+
+        return ApiResult.Success(Unit)
     }
+
+    private suspend fun stagePage(
+        revision: Long,
+        response: PullResponseDto,
+        stagedTaskRefs: MutableSet<TaskRef>
+    ) {
+        val snapshots = response.records.map { r ->
+            val owner = r.ownerUserId ?: store.userId
+            if (r.tableName == "todos") {
+                stagedTaskRefs.add(TaskRef(owner, r.rowId))
+            }
+            CanonicalRecordSnapshot(
+                ref = CanonicalRecordRef(ownerUserId = owner, tableName = r.tableName, rowId = r.rowId),
+                dataJson = r.data.toString(),
+                version = r.version,
+                syncedAt = runCatching { Instant.parse(r.syncedAt).toEpochMilliseconds() }.getOrDefault(0L),
+                deleted = r.deleted
+            )
+        }
+        store.stageDataPage(revision, snapshots)
+    }
+
+    private suspend fun computeAccessCheckUnion(stagedTaskRefs: Set<TaskRef>): List<TaskRef> {
+        val priorAccessRefs = store.dao.getAllAccess()
+            .filter { it.status == TaskAccessStatus.Accessible.name }
+            .map { TaskRef(it.ownerUserId, it.rowId) }
+        val outboxTasks = store.dao.getAllOutbox().filter { it.tableName == "todos" }.map {
+            TaskRef(it.ownerUserId ?: store.userId, it.rowId)
+        }
+        val draftTasks = store.dao.getAllDrafts().filter { it.tableName == "todos" }.map {
+            TaskRef(it.ownerUserId ?: store.userId, it.rowId)
+        }
+
+        val candidateUnion = (stagedTaskRefs + priorAccessRefs + outboxTasks + draftTasks + displayedTaskRefs)
+
+        // Exclude private unsent owner-created tasks
+        return candidateUnion.filter { ref ->
+            if (ref.ownerUserId == store.userId && ref !in stagedTaskRefs) {
+                val confirmed = store.readConfirmedBase(ref.toRecordRef())
+                confirmed != null
+            } else {
+                true
+            }
+        }.sorted()
+    }
+
+    private suspend fun handleFailure(error: SafeError) {
+        if (error is SafeError.MembershipDenied) {
+            store.invalidateAllSharedAccess(AccessLossReason.MEMBERSHIP_DENIED, System.currentTimeMillis())
+        }
+    }
+
+    private fun fenced(): ApiResult.Failure =
+        ApiResult.Failure(SafeError.Unauthorized("ACCOUNT_FENCED", "Account changed during catch-up"))
+}
+
+internal fun validatePage(response: PullResponseDto, previous: SyncCheckpointDto?) {
+    require(response.schemaVersion in 1..MAX_EXACT_VERSION)
+    val checkpointTime = Instant.parse(response.checkpoint.updatedAt)
+    var lastRecordTime: Instant? = null
+    for (record in response.records) {
+        require((record.tableName == "todos" || record.tableName == ASSIGNMENT_TABLE_NAME) &&
+                record.version in 1..MAX_EXACT_VERSION && record.rowId.isNotEmpty())
+        val currentRecordTime = Instant.parse(record.syncedAt)
+        if (lastRecordTime != null) {
+            require(currentRecordTime >= lastRecordTime) { "Regressive record syncedAt within page" }
+        }
+        require(currentRecordTime <= checkpointTime) { "Record syncedAt exceeds page checkpoint" }
+        lastRecordTime = currentRecordTime
+    }
+    if (previous != null) {
+        require(compareCheckpoint(response.checkpoint, previous) >= 0) { "Regressive checkpoint" }
+    }
+    if (response.hasMore) {
+        require(response.records.isNotEmpty()) { "Nonprogressing empty page" }
+        if (previous != null) {
+            require(compareCheckpoint(response.checkpoint, previous) > 0) { "Nonprogressing page checkpoint" }
+        }
+    }
+}
+
+internal fun compareCheckpoint(left: SyncCheckpointDto, right: SyncCheckpointDto): Int {
+    val time = Instant.parse(left.updatedAt).compareTo(Instant.parse(right.updatedAt))
+    return if (time == 0) left.id.compareTo(right.id) else time
 }

@@ -12,7 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import dev.tabbyrush.shared.contract.AccountKey
-
+import dev.tabbyrush.shared.contract.TaskRef
 /**
  * Factory utilities for Android notification channels, explicit alarm intents,
  * and immutable PendingIntents with identity-only data URIs.
@@ -29,10 +29,11 @@ object AndroidNotificationIntentFactory {
 
     const val EXTRA_ACCOUNT_KEY = "extra_account_key"
     const val EXTRA_GENERATION = "extra_generation"
+    const val EXTRA_OWNER_USER_ID = "extra_owner_user_id"
+    const val EXTRA_ROW_ID = "extra_row_id"
     const val EXTRA_TASK_ID = "extra_task_id"
     const val EXTRA_SCHEDULE_TOKEN = "extra_schedule_token"
     const val EXTRA_OCCURRENCE_INDEX = "extra_occurrence_index"
-
     fun getAccountNotificationTag(accountKey: AccountKey): String = "tabbyrush_${accountKey.value}"
 
     fun ensureNotificationChannel(context: Context) {
@@ -70,17 +71,27 @@ object AndroidNotificationIntentFactory {
         context: Context,
         accountKey: AccountKey,
         generation: Long,
-        taskId: String,
+        taskRef: TaskRef,
         scheduleToken: String,
         occurrenceIndex: Int
     ): Intent {
         return Intent(context, TabbyRushAlarmReceiver::class.java).apply {
             action = ACTION_DELIVER_REMINDER
-            // Data URI participates in filter equality without carrying user text
-            data = Uri.parse("tabbyrush://alarm/${accountKey.value}/$generation/$taskId/$scheduleToken/$occurrenceIndex")
+            data = Uri.Builder()
+                .scheme("tabbyrush")
+                .authority("alarm")
+                .appendPath(accountKey.value)
+                .appendPath(generation.toString())
+                .appendPath(taskRef.ownerUserId)
+                .appendPath(taskRef.rowId)
+                .appendPath(scheduleToken)
+                .appendPath(occurrenceIndex.toString())
+                .build()
             putExtra(EXTRA_ACCOUNT_KEY, accountKey.value)
             putExtra(EXTRA_GENERATION, generation)
-            putExtra(EXTRA_TASK_ID, taskId)
+            putExtra(EXTRA_OWNER_USER_ID, taskRef.ownerUserId)
+            putExtra(EXTRA_ROW_ID, taskRef.rowId)
+            putExtra(EXTRA_TASK_ID, taskRef.rowId)
             putExtra(EXTRA_SCHEDULE_TOKEN, scheduleToken)
             putExtra(EXTRA_OCCURRENCE_INDEX, occurrenceIndex.toLong())
         }
@@ -88,14 +99,61 @@ object AndroidNotificationIntentFactory {
 
     fun getAlarmRequestCode(
         accountKey: AccountKey,
-        taskId: String,
+        taskRef: TaskRef,
         scheduleToken: String,
         occurrenceIndex: Int
     ): Int {
-        return (accountKey.value + taskId + scheduleToken + occurrenceIndex).hashCode() and 0x7FFFFFFF
+        var h = accountKey.value.hashCode()
+        h = 31 * h + taskRef.ownerUserId.hashCode()
+        h = 31 * h + taskRef.rowId.hashCode()
+        h = 31 * h + scheduleToken.hashCode()
+        h = 31 * h + occurrenceIndex.hashCode()
+        return h and 0x7FFFFFFF
     }
 
     fun createAlarmPendingIntent(
+        context: Context,
+        accountKey: AccountKey,
+        generation: Long,
+        taskRef: TaskRef,
+        scheduleToken: String,
+        occurrenceIndex: Int
+    ): PendingIntent {
+        val intent = createAlarmIntent(context, accountKey, generation, taskRef, scheduleToken, occurrenceIndex)
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val requestCode = getAlarmRequestCode(accountKey, taskRef, scheduleToken, occurrenceIndex)
+        return PendingIntent.getBroadcast(context, requestCode, intent, flags)
+    }
+
+    fun createViewTaskPendingIntent(
+        context: Context,
+        accountKey: AccountKey,
+        taskRef: TaskRef
+    ): PendingIntent {
+        val clickIntent = Intent(context, MainActivity::class.java).apply {
+            action = ACTION_VIEW_TASK
+            data = Uri.Builder()
+                .scheme("tabbyrush")
+                .authority("task")
+                .appendPath(accountKey.value)
+                .appendPath(taskRef.ownerUserId)
+                .appendPath(taskRef.rowId)
+                .build()
+            putExtra(EXTRA_ACCOUNT_KEY, accountKey.value)
+            putExtra(EXTRA_OWNER_USER_ID, taskRef.ownerUserId)
+            putExtra(EXTRA_ROW_ID, taskRef.rowId)
+            putExtra(EXTRA_TASK_ID, taskRef.rowId)
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val requestCode = (accountKey.value + ":" + taskRef.ownerUserId + ":" + taskRef.rowId).hashCode() and 0x7FFFFFFF
+        return PendingIntent.getActivity(context, requestCode, clickIntent, flags)
+    }
+
+    /**
+     * Legacy intent builder to allow cancellation of pre-upgrade alarms without mapping them to current user.
+     */
+    fun createLegacyAlarmPendingIntent(
         context: Context,
         accountKey: AccountKey,
         generation: Long,
@@ -103,26 +161,17 @@ object AndroidNotificationIntentFactory {
         scheduleToken: String,
         occurrenceIndex: Int
     ): PendingIntent {
-        val intent = createAlarmIntent(context, accountKey, generation, taskId, scheduleToken, occurrenceIndex)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        val requestCode = getAlarmRequestCode(accountKey, taskId, scheduleToken, occurrenceIndex)
-        return PendingIntent.getBroadcast(context, requestCode, intent, flags)
-    }
-
-    fun createViewTaskPendingIntent(
-        context: Context,
-        accountKey: AccountKey,
-        taskId: String
-    ): PendingIntent {
-        val clickIntent = Intent(context, MainActivity::class.java).apply {
-            action = ACTION_VIEW_TASK
-            data = Uri.parse("tabbyrush://task/${accountKey.value}/$taskId")
+        val intent = Intent(context, TabbyRushAlarmReceiver::class.java).apply {
+            action = ACTION_DELIVER_REMINDER
+            data = Uri.parse("tabbyrush://alarm/${accountKey.value}/$generation/$taskId/$scheduleToken/$occurrenceIndex")
             putExtra(EXTRA_ACCOUNT_KEY, accountKey.value)
+            putExtra(EXTRA_GENERATION, generation)
             putExtra(EXTRA_TASK_ID, taskId)
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_SCHEDULE_TOKEN, scheduleToken)
+            putExtra(EXTRA_OCCURRENCE_INDEX, occurrenceIndex.toLong())
         }
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        val requestCode = (accountKey.value + taskId).hashCode() and 0x7FFFFFFF
-        return PendingIntent.getActivity(context, requestCode, clickIntent, flags)
+        val requestCode = (accountKey.value + taskId + scheduleToken + occurrenceIndex).hashCode() and 0x7FFFFFFF
+        return PendingIntent.getBroadcast(context, requestCode, intent, flags)
     }
 }

@@ -4,7 +4,13 @@ object EndpointPolicy {
     private val ALLOWED_DEBUG_HTTP_HOSTS = setOf(
         "localhost:3000",
         "127.0.0.1:3000",
-        "10.0.2.2:3000"
+        "10.0.2.2:3000",
+        "localhost:3100",
+        "127.0.0.1:3100",
+        "10.0.2.2:3100",
+        "localhost:3101",
+        "127.0.0.1:3101",
+        "10.0.2.2:3101"
     )
 
     fun validate(raw: String, mode: BuildMode): ApiResult<String> {

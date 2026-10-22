@@ -6,6 +6,8 @@ import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.NativeReminderAdapter
 import dev.tabbyrush.shared.contract.ReminderCapabilities
 import dev.tabbyrush.shared.contract.ScheduledAlarmHandle
+import dev.tabbyrush.shared.contract.Sha256
+import dev.tabbyrush.shared.contract.TaskRef
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -67,6 +69,7 @@ class WindowsNativeReminderAdapter(
 ) : DesktopReminderAdapter {
 
     private val postedPlatformIds = ConcurrentHashMap<String, MutableSet<String>>()
+    private val taskNotificationMap = ConcurrentHashMap<String, ConcurrentHashMap<TaskRef, MutableSet<String>>>()
     private var scheduleListener: ((AccountKey, Long, List<ScheduledAlarmHandle>) -> Unit)? = null
 
     override fun setScheduleListener(listener: ((AccountKey, Long, List<ScheduledAlarmHandle>) -> Unit)?) {
@@ -95,14 +98,17 @@ class WindowsNativeReminderAdapter(
     override suspend fun postOwnedNotification(
         accountKey: AccountKey,
         generation: Long,
-        taskId: String,
+        taskRef: TaskRef,
         scheduleToken: String,
         occurrenceIndex: Int,
         title: String,
         dueEpochMs: Long
     ): String? = withContext(ioDispatcher) {
-        val tag = "t_${taskId.take(16)}_$occurrenceIndex"
-        val group = "d_${accountKey.value.take(12)}"
+        val canonicalPayload = "${taskRef.ownerUserId.length}:${taskRef.ownerUserId}:${taskRef.rowId.length}:${taskRef.rowId}:$scheduleToken:$occurrenceIndex"
+        val hash = Sha256.sha256Hex(canonicalPayload.encodeToByteArray())
+        val tag = "t_${hash.take(32)}"
+        val groupHash = Sha256.sha256Hex(accountKey.value.encodeToByteArray())
+        val group = "d_${groupHash.take(16)}"
         val safeTitle = title.ifBlank { "Task Reminder" }
         val status = windowsAdapter.postNotification(
             tag = tag,
@@ -114,9 +120,25 @@ class WindowsNativeReminderAdapter(
             is WindowsNotificationStatus.Success -> {
                 val platformId = "$group|$tag"
                 postedPlatformIds.computeIfAbsent(accountKey.value) { ConcurrentHashMap.newKeySet() }.add(platformId)
+                taskNotificationMap.computeIfAbsent(accountKey.value) { ConcurrentHashMap() }
+                    .computeIfAbsent(taskRef) { ConcurrentHashMap.newKeySet() }.add(platformId)
                 platformId
             }
             else -> null
+        }
+    }
+
+    override suspend fun cancelNotificationsForTask(
+        accountKey: AccountKey,
+        taskRef: TaskRef
+    ) = withContext(ioDispatcher) {
+        val platformIds = taskNotificationMap[accountKey.value]?.remove(taskRef) ?: return@withContext
+        for (platformId in platformIds) {
+            postedPlatformIds[accountKey.value]?.remove(platformId)
+            val parts = platformId.split('|')
+            if (parts.size == 2) {
+                windowsAdapter.cancelNotification(tag = parts[1], group = parts[0])
+            }
         }
     }
 
@@ -137,8 +159,10 @@ class WindowsNativeReminderAdapter(
     }
 
     override suspend fun cancelAllForAccount(accountKey: AccountKey) = withContext(ioDispatcher) {
+        taskNotificationMap.remove(accountKey.value)
         val accountIds = postedPlatformIds.remove(accountKey.value) ?: mutableSetOf()
-        val group = "d_${accountKey.value.take(12)}"
+        val groupHash = Sha256.sha256Hex(accountKey.value.encodeToByteArray())
+        val group = "d_${groupHash.take(16)}"
         val errors = mutableListOf<String>()
         for (platformId in accountIds) {
             val parts = platformId.split('|')

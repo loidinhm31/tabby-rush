@@ -37,13 +37,13 @@ data class ReminderRule(
 ) {
     init {
         require(leadMinutes >= 0) { "leadMinutes must be non-negative" }
-        require(count in StrictSyncV2Contract.MIN_REMINDER_COUNT..StrictSyncV2Contract.MAX_REMINDER_COUNT) {
+        require(count in TaskDataContract.MIN_REMINDER_COUNT..TaskDataContract.MAX_REMINDER_COUNT) {
             "reminder count must be between 1 and 10"
         }
         if (count == 1L) {
             require(intervalMinutes == null) { "intervalMinutes must be null when count is 1" }
         } else {
-            require(intervalMinutes != null && intervalMinutes >= StrictSyncV2Contract.MIN_REPEAT_INTERVAL_MINUTES) {
+            require(intervalMinutes != null && intervalMinutes >= TaskDataContract.MIN_REPEAT_INTERVAL_MINUTES) {
                 "repeating intervalMinutes must be >= 15"
             }
         }
@@ -55,7 +55,7 @@ data class ReminderRule(
 }
 
 data class Todo(
-    val id: String,
+    val taskRef: TaskRef,
     val title: String,
     val completed: Boolean,
     val createdAt: Long,
@@ -65,13 +65,27 @@ data class Todo(
     val isDeleted: Boolean = false,
     val deadline: TaskDeadline? = null,
     val reminderRule: ReminderRule = ReminderRule.DISABLED,
-    val scheduleToken: String? = null
+    val scheduleToken: String? = null,
+    val parentTaskRef: TaskRef? = null,
+    val accessState: TaskAccessState? = null
 ) {
+    val id: String get() = taskRef.rowId
+    val ownerUserId: String get() = taskRef.ownerUserId
+    val parentTaskId: String? get() = parentTaskRef?.rowId
+
     init {
         require(createdAt >= 0) { "createdAt must be non-negative" }
         require(updatedAt >= createdAt) { "updatedAt must be greater than or equal to createdAt" }
         require(serverRevision >= 0) { "serverRevision must be non-negative" }
         validateScheduleConsistency()
+        if (parentTaskRef != null) {
+            require(parentTaskRef.ownerUserId == taskRef.ownerUserId) {
+                "parentTaskRef owner '${parentTaskRef.ownerUserId}' must match task owner '${taskRef.ownerUserId}'"
+            }
+            require(parentTaskRef != taskRef) {
+                "parentTaskRef must not equal taskRef (self-reference forbidden)"
+            }
+        }
     }
 
     private fun validateScheduleConsistency() {
@@ -121,8 +135,8 @@ data class Todo(
     }
 }
 
-fun Todo.toStrictV2TodoData(): StrictV2TodoData {
-    return StrictV2TodoData(
+fun Todo.toTaskData(): TaskData {
+    return TaskData(
         id = id,
         title = title,
         completed = completed,
@@ -138,11 +152,12 @@ fun Todo.toStrictV2TodoData(): StrictV2TodoData {
         reminderLeadMinutes = reminderRule.leadMinutes,
         reminderIntervalMinutes = reminderRule.intervalMinutes,
         reminderCount = reminderRule.count,
-        scheduleToken = scheduleToken
+        scheduleToken = scheduleToken,
+        parentTaskId = parentTaskId
     )
 }
 
-fun StrictV2TodoData.toDeadline(): TaskDeadline? {
+fun TaskData.toDeadline(): TaskDeadline? {
     val date = deadlineDate ?: return null
     return TaskDeadline(
         date = date,
@@ -155,7 +170,7 @@ fun StrictV2TodoData.toDeadline(): TaskDeadline? {
     )
 }
 
-fun StrictV2TodoData.toReminderRule(): ReminderRule {
+fun TaskData.toReminderRule(): ReminderRule {
     return ReminderRule(
         enabled = reminderEnabled,
         leadMinutes = reminderLeadMinutes,
@@ -163,6 +178,7 @@ fun StrictV2TodoData.toReminderRule(): ReminderRule {
         count = reminderCount
     )
 }
+
 
 fun hasScheduleSemanticChange(
     oldDeadline: TaskDeadline?,

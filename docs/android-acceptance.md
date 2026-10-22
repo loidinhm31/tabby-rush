@@ -1,16 +1,21 @@
 # Android Composition, Reminder Alarms & Runtime Acceptance Specification
 
-**Document Version**: 1.3.0
-**Phase**: 12 — Coordinated Cutover, Recovery Runbook & Release Documentation
-**Status**: Logic & Native Adapters Implemented & Unit Verified (Physical Connected Device / Emulator & Doze Mode Acceptance Formally Held Pending Gate G2 / Hardware Testbed)
-**Related Documents**: [Project Overview PDR](./project-overview-pdr.md) · [System Architecture](./system-architecture.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Design Guidelines](./design-guidelines.md)
+**Document Version**: 1.5.0
+**Last Updated**: 2026-10-21
+**Status**: Collaborative task assignees and Room v5 delivered (Phases 01–08). Android unit/package and offline evidence reported; connected-device and interactive UI acceptance NOT RUN. Native acceptance is not passed. Production migration is unauthorized.
+**Related Documents**: [Project Overview PDR](./project-overview-pdr.md) · [System Architecture](./system-architecture.md) · [Authentication & Credentials](./authentication-and-credentials.md) · [Local Storage & Sync](./local-storage-and-sync.md) · [Design Guidelines](./design-guidelines.md) · [Release Acceptance](./release-acceptance.md) · [Integrated Acceptance Evidence](../plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md)
 
 ---
 
 ## 1. Overview & Architectural Boundaries
 
-Phase 08 delivers the native Android reminder scheduling, private notification delivery, device restoration receivers, and account lifecycle coordination for the `:androidApp` module, building on the shared Room v2 storage, outbox sync coordinator, and shared scheduling ledger from Phases 05–07.
+The Android app integrates platform lifecycle, reminders, notifications, task surfaces, and account coordination with Room v5 local storage and the current standard Hub sync client. It does not use strict-v1/v2/v3 task-sync routes. Historical Android phase evidence below is dated and must not be treated as a fresh run or connected-device acceptance.
 
+### 1.0 Collaborative Task Assignees & Surface Invariants
+1. **Canonical Identity in Intents & Reminders**: Android `AlarmManager` alarms, notification tags, and `PendingIntent` extras transport canonical `TaskRef(ownerUserId, rowId)` rather than bare row IDs.
+2. **Admission Re-Authorization**: Widgets (`GlanceAppWidget`), alarm receivers (`TabbyRushAlarmReceiver`), and notification click handlers re-resolve `TaskRef` and current `accessGeneration` at admission and immediately before local mutation or delivery. If authoritative access was lost, delivery is suppressed and alarms are cancelled fail-closed.
+3. **Child-Only Privacy**: Assigned child tasks render flat in the Android task list and Glance widget without synthetic parent rows or sibling disclosures.
+4. **Revocation Purge & Notification Cancellation**: When access is revoked, active notifications for the task are cancelled, scheduled alarms are cleared from `AndroidAlarmRegistry`, and active widget state is refreshed.
 ```
                       ┌──────────────────────────────────────────────┐
                       │              TabbyRushApplication                │
@@ -146,7 +151,7 @@ Phase 08 delivers the native Android reminder scheduling, private notification d
 - **Glance Task Widget (`TabbyRushTaskWidget`)**:
   - Implemented using Jetpack Glance 1.2.0-beta01 with `SizeMode.Responsive` supporting 120×120dp (2×2), 240×120dp (3×2), 240×240dp (3×3), and 320×360dp (4×4+) layouts.
   - Presentation state `WidgetDisplayState`: non-ready states (`Loading`, `SignedOut`, `Locked`, `Unavailable`) display generic fallback copy with zero private task titles exposed.
-  - Single scrollable list partitioned into Incomplete tasks and Completed tasks in stable `createdAt DESC, id DESC` order.
+- Single scrollable list partitioned into Incomplete tasks and Completed tasks (historically flat `createdAt DESC, id DESC` in Phase 07; superseded by Phase 04 grouped hierarchy projection in §3.8).
   - Interactive atomic completion toggle routes through `TaskSurfaceActionReceiver` and `SessionViewModel.setCompletedLocally()`; quick add dialog routes to `MainActivity` with `ACTION_ADD_TASK`.
 - **Quiet Task Surface Deadline Notification (`TaskSurfaceNotificationCoordinator`)**:
   - Channel `tabbyrush_task_surfaces`: `IMPORTANCE_LOW`, lights/sound/vibration disabled, `lockscreenVisibility = Notification.VISIBILITY_PRIVATE`.
@@ -165,6 +170,30 @@ Phase 08 delivers the native Android reminder scheduling, private notification d
   1. *Delivery Drain Timeout*: If `deliveryGate.closeAndDrain()` times out in `TabbyRushApplication.closeRuntimeInternal()`, the method catches and logs the exception, then returns before observer-job cancellation and Room closure. `closeActiveRuntime()` nevertheless clears `activeRuntime`, leaving coroutine jobs running and Room unclosed. This remains an open safety finding.
   2. *Widget Cleanup Error Swallowing*: RemoteViews blanking and Glance session closure catch `Throwable` non-fatally during leave protocol, risking ghost widget state on launcher if AppWidgetManager fails.
   3. *Glance Process Death & Provenance Holds*: Launcher session survival across OS process death and Glance artifact provenance remain physical execution holds.
+
+### 3.8 Grouped Glance Widget & Deadline Presentation Architecture (Phase 04)
+
+Phase 04 updates the native Android Glance launcher widget (`TabbyRushTaskWidget`) to render hierarchical parent-child groups and explicit absolute deadlines directly from shared Phase 03 evaluators without platform-specific hierarchy forks:
+
+1. **Pure `projectWidgetItems` Projection (`task-widget-projection.kt`)**:
+   - Consumes `TaskHierarchyProjector.projectHierarchy(section, TodoFilter.ALL)` to produce `WidgetTaskItem` models.
+   - `TodoFilter.ALL` preserves whole compact groups intact within the Incomplete section (active parent displays together with both active and completed sibling children). Fully completed groups partition under Completed.
+   - Enforces ancestor deletion dominance (suppressing child tasks of locally or remotely deleted parents) and effective parent completion derivation.
+2. **Absolute Own Deadlines & Overdue Decoration**:
+   - Formats each item's deadline via `TaskDeadlinePresentation.formatDeadline(deadline, effectiveCompleted, nowEpochMs)`.
+   - Every row displays its own stored absolute date (`"Due YYYY-MM-DD"`) and, if timed, captured time and IANA zone (`"Due YYYY-MM-DD HH:mm (captured zone)"`). Zero deadline inheritance occurs between parent and child.
+   - Reminder rule anchor time (default 09:00 for date-only tasks) never leaks into deadline displays. Tasks lacking deadlines omit the metadata line entirely.
+   - Overdue decoration (`• Overdue`) renders in `GlanceTheme.colors.error` with `FontWeight.Bold` supplementing the absolute date rather than replacing it. Completed tasks never render as overdue.
+3. **Adaptive Glance Row Layout & Minimum Hit Targets (`task-widget.kt`)**:
+   - Replaces fixed-height single-line rows with adaptive Glance Column and Box compositions.
+   - Explicit 48×48dp CheckBox container `Box(contentAlignment = Alignment.Center)` accompanied by a minimum 48dp `Spacer` serves as a layout provision intended to meet Android >=48dp touch target guidance; physical touch bounds remain subject to runtime device verification.
+   - Navigable title/metadata `Column` declares `.fillMaxHeight()` with `Alignment.CenterVertically` and click action (`createOpenTaskIntent`).
+   - Title text allows 1 line (compact) or 2 lines; deadline text configures `maxLines = 3` to accommodate multi-line wrapped deadline and overdue labels on narrow devices, though text clipping prevention remains subject to runtime verification under 200% font scaling.
+   - Child rows indent by 12dp (compact) or 20dp (expanded).
+4. **Read-Only Automatic Parent Progress & Fenced Actions**:
+   - Parents with live children render read-only checkboxes (`onCheckedChange = null`) displaying automatic child completion progress (`"Subtasks: X/Y completed"`) and aggregated accessibility descriptions (`task_widget_parent_automatic_content_desc`), preventing direct group toggle.
+   - Standalone roots and leaf children bind interactive callbacks fenced by `SurfaceAccountToken(accountKey, generation)` via `TaskWidgetActionKeys.toggleTaskParameters`. Stale parent completion actions fail closed in shared store admission.
+   - Widget Add button invokes `createAddTaskIntent`, creating independent root tasks only (child creation remains strictly main-app-only).
 ---
 
 ## 4. Implementation, Verification & Acceptance Status Matrix
@@ -180,10 +209,14 @@ Phase 08 delivers the native Android reminder scheduling, private notification d
 | **`CompositeLeaveSchedulerCancelGate`** | Yes | Yes (Unit: 4-stage ordering, timeout exception) | Production gate verified; `closeRuntimeInternal()` follows separate unjoined teardown. |
 | **`ReminderPermissionController`** | Yes | Yes (Unit: sealed class hierarchy, permission constants) | `MainActivity.onResume()` discards evaluation result; UI prompt deferred to Phase 10. |
 | **Cold-Start Navigation** | Yes | Yes (Unit / Code review: `pendingTarget` queueing) | Live activity transition testing pending connected device testbed. |
+| **`projectWidgetItems` (Projection)** | Yes | Yes (Unit: whole compact group preservation, ancestor deletion dominance, raw completion disagreement) | Launcher rendering and responsive scaling held at Gate G2 / Phase 06. |
+| **`TabbyRushTaskWidget` (Grouped & Deadlines)** | Yes | Yes (Unit: absolute own deadline formatting, overdue decoration, TalkBack description assembly) | Connected launcher execution and TalkBack audio verification held at Gate G2 / Phase 06. |
 
 ### 4.2 Automated Verification Evidence
 
-The following are recorded Phase 07 results, not fresh runs performed for this documentation update. The Phase 07 aggregate is 364 Gradle tests, 12 Node security auditor tests, 6 source diagnostics, 18 Hub fixture checks, and 8 strict-v2 rehearsal checks; build outputs are recorded separately.
+#### 4.2.1 Historical Phase 07 Automated Verification Evidence
+
+The following are historical Phase 07 results from earlier runs (2026-10-20 and prior), not fresh verification for this update. Their counts are snapshots only. The former strict-v2 rehearsal runner referenced below has been removed; its recorded result is not a current executable check.
 
 1. **Android Unit Test Suite (`:androidApp:testDebugUnitTest`)**:
    - Command: `./gradlew.bat :androidApp:testDebugUnitTest --rerun-tasks --dependency-verification=off`
@@ -218,14 +251,40 @@ The following are recorded Phase 07 results, not fresh runs performed for this d
    - Outcome: `BUILD SUCCESSFUL` (99/99 tests passed across 13 classes).
 9. **Cryptographic & Protocol Verification**:
    - `node scripts/hub-live-smoke.mjs --fixture-test`: 18/18 offline smoke-fixture self-checks PASS.
-   - `node scripts/strict-v2-cutover-rehearsal.mjs --self-test`: 8/8 in-process tooling rehearsal checks PASS.
+   - Historical report claim: 8/8 strict-v2 rehearsal checks passed. `strict-v2-cutover-rehearsal.mjs` has been removed; do not run or cite it as current verification.
 10. **Note on Unavailable Tools**:
    - `.omp/evcrate/scripts/validate-docs.cjs` is absent from repo environment and was not executed.
 
+#### 4.2.2 Phase 04 Grouped Widget & Deadline Automated Verification Evidence
+
+Recorded from QA validation report (`plans/reports/qa-261020-0053-phase-04-android-widget-deadline-labels.md`):
+
+1. **TabbyRush Shared JVM Tests (`:shared:jvmTest`)**:
+   - Command: `JAVA_HOME=... ./gradlew :shared:jvmTest --dependency-verification=off --rerun-tasks`
+   - Outcome: `BUILD SUCCESSFUL` — **341 / 341 PASSED (100% Green)** across 41 test suites.
+2. **Android Unit Test Suite (`:androidApp:testDebugUnitTest`)**:
+   - Command: `JAVA_HOME=... ./gradlew :androidApp:testDebugUnitTest --dependency-verification=off --rerun-tasks`
+   - Outcome: `BUILD SUCCESSFUL` — **50 / 50 PASSED (100% Green)** across 8 test suites, including 18 `TaskWidgetModelTest` assertions verifying:
+     - Pure projection with `TodoFilter.ALL` keeping mixed groups intact under Incomplete.
+     - Ancestor deletion dominance suppressing children of deleted roots.
+     - Fully completed groups placed under Completed with effective completion.
+     - Absolute own deadline formatting with overdue decoration and no anchor leakage.
+     - No deadline inheritance between parent and child.
+     - Read-only automatic parent progress and absence of toggle callback.
+     - Request code determinism, action parameter serialization, and `SurfaceAccountToken` fence isolation.
+3. **Historical Strict-v3 Vector Result**:
+   - Prior Phase report recorded 11/11 vector checks. `strict-v3-vector-runner.mjs` has been removed; this result is historical strict-protocol evidence, not current standard-sync verification.
+4. **Android Instrumentation Compilation (`:androidApp:compileDebugAndroidTestKotlin`)**:
+   - Command: `JAVA_HOME=... ./gradlew :androidApp:compileDebugAndroidTestKotlin --dependency-verification=off`
+   - Outcome: `BUILD SUCCESSFUL` (build succeeded with 47 executed Gradle tasks; instrumented test sources compile clean). Not counted as test assertions.
+5. **Combined Reported Verification Total**: **402 reported passing tests/checks** (`341 + 50 + 11`).
+6. **Documentation Tooling & Acceptance Caveats**:
+   - Documentation link validation for this phase was executed via host path `/home/loidinh/.omp/agent/evcrate/scripts/validate-docs.cjs`, verifying 273 internal links (0 broken) and 47 code references.
+   - *Overdue Refresh Limitation*: Overdue evaluation captures `nowEpochMs = System.currentTimeMillis()` at composition time without automatic midnight/boundary trigger refresh; periodic/boundary wake is tracked as an acceptance gap for Phase 06.
 ### 4.3 Gate G2 Physical Execution Status & Cutover Integration
-- **Current Position**: Android implementations and automated checks are recorded, including unit tests and debug APK assembly. These do not establish native launcher, shade, or device acceptance.
-- **Formal Hold**: Physical connected device/emulator execution, launcher interaction, Doze behavior, real lock-screen privacy, and reboot restoration remain held at Gate G2. The Android evidence PNGs are visual design baselines, not runtime captures.
-- **Phase 07 Record**: Credited 6h / 12h; overall progress 118h / 132h (89.4%). See the [Android sticky-surface evidence summary](./evidence/sticky-surfaces-android-summary.md) and [Phase 07 evidence report](../plans/261016-1409-sticky-task-surfaces/reports/phase-07-acceptance-evidence.md). Phase 08 Linux acceptance and production release gates G3, G6, and G7 remain pending; the 149 unmatched dependency checksums and separate Glance provenance hold remain open.
+- **Current Position**: UI provider approval timed out twice; connected Android device/emulator acceptance was not run. Unit/package and standalone runtime-harness evidence do not establish native launcher, notification shade, accessibility, Doze, reboot, or device acceptance.
+- **Production Boundary**: No live production database migration has been authorized. Any future operator conversion requires separate exact-target approval and its own safety gates.
+- **Historical Gate Notes**: Earlier Phase 07 reports, phase-hour totals, Gate labels, and claims about dependency checksums are dated snapshots. Retain them as history only; they do not establish current acceptance status.
 ---
 
 ## 5. UI Accessibility & Acceptance Checklist
@@ -261,4 +320,5 @@ The following are recorded Phase 07 results, not fresh runs performed for this d
 ### 6.2 Acceptance & Pilot Gate Status
 - **Automated Checks**: Smoke runner self-test passes 21/21 assertions (`scripts/admin-announcements-smoke.mjs --self-test`).
 - **Hardware Hold**: Physical connected Android API 33+ device verification (actual notification shade capture and tap navigation) remains held at Gate G2.
-- **Pilot Readiness**: Software runtime and security manifest invariants are validated; restricted operator pilot approved for Android and Linux, while Windows desktop remains held at Gate G5.
+- **Collaborative Assignees Gate (G4)**: Connected Android verification of collaborative task assignees (assignee picker, child-only Glance widget, alarm re-authorization, revocation cancellation) is **NOT RUN / pending**.
+- **Pilot & Release Boundary**: The earlier restricted operator pilot statement applies only to announcements scope. It is not approval for collaborative sync release or production migration. Full delivery remains blocked until Gate G4 and interactive UI acceptance are executed and evidenced.

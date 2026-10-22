@@ -10,15 +10,19 @@ import androidx.room.Index
  */
 @Entity(
     tableName = "reminder_delivery_ledger",
-    primaryKeys = ["accountKey", "generation", "taskId", "scheduleToken", "occurrenceIndex"],
+    primaryKeys = ["accountKey", "generation", "bindingKey", "tableName", "taskId", "scheduleToken", "occurrenceIndex"],
     indices = [
-        Index(value = ["accountKey", "generation", "taskId"]),
+        Index(value = ["accountKey", "generation", "bindingKey", "tableName", "taskId"]),
         Index(value = ["dueEpochMs"])
     ]
 )
 data class ReminderDeliveryLedgerEntity(
     val accountKey: String,
     val generation: Long,
+    val bindingKey: String = BINDING_LOCAL_ACCOUNT,
+    val ownerBinding: String = BINDING_LOCAL_ACCOUNT,
+    val ownerUserId: String? = null,
+    val tableName: String = dev.tabbyrush.shared.contract.TaskDataContract.DEFAULT_TABLE_NAME,
     val taskId: String,
     val scheduleToken: String,
     val occurrenceIndex: Int,

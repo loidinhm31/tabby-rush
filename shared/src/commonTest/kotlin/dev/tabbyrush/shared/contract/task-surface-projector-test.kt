@@ -11,6 +11,7 @@ class TaskSurfaceProjectorTest {
 
     private fun createTodo(
         id: String,
+        ownerUserId: String = "user-1",
         title: String = "Todo $id",
         completed: Boolean = false,
         isDeleted: Boolean = false,
@@ -19,7 +20,7 @@ class TaskSurfaceProjectorTest {
         deadline: TaskDeadline? = null,
         scheduleToken: String? = if (deadline != null) "token-$id" else null
     ) = Todo(
-        id = id,
+        taskRef = TaskRef(ownerUserId, id),
         title = title,
         completed = completed,
         createdAt = createdAt,
@@ -34,6 +35,7 @@ class TaskSurfaceProjectorTest {
 
     private fun createSchedule(
         taskId: String,
+        ownerUserId: String = "user-1",
         title: String = "Schedule $taskId",
         completed: Boolean = false,
         isDeleted: Boolean = false,
@@ -42,7 +44,7 @@ class TaskSurfaceProjectorTest {
         reminderRule: ReminderRule = ReminderRule.DISABLED,
         scheduleToken: String? = null
     ) = PersistedTaskSchedule(
-        taskId = taskId,
+        taskRef = TaskRef(ownerUserId, taskId),
         title = title,
         completed = completed,
         isDeleted = isDeleted,
@@ -193,6 +195,21 @@ class TaskSurfaceProjectorTest {
         val selection = selectNextDeadline(schedules, nowEpochMs = 10_000L)
         assertNotNull(selection)
         assertEquals("task-a", selection.taskId)
+    }
+
+    @Test
+    fun testSelectNextDeadlineTieBreakIncludesOwner() {
+        val dl = createTimedDeadline(overdueEpochMs = 2_000L)
+        val schedules = listOf(
+            createSchedule(taskId = "task-1", ownerUserId = "user-z", deadline = dl),
+            createSchedule(taskId = "task-1", ownerUserId = "user-a", deadline = dl)
+        )
+
+        // Same rowId "task-1", tie-break by ownerUserId ASC chooses "user-a"
+        val selection = selectNextDeadline(schedules, nowEpochMs = 10_000L)
+        assertNotNull(selection)
+        assertEquals("user-a", selection.ownerUserId)
+        assertEquals("task-1", selection.taskId)
     }
 
     @Test

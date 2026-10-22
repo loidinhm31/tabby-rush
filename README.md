@@ -1,149 +1,77 @@
 # TabbyRush
 
-TabbyRush is an Android-first shared Compose Multiplatform application designed for fast, focused personal task management with multi-device cloud synchronization.
+TabbyRush is a native Android and desktop task-management application built with Kotlin Multiplatform and Compose. Local data is stored offline in Room/SQLite and synchronized with Glean Hub using ordinary app registration and standard push/pull/delta routes. Glean Hub's admin console is management tooling, not a TabbyRush web application.
 
-The application reuses the **Glean Hub** backend infrastructure with an opt-in, strict per-record synchronization protocol (`strict-v1`), ensuring complete data isolation from legacy Hub clients while delivering native offline capability, durable Room KMP persistence, and an accessible light theme.
+The current client does not use strict-v1/v2/v3 synchronization. Hub `schemaVersion` is informational concurrency metadata; it does not automatically generate native UI, Kotlin fields, or Room migrations. Former strict protocol runbooks have been retired.
 
----
+## Features
 
-## Key Features
+- Offline-first task creation, editing, completion, deletion, and account-specific storage.
+- Two-level parent/child tasks, client-side hierarchy projection, group deletion, and parent completion behavior.
+- Optional date/time deadlines and local reminders, with shared scheduling rules and platform-specific delivery integrations.
+- Collaborative task assignment: multi-user task delegation with single canonical creator-owned rows, child-only privacy boundaries, full-group completion calculation, and username lookup.
+- Standard Hub sync with raw unknown JSON retention, explicit intent-based merges, version acknowledgements, staged full scans, and conflict review.
+- Room v5 local storage with two-stage legacy owner binding, authoritative access state tracking, and privacy-first revocation purge with non-replayable content-free evidence.
+- Whole-app collaboration cutoff (HTTP 426) for legacy clients and single app-wide replica-set transaction guard (`_sync_assignment_fences`).
+- Android app and Glance task widget/notifications; desktop Compose app and sticky task surfaces where the platform supports them.
+- Protected platform credentials: Android Keystore, Linux Secret Service, and current-user Windows DPAPI.
+- Glean Hub administrator announcements with a separate versioned contract and in-memory client inbox.
+## Current Status
 
-- **Offline-First Task Management**: Full task lifecycle (create, toggle completion, edit title, filter, delete) operating against local Room SQLite database with BundledSQLiteDriver.
-- **Strict-v1 Sync Protocol**: Opt-in strong per-record sync protocol featuring insert-only create, explicit revision Compare-And-Swap (CAS), structured per-operation acknowledgements, stable cursor scans, and permanent empty tombstones.
-- **Hardware-Backed Credential Vault**: Token storage backed by platform security primitives (Android KeyStore with AES-256 GCM on mobile; Secret Service on Linux; DPAPI on Windows).
-- **Single-Flight Refresh & Token Fencing**: Concurrent network operations coalesce behind a single mutex-protected token refresh coordinator.
-- **Account Lifecycle**: Account leave coordinates local database/credential cleanup with sync, reminder, and task-surface cancellation. Android OS-retained widget and notification content is cleared on a best-effort basis; see [Security & Recovery](docs/security-and-recovery.md) for the lifecycle caveats.
-- **Accessible Light UI**: Clean, high-contrast light theme conforming to WCAG 2.1 AA contrast requirements and ForumFlash design guidelines.
-- **Sticky Task Surfaces**: Android provides a native Glance task widget and an opt-in, quiet deadline notification; Desktop provides a compact Compose Multiplatform sticky window with tray controls when the host session supports a usable tray.
-- **Server Admin Announcements**: Secure, unidirectional administrator broadcasts via Glean Hub. Features 90-day retention backed by MongoDB BSON DateTime TTL indexes, FCM HTTP v1 generic notifications for Android with channel `tabbyrush.remote.announcements` and tag `remote:<messageId>`, streaming SSE broker with `streamEpoch`, monotonic `acceptanceOrdinal`, and ready baseline, in-memory 200-item sliding cache, no persistent offline content or read outbox, Keystore-backed install proof fencing, and restricted pilot staged rollout (Android & Linux verified; Windows desktop runtime held at Gate G5).
+Implementation of Collaborative Task Assignees (Phases 01–08) is complete, establishing Room v5 persistence, two-stage binding, canonical identity projections, and shared Compose/Android/desktop surfaces. Policy validation (G0) was confirmed 2026-10-21 (privacy-first purge, whole-app capability cutoff, and simpler app-wide replica-set guard).
 
-Server Admin Announcements delivery is recorded with 566 passing verifications in QA regression testing (`qa-261018-1548-c1-c6-regression-verification.md`); standalone smoke verification records 21/21 mock assertions and 13 golden vectors passing (`node scripts/admin-announcements-smoke.mjs --self-test`). Restricted pilot is approved as recorded in acceptance evidence for Android, Linux, and Web Admin; Windows desktop runtime remains held at Gate G5, and inherited release holds G2/G3/G6/G7 and checksum verification baseline remain open.
+Dedicated verification harnesses have been prepared in Phase 09: `./gradlew :desktopApp:runTaskAssigneesRuntimeSmoke` and `node scripts/task-assignees-live-smoke.mjs`. However, G1–G6 runtime verification is **NOT RUN / pending** per project delegation rules (reserved for Main integration verification).
 
----
+Prior reported verification includes offline Gradle/package suites, disposable-local Hub API/browser smoke, 7/7 disposable-Mongo conversion-operator checks, and a standalone Windows runtime smoke through a strict Gradle JavaExec entry point. Interactive UI provider approval timed out twice; connected-device acceptance was not run. Native acceptance is not passed, no production database has been migrated or authorized, and release remains blocked. See [Release Acceptance](docs/release-acceptance.md) for the current boundary.
+## Repository Layout
 
-## Architecture & Directory Structure
-
-```
-.
-├── androidApp/          # Native Android application module (AGP 8.7.3, minSdk 26, compileSdk 35)
-│   ├── src/main/        # Application container, Glance widget, task-surface notification and receivers
-│   └── src/androidTest/ # Instrumented account, navigation, preference and widget tests
-├── desktopApp/          # Compose Multiplatform JVM desktop application
-│   └── src/             # Shared sticky window/tray integration and target-specific Linux/Windows code
-├── shared/              # Shared Kotlin Multiplatform core library
-│   ├── src/commonMain/  # Domain, sync, Room, Compose UI and account-token-fenced task-surface contracts
-│   └── src/commonTest/  # Unit tests, digest vectors and in-memory SQLite integration tests
-├── scripts/             # Host tooling, emulator orchestration, Hub smoke runners, and recovery scripts
-│   ├── hub-strict-upgrade.mjs          # Strict-v2 Hub migration CLI runner
-│   ├── strict-v2-cutover-rehearsal.mjs # Strict-v2 operator tooling rehearsal and self-test harness
-│   ├── hub-live-smoke.mjs              # Live Hub strict-v1 verification harness
-│   ├── release-security-check.mjs      # Release APK security and manifest auditor
-│   ├── hub-strict-recovery.js          # Maintenance-only fresh-epoch recovery script (strict-v1 only)
-│   ├── hub-schema-provision.mjs        # Schema registration and admission runner
-│   ├── admin-announcements-smoke.mjs   # Announcements smoke runner and vector test
-│   ├── build-windows-remote-msi.ps1    # Windows remote MSI packaging script
-│   └── android-smoke.sh                # Device smoke runner with reverse port-forwarding
-├── integration/         # Canonical schemas, wire vectors, and contract specifications
-│   ├── glean-hub/        # Active schema, versioned schemas, and strict-v2 vectors
-│   └── announcements/    # Server Admin Announcements contract-v1.json and vectors-v1.json
-└── docs/                # Architecture specifications, operational runbooks, and test evidence
+```text
+androidApp/      Native Android lifecycle, platform integration, widgets and tests
+desktopApp/       Compose Multiplatform desktop app with Linux/Windows providers
+shared/          Shared domain, Compose UI, Room storage, auth and standard sync
+scripts/         Provisioning, security checks, host tooling, smoke and packaging helpers
+integration/     Hub schema inputs, announcement contracts and historical vectors
+plans/           Implementation plans, phase evidence and reviews
+docs/            Architecture, requirements, operations, acceptance and archives
 ```
 
----
+## Development
 
-## Development Prerequisites
+See [Toolchain Versions](docs/toolchain-versions.md), [Code Standards](docs/code-standards.md), [System Architecture](docs/system-architecture.md), and [Deployment Guide](docs/deployment-guide.md) for supported environment and workflows. Common entry points include:
 
-### 1. Run Shared Multiplatform Tests
-Execute the unit and SQLite integration suites across the shared core:
 ```bash
-# Use JDK 21 LTS (e.g. export JAVA_HOME=/path/to/jdk-21)
-JAVA_HOME="${JAVA_HOME:-/home/loidinh/.local/share/jvm/jdk-21}" ./gradlew :shared:jvmTest --dependency-verification=off
-```
-- **Headless Display**: Xpra 6.x on display `:100` for remote GUI workflows.
-
----
-
-## Common Commands
-
-### 1. Run Shared Multiplatform Tests
-Execute the unit and SQLite integration suites across the shared core:
-```bash
-JAVA_HOME=/home/loidinh/.local/share/jvm/jdk-21 ./gradlew :shared:jvmTest --dependency-verification=off
-```
-
-### 2. Verify Hub Compatibility Smoke (Fixture Mode)
-Run the self-contained offline test suite for strict-v1 protocol verification:
-```bash
-node scripts/hub-live-smoke.mjs --fixture-test
-```
-
-### 3. Run Release Security Audit (Diagnostic Mode)
-Audit Android manifest, backup rules, and secret absence statically:
-```bash
+./gradlew :shared:jvmTest
+./gradlew :desktopApp:runTaskAssigneesRuntimeSmoke -PdesktopTarget=windows
+node scripts/task-assignees-live-smoke.mjs --help
+node scripts/hub-schema-provision.mjs --help
 node scripts/release-security-check.mjs --diagnose-source
-```
-
-### 4. Build Android Release APK (Requires SDK & Keystore)
-```bash
-export TABBYRUSH_KEYSTORE="/path/to/keystore.jks"
-export TABBYRUSH_KEY_ALIAS="tabbyrush-release"
-export TABBYRUSH_STORE_PASSWORD="<password>"
-export TABBYRUSH_KEY_PASSWORD="<password>"
-
-./gradlew :androidApp:assembleRelease
-```
-
-### 5. Run Strict-v2 Cutover Rehearsal & Tooling Self-Test
-Run the automated in-process mock self-test verifying CLI upgrade workflows, same-ID retry, and read-back assertions:
-```bash
-node scripts/strict-v2-cutover-rehearsal.mjs --self-test
-```
-
-### 6. Run Server Admin Announcements Smoke & Vector Verification
-Execute the standalone Node.js smoke runner and golden vector assertions:
-```bash
 node scripts/admin-announcements-smoke.mjs --self-test
 ```
 
-### 7. GitHub Flow CI & Multiplatform Releases
-- **Pull Request CI (`.github/workflows/pr-test.yml`)**: Runs shared, Android, and Desktop unit tests only (fast verification without packaging overhead).
-- **End-User Releases (`.github/workflows/release.yml`)**: Triggered by pushing a version tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) after bumping `appVersion` in `gradle.properties`. Builds and publishes all installable end-user packages (Android APK, Linux RPM + tarball, Windows MSI + ZIP) to GitHub Releases.
-See [Deployment Guide](docs/deployment-guide.md#12-github-flow-cicd-pipeline--multiplatform-releases) for version bump instructions and artifact details.
+Run the desktop app against a local Hub with `just run-desktop` (or `just run-desktop-debug`). These use the debug launcher, which permits `http://localhost:3000`; set `APPROVED_HUB_ORIGIN` and `TABBYRUSH_API_KEY` in your local `.env`. Use `just run-desktop-release` for the HTTPS-only release launcher. Each recipe accepts an optional dependency-verification mode, for example `just run-desktop strict`. If the single-instance guard reports an existing app, quit it from the tray before relaunching; closing the window can leave it running.
 
-### 8. Bump Application Version
-Bump version and Android versionCode centrally via JavaScript runner or Just task:
-```bash
-just bump patch       # Increment patch: 1.0.0 -> 1.0.1 (versionCode: 2)
-just bump minor       # Increment minor: 1.0.0 -> 1.1.0 (versionCode: 2)
-just bump-tag patch   # Bump and create git tag v1.0.1
-# Or directly: node scripts/bump-version.mjs patch [--git-tag] [--dry-run]
-```
----
+Run provisioning only for a new ordinary Hub app registration. On Windows, its `--out` file must be placed in an existing private, non-symlink directory with protected DACL/owner limited to the current user, `SYSTEM`, and `Administrators`; the script refuses unsafe directories and does not change their permissions. Never pass administrative tokens or database credentials as command-line literals.
+
+Package generation and automated test results are not a substitute for interactive platform acceptance or production authorization.
 
 ## Documentation Index
 
-- [Project Overview & PDR](docs/project-overview-pdr.md)
+- [Project Overview & Product Requirements](docs/project-overview-pdr.md)
 - [System Architecture](docs/system-architecture.md)
 - [Code Standards](docs/code-standards.md)
 - [Codebase Summary](docs/codebase-summary.md)
-- [Design Guidelines](docs/design-guidelines.md)
-- [Local Storage & Sync](docs/local-storage-and-sync.md)
-- [Authentication & Credentials](docs/authentication-and-credentials.md)
+- [Local Storage & Standard Sync](docs/local-storage-and-sync.md)
+- [API Contract](docs/api-contract.md)
+- [Standard Sync & Schema Design](docs/standard-sync-cutover-design.md)
+- [Standard Sync Cutover Runbook](docs/standard-sync-cutover-runbook.md)
+- [Hub Schema Integration](docs/hub-schema-integration.md)
+- [Hub Compatibility Acceptance](docs/hub-compatibility-acceptance.md)
+- [Authentication & Credentials](docs/authentication-and-credentials.md) — not revalidated during this cutover; use the API Contract above for current routes.
 - [Security & Recovery](docs/security-and-recovery.md)
-- [Android Acceptance](docs/android-acceptance.md)
-- [Windows Acceptance](docs/windows-acceptance.md)
-- [Windows Desktop Guide](docs/windows-desktop-guide.md)
 - [Deployment Guide](docs/deployment-guide.md)
-- [Toolchain Versions](docs/toolchain-versions.md)
-- [Strict-v2 Cutover Runbook](docs/strict-v2-cutover-runbook.md)
 - [Release Acceptance](docs/release-acceptance.md)
-- [Project Roadmap](docs/project-roadmap.md)
-- [Development Roadmap](docs/development-roadmap.md)
-- [Project Changelog](docs/project-changelog.md)
-- [Android Sticky-Surface Evidence](docs/evidence/sticky-surfaces-android-summary.md)
-- [Windows Sticky-Surface Evidence](docs/evidence/sticky-surfaces-windows-summary.md)
-- [Announcement Contract](docs/announcement-contract.md)
-- [Remote Notification Setup](docs/remote-notification-setup.md)
-- [Admin Announcements Acceptance Evidence](docs/evidence/admin-announcements-acceptance.md)
-- [Linux Desktop Guide](docs/linux-desktop-guide.md)
-- [Linux Acceptance](docs/linux-acceptance.md)
+- [Android Acceptance](docs/android-acceptance.md)
+- [Linux Desktop Guide](docs/linux-desktop-guide.md) · [Linux Acceptance](docs/linux-acceptance.md)
+- [Windows Desktop Guide](docs/windows-desktop-guide.md) · [Windows Acceptance](docs/windows-acceptance.md)
+- [Announcements Contract](docs/announcement-contract.md) · [Announcements Evidence](docs/evidence/admin-announcements-acceptance.md)
+- [Project Roadmap](docs/project-roadmap.md) · [Development Roadmap](docs/development-roadmap.md) · [Project Changelog](docs/project-changelog.md)

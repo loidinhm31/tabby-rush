@@ -2,7 +2,11 @@ package dev.tabbyrush.shared.contract
 
 sealed interface TodoAction {
     data class SelectFilter(val filter: TodoFilter) : TodoAction
-    data class OpenCreate(val initialTitle: String = "") : TodoAction
+    data class OpenCreate(
+        val initialTitle: String = "",
+        val parentTaskRef: TaskRef? = null,
+        val parentTitle: String? = null
+    ) : TodoAction
     data class ChangeDraftTitle(val rawTitle: String) : TodoAction
     data object SubmitEditor : TodoAction
     data object CancelEditor : TodoAction
@@ -13,9 +17,9 @@ sealed interface TodoAction {
     data object CancelDelete : TodoAction
     data object TriggerSync : TodoAction
     data object ReconcilePending : TodoAction
-    data class DiscardConflict(val rowId: String) : TodoAction
-    data class ReapplyConflict(val rowId: String) : TodoAction
-    data class CopyAsNew(val rowId: String) : TodoAction
+    data class DiscardConflict(val taskRef: TaskRef) : TodoAction
+    data class ReapplyConflict(val taskRef: TaskRef) : TodoAction
+    data class CopyAsNew(val taskRef: TaskRef) : TodoAction
     data object DismissError : TodoAction
     data object RequestLeave : TodoAction
     data object ConfirmLeave : TodoAction
@@ -27,4 +31,6 @@ sealed interface TodoAction {
     data object RequestExactAlarmPermission : TodoAction
     data object OpenNotificationSettings : TodoAction
     data class ClockTick(val nowEpochMs: Long) : TodoAction
+    data class AssignTask(val intent: AssignmentIntent) : TodoAction
+    data class DismissAccessLossNotice(val ref: TaskRef) : TodoAction
 }

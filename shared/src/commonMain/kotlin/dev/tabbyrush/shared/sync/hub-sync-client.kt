@@ -2,480 +2,181 @@ package dev.tabbyrush.shared.sync
 
 import dev.tabbyrush.shared.auth.HubAuthSession
 import dev.tabbyrush.shared.auth.HubHttpClient
+import dev.tabbyrush.shared.contract.ASSIGNMENT_TABLE_NAME
 import dev.tabbyrush.shared.contract.ApiResult
+import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.HubConfig
 import dev.tabbyrush.shared.contract.SafeError
-import dev.tabbyrush.shared.contract.StrictSyncContract
-import dev.tabbyrush.shared.contract.StrictSyncV2Contract
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 
-/**
- * HubSyncClient coordinates HTTP communications with the Hub strict-v1 endpoints:
- * - POST /api/v1/sync/:app_id/strong/bootstrap
- * - POST /api/v1/sync/:app_id/strong/push
- * - POST /api/v1/sync/:app_id/strong/pull
- *
- * Enforces request bounds (<= 100 unique rowIds, <= 256 KiB serialized payload)
- * and maps server error codes to typed SafeErrors.
- */
+/** One POST per invocation. Token refresh never replays a mutation or delta. */
 class HubSyncClient(
     val config: HubConfig,
     val session: HubAuthSession,
-    val httpClient: HubHttpClient = session.authClient.httpClient
+    val httpClient: HubHttpClient = session.authClient.httpClient,
+    val expectedAccountKey: AccountKey? = session.currentAccountKey.value
 ) {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = false
-        encodeDefaults = true
-    }
-
-    suspend fun bootstrap(): ApiResult<BootstrapResponseDto> {
-        val path = "/api/v1/sync/${config.appId}/strong/bootstrap"
-        val bodyJson = "{}"
-
-        return session.authorizedRequest { token ->
-            val responseResult = httpClient.executeRaw(
-                method = HttpMethod.Post,
-                path = path,
-                accessToken = token,
-                bodyJson = bodyJson
-            )
-
-            when (responseResult) {
-                is ApiResult.Failure -> responseResult
-                is ApiResult.Success -> {
-                    val response = responseResult.value
-                    if (response.status == HttpStatusCode.OK) {
-                        try {
-                            val parsed = json.decodeFromString<BootstrapResponseDto>(response.bodyAsText())
-                            if (parsed.protocol != StrictSyncContract.PROTOCOL_VERSION &&
-                                parsed.protocol != StrictSyncV2Contract.PROTOCOL_VERSION
-                            ) {
-                                ApiResult.Failure(
-                                    SafeError.ProtocolIncompatible(
-                                        code = "PROTOCOL_MISMATCH",
-                                        message = "Server returned unsupported protocol: ${parsed.protocol}"
-                                    )
-                                )
-                            } else {
-                                ApiResult.Success(parsed)
-                            }
-                        } catch (e: Exception) {
-                            ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "MALFORMED_RESPONSE",
-                                    message = "Failed to parse bootstrap response: ${e.message}"
-                                )
-                            )
-                        }
-                    } else {
-                        ApiResult.Failure(parseStrictError(response.status, response.bodyAsText()))
-                    }
-                }
-            }
-        }
-    }
+    private val json = syncWireJson
 
     suspend fun push(
-        epoch: String,
-        operations: List<StrictOperationDto>
-    ): ApiResult<StrictPushResponseDto> {
-        if (operations.size > MAX_BATCH_SIZE) {
-            return ApiResult.Failure(
-                SafeError.Validation(
-                    code = "BATCH_TOO_LARGE",
-                    message = "Operation batch exceeds maximum of $MAX_BATCH_SIZE (got ${operations.size})"
-                )
-            )
-        }
-
-        val rowIds = operations.map { it.rowId }
-        if (rowIds.toSet().size != rowIds.size) {
-            return ApiResult.Failure(
-                SafeError.Validation(
-                    code = "DUPLICATE_ROW_IDS",
-                    message = "Push operations must not contain duplicate rowIds"
-                )
-            )
-        }
-
-        val requestDto = StrictPushRequestDto(
-            protocol = StrictSyncContract.PROTOCOL_VERSION,
-            epoch = epoch,
-            operations = operations
-        )
-
-        val bodyJson = json.encodeToString(requestDto)
-        val bodyBytes = bodyJson.encodeToByteArray()
-        if (bodyBytes.size > MAX_PAYLOAD_BYTES) {
-            return ApiResult.Failure(
-                SafeError.Validation(
-                    code = "PAYLOAD_TOO_LARGE",
-                    message = "Serialized push body exceeds $MAX_PAYLOAD_BYTES bytes (got ${bodyBytes.size})"
-                )
-            )
-        }
-
-        val path = "/api/v1/sync/${config.appId}/strong/push"
-
-        return session.authorizedRequest { token ->
-            val responseResult = httpClient.executeRaw(
-                method = HttpMethod.Post,
-                path = path,
-                accessToken = token,
-                bodyJson = bodyJson
-            )
-
-            when (responseResult) {
-                is ApiResult.Failure -> responseResult
-                is ApiResult.Success -> {
-                    val response = responseResult.value
-                    if (response.status == HttpStatusCode.OK) {
-                        try {
-                            val parsed = json.decodeFromString<StrictPushResponseDto>(response.bodyAsText())
-                            if (parsed.protocol != StrictSyncContract.PROTOCOL_VERSION) {
-                                ApiResult.Failure(
-                                    SafeError.ProtocolIncompatible(
-                                        code = "PROTOCOL_MISMATCH",
-                                        message = "Server returned unsupported protocol: ${parsed.protocol}"
-                                    )
-                                )
-                            } else if (parsed.epoch != epoch) {
-                                ApiResult.Failure(
-                                    SafeError.ResetRequired(
-                                        code = "EPOCH_MISMATCH",
-                                        message = "Response epoch ${parsed.epoch} mismatched request epoch $epoch"
-                                    )
-                                )
-                            } else {
-                                ApiResult.Success(parsed)
-                            }
-                        } catch (e: Exception) {
-                            ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "MALFORMED_RESPONSE",
-                                    message = "Failed to parse push response: ${e.message}"
-                                )
-                            )
-                        }
-                    } else {
-                        ApiResult.Failure(parseStrictError(response.status, response.bodyAsText()))
-                    }
-                }
-            }
-        }
-    }
-
-    suspend fun pushV2(
-        epoch: String,
-        operations: List<StrictV2OperationDto>
-    ): ApiResult<StrictPushResponseDto> {
-        if (operations.size > MAX_BATCH_SIZE) {
-            return ApiResult.Failure(
-                SafeError.Validation(
-                    code = "BATCH_TOO_LARGE",
-                    message = "Operation batch exceeds maximum of $MAX_BATCH_SIZE (got ${operations.size})"
-                )
-            )
-        }
-
-        val rowIds = operations.map { it.rowId }
-        if (rowIds.toSet().size != rowIds.size) {
-            return ApiResult.Failure(
-                SafeError.Validation(
-                    code = "DUPLICATE_ROW_IDS",
-                    message = "Push operations must not contain duplicate rowIds"
-                )
-            )
-        }
-
-        val requestDto = StrictV2PushRequestDto(
-            protocol = StrictSyncV2Contract.PROTOCOL_VERSION,
-            epoch = epoch,
-            operations = operations
-        )
-
-        val bodyJson = json.encodeToString(requestDto)
-        val bodyBytes = bodyJson.encodeToByteArray()
-        if (bodyBytes.size > MAX_PAYLOAD_BYTES) {
-            return ApiResult.Failure(
-                SafeError.Validation(
-                    code = "PAYLOAD_TOO_LARGE",
-                    message = "Serialized push body exceeds $MAX_PAYLOAD_BYTES bytes (got ${bodyBytes.size})"
-                )
-            )
-        }
-
-        val path = "/api/v1/sync/${config.appId}/strong/push"
-
-        return session.authorizedRequest { token ->
-            val responseResult = httpClient.executeRaw(
-                method = HttpMethod.Post,
-                path = path,
-                accessToken = token,
-                bodyJson = bodyJson
-            )
-
-            when (responseResult) {
-                is ApiResult.Failure -> responseResult
-                is ApiResult.Success -> {
-                    val response = responseResult.value
-                    if (response.status == HttpStatusCode.OK) {
-                        try {
-                            val parsed = json.decodeFromString<StrictPushResponseDto>(response.bodyAsText())
-                            if (parsed.protocol != StrictSyncV2Contract.PROTOCOL_VERSION) {
-                                ApiResult.Failure(
-                                    SafeError.ProtocolIncompatible(
-                                        code = "PROTOCOL_MISMATCH",
-                                        message = "Server returned unsupported protocol: ${parsed.protocol}"
-                                    )
-                                )
-                            } else if (parsed.epoch != epoch) {
-                                ApiResult.Failure(
-                                    SafeError.ResetRequired(
-                                        code = "EPOCH_MISMATCH",
-                                        message = "Response epoch ${parsed.epoch} mismatched request epoch $epoch"
-                                    )
-                                )
-                            } else {
-                                ApiResult.Success(parsed)
-                            }
-                        } catch (e: Exception) {
-                            ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "MALFORMED_RESPONSE",
-                                    message = "Failed to parse push response: ${e.message}"
-                                )
-                            )
-                        }
-                    } else {
-                        ApiResult.Failure(parseStrictError(response.status, response.bodyAsText()))
-                    }
-                }
-            }
+        records: List<PushRecordDto>,
+        collaborationVersion: Long? = COLLABORATION_VERSION_1
+    ): ApiResult<PushResponseDto> {
+        validateRecords(records)?.let { return ApiResult.Failure(it) }
+        val request = PushRequestDto(records = records, collaborationVersion = collaborationVersion)
+        return post("push", json.encodeToString(request)) { raw ->
+            val element = json.parseToJsonElement(raw)
+            validateSchemaMetadata(element)
+            val parsed = json.decodeFromJsonElement(PushResponseDto.serializer(), element)
+            validatePushResponse(parsed)
+            parsed
         }
     }
 
     suspend fun pull(
-        epoch: String,
-        protocol: String = StrictSyncContract.PROTOCOL_VERSION,
-        tableName: String = StrictSyncContract.DEFAULT_TABLE_NAME,
-        cursor: String? = null,
-        batchSize: Int = 100
-    ): ApiResult<StrictPullResponseDto> {
-        val requestDto = StrictPullRequestDto(
-            protocol = protocol,
-            epoch = epoch,
-            tableName = tableName,
-            cursor = cursor,
-            batchSize = batchSize
+        request: PullRequestDto = PullRequestDto(
+            tables = listOf("todos", ASSIGNMENT_TABLE_NAME),
+            collaborationVersion = COLLABORATION_VERSION_1
         )
-        val bodyJson = json.encodeToString(requestDto)
-        val path = "/api/v1/sync/${config.appId}/strong/pull"
+    ): ApiResult<PullResponseDto> =
+        post("pull", json.encodeToString(request)) { raw ->
+            val element = json.parseToJsonElement(raw)
+            validateSchemaMetadata(element)
+            val parsed = json.decodeFromJsonElement(PullResponseDto.serializer(), element)
+            validatePullResponse(parsed)
+            parsed
+        }
 
-        return session.authorizedRequest { token ->
-            val responseResult = httpClient.executeRaw(
-                method = HttpMethod.Post,
-                path = path,
-                accessToken = token,
-                bodyJson = bodyJson
+    suspend fun delta(request: DeltaRequestDto): ApiResult<DeltaResponseDto> {
+        validateRecords(request.push?.records.orEmpty())?.let { return ApiResult.Failure(it) }
+        return post("delta", json.encodeToString(request)) { raw ->
+            val objectValue = json.parseToJsonElement(raw).jsonObject
+            val push = objectValue["push"]?.takeUnless { it == JsonNull }?.let {
+                runCatching {
+                    validateSchemaMetadata(it)
+                    val parsed = json.decodeFromJsonElement(PushResponseDto.serializer(), it)
+                    validatePushResponse(parsed)
+                    parsed
+                }
+            }
+            val pull = objectValue["pull"]?.takeUnless { it == JsonNull }?.let {
+                runCatching {
+                    validateSchemaMetadata(it)
+                    val parsed = json.decodeFromJsonElement(PullResponseDto.serializer(), it)
+                    validatePullResponse(parsed)
+                    parsed
+                }
+            }
+            DeltaResponseDto(
+                push?.getOrNull(),
+                pull?.getOrNull(),
+                if (push?.isFailure == true) "Invalid delta push result; delivery unknown" else null,
+                if (pull?.isFailure == true) "Invalid delta pull result; previous checkpoint retained" else null
             )
+        }
+    }
 
-            when (responseResult) {
-                is ApiResult.Failure -> responseResult
+    private fun validateSchemaMetadata(element: JsonElement) {
+        val value = element.jsonObject["schemaVersion"] as? JsonPrimitive
+        require(value != null && !value.isString && value.content.isNotEmpty() && value.content[0] in '1'..'9' &&
+            value.content.all { it in '0'..'9' } && value.longOrNull?.let { it in 1..MAX_EXACT_VERSION } == true) { "Invalid schemaVersion" }
+    }
+
+    private fun validateRecords(records: List<PushRecordDto>): SafeError? {
+        if (records.size > 100) {
+            return SafeError.Validation("INVALID_BATCH", "Push needs at most 100 records")
+        }
+        val canonicalKeys = records.map { Triple(it.ownerUserId ?: "", it.tableName, it.rowId) }
+        if (canonicalKeys.toSet().size != records.size) {
+            return SafeError.Validation("INVALID_BATCH", "Push needs distinct canonical records")
+        }
+        for (record in records) {
+            if (record.tableName != "todos" && record.tableName != "taskAssignees") {
+                return SafeError.Validation("INVALID_VERSION", "Invalid record table: ${record.tableName}")
+            }
+            if (record.version !in 1..MAX_EXACT_VERSION || record.assumedServerVersion !in 0 until record.version) {
+                return SafeError.Validation("INVALID_VERSION", "Invalid record version")
+            }
+            if (record.ownerUserId != null && record.ownerUserId.isBlank()) {
+                return SafeError.Validation("INVALID_OWNER", "ownerUserId must not be blank when present")
+            }
+        }
+        return null
+    }
+
+    private fun validatePushResponse(response: PushResponseDto) {
+        if (response.collaborationVersion != null) {
+            require(response.collaborationVersion == COLLABORATION_VERSION_1) { "Unsupported collaborationVersion in response" }
+        }
+        for (synced in response.syncedRecords) {
+            require(synced.version in 1..MAX_EXACT_VERSION) { "Invalid synced version" }
+            if (response.collaborationVersion == COLLABORATION_VERSION_1 && synced.ownerUserId != null) {
+                require(synced.ownerUserId.isNotBlank()) { "Invalid ownerUserId in syncedRecords" }
+            }
+        }
+        for (conflict in response.conflicts) {
+            require(conflict.clientVersion in 1..MAX_EXACT_VERSION && conflict.serverVersion in 1..MAX_EXACT_VERSION) {
+                "Invalid conflict version"
+            }
+        }
+    }
+
+    private fun validatePullResponse(response: PullResponseDto) {
+        if (response.collaborationVersion != null) {
+            require(response.collaborationVersion == COLLABORATION_VERSION_1) { "Unsupported collaborationVersion in response" }
+        }
+        if (response.accessRevision != null) {
+            require(response.accessRevision in 1..MAX_EXACT_VERSION) { "Invalid accessRevision in response" }
+        }
+        for (record in response.records) {
+            require(record.version in 1..MAX_EXACT_VERSION) { "Invalid record version in pull" }
+            if (response.collaborationVersion == COLLABORATION_VERSION_1) {
+                require(record.ownerUserId != null && record.ownerUserId.isNotBlank()) {
+                    "Missing trusted owner on collaborative pull record"
+                }
+            }
+        }
+        val results = response.accessResults
+        if (results != null) {
+            val refs = results.map {
+                require(it.ref.ownerUserId.isNotBlank() && it.ref.tableName.isNotBlank() && it.ref.rowId.isNotBlank()) {
+                    "Invalid ref in accessResults"
+                }
+                Triple(it.ref.ownerUserId, it.ref.tableName, it.ref.rowId)
+            }
+            require(refs.toSet().size == refs.size) { "Duplicate canonical reference in accessResults" }
+        }
+    }
+
+    private suspend fun <T> post(route: String, body: String, decode: (String) -> T): ApiResult<T> {
+        if (body.encodeToByteArray().size > MAX_SYNC_BODY_BYTES) {
+            return ApiResult.Failure(SafeError.Validation("PAYLOAD_TOO_LARGE", "Sync payload exceeds 256 KiB"))
+        }
+        if (expectedAccountKey == null) return ApiResult.Failure(SafeError.Unauthorized("ACCOUNT_FENCED", "Sync requires a captured account identity"))
+        val path = "/api/v1/sync/${config.appId}/$route"
+        return session.authorizedRequest(expectedAccountKey = expectedAccountKey) { token ->
+            when (val result = httpClient.executeRaw(HttpMethod.Post, path, token, body)) {
+                is ApiResult.Failure -> result
                 is ApiResult.Success -> {
-                    val response = responseResult.value
-                    if (response.status == HttpStatusCode.OK) {
-                        try {
-                            val parsed = json.decodeFromString<StrictPullResponseDto>(response.bodyAsText())
-                            if (parsed.protocol != protocol) {
-                                ApiResult.Failure(
-                                    SafeError.ProtocolIncompatible(
-                                        code = "PROTOCOL_MISMATCH",
-                                        message = "Server returned unsupported protocol: ${parsed.protocol}"
-                                    )
-                                )
-                            } else if (parsed.epoch != epoch) {
-                                ApiResult.Failure(
-                                    SafeError.ResetRequired(
-                                        code = "EPOCH_MISMATCH",
-                                        message = "Response epoch ${parsed.epoch} mismatched request epoch $epoch"
-                                    )
-                                )
-                            } else {
-                                ApiResult.Success(parsed)
-                            }
-                        } catch (e: Exception) {
-                            ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "MALFORMED_RESPONSE",
-                                    message = "Failed to parse pull response: ${e.message}"
-                                )
-                            )
-                        }
+                    val response = result.value
+                    if (response.status != HttpStatusCode.OK) {
+                        ApiResult.Failure(httpClient.parseResponseError(response, path))
                     } else {
-                        ApiResult.Failure(parseStrictError(response.status, response.bodyAsText()))
+                        try {
+                            ApiResult.Success(decode(response.bodyAsText()))
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            ApiResult.Failure(SafeError.ProtocolIncompatible("MALFORMED_RESPONSE", "Invalid standard sync response; local work retained"))
+                        }
                     }
                 }
             }
         }
-    }
-
-    suspend fun legacyReceipts(
-        epoch: String,
-        receipts: List<LegacyReceiptItemDto>
-    ): ApiResult<LegacyReceiptsResponseDto> {
-        if (receipts.size > MAX_BATCH_SIZE) {
-            return ApiResult.Failure(
-                SafeError.Validation(
-                    code = "BATCH_TOO_LARGE",
-                    message = "Legacy receipt batch exceeds maximum of $MAX_BATCH_SIZE (got ${receipts.size})"
-                )
-            )
-        }
-
-        val requestDto = LegacyReceiptsRequestDto(
-            protocol = StrictSyncContract.PROTOCOL_VERSION,
-            epoch = epoch,
-            receipts = receipts
-        )
-
-        val bodyJson = json.encodeToString(requestDto)
-        val bodyBytes = bodyJson.encodeToByteArray()
-        if (bodyBytes.size > MAX_PAYLOAD_BYTES) {
-            return ApiResult.Failure(
-                SafeError.Validation(
-                    code = "PAYLOAD_TOO_LARGE",
-                    message = "Serialized legacy receipts body exceeds $MAX_PAYLOAD_BYTES bytes (got ${bodyBytes.size})"
-                )
-            )
-        }
-
-        val path = "/api/v1/sync/${config.appId}/strong/legacy-receipts"
-
-        return session.authorizedRequest { token ->
-            val responseResult = httpClient.executeRaw(
-                method = HttpMethod.Post,
-                path = path,
-                accessToken = token,
-                bodyJson = bodyJson
-            )
-
-            when (responseResult) {
-                is ApiResult.Failure -> responseResult
-                is ApiResult.Success -> {
-                    val response = responseResult.value
-                    if (response.status == HttpStatusCode.OK) {
-                        try {
-                            val parsed = json.decodeFromString<LegacyReceiptsResponseDto>(response.bodyAsText())
-                            if (parsed.protocol != StrictSyncContract.PROTOCOL_VERSION) {
-                                ApiResult.Failure(
-                                    SafeError.ProtocolIncompatible(
-                                        code = "PROTOCOL_MISMATCH",
-                                        message = "Server returned unsupported protocol in legacy receipts: ${parsed.protocol}"
-                                    )
-                                )
-                            } else if (parsed.epoch != epoch) {
-                                ApiResult.Failure(
-                                    SafeError.ResetRequired(
-                                        code = "EPOCH_MISMATCH",
-                                        message = "Legacy receipts epoch ${parsed.epoch} mismatched request epoch $epoch"
-                                    )
-                                )
-                            } else {
-                                ApiResult.Success(parsed)
-                            }
-                        } catch (e: Exception) {
-                            ApiResult.Failure(
-                                SafeError.ProtocolIncompatible(
-                                    code = "MALFORMED_RESPONSE",
-                                    message = "Failed to parse legacy receipts response: ${e.message}"
-                                )
-                            )
-                        }
-                    } else {
-                        ApiResult.Failure(parseStrictError(response.status, response.bodyAsText()))
-                    }
-                }
-            }
-        }
-    }
-
-    private fun parseStrictError(status: HttpStatusCode, rawBody: String): SafeError {
-        val parsedEnvelope = try {
-            json.decodeFromString<StrictSyncErrorDto>(rawBody)
-        } catch (_: Exception) {
-            null
-        }
-
-        val code = parsedEnvelope?.code
-        val message = parsedEnvelope?.error ?: "Server returned HTTP ${status.value}"
-
-        return when {
-            status == HttpStatusCode.Conflict || code == "epochMismatch" -> {
-                SafeError.ResetRequired(
-                    code = "EPOCH_MISMATCH",
-                    message = message
-                )
-            }
-            status == HttpStatusCode.UpgradeRequired || code == "protocolUnsupported" || code == "notStrictApp" -> {
-                SafeError.ProtocolIncompatible(
-                    code = "PROTOCOL_INCOMPATIBLE",
-                    message = message
-                )
-            }
-            status == HttpStatusCode.ServiceUnavailable || code == "notAdmitted" -> {
-                SafeError.Network(
-                    code = "SERVICE_UNAVAILABLE",
-                    message = message
-                )
-            }
-            status == HttpStatusCode.BadRequest || code == "invalidRequest" -> {
-                SafeError.Validation(
-                    code = "BAD_REQUEST",
-                    message = message
-                )
-            }
-            status == HttpStatusCode.Unauthorized || code == "unauthorized" -> {
-                if (message.contains("API key", ignoreCase = true)) {
-                    SafeError.Unauthorized(
-                        code = "INVALID_API_KEY",
-                        message = message
-                    )
-                } else {
-                    SafeError.Unauthorized(
-                        code = "UNAUTHORIZED",
-                        message = message
-                    )
-                }
-            }
-            status == HttpStatusCode.NotFound || code == "appNotFound" -> {
-                SafeError.Validation(
-                    code = "APP_NOT_FOUND",
-                    message = message
-                )
-            }
-            status.value >= 500 -> {
-                SafeError.Network(
-                    code = "SERVER_ERROR",
-                    message = message
-                )
-            }
-            else -> {
-                SafeError.Validation(
-                    code = "REQUEST_FAILED",
-                    message = message
-                )
-            }
-        }
-    }
-
-    companion object {
-        const val MAX_BATCH_SIZE = 100
-        const val MAX_PAYLOAD_BYTES = 256 * 1024 // 256 KiB
     }
 }

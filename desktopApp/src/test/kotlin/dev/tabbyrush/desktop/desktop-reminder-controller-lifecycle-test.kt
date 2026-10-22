@@ -4,11 +4,14 @@ import dev.tabbyrush.shared.auth.HubAuthSession
 import dev.tabbyrush.shared.contract.AccountIdentity
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.BuildMode
+import dev.tabbyrush.shared.contract.CredentialBundle
 import dev.tabbyrush.shared.contract.CredentialVault
 import dev.tabbyrush.shared.contract.HubConfig
 import dev.tabbyrush.shared.contract.NativeReminderAdapter
 import dev.tabbyrush.shared.contract.ReminderCapabilities
 import dev.tabbyrush.shared.contract.ScheduledAlarmHandle
+import dev.tabbyrush.shared.contract.SyncStatus
+import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.VaultStatus
 import dev.tabbyrush.shared.data.JvmAccountFiles
 import dev.tabbyrush.shared.sync.DeliveryGateState
@@ -17,7 +20,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -25,7 +31,6 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -46,20 +51,12 @@ class DesktopReminderControllerLifecycleTest {
         override suspend fun reconcileSchedule(accountKey: AccountKey, generation: Long, desiredAlarms: List<ScheduledAlarmHandle>) {
             listener?.invoke(accountKey, generation, desiredAlarms)
         }
-        override suspend fun postOwnedNotification(accountKey: AccountKey, generation: Long, taskId: String, scheduleToken: String, occurrenceIndex: Int, title: String, dueEpochMs: Long): String = "p-1"
+        override suspend fun postOwnedNotification(accountKey: AccountKey, generation: Long, taskRef: dev.tabbyrush.shared.contract.TaskRef, scheduleToken: String, occurrenceIndex: Int, title: String, dueEpochMs: Long): String? = "p-1"
         override suspend fun removeOwnedNotification(accountKey: AccountKey, platformNotificationId: String) {}
         override suspend fun cancelAllForAccount(accountKey: AccountKey) {
             cancelledAccounts.add(accountKey)
         }
-    }
-    private class InMemoryVault : CredentialVault {
-        val clearedKeys = mutableListOf<AccountKey>()
-        override val status: VaultStatus = VaultStatus.READY
-        override suspend fun store(accountKey: AccountKey, bundle: dev.tabbyrush.shared.contract.CredentialBundle) {}
-        override suspend fun load(accountKey: AccountKey): dev.tabbyrush.shared.contract.CredentialBundle? = null
-        override suspend fun clear(accountKey: AccountKey) {
-            clearedKeys.add(accountKey)
-        }
+        override suspend fun cancelNotificationsForTask(accountKey: AccountKey, taskRef: dev.tabbyrush.shared.contract.TaskRef) {}
     }
 
     @BeforeTest
@@ -75,7 +72,7 @@ class DesktopReminderControllerLifecycleTest {
     @Test
     fun testStartupWipeRecoveryCancelsPlatformNotificationsBeforeClearingMarker() = runTest {
         val accountFiles = JvmAccountFiles(baseDir = tempDir)
-        val vault = InMemoryVault()
+        val vault = InMemoryCredentialVault()
         val adapter = RecordingReminderAdapter()
 
         // Create an account with a pending wipe marker
@@ -110,16 +107,17 @@ class DesktopReminderControllerLifecycleTest {
     @Test
     fun testStartupWipeRecoveryRetainsMarkerWhenReminderCancellationFails() = runTest {
         val accountFiles = JvmAccountFiles(baseDir = tempDir)
-        val vault = InMemoryVault()
+        val vault = InMemoryCredentialVault()
         val failingAdapter = object : DesktopReminderAdapter {
             override fun setScheduleListener(listener: ((AccountKey, Long, List<ScheduledAlarmHandle>) -> Unit)?) {}
             override suspend fun queryCapabilities(): ReminderCapabilities = ReminderCapabilities(true, true, true)
             override suspend fun reconcileSchedule(accountKey: AccountKey, generation: Long, desiredAlarms: List<ScheduledAlarmHandle>) {}
-            override suspend fun postOwnedNotification(accountKey: AccountKey, generation: Long, taskId: String, scheduleToken: String, occurrenceIndex: Int, title: String, dueEpochMs: Long): String = "p-1"
+            override suspend fun postOwnedNotification(accountKey: AccountKey, generation: Long, taskRef: dev.tabbyrush.shared.contract.TaskRef, scheduleToken: String, occurrenceIndex: Int, title: String, dueEpochMs: Long): String? = "p-1"
             override suspend fun removeOwnedNotification(accountKey: AccountKey, platformNotificationId: String) {}
             override suspend fun cancelAllForAccount(accountKey: AccountKey) {
                 throw RuntimeException("Simulated platform notification cancellation failure")
             }
+            override suspend fun cancelNotificationsForTask(accountKey: AccountKey, taskRef: dev.tabbyrush.shared.contract.TaskRef) {}
         }
 
         // Create an account with a pending wipe marker and database file
@@ -155,26 +153,63 @@ class DesktopReminderControllerLifecycleTest {
     }
 
     @Test
-    fun testRuntimeInitializationSetsUpReminderSubsystem() = runTest {
+    fun testQuitClosesReminderDeliveryGate() = runBlocking {
         val accountFiles = JvmAccountFiles(baseDir = tempDir)
         val lockFile = File(tempDir, "tabbyrush.lock")
         val instanceGuard = SingleInstanceGuard.tryAcquire(lockFile)!!
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
         try {
-            val controller = DesktopController(BuildMode.DEBUG, scope, instanceGuard)
+            val vault = InMemoryCredentialVault()
+            val controller = DesktopController(BuildMode.DEBUG, scope, instanceGuard, accountFiles = accountFiles, vaultOverride = vault)
+            val identity = AccountIdentity("test-user", "test-user", "test-user@example.com")
+            val key = AccountKey.create(controller.hubConfig.canonicalOrigin, identity.userId)
+            controller.vault.store(key, CredentialBundle("test-access-token", "test-refresh-token"))
+            assertTrue(controller.authSession.restoreSession(identity, key))
+            val runtime = controller.getOrCreateAccountRuntime(key)
 
-            val runtime = controller.getOrCreateAccountRuntime(accountKey)
-
-            assertNotNull(runtime.reminderCoordinator)
-            assertNotNull(runtime.deliveryGate)
-            assertNotNull(runtime.reminderScheduler)
-            assertNotNull(runtime.scheduleObserverJob)
             assertEquals(DeliveryGateState.OPEN, runtime.deliveryGate.getState())
 
             controller.disposeSuspend()
             assertEquals(DeliveryGateState.CLOSED, runtime.deliveryGate.getState())
         } finally {
+            scope.cancel()
+            instanceGuard.close()
+        }
+    }
+
+    @Test
+    fun testShutdownCancelsControllerSyncWaitingForCoordinatorAdmission() = runTest {
+        val accountFiles = JvmAccountFiles(baseDir = tempDir)
+        val instanceGuard = SingleInstanceGuard.tryAcquire(File(tempDir, "tabbyrush.lock"))!!
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val vault = InMemoryCredentialVault()
+        val controller = DesktopController(BuildMode.DEBUG, scope, instanceGuard, accountFiles = accountFiles, vaultOverride = vault)
+        try {
+            // Establish the runtime before advancing controller observers, without making a network request.
+            val runtime = runBlocking {
+                val identity = AccountIdentity("test-user", "test-user", "test-user@example.com")
+                val key = AccountKey.create(controller.hubConfig.canonicalOrigin, identity.userId)
+                controller.vault.store(key, CredentialBundle("test-access-token", "test-refresh-token"))
+                assertTrue(controller.authSession.restoreSession(identity, key))
+                controller.getOrCreateAccountRuntime(key)
+            }
+            runtime.coordinator.coordinatorMutex.lock()
+            try {
+                controller.onAction(TodoAction.TriggerSync)
+                runCurrent()
+                // Sync is now waiting at coordinator admission. Shutdown must own and cancel that job.
+                controller.syncScheduler.disposeAndAwait()
+            } finally {
+                runtime.coordinator.coordinatorMutex.unlock()
+            }
+            runCurrent()
+            assertEquals(SyncStatus.IDLE, runtime.coordinator.progress.value.status,
+                "A controller sync must not escape scheduler shutdown and enter the store later")
+            controller.disposeSuspend()
+            assertEquals(DeliveryGateState.CLOSED, runtime.deliveryGate.getState())
+        } finally {
+            controller.disposeSuspend()
             scope.cancel()
             instanceGuard.close()
         }

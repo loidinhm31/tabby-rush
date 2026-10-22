@@ -18,6 +18,7 @@ import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.NativeReminderAdapter
 import dev.tabbyrush.shared.contract.ReminderCapabilities
 import dev.tabbyrush.shared.contract.ScheduledAlarmHandle
+import dev.tabbyrush.shared.contract.TaskRef
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -338,6 +339,7 @@ class LinuxNativeReminderAdapter(
 ) : DesktopReminderAdapter {
 
     private val postedNotificationIds = ConcurrentHashMap<String, MutableSet<Long>>()
+    private val taskNotificationMap = ConcurrentHashMap<String, ConcurrentHashMap<TaskRef, MutableSet<Long>>>()
     private var scheduleListener: ((AccountKey, Long, List<ScheduledAlarmHandle>) -> Unit)? = null
 
     override fun setScheduleListener(listener: ((AccountKey, Long, List<ScheduledAlarmHandle>) -> Unit)?) {
@@ -365,7 +367,7 @@ class LinuxNativeReminderAdapter(
     override suspend fun postOwnedNotification(
         accountKey: AccountKey,
         generation: Long,
-        taskId: String,
+        taskRef: TaskRef,
         scheduleToken: String,
         occurrenceIndex: Int,
         title: String,
@@ -381,9 +383,24 @@ class LinuxNativeReminderAdapter(
             is LinuxNotificationStatus.Success -> {
                 val id = status.notificationId
                 postedNotificationIds.computeIfAbsent(accountKey.value) { ConcurrentHashMap.newKeySet() }.add(id)
+                taskNotificationMap.computeIfAbsent(accountKey.value) { ConcurrentHashMap() }
+                    .computeIfAbsent(taskRef) { ConcurrentHashMap.newKeySet() }.add(id)
                 id.toString()
             }
             else -> null
+        }
+    }
+
+    override suspend fun cancelNotificationsForTask(
+        accountKey: AccountKey,
+        taskRef: TaskRef
+    ) = withContext(ioDispatcher) {
+        val ids = taskNotificationMap[accountKey.value]?.remove(taskRef) ?: return@withContext
+        for (id in ids) {
+            postedNotificationIds[accountKey.value]?.remove(id)
+            try {
+                dbusAdapter.closeNotification(id)
+            } catch (_: Exception) {}
         }
     }
 
@@ -400,6 +417,7 @@ class LinuxNativeReminderAdapter(
     }
 
     override suspend fun cancelAllForAccount(accountKey: AccountKey) = withContext(ioDispatcher) {
+        taskNotificationMap.remove(accountKey.value)
         val accountIds = postedNotificationIds.remove(accountKey.value) ?: return@withContext
         val errors = mutableListOf<String>()
         for (id in accountIds) {

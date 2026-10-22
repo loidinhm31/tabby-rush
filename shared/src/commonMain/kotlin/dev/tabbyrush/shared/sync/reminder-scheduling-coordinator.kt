@@ -3,6 +3,8 @@ package dev.tabbyrush.shared.sync
 import dev.tabbyrush.shared.contract.AccountKey
 import dev.tabbyrush.shared.contract.NativeReminderAdapter
 import dev.tabbyrush.shared.contract.ScheduledAlarmHandle
+import dev.tabbyrush.shared.contract.TaskAccessStatus
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.data.ReminderOccurrenceStore
 import dev.tabbyrush.shared.data.RoomAccountStore
 
@@ -51,7 +53,7 @@ class ReminderSchedulingCoordinator(
                 ScheduledAlarmHandle(
                     accountKey = it.accountKey,
                     generation = it.generation,
-                    taskId = it.taskId,
+                    taskRef = TaskRef(it.ownerUserId ?: store.userId, it.taskId),
                     scheduleToken = it.scheduleToken,
                     occurrenceIndex = it.occurrenceIndex,
                     triggerAtEpochMs = it.dueEpochMs
@@ -72,13 +74,13 @@ class ReminderSchedulingCoordinator(
      * Enforces:
      * 1. Delivery gate admission (fail closed if closing, closed, or wiped).
      * 2. Capability verification.
-     * 3. Current persisted task eligibility re-check & fresh title fetch.
+     * 3. Current persisted task eligibility & access re-check.
      * 4. Atomic claim in SQLite before native post.
-     * 5. Pre-post wipe marker re-check.
+     * 5. Pre-post wipe marker, gate state, and fresh projection re-check.
      * 6. Native post followed by outcome recording.
      */
     suspend fun deliverReminder(
-        taskId: String,
+        taskRef: TaskRef,
         scheduleToken: String,
         occurrenceIndex: Int,
         triggerGeneration: Long,
@@ -90,21 +92,26 @@ class ReminderSchedulingCoordinator(
             val caps = adapter.queryCapabilities()
             if (!caps.isDeliveryPermitted) return@withDeliveryAdmission false
 
+            if (taskRef.ownerUserId != store.userId) {
+                val access = store.accessFor(taskRef)
+                if (access == null || access.status != TaskAccessStatus.Accessible) {
+                    return@withDeliveryAdmission false
+                }
+            }
+
             // Re-read current persisted task projection (fresh content and eligibility)
             val schedules = store.getPersistedScheduleProjection()
-            val taskSchedule = schedules.find { it.taskId == taskId }
+            val taskSchedule = schedules.find { it.ownerUserId == taskRef.ownerUserId && it.taskId == taskRef.rowId }
             if (taskSchedule == null || !taskSchedule.isEligibleForScheduling || taskSchedule.scheduleToken != scheduleToken) {
                 // Task was deleted, completed, disabled, or token changed: cancel and do not post
                 occurrenceStore.syncPlannedOccurrences(triggerGeneration, schedules, nowEpochMs)
                 return@withDeliveryAdmission false
             }
 
-            val title = taskSchedule.title
-
             // Atomic claim-before-post in SQLite
             val claimed = occurrenceStore.evaluateAndClaimDueOpportunity(
                 generation = triggerGeneration,
-                taskId = taskId,
+                taskId = taskRef.rowId,
                 scheduleToken = scheduleToken,
                 nowEpochMs = nowEpochMs
             ) ?: return@withDeliveryAdmission false
@@ -113,16 +120,26 @@ class ReminderSchedulingCoordinator(
             if (hasWipeMarker() || deliveryGate.getState() != DeliveryGateState.OPEN) {
                 return@withDeliveryAdmission false
             }
-            val prePostSchedule = store.getPersistedScheduleProjection().find { it.taskId == taskId }
+
+            if (taskRef.ownerUserId != store.userId) {
+                val prePostAccess = store.accessFor(taskRef)
+                if (prePostAccess == null || prePostAccess.status != TaskAccessStatus.Accessible) {
+                    return@withDeliveryAdmission false
+                }
+            }
+
+            val prePostSchedule = store.getPersistedScheduleProjection().find { it.ownerUserId == taskRef.ownerUserId && it.taskId == taskRef.rowId }
             if (prePostSchedule == null || !prePostSchedule.isEligibleForScheduling || prePostSchedule.scheduleToken != scheduleToken) {
                 return@withDeliveryAdmission false
             }
+
+            val title = prePostSchedule.title
 
             // Native post
             val platformId = adapter.postOwnedNotification(
                 accountKey = accountKey,
                 generation = triggerGeneration,
-                taskId = taskId,
+                taskRef = taskRef,
                 scheduleToken = scheduleToken,
                 occurrenceIndex = claimed.index,
                 title = title,
@@ -132,7 +149,7 @@ class ReminderSchedulingCoordinator(
             if (platformId != null) {
                 occurrenceStore.recordPosted(
                     generation = triggerGeneration,
-                    taskId = taskId,
+                    taskId = taskRef.rowId,
                     scheduleToken = scheduleToken,
                     occurrenceIndex = claimed.index,
                     platformNotificationId = platformId,
@@ -145,6 +162,20 @@ class ReminderSchedulingCoordinator(
             }
         } ?: false
     }
+
+    suspend fun deliverReminder(
+        taskId: String,
+        scheduleToken: String,
+        occurrenceIndex: Int,
+        triggerGeneration: Long,
+        nowEpochMs: Long = clock()
+    ): Boolean = deliverReminder(
+        taskRef = TaskRef(store.userId, taskId),
+        scheduleToken = scheduleToken,
+        occurrenceIndex = occurrenceIndex,
+        triggerGeneration = triggerGeneration,
+        nowEpochMs = nowEpochMs
+    )
 
     /**
      * Implements LeaveSchedulerCancelGate to cancel all alarms and posted notifications

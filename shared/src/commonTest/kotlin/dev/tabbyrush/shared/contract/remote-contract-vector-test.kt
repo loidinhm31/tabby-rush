@@ -1,9 +1,15 @@
 package dev.tabbyrush.shared.contract
+import dev.tabbyrush.shared.sync.CanonicalRecordRefDto
+import dev.tabbyrush.shared.sync.PullRequestDto
+import dev.tabbyrush.shared.sync.TaskAccessResultDto
+import dev.tabbyrush.shared.sync.TaskCapabilitiesDto
 
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RemoteContractVectorTest {
@@ -107,25 +113,25 @@ class RemoteContractVectorTest {
     @Test
     fun testDigestGoldenVectors() {
         val audSelected = "{\"appId\":\"tabby-rush\",\"audience\":{\"mode\":\"selected\",\"userIds\":[\"507f1f77bcf86cd799439011\"]},\"recipientIds\":[\"507f1f77bcf86cd799439011\"]}"
-        assertEquals("sha256:3b79fbc0c71a21c9597c12864921255705fb2a2bb190c5e4e66b17e4740daf70", "sha256:" + StrictSyncDigest.sha256Hex(audSelected.encodeToByteArray()))
+        assertEquals("sha256:3b79fbc0c71a21c9597c12864921255705fb2a2bb190c5e4e66b17e4740daf70", "sha256:" + Sha256.sha256Hex(audSelected.encodeToByteArray()))
 
         val audAll = "{\"appId\":\"tabby-rush\",\"audience\":{\"mode\":\"all\"},\"recipientIds\":[\"507f1f77bcf86cd799439011\",\"507f1f77bcf86cd799439012\"]}"
-        assertEquals("sha256:78c0cce67bac4168cad5cc5071473f88b3383ae0b0e863fb86c76a1c4d76b636", "sha256:" + StrictSyncDigest.sha256Hex(audAll.encodeToByteArray()))
+        assertEquals("sha256:78c0cce67bac4168cad5cc5071473f88b3383ae0b0e863fb86c76a1c4d76b636", "sha256:" + Sha256.sha256Hex(audAll.encodeToByteArray()))
 
         val audAdmins = "{\"appId\":\"tabby-rush\",\"audience\":{\"mode\":\"admins\"},\"recipientIds\":[\"507f1f77bcf86cd799439011\"]}"
-        assertEquals("sha256:eb52954adb601beacabaebc2c39fd00951fcdf7e0590b563c0dd6e529c043080", "sha256:" + StrictSyncDigest.sha256Hex(audAdmins.encodeToByteArray()))
+        assertEquals("sha256:eb52954adb601beacabaebc2c39fd00951fcdf7e0590b563c0dd6e529c043080", "sha256:" + Sha256.sha256Hex(audAdmins.encodeToByteArray()))
 
         val reqAscii = "{\"previewId\":\"a1c8249a-6f8d-4e73-97f5-dcebd10b407b\",\"audienceDigest\":\"sha256:3b79fbc0c71a21c9597c12864921255705fb2a2bb190c5e4e66b17e4740daf70\",\"title\":\"Maintenance notice\",\"body\":\"Please save your work before maintenance.\"}"
-        assertEquals("sha256:f31a1a62edf5374b573e495c92c22142db391357c8de0ec9c12965f6a5059d47", "sha256:" + StrictSyncDigest.sha256Hex(reqAscii.encodeToByteArray()))
+        assertEquals("sha256:f31a1a62edf5374b573e495c92c22142db391357c8de0ec9c12965f6a5059d47", "sha256:" + Sha256.sha256Hex(reqAscii.encodeToByteArray()))
 
         val reqUnicode = "{\"previewId\":\"a1c8249a-6f8d-4e73-97f5-dcebd10b407b\",\"audienceDigest\":\"sha256:3b79fbc0c71a21c9597c12864921255705fb2a2bb190c5e4e66b17e4740daf70\",\"title\":\"Thông báo bảo trì: TabbyRush\",\"body\":\"Vui lòng lưu công việc trước khi hệ thống bảo trì lúc 00:00 UTC.\\n\\\"TabbyRush\\\" \\\\ 🐱\"}"
-        assertEquals("sha256:6a6d725093346aca0dd5a46536e0bc7de8ba585a2564e6534954cb537ded233a", "sha256:" + StrictSyncDigest.sha256Hex(reqUnicode.encodeToByteArray()))
+        assertEquals("sha256:6a6d725093346aca0dd5a46536e0bc7de8ba585a2564e6534954cb537ded233a", "sha256:" + Sha256.sha256Hex(reqUnicode.encodeToByteArray()))
 
         val bindOp = "{\"appId\":\"tabby-rush\",\"installId\":\"a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d\",\"operationKind\":\"bind\",\"operationGeneration\":\"17\",\"ownerId\":\"507f1f77bcf86cd799439011\",\"platform\":\"android\",\"tokenHash\":\"bf243062400fdb658ea1b2536dc1244dfe259314d79bfa46da8f38ff8554f74f\",\"appVersion\":\"1.0.0\",\"expectedBindingGeneration\":null}"
-        assertEquals("4a9ae79e2b9095572381bac54e47ac1e75cccaf0facb195d42ce55fba7074cca", StrictSyncDigest.sha256Hex(bindOp.encodeToByteArray()))
+        assertEquals("4a9ae79e2b9095572381bac54e47ac1e75cccaf0facb195d42ce55fba7074cca", Sha256.sha256Hex(bindOp.encodeToByteArray()))
 
         val unbindOp = "{\"appId\":\"tabby-rush\",\"installId\":\"a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d\",\"operationKind\":\"unbind\",\"operationGeneration\":\"18\",\"ownerId\":\"507f1f77bcf86cd799439011\",\"platform\":null,\"tokenHash\":null,\"appVersion\":null,\"expectedBindingGeneration\":\"17\"}"
-        assertEquals("d9a378d326c1145dfa46aa6ad9b4c4dcc52dd0263fac1b1518c94f177c11c077", StrictSyncDigest.sha256Hex(unbindOp.encodeToByteArray()))
+        assertEquals("d9a378d326c1145dfa46aa6ad9b4c4dcc52dd0263fac1b1518c94f177c11c077", Sha256.sha256Hex(unbindOp.encodeToByteArray()))
     }
 
     @Test
@@ -169,6 +175,57 @@ class RemoteContractVectorTest {
         assertTrue(validateAudienceCount(500))
         assertFalse(validateAudienceCount(0), "Empty audience rejected")
         assertFalse(validateAudienceCount(501), "Audience > 500 overflow rejected")
+    }
+
+    @Test
+    fun testCollaborationWireVectors() {
+        val refDto = CanonicalRecordRefDto("user-1", "todos", "row-123")
+        val caps = TaskCapabilitiesDto(editContent = true, manageAssignment = false, deleteTask = false, createChild = false)
+        val accessResult = TaskAccessResultDto(ref = refDto, status = "accessible", capabilities = caps, hierarchyCoverage = "child-only")
+
+        // 1. Serialization round-trip using production syncWireJson
+        val encodedResult = dev.tabbyrush.shared.sync.syncWireJson.encodeToString(TaskAccessResultDto.serializer(), accessResult)
+        val decodedResult = dev.tabbyrush.shared.sync.syncWireJson.decodeFromString(TaskAccessResultDto.serializer(), encodedResult)
+        assertEquals(accessResult, decodedResult)
+
+        // 2. Fixed wire fixture from Rust engine decodes cleanly into Kotlin DTO
+        val rustWireAccessResult = """{"ref":{"ownerUserId":"user-1","tableName":"todos","rowId":"row-99"},"status":"accessible","capabilities":{"editContent":true,"manageAssignment":false,"deleteTask":false,"createChild":false},"hierarchyCoverage":"child-only"}"""
+        val decodedRustResult = dev.tabbyrush.shared.sync.syncWireJson.decodeFromString(TaskAccessResultDto.serializer(), rustWireAccessResult)
+        assertEquals("user-1", decodedRustResult.ref.ownerUserId)
+        assertEquals("todos", decodedRustResult.ref.tableName)
+        assertEquals("row-99", decodedRustResult.ref.rowId)
+        assertEquals("accessible", decodedRustResult.status)
+        assertEquals(true, decodedRustResult.capabilities?.editContent)
+        assertEquals(false, decodedRustResult.capabilities?.manageAssignment)
+        assertEquals("child-only", decodedRustResult.hierarchyCoverage)
+
+        // 3. PullRequest with explicit tables and null accessChecks (scan mode: tables emitted, accessChecks omitted)
+        val scanPull = PullRequestDto(tables = listOf("todos", "taskAssignees"), collaborationVersion = 1L, accessChecks = null)
+        val scanJson = dev.tabbyrush.shared.sync.syncWireJson.encodeToString(PullRequestDto.serializer(), scanPull)
+        assertFalse(scanJson.contains("\"accessChecks\""), "null accessChecks must be omitted")
+        assertTrue(scanJson.contains("\"collaborationVersion\":1"), "collaborationVersion must be emitted")
+        assertTrue(scanJson.contains("\"tables\":[\"todos\",\"taskAssignees\"]"), "tables filter must be emitted in scan mode")
+
+        // 4. PullRequest with non-empty accessChecks (validation mode: tables omitted, accessChecks emitted)
+        val nonEmptyCheckPull = PullRequestDto(collaborationVersion = 1L, accessChecks = listOf(refDto))
+        val nonEmptyJson = dev.tabbyrush.shared.sync.syncWireJson.encodeToString(PullRequestDto.serializer(), nonEmptyCheckPull)
+        assertFalse(nonEmptyJson.contains("\"tables\""), "tables must not be emitted in validation mode")
+        assertTrue(nonEmptyJson.contains("\"accessChecks\":["), "accessChecks must be emitted")
+
+        // 5. PullRequest with explicit empty list accessChecks (final boundary validation mode: tables omitted, accessChecks=[])
+        val checkPull = PullRequestDto(collaborationVersion = 1L, accessChecks = emptyList())
+        val checkJson = dev.tabbyrush.shared.sync.syncWireJson.encodeToString(PullRequestDto.serializer(), checkPull)
+        assertTrue(checkJson.contains("\"accessChecks\":[]"), "empty accessChecks must be emitted as []")
+        assertTrue(checkJson.contains("\"collaborationVersion\":1"))
+        assertFalse(checkJson.contains("\"tables\""), "tables must not be emitted in validation mode")
+
+        // 6. Server validation wire fixture with empty accessChecks has no tables
+        val rustValidationWire = """{"batchSize":100,"collaborationVersion":1,"accessChecks":[]}"""
+        val decodedValidation = dev.tabbyrush.shared.sync.syncWireJson.decodeFromString(PullRequestDto.serializer(), rustValidationWire)
+        assertEquals(1L, decodedValidation.collaborationVersion)
+        assertNull(decodedValidation.tables, "tables must be null in validation-only wire fixture")
+        assertNotNull(decodedValidation.accessChecks, "accessChecks must not be null when [] is sent")
+        assertTrue(decodedValidation.accessChecks!!.isEmpty(), "accessChecks must be empty list")
     }
 
     private fun compareGenerations(a: String, b: String): Int {

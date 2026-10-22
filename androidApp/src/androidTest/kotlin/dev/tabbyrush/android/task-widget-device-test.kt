@@ -14,6 +14,7 @@ import dev.tabbyrush.shared.contract.SurfaceResult
 import dev.tabbyrush.shared.contract.SurfaceSnapshot
 import dev.tabbyrush.shared.contract.TaskSections
 import dev.tabbyrush.shared.contract.TaskSurfaceAccess
+import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.Todo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,8 +41,11 @@ class TaskWidgetDeviceTest {
 
     @Before
     fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-        TabbyRushTaskWidget.clearState()
+        runBlocking {
+            context = ApplicationProvider.getApplicationContext()
+            assertTrue("Widget updater must quiesce before test execution", TaskWidgetUpdater.awaitQuiescenceAndNotClearing(5_000L))
+            TabbyRushTaskWidget.clearState()
+        }
     }
 
     @Test
@@ -68,9 +72,9 @@ class TaskWidgetDeviceTest {
 
     @Test
     fun testPendingIntentsCreation() {
-        val openPending = createOpenTaskPendingIntent(context, testToken, "task-1")
+        val taskRef = TaskRef("test-user", "task-1")
+        val openPending = createOpenTaskPendingIntent(context, testToken, taskRef)
         assertNotNull("Open task PendingIntent must not be null", openPending)
-
         val addPending = createAddTaskPendingIntent(context, testToken)
         assertNotNull("Add task PendingIntent must not be null", addPending)
 
@@ -117,7 +121,7 @@ class TaskWidgetDeviceTest {
                     token = token,
                     sections = TaskSections(
                         incomplete = listOf(
-                            Todo("task-100", "Device Test Task", false, false, 500L, 500L)
+                            Todo(taskRef = TaskRef("test-user", "task-100"), title = "Device Test Task", completed = false, createdAt = 500L, updatedAt = 500L)
                         ),
                         completed = emptyList()
                     ),
@@ -128,12 +132,12 @@ class TaskWidgetDeviceTest {
 
         override suspend fun setCompleted(
             token: SurfaceAccountToken,
-            taskId: String,
+            taskRef: TaskRef,
             completed: Boolean,
             nowEpochMs: Long
         ): SurfaceResult<CompletionChange> {
             setCompletedCalled = true
-            lastCompletedTaskId = taskId
+            lastCompletedTaskId = taskRef.rowId
             lastCompletedValue = completed
             return SurfaceResult.Value(CompletionChange.Changed)
         }
@@ -147,7 +151,7 @@ class TaskWidgetDeviceTest {
             return true
         }
 
-        override suspend fun validateNavigation(token: SurfaceAccountToken, taskId: String?): Boolean = true
+        override suspend fun validateNavigation(token: SurfaceAccountToken, taskRef: TaskRef?): Boolean = true
     }
 
     private class DeviceTestHost(
@@ -161,27 +165,29 @@ class TaskWidgetDeviceTest {
     }
 
     @Test
-    fun testUpdaterRefreshAndClearLifecycle() = runBlocking {
-        val access = DeviceTestAccess(SurfaceReadiness.Ready(testToken))
-        val host = DeviceTestHost(access)
+    fun testUpdaterRefreshAndClearLifecycle() {
+        runBlocking {
+            val access = DeviceTestAccess(SurfaceReadiness.Ready(testToken))
+            val host = DeviceTestHost(access)
 
-        // 1. Refresh updates display state
-        TaskWidgetUpdater.refreshAll(context, host)
-        assertEquals(1, access.publishedCount)
-        val stateAfterRefresh = TabbyRushTaskWidget.displayState.value
-        assertTrue("Display state must be Content after refresh", stateAfterRefresh is WidgetDisplayState.Content)
-        val content = stateAfterRefresh as WidgetDisplayState.Content
-        assertEquals(testToken, content.token)
-        assertEquals(1, content.sections.incomplete.size)
-        assertEquals("Device Test Task", content.sections.incomplete.first().title)
+            // 1. Refresh updates display state
+            TaskWidgetUpdater.refreshAll(context, host)
+            assertEquals(1, access.publishedCount)
+            val stateAfterRefresh = TabbyRushTaskWidget.displayState.value
+            assertTrue("Display state must be Content after refresh", stateAfterRefresh is WidgetDisplayState.Content)
+            val content = stateAfterRefresh as WidgetDisplayState.Content
+            assertEquals(testToken, content.token)
+            assertEquals(1, content.sections.incomplete.size)
+            assertEquals("Device Test Task", content.sections.incomplete.first().title)
 
-        // 2. Clear all resets to SignedOut immediately
-        TaskWidgetUpdater.clearAll(context)
-        val stateAfterClear = TabbyRushTaskWidget.displayState.value
-        assertEquals("Display state must be SignedOut after clearAll", WidgetDisplayState.SignedOut, stateAfterClear)
+            // 2. Clear all resets to SignedOut immediately
+            TaskWidgetUpdater.clearAll(context)
+            val stateAfterClear = TabbyRushTaskWidget.displayState.value
+            assertEquals("Display state must be SignedOut after clearAll", WidgetDisplayState.SignedOut, stateAfterClear)
 
-        // 3. Await quiescence completes cleanly
-        TaskWidgetUpdater.awaitQuiescence(2_000L)
+            // 3. Await quiescence completes cleanly
+            assertTrue("Quiescence must complete cleanly", TaskWidgetUpdater.awaitQuiescence(2_000L))
+        }
     }
 
     @Test

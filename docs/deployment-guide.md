@@ -1,57 +1,53 @@
 # TabbyRush Deployment & Operations Guide
 
-**Document Version**: 1.5.0
-**Phase**: Sticky Task Surfaces Phase 07 delivered / documentation & automated verification evidenced; native Android/Windows acceptance conditionally held at Gate G2; Linux acceptance pending Phase 08; production cutover remains blocked by G3/G6/G7
-**Related Documents**: [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
+**Document Version**: 1.18.0
+**Last Updated**: 2026-10-20
+**Release Baseline**: 1.0.17 (versionCode 18)
+**Status**: Standard sync is current. Offline Gradle/package suites, disposable-local Hub smoke, and a standalone Windows runtime smoke are reported passed; interactive native UI/device acceptance is not passed, and live production migration/release remain unauthorized.
+**Related Documents**: [Standard Sync Design](./standard-sync-cutover-design.md) · [Security & Recovery](./security-and-recovery.md) · [Release Acceptance](./release-acceptance.md) · [Hub Schema Integration](./hub-schema-integration.md) · [System Architecture](./system-architecture.md) · [Linux Desktop Guide](./linux-desktop-guide.md) · [Linux Acceptance](./linux-acceptance.md) · [Windows Desktop Guide](./windows-desktop-guide.md) · [Windows Acceptance](./windows-acceptance.md)
 
 ---
 
 ## 1. Overview & Operational Responsibilities
 
-This guide details the end-to-end operational procedures required to deploy and maintain TabbyRush with isolated strict-v1 synchronization against Glean Hub.
+This guide covers deployment of the native TabbyRush Android/Desktop clients using Glean Hub ordinary registration and standard synchronization.
 
-In strict adherence to architectural boundaries:
-- **Client Distribution**: The TabbyRush Android client ships with fixed, compile-time approved Hub endpoints; no administrative or database credentials are ever distributed to end-user devices.
-- **Backend Infrastructure**: Glean Hub (implemented in Rust with the `glean-hub-sync` extension) and its underlying MongoDB persistence remain strictly under operator custody.
-- **Sync Protocol Isolation**: The strict-v1 protocol runs in dedicated namespaces and route trees, completely isolated from legacy Glean clients.
-- **Desktop Distribution**: Linux uses the self-contained image or RPM and Freedesktop Secret Service; Windows uses a self-contained application image or per-user MSI and current-user DPAPI. Each target uses its own dependency lock and OS credential provider.
+In keeping with architectural boundaries:
+- **Client Distribution**: Approved Hub origins and the app API key are client configuration; administrative and database credentials are never distributed to end-user devices.
+- **Backend Infrastructure**: Glean Hub and MongoDB remain under operator custody.
+- **Sync Protocol**: The current binary uses standard push/pull/delta routes under `/api/v1/sync/{app_id}/`; it does not use strict-v1/v2/v3 routes.
+- **Desktop Distribution**: Linux uses the supported package/image and Secret Service; Windows uses the supported package/image and current-user DPAPI. Each target uses its own dependency lock and OS credential provider.
+
+Offline Gradle/package suites and disposable-local API/browser smoke are reported passed. A standalone Windows runtime smoke also passed through a strict Gradle JavaExec entry point against disposable loopback services, exercising DPAPI, real HTTP auth, Room offline restart, two independent stores using the actual coordinator, schemaVersion 2, unknown JSON/customNotes preservation, parent/child sync, and group deletion. It is not interactive UI acceptance or connected-Android proof. UI provider approval timed out twice; connected-device acceptance was not run. Do not equate package creation or harness/backend smoke with native release acceptance.
 
 ---
 
-## 2. Glean Hub Strict Backend Deployment
+## 2. Glean Hub Ordinary Registration & Schema
 
-### 2.1 Host & Database Prerequisites
-1. **Glean Hub Binary**: Built with `glean-hub-sync` strict extension and Axum web framework.
-2. **MongoDB Cluster**:
-   - MongoDB 6.0+ or 7.0+ (Replica Set recommended for majority write concerns, or standalone writable primary with `w: 1, j: true`).
-   - Storage engine: WiredTiger with journaling enabled.
-   - Network: Firewalled, TLS-encrypted connections only; never exposed to public internet directly without a reverse proxy.
-3. **Approved Reverse Proxy**:
-   - Nginx, Caddy, or Cloudflare terminating public TLS.
-   - Enforce HTTPS only (HTTP -> HTTPS redirect at proxy edge; application client does not follow redirects).
+### 2.1 Hub and Database Prerequisites
 
-### 2.2 Provisioning the Strict-v1 Application
-Execute the schema provisioning runner against the approved Hub instance:
+Deploy the approved Glean Hub release behind the organization's TLS-terminating reverse proxy and use its supported MongoDB topology/backup policy. The current TabbyRush client expects HTTPS outside configured loopback development environments and does not follow redirects for sync requests. Keep database credentials, admin tokens, and backups within operator custody.
+
+### 2.2 Register a New Ordinary App
+
+`scripts/hub-schema-provision.mjs` provisions a new ordinary registration only; it does not update, convert, or migrate an existing app. The schema file must contain `appId` and `schema`, and `--confirm-app` must exactly match. The script requires explicit `--origin`, `--schema`, `--out`, and `GLEAN_ADMIN_TOKEN`, validates ordinary schema metadata, writes credentials to a new file without printing them, and verifies registry read-back.
 
 ```bash
-# Set authorized operator admin token
 export GLEAN_ADMIN_TOKEN="<operator_admin_jwt>"
-export APPROVED_HUB_ORIGIN="https://hub.example.com"
-
-# Provision strict app schema and verify admission read-back
 node scripts/hub-schema-provision.mjs \
-  --origin "$APPROVED_HUB_ORIGIN" \
-  --token "$GLEAN_ADMIN_TOKEN" \
-  --schema integration/glean-hub/tabbyrush-schema.json \
-  --out /secure/credentials/tabbyrush-credentials.json
+  --origin "https://hub.example.com" \
+  --schema ./integration/glean-hub/tabbyrush-schema.json \
+  --out /secure/credentials/tabbyrush-credentials.json \
+  --confirm-app tabby-rush
 ```
 
-**Verification Invariants:**
-- Inspects `GET /api/v1/apps/tabby-rush` read-back.
-- Asserts `syncMode === 'strict-v1'`.
-- Validates the 4 canonical columns in `todos`: `id` (string), `title` (string), `completed` (boolean), `createdAt` (integer).
-- Saves the dedicated `apiKey` into custody with restrictive `0600` file permissions.
+Never pass administrative tokens or MongoDB credentials as command-line literals. On Windows, `--out` MUST be inside an already-existing private, non-symlink directory whose protected DACL and owner restrict access to the current user, `SYSTEM`, and `Administrators`. Create and secure this directory through the approved host process before running the script. The script refuses an unsafe/missing directory and does not change its permissions. It reserves the new output file, sets/verifies its file DACL, and only then sends the registration POST.
 
+### 2.3 Schema Changes
+
+Admin schema updates use `expectedSchemaVersion`. Treat the returned `schemaVersion` as Hub metadata concurrency only: an effective change increments it; a no-op does not; a stale changed update conflicts rather than overwriting current data. Unknown JSON keys are permitted by standard sync. Adding a Hub schema field does not generate native UI, Kotlin fields, or Room migrations; any new required client behavior needs an explicitly compatible native release.
+
+The disposable-local smoke used nullable `customNotes`: version 1→2, no-op remained 2, and a stale changed edit returned 409 while preserving the draft and rendering latest schema read-only. This is not production authorization or a live cutover test.
 ---
 
 ## 3. Android Release Build & Signing
@@ -254,33 +250,32 @@ rm -rf ~/.local/share/tabbyrush
 ## 8. Windows Desktop & MSI Deployment
 
 ### 8.1 Build Host Prerequisites
-Build and package on a Windows x64 host with JDK 21 LTS (`java`, `javac`, and `jpackage`) and PowerShell. The `:desktopApp:packageMsi` task also requires WiX tooling; the recorded build used WiX 3.11 provisioned by the Compose Desktop plugin. Run diagnostics before resolving dependencies:
+Build and package on a Windows x64 host with JDK 21 LTS (`java`, `javac`, and `jpackage`), CMake/MSVC for C++20 WinRT, and PowerShell. Note that bare `:desktopApp:packageMsi` is guarded in `desktopApp/build.gradle.kts` (requiring `-PallowBarePackageMsi` if run directly). CI and official release packaging use the dedicated remote MSI packaging script `scripts/build-windows-remote-msi.ps1` (or `:desktopApp:packageRemoteMsi`), which compiles the native C++/WinRT toast DLL (`tabbyrush-toast.dll`), stages resources, normalizes configs to BOM-free UTF-8, and packages a per-user MSI with WiX.
+
+Run diagnostics before resolving dependencies:
 
 ```powershell
 .\scripts\windows-package-smoke.ps1 -Diagnose
 ```
 
-The Windows build selects `desktopTarget=windows`; explicit targets that do not match the host are rejected. Keep Gradle dependency verification enabled for package builds. Do not use `--dependency-verification=off` to produce a distributable or MSI.
+The Windows build selects `desktopTarget=windows`; explicit targets that do not match the host are rejected. Note: CI currently runs with `--dependency-verification=off` due to the open 149-hash buildscript verification baseline hold.
 
-### 8.2 Build and Test
-Run the target-specific build, Windows desktop tests, and shared JVM regression suite:
+### 8.2 Build and Packaging via Remote MSI Script
+Run the packaging script to compile the native toast bridge, assemble distributables, and build the MSI:
 
 ```powershell
-.\gradlew.bat -PdesktopTarget=windows :desktopApp:dependencies
-.\gradlew.bat -PdesktopTarget=windows :desktopApp:compileKotlin :desktopApp:test
-.\gradlew.bat :shared:jvmTest
-.\gradlew.bat -PdesktopTarget=windows :desktopApp:createDistributable
-.\gradlew.bat -PdesktopTarget=windows :desktopApp:packageMsi
+# Execute complete Windows desktop build and per-user MSI packaging
+powershell -ExecutionPolicy Bypass -File .\scripts\build-windows-remote-msi.ps1 -Verification off
 ```
 
-The Windows lockfile is `desktopApp\gradle-windows.lockfile`; ordinary builds consume the target-specific lock without `--write-locks`. The self-contained application image is written to `desktopApp\build\compose\binaries\main\app\TabbyRush\`. The MSI output is `desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.0.msi`. `createDistributable` includes the runtime and `TabbyRush.exe`; it does not require WiX.
+The Windows lockfile is `desktopApp\gradle-windows.lockfile`; ordinary builds consume the target-specific lock without `--write-locks`. The self-contained application image is written to `desktopApp\build\compose\binaries\main\app\TabbyRush\`. The MSI output is written to `desktopApp\build\compose\binaries\main\msi\TabbyRush-<version>.msi` (or `desktopApp\build\windows-installer\TabbyRush-<version>.msi`).
 
 ### 8.3 Audit the Bundle and MSI
 Inspect the distributable and MSI using the Windows-specific PowerShell harness:
 
 ```powershell
 .\scripts\windows-package-smoke.ps1 -DistDir desktopApp\build\compose\binaries\main\app\TabbyRush
-.\scripts\windows-package-smoke.ps1 -MsiPath desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.0.msi
+.\scripts\windows-package-smoke.ps1 -MsiPath desktopApp\build\compose\binaries\main\msi\TabbyRush-1.0.17.msi
 ```
 
 The bundle audit checks the launcher/runtime, Windows DPAPI class and SPI registration, exactly one registered vault provider, and absence of Linux D-Bus/Secret Service classes. The MSI audit calculates SHA-256, reports Authenticode status, and reads Windows Installer metadata through COM. See [Windows Test Summary](./evidence/windows-test-summary.md) for the recorded 100.68 MB unsigned development MSI and its exact hash; rebuilds may have different hashes.
@@ -302,35 +297,31 @@ Phase 10 implementation is recorded at **100% (2026-10-14)**; technical acceptan
 
 ---
 
-## 9. Strict-v2 Protocol Migration & Cutover Operations
+## 9. Standard Sync Conversion & Cutover Safety
 
-### 9.1 Architecture & Deployment Ordering
-Upgrading TabbyRush and Glean Hub to `strict-v2` (task deadlines, strict timezones, and native reminders) requires strict versioned coordination. Deploying schema changes or database modifications in isolation is strictly prohibited.
+The current TabbyRush binary uses ordinary Hub registration and standard sync. Strict-v1/v2/v3 migration commands and runbooks are historical and do not apply to this client. The client does not perform a live server conversion.
 
-The authorized deployment ordering is:
-1. **All-Node Backend Deployment**: Deploy the fence-aware Glean Hub backend binary across all instances. Ingress continues serving `strict-v1`.
-2. **Client Publication**: Publish updated TabbyRush clients (Android APK, Linux package, Windows MSI) containing Room 1→2 migration and `ContractTransitionCoordinator`. UI guards keep deadline submission disabled with an upgrade prompt while the backend remains on v1.
-3. **Non-Mutating Preflight**: Execute dry-run preflight via `node scripts/hub-strict-upgrade.mjs --app-id tabbyrush --dry-run`.
-4. **Controlled In-Place Upgrade**: Execute the upgrade via CLI or Web Admin UI with a durable migration UUID. The backend fences new traffic, drains admitted request permits, transforms documents in batches of 500, validates all documents, publishes canonical `strict-v2` in `_schemas` via CAS, and releases the fence.
-5. **Mandatory Post-Cutover Read-Back**: Verify `syncMode === 'strict-v2'`, canonical fingerprint `5f53955105701cc8c778f4189a2f9a4b90787e36763d62133e11616cf801f6e4`, all 16 columns active, and unchanged active epoch UUID.
-6. **Client Replay & Transition**: Connected clients transition to `ready-v2`, reconcile legacy receipts, and unlock full deadline and reminder functionality.
+The standard-sync conversion operator is source-built separately from TabbyRush. Parent-reported disposable MongoDB execution passed 7/7 operator checks, including concurrency, deadline, and recovery. That evidence does not authorize any live target. No production migration has been authorized.
 
-For the complete, step-by-step incident response and recovery procedures, consult the authoritative [Strict-v2 Cutover Runbook](./strict-v2-cutover-runbook.md).
+### 9.1 Mutating Operator Preconditions
 
-### 9.2 Tooling Rehearsal & Testing
-Operators can rehearse CLI upgrade flows and verify parameter validation, token redaction, same-ID retry, and read-back assertions using the dedicated rehearsal runner:
-```bash
-# In-process mock tooling self-test
-node scripts/strict-v2-cutover-rehearsal.mjs --self-test
+Any real conversion requires separate explicit live-cutover approval naming the Hub origin, exact database and app ID, maintenance window, verified backup/restore scope, and isolation plan. Before mutation, quiesce or isolate every Hub instance and background writer/job as required by the approved plan. A maintenance window must be renewed and verified before **each collection rename and each registry compare-and-swap**. Publication is not a multi-step transaction; no automatic service restart, isolation release, or post-publication rollback occurs.
 
-# Disposable staging rehearsal (requires explicit safety flag and token via env)
-export GLEAN_ADMIN_TOKEN="<operator_admin_token>"
-node scripts/strict-v2-cutover-rehearsal.mjs \
-  --staging-origin "https://staging-hub.example.com" \
-  --app-id tabbyrush \
-  --confirm-disposable-staging
-```
-*Note: Tooling self-tests verify client-side CLI orchestration; physical Gate G3 multi-instance cluster migration must be verified on a live MongoDB replica set before production cutover.*
+### 9.2 Exclusive Claim Recovery After Failure
+
+The operator's exclusive execution claim is durable and has no automatic expiry or takeover. After **any failed mutating run**, do not start another execution or clear the claim by hand. Recovery is allowed only with explicit `maintenance.executionRecovery` for the exact `expectedExecutionId`, containing:
+
+- `executorStopped: true` and `executorStopEvidence`;
+- `mongoOperationsDrained: true` and `mongoDrainEvidence`;
+- `authorizedActions` containing `"recoverExecution"`.
+
+The evidence must establish both that the prior executor is stopped and that all MongoDB operations it initiated are drained. If any condition is not established, stop and keep the target isolated. An operator recovery authorization is not approval for a production migration.
+
+### 9.3 Rollback Boundary
+
+Before publication, recovery or restoration still requires the separately approved procedure, verified backup, and confirmed isolation. Once standard data/publication is active, do not restore an older snapshot over new writes; any reverse migration needs a separate approved, data-aware plan. The conversion tool does not restart services or release external isolation on completion.
+
+For current client behavior, see [Standard Sync & Schema Version](./standard-sync-cutover-design.md) and [Standard Sync Cutover Runbook](./standard-sync-cutover-runbook.md). Former strict runbooks have been retired.
 
 ---
 
@@ -426,7 +417,7 @@ TabbyRush implements an automated GitHub Flow workflow structure:
 
 | Platform | Built File | Generated Release Asset | Description |
 |---|---|---|---|
-| **Android** | `:androidApp:assembleRelease` | `tabbyrush-<version>.apk` | Signed production Android application package |
+| **Android** | `:androidApp:assembleRelease` (or `:androidApp:assembleDebug`) | `tabbyrush-<version>.apk` | Signed production Android package (or fallback debug APK staged as `tabbyrush-<version>.apk` when signing secrets are unprovisioned) |
 | **Linux Desktop** | `:desktopApp:packageRpm` | `tabbyrush-<version>.rpm` | Native RPM installer (Fedora / RHEL / openSUSE) |
 | **Linux Desktop** | `:desktopApp:createDistributable` | `tabbyrush-<version>-linux-x64.tar.gz` | Portable standalone executable tarball |
 | **Windows Desktop** | `:desktopApp:packageMsi` | `TabbyRush-<version>.msi` | Native per-user MSI installer |
@@ -443,11 +434,11 @@ TabbyRush provides an automated JavaScript bump-version runner at `scripts/bump-
 just bump patch --dry-run
 node scripts/bump-version.mjs patch --dry-run
 
-# Bump patch version (e.g. 1.0.0 -> 1.0.1, versionCode 1 -> 2)
+# Bump patch version (e.g. 1.0.17 -> 1.0.18, versionCode 18 -> 19)
 just bump patch
 # or: node scripts/bump-version.mjs patch
 
-# Bump minor version (e.g. 1.0.0 -> 1.1.0)
+# Bump minor version (e.g. 1.0.17 -> 1.1.0)
 just bump minor
 
 # Bump and create git release tag automatically
@@ -460,12 +451,12 @@ just bump-tag patch
    ```bash
    just bump patch
    git add gradle.properties
-   git commit -m "chore(release): bump version to 1.0.1"
-   git tag v1.0.1
+   git commit -m "chore(release): bump version to 1.0.18"
+   git tag v1.0.18
    ```
 2. Push to GitHub:
    ```bash
-   git push origin main v1.0.1
+   git push origin main v1.0.18
    ```
 3. The `release.yml` GitHub Actions workflow triggers automatically on the tag push, validates version synchronization, builds the 5 multiplatform packages, and attaches them to a new GitHub Release.
 
@@ -473,3 +464,4 @@ just bump-tag patch
 - **Dependency Verification Notice**: CI builds currently execute with `--dependency-verification=off` to accommodate the 149-hash buildscript verification baseline hold documented in Section 7.2.
 - **Windows Packaging**: The MSI installer produced by the workflow is an unsigned development installer; public distribution requires Authenticode signing on an authorized build workstation.
 - **Platform Acceptance Status**: Packaging verification in CI confirms installer and binary assembly, not installed-runtime or physical device acceptance (Gates G2/G6 remain held).
+- **Android Release Signing Mode & Fallback**: The workflow determines signing custody dynamically (`id: signing_check`). If all release keystore credentials (`TABBYRUSH_KEYSTORE_BASE64`, `TABBYRUSH_KEY_ALIAS`, `TABBYRUSH_STORE_PASSWORD`, `TABBYRUSH_KEY_PASSWORD`, `APPROVED_HUB_ORIGIN`, `TABBYRUSH_API_KEY`) are present, it builds and audits a signed release APK (`androidApp-release.apk`) via `scripts/release-security-check.mjs`. If signing secrets are unprovisioned, it emits a workflow warning and falls back to building an Android debug APK (`androidApp-debug.apk`), staging it as `tabbyrush-<version>.apk` solely for testing release workflow asset delivery. A debug fallback APK does NOT constitute production release acceptance or verified signature custody.

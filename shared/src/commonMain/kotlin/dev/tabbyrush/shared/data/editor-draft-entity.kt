@@ -7,9 +7,15 @@ import androidx.room.PrimaryKey
  * EditorDraftEntity persists uncommitted or in-progress local modifications
  * distinct from the confirmed server base and frozen outbox operations.
  */
-@Entity(tableName = "editor_drafts")
+@Entity(
+    tableName = "editor_drafts",
+    primaryKeys = ["bindingKey", "tableName", "rowId"]
+)
 data class EditorDraftEntity(
-    @PrimaryKey
+    val bindingKey: String = BINDING_LOCAL_ACCOUNT,
+    val ownerBinding: String = BINDING_LOCAL_ACCOUNT,
+    val ownerUserId: String? = null,
+    val tableName: String = dev.tabbyrush.shared.contract.TaskDataContract.DEFAULT_TABLE_NAME,
     val rowId: String,
     val draftTitle: String,
     val draftCompleted: Boolean,
@@ -27,5 +33,6 @@ data class EditorDraftEntity(
     val reminderLeadMinutes: Long = 0L,
     val reminderIntervalMinutes: Long? = null,
     val reminderCount: Long = 1L,
-    val scheduleToken: String? = null
+    val scheduleToken: String? = null,
+    val parentTaskId: String? = null
 )

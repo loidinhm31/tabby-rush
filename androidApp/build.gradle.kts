@@ -32,7 +32,8 @@ fun loadDotEnv(rootDir: File): Map<String, String> {
     return env
 }
 
-val dotEnv = loadDotEnv(rootDir)
+val isolatedTestConfig = providers.gradleProperty("isolatedTestConfig").orNull == "true"
+val dotEnv = if (isolatedTestConfig) emptyMap() else loadDotEnv(rootDir)
 val configuredOrigin = (project.findProperty("hubOrigin")?.toString()?.takeIf { it.isNotBlank() })
     ?: System.getenv("APPROVED_HUB_ORIGIN")?.takeIf { it.isNotBlank() }
     ?: dotEnv["APPROVED_HUB_ORIGIN"]?.takeIf { it.isNotBlank() }
@@ -40,9 +41,10 @@ val configuredOrigin = (project.findProperty("hubOrigin")?.toString()?.takeIf { 
 val configuredApiKey = (project.findProperty("hubApiKey")?.toString()?.takeIf { it.isNotBlank() })
     ?: System.getenv("TABBYRUSH_API_KEY")?.takeIf { it.isNotBlank() }
     ?: dotEnv["TABBYRUSH_API_KEY"]?.takeIf { it.isNotBlank() }
-val configuredFirebaseConfigPath = (project.findProperty("firebaseConfigPath")?.toString()?.takeIf { it.isNotBlank() })
-    ?: System.getenv("TABBYRUSH_FIREBASE_CONFIG_PATH")?.takeIf { it.isNotBlank() }
-    ?: dotEnv["TABBYRUSH_FIREBASE_CONFIG_PATH"]?.takeIf { it.isNotBlank() }
+val configuredFirebaseConfigPath = if (isolatedTestConfig) null else
+    (project.findProperty("firebaseConfigPath")?.toString()?.takeIf { it.isNotBlank() }
+        ?: System.getenv("TABBYRUSH_FIREBASE_CONFIG_PATH")?.takeIf { it.isNotBlank() }
+        ?: dotEnv["TABBYRUSH_FIREBASE_CONFIG_PATH"]?.takeIf { it.isNotBlank() })
 
 var firebaseConfigured = false
 var firebaseProjectId = ""
@@ -109,12 +111,9 @@ android {
         versionName = configuredVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val defaultCloudOrigin = "https://api-glean-hub.qm-hub-v001.cloud"
-        val defaultCloudApiKey = "XoaJSoximq8EhK06IjXAQCOqKqRtM6qy"
-
-        val debugOrigin = configuredOrigin ?: defaultCloudOrigin
-        val releaseOrigin = configuredOrigin ?: defaultCloudOrigin
-        val apiKey = configuredApiKey ?: defaultCloudApiKey
+        val debugOrigin = configuredOrigin ?: "http://127.0.0.1:3100"
+        val releaseOrigin = configuredOrigin ?: ""
+        val apiKey = configuredApiKey ?: ""
 
         buildConfigField("String", "HUB_API_KEY", escapeBuildConfig(apiKey))
         buildConfigField("String", "HUB_ORIGIN_DEBUG", escapeBuildConfig(debugOrigin))
@@ -153,6 +152,9 @@ android {
         }
         debug {
             isDebuggable = true
+            if (isolatedTestConfig) {
+                applicationIdSuffix = ".standardsmoke"
+            }
         }
     }
 
@@ -196,6 +198,7 @@ gradle.taskGraph.whenReady {
         task.project == project && (task.name.contains("Release", ignoreCase = true) && !task.name.contains("UnitTest", ignoreCase = true))
     }
     if (isReleaseTask) {
+        if (isolatedTestConfig) throw GradleException("isolatedTestConfig is limited to debug/test builds, never release packaging.")
         val signing = android.signingConfigs.getByName("release")
         if (signing.storeFile == null || !signing.storeFile!!.exists() ||
             signing.storePassword.isNullOrBlank() ||

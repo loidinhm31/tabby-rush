@@ -28,7 +28,8 @@ sealed interface SafeError {
     data class Conflict(
         override val code: String,
         override val message: String,
-        val rowId: String
+        val taskRef: TaskRef? = null,
+        val rowId: String = taskRef?.rowId ?: ""
     ) : SafeError
 
     data class ProtocolIncompatible(
@@ -36,10 +37,33 @@ sealed interface SafeError {
         override val message: String
     ) : SafeError
 
-    data class ResetRequired(
-        override val code: String,
-        override val message: String
+    data class CollaborationRequired(
+        override val code: String = "COLLABORATION_REQUIRED",
+        override val message: String = "Application upgrade required for collaboration"
     ) : SafeError
+
+    data class AccessRevisionChanged(
+        override val code: String = "ACCESS_REVISION_CHANGED",
+        override val message: String = "Access revision changed during synchronization"
+    ) : SafeError
+
+    data class AccessDenied(
+        override val code: String = "ACCESS_DENIED",
+        override val message: String = "Access denied for task",
+        val taskRef: TaskRef? = null
+    ) : SafeError
+
+    data class OperationForbidden(
+        override val code: String = "OPERATION_FORBIDDEN",
+        override val message: String = "Operation forbidden on task",
+        val taskRef: TaskRef? = null
+    ) : SafeError
+
+    data class MembershipDenied(
+        override val code: String = "MEMBERSHIP_DENIED",
+        override val message: String = "Application membership denied"
+    ) : SafeError
+
 
     data class UncertainOutcome(
         override val code: String,

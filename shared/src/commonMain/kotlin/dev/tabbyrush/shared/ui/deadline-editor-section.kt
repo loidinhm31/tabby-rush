@@ -81,21 +81,6 @@ fun DeadlineEditorSection(
         }
 
         if (editor.hasDeadline) {
-            // Strict-v2 Upgrade Warning if account is v1
-            if (!editor.isAccountV2) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = TabbyRushThemeTokens.customColors.coralSurface),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text(
-                        text = "Strict-v2 account upgrade required to save deadlines or reminders. Upgrading can be performed via the Hub admin console or CLI.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(TabbyRushThemeTokens.SpacingMedium)
-                    )
-                }
-            }
 
             // Date & Timezone Row
             Row(

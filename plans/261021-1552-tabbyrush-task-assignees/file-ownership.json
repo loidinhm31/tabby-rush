@@ -1,0 +1,1204 @@
+{
+  "planDirectory": "G:/ws/sharing/doggo/plans/261021-1552-tabbyrush-task-assignees",
+  "status": "pending",
+  "created": "2026-10-21",
+  "branch": "feature/parent-child-tasks-deadline-surfaces",
+  "totalEffortHours": 284,
+  "ownershipRule": "One full repo-qualified path belongs to exactly one phase, including tests/docs/config. create paths are proposed. Future integration fixes return to original owner.",
+  "phases": [
+    {
+      "id": "01",
+      "phaseFile": "phase-01-canonical-contracts-and-pure-projections.md",
+      "effortHours": 24,
+      "dependsOn": [],
+      "files": [
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/account-store.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-models.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-action.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/todo-ui-state.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/sync-coordinator.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/safe-errors.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-data-contract.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-hierarchy-projector.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-contracts.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-surface-projector.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-task-schedule.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-schedule-projector.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/reminder-scheduler.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/auth-session.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/app-factories.kt",
+          "action": "modify",
+          "purpose": "Freeze canonical identity, capability/coverage, typed operations and pure projection contracts"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/hub-sync-dtos.kt",
+          "action": "modify",
+          "purpose": "Actual Kotlin standard-sync wire types, owner-qualified results and explicit accessChecks presence"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/canonical-record-ref.kt",
+          "action": "create",
+          "purpose": "Concrete shared value/interface definitions; no implementation stubs (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/task-access-contracts.kt",
+          "action": "create",
+          "purpose": "Concrete shared value/interface definitions; no implementation stubs (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/collaboration-store-contracts.kt",
+          "action": "create",
+          "purpose": "Concrete shared value/interface definitions; no implementation stubs (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/assignment-contracts.kt",
+          "action": "create",
+          "purpose": "Concrete shared value/interface definitions; no implementation stubs (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/sync-storage-contracts.kt",
+          "action": "create",
+          "purpose": "Concrete shared value/interface definitions; no implementation stubs (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/contract/persisted-projection-inputs.kt",
+          "action": "create",
+          "purpose": "Concrete shared value/interface definitions; no implementation stubs (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-hierarchy-projector-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected pure-model fixtures and assert identity/coverage behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-surface-projector-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected pure-model fixtures and assert identity/coverage behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/persisted-schedule-projection-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected pure-model fixtures and assert identity/coverage behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/adversarial-scheduler-boundary-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected pure-model fixtures and assert identity/coverage behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-deadline-reminder-models-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected pure-model fixtures and assert identity/coverage behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/task-deadline-presentation-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected pure-model fixtures and assert identity/coverage behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/reminder-schedule-calculator-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected pure-model fixtures and assert identity/coverage behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/remote-contract-vector-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected pure-model fixtures and assert identity/coverage behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/contract/canonical-task-access-test.kt",
+          "action": "create",
+          "purpose": "Behavioral duplicate-owner and full-group/child-only contract tests (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-core/glean-hub-sync-engine/src/sharing.rs",
+          "action": "modify",
+          "purpose": "Actual Rust policy/wire/reference definitions, constructors and legacy omission semantics"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-core/glean-hub-sync-engine/src/protocol.rs",
+          "action": "modify",
+          "purpose": "Actual Rust policy/wire/reference definitions, constructors and legacy omission semantics"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-core/glean-hub-sync-engine/src/conflict.rs",
+          "action": "modify",
+          "purpose": "Actual Rust policy/wire/reference definitions, constructors and legacy omission semantics"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-core/glean-hub-sync-engine/src/document.rs",
+          "action": "modify",
+          "purpose": "Actual Rust policy/wire/reference definitions, constructors and legacy omission semantics"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-core/glean-hub-sync-engine/src/checkpoint.rs",
+          "action": "modify",
+          "purpose": "Actual Rust policy/wire/reference definitions, constructors and legacy omission semantics"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-core/glean-hub-sync-client/src/client.rs",
+          "action": "modify",
+          "purpose": "Migrate Rust request literals/export registration and generated TypeScript source consumers"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-core/glean-hub-sync-client/src/bin/export_types.rs",
+          "action": "modify",
+          "purpose": "Migrate Rust request literals/export registration and generated TypeScript source consumers"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-core/glean-hub-sync-client-types/src/index.ts",
+          "action": "modify",
+          "purpose": "Migrate Rust request literals/export registration and generated TypeScript source consumers"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-core/glean-hub-sync-client-types/src/client.ts",
+          "action": "modify",
+          "purpose": "Migrate Rust request literals/export registration and generated TypeScript source consumers"
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "phaseFile": "phase-02-hub-authorization-and-reconciliation.md",
+      "effortHours": 48,
+      "dependsOn": [
+        "01"
+      ],
+      "files": [
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/Cargo.toml",
+          "action": "modify",
+          "purpose": "Register assignment integration target under existing disposable Mongo opt-in feature"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/sync_service.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/app_service.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/schema_validator.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/mod.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/models/app.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/models/api.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/models/record.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/models/mod.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/routes/sync.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/routes/apps.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/middleware/dual_auth.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/jobs/deleted_records_cleanup.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/error.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/lib.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/sync_generation_tests.rs",
+          "action": "modify",
+          "purpose": "Enforce policy transactions, canonical authorization, current membership, revision scans and all existing contract literals"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/tests/schema_version_integration.rs",
+          "action": "modify",
+          "purpose": "Behavioral policy/schema CAS/no-op and topology acceptance tests"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/assignment_authorization.rs",
+          "action": "create",
+          "purpose": "Narrow transaction/access helpers and real replica-set hostile/race tests (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/services/assignment_reconciliation.rs",
+          "action": "create",
+          "purpose": "Narrow transaction/access helpers and real replica-set hostile/race tests (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/src/models/assignment_fence.rs",
+          "action": "create",
+          "purpose": "Narrow transaction/access helpers and real replica-set hostile/race tests (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-plugin/glean-hub-sync/tests/task_assignment_integration.rs",
+          "action": "create",
+          "purpose": "Narrow transaction/access helpers and real replica-set hostile/race tests (proposed new path)"
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "phaseFile": "phase-03-room-v5-and-access-persistence.md",
+      "effortHours": 40,
+      "dependsOn": [
+        "01"
+      ],
+      "files": [
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/room-account-store.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/tabbyrush-dao.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/tabbyrush-database.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/database-migrations.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/server-base-entity.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/outbox-entity.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/editor-draft-entity.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/scan-staging-entity.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/account-sync-meta-entity.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/legacy-sync-evidence-entity.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/reminder-delivery-ledger-entity.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/reminder-occurrence-store.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/schedule-reconciliation-delta.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/persisted-schedule-snapshot.kt",
+          "action": "modify",
+          "purpose": "Canonical Room v5 keys, owner binding, access staging/purge and reminder storage implementation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/androidMain/kotlin/dev/tabbyrush/shared/data/android-database-builder.kt",
+          "action": "modify",
+          "purpose": "Register complete non-destructive migration paths on both builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmMain/kotlin/dev/tabbyrush/shared/data/jvm-database-builder.kt",
+          "action": "modify",
+          "purpose": "Register complete non-destructive migration paths on both builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/task-access-entity.kt",
+          "action": "create",
+          "purpose": "Authoritative access/revision and content-free evidence storage; new schema only (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/access-check-staging-entity.kt",
+          "action": "create",
+          "purpose": "Authoritative access/revision and content-free evidence storage; new schema only (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/data/access-loss-evidence-entity.kt",
+          "action": "create",
+          "purpose": "Authoritative access/revision and content-free evidence storage; new schema only (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/5.json",
+          "action": "create",
+          "purpose": "Authoritative access/revision and content-free evidence storage; new schema only (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-migration-v1-to-v2-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-migration-v2-to-v3-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-migration-to-v4-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/native-sync-safety-sqlite-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/adversarial-sync-sqlite-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-store-sqlite-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/task-surface-sync-sqlite-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/reminder-scheduling-coordinator-sqlite-smoke-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/reminder-teardown-barrier-sqlite-test.kt",
+          "action": "modify",
+          "purpose": "Own SQLite behavioral fixtures and affected migration/store callers"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/data/reminder-occurrence-store-test.kt",
+          "action": "modify",
+          "purpose": "Migrate ledger/store tests and real Android SQLite behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/androidInstrumentedTest/kotlin/dev/tabbyrush/shared/data/room-account-store-test.kt",
+          "action": "modify",
+          "purpose": "Migrate ledger/store tests and real Android SQLite behavior"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/room-migration-to-v5-test.kt",
+          "action": "create",
+          "purpose": "Populated old-schema migration, binding and atomic access/purge tests (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/jvmTest/kotlin/dev/tabbyrush/shared/data/collaborative-access-sqlite-test.kt",
+          "action": "create",
+          "purpose": "Populated old-schema migration, binding and atomic access/purge tests (proposed new path)"
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "phaseFile": "phase-04-admin-policy-and-native-provisioning.md",
+      "effortHours": 16,
+      "dependsOn": [
+        "01"
+      ],
+      "files": [
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-app/src/services/sync-admin-service.ts",
+          "action": "modify",
+          "purpose": "Admin policy decoding, schema CAS/no-op drafts, validation and help"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-app/src/services/sync-admin-service.test.ts",
+          "action": "modify",
+          "purpose": "Admin policy decoding, schema CAS/no-op drafts, validation and help"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-app/src/pages/admin/app-registration.tsx",
+          "action": "modify",
+          "purpose": "Admin policy decoding, schema CAS/no-op drafts, validation and help"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/glean-hub-app/src/pages/admin/edit-app.tsx",
+          "action": "modify",
+          "purpose": "Admin policy decoding, schema CAS/no-op drafts, validation and help"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/integration/glean-hub/tabbyrush-schema.json",
+          "action": "modify",
+          "purpose": "Add relation table/policy to ordinary provisioning without enabling any real app"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/scripts/hub-schema-provision.mjs",
+          "action": "modify",
+          "purpose": "Add relation table/policy to ordinary provisioning without enabling any real app"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/scripts/hub-schema-provision.test.mjs",
+          "action": "create",
+          "purpose": "Behavioral schema-input validation and refusal before registration on invalid policy (proposed new path)"
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "phaseFile": "phase-05-native-transport-and-sync-lifecycle.md",
+      "effortHours": 40,
+      "dependsOn": [
+        "01",
+        "02",
+        "03"
+      ],
+      "files": [
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/hub-sync-client.kt",
+          "action": "modify",
+          "purpose": "Transport and reconciliation implementations consume frozen interfaces; canonical sync/reminder lifecycle"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/task-json-merge.kt",
+          "action": "modify",
+          "purpose": "Transport and reconciliation implementations consume frozen interfaces; canonical sync/reminder lifecycle"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/staged-full-scan.kt",
+          "action": "modify",
+          "purpose": "Transport and reconciliation implementations consume frozen interfaces; canonical sync/reminder lifecycle"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/account-sync-coordinator.kt",
+          "action": "modify",
+          "purpose": "Transport and reconciliation implementations consume frozen interfaces; canonical sync/reminder lifecycle"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/outbox-reconciliation.kt",
+          "action": "modify",
+          "purpose": "Transport and reconciliation implementations consume frozen interfaces; canonical sync/reminder lifecycle"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/legacy-standard-intent-migration.kt",
+          "action": "modify",
+          "purpose": "Transport and reconciliation implementations consume frozen interfaces; canonical sync/reminder lifecycle"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/account-leave-protocol.kt",
+          "action": "modify",
+          "purpose": "Transport and reconciliation implementations consume frozen interfaces; canonical sync/reminder lifecycle"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/reminder-scheduling-coordinator.kt",
+          "action": "modify",
+          "purpose": "Transport and reconciliation implementations consume frozen interfaces; canonical sync/reminder lifecycle"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/sync/reminder-delivery-gate.kt",
+          "action": "modify",
+          "purpose": "Transport and reconciliation implementations consume frozen interfaces; canonical sync/reminder lifecycle"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/auth/hub-http-client.kt",
+          "action": "modify",
+          "purpose": "JWT-only lookup and account-generation-safe capability/auth transport"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/auth/hub-auth-client.kt",
+          "action": "modify",
+          "purpose": "JWT-only lookup and account-generation-safe capability/auth transport"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/auth/hub-auth-dtos.kt",
+          "action": "modify",
+          "purpose": "JWT-only lookup and account-generation-safe capability/auth transport"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/auth/hub-auth-session.kt",
+          "action": "modify",
+          "purpose": "JWT-only lookup and account-generation-safe capability/auth transport"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/hub-sync-client-test.kt",
+          "action": "modify",
+          "purpose": "Transport/reconciliation behavioral tests and affected exact-identity fixtures"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/task-json-merge-test.kt",
+          "action": "modify",
+          "purpose": "Transport/reconciliation behavioral tests and affected exact-identity fixtures"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/staged-full-scan-test.kt",
+          "action": "modify",
+          "purpose": "Transport/reconciliation behavioral tests and affected exact-identity fixtures"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/account-sync-coordinator-test.kt",
+          "action": "modify",
+          "purpose": "Transport/reconciliation behavioral tests and affected exact-identity fixtures"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/outbox-reconciliation-test.kt",
+          "action": "modify",
+          "purpose": "Transport/reconciliation behavioral tests and affected exact-identity fixtures"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/legacy-standard-intent-migration-test.kt",
+          "action": "modify",
+          "purpose": "Transport/reconciliation behavioral tests and affected exact-identity fixtures"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/account-leave-protocol-test.kt",
+          "action": "modify",
+          "purpose": "Transport/reconciliation behavioral tests and affected exact-identity fixtures"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/reminder-delivery-gate-test.kt",
+          "action": "modify",
+          "purpose": "Transport/reconciliation behavioral tests and affected exact-identity fixtures"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/recording-native-reminder-adapter.kt",
+          "action": "modify",
+          "purpose": "Transport/reconciliation behavioral tests and affected exact-identity fixtures"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/auth/hub-auth-client-test.kt",
+          "action": "modify",
+          "purpose": "Lookup policy/generation and restoration integration tests"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/auth/hub-auth-session-test.kt",
+          "action": "modify",
+          "purpose": "Lookup policy/generation and restoration integration tests"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/sync/collaboration-reconciliation-test.kt",
+          "action": "create",
+          "purpose": "Stable-revision, explicit empty accessChecks, denial and exact-ack race behavior (proposed new path)"
+        }
+      ]
+    },
+    {
+      "id": "06",
+      "phaseFile": "phase-06-shared-compose-assignee-workflows.md",
+      "effortHours": 24,
+      "dependsOn": [
+        "01",
+        "03"
+      ],
+      "files": [
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/tabbyrush-app.kt",
+          "action": "modify",
+          "purpose": "Canonical selection/actions, assignment workflows, child-only UI and privacy-safe review"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/todo-list.kt",
+          "action": "modify",
+          "purpose": "Canonical selection/actions, assignment workflows, child-only UI and privacy-safe review"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/todo-editor.kt",
+          "action": "modify",
+          "purpose": "Canonical selection/actions, assignment workflows, child-only UI and privacy-safe review"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/conflict-review.kt",
+          "action": "modify",
+          "purpose": "Canonical selection/actions, assignment workflows, child-only UI and privacy-safe review"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/sync-feedback.kt",
+          "action": "modify",
+          "purpose": "Canonical selection/actions, assignment workflows, child-only UI and privacy-safe review"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/todo-semantics-test.kt",
+          "action": "modify",
+          "purpose": "Update meaningful role/permission and canonical selection semantics"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonMain/kotlin/dev/tabbyrush/shared/ui/task-assignee-picker.kt",
+          "action": "create",
+          "purpose": "Username picker, direct/inherited indicators and observable role actions (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/shared/src/commonTest/kotlin/dev/tabbyrush/shared/ui/task-assignee-workflow-test.kt",
+          "action": "create",
+          "purpose": "Username picker, direct/inherited indicators and observable role actions (proposed new path)"
+        }
+      ]
+    },
+    {
+      "id": "07",
+      "phaseFile": "phase-07-android-actions-and-access-surfaces.md",
+      "effortHours": 32,
+      "dependsOn": [
+        "01",
+        "03"
+      ],
+      "files": [
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/session-view-model.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/account-runtime-factory.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/account-runtime.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/android-account-state-manager.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/main-activity.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-application.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-sync-worker.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-projection.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-actions.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-updater.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-widget-receiver.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-access.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-host.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-runtime-coordinator.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-action-receiver.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-intents.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-notification.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-preferences.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-settings.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-create-screen.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-refresh-worker.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-time-receiver.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/task-surface-dismiss-receiver.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/tabbyrush-alarm-receiver.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/reminder-restore-receiver.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/android-alarm-registry.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/android-notification-adapter.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/android-notification-intent-factory.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/main/kotlin/dev/tabbyrush/android/composite-leave-scheduler-cancel-gate.kt",
+          "action": "modify",
+          "purpose": "Canonical Android controller/runtime/intents, permissions and access-loss cancellation; no Room builders"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/test/kotlin/dev/tabbyrush/android/task-widget-model-test.kt",
+          "action": "modify",
+          "purpose": "Android identity/admission/publication and cancellation behavioral tests"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/test/kotlin/dev/tabbyrush/android/task-surface-notification-test.kt",
+          "action": "modify",
+          "purpose": "Android identity/admission/publication and cancellation behavioral tests"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/test/kotlin/dev/tabbyrush/android/android-notification-adapter-test.kt",
+          "action": "modify",
+          "purpose": "Android identity/admission/publication and cancellation behavioral tests"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/test/kotlin/dev/tabbyrush/android/composite-leave-scheduler-cancel-gate-test.kt",
+          "action": "modify",
+          "purpose": "Android identity/admission/publication and cancellation behavioral tests"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/androidTest/kotlin/dev/tabbyrush/android/task-widget-device-test.kt",
+          "action": "modify",
+          "purpose": "Real widget/native child-only and account-switch coverage"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/androidTest/kotlin/dev/tabbyrush/android/todo-device-test.kt",
+          "action": "modify",
+          "purpose": "Real widget/native child-only and account-switch coverage"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/androidApp/src/test/kotlin/dev/tabbyrush/android/collaborative-surface-access-test.kt",
+          "action": "create",
+          "purpose": "Hostile/stale intent and revoked-content publication tests (proposed new path)"
+        }
+      ]
+    },
+    {
+      "id": "08",
+      "phaseFile": "phase-08-desktop-actions-and-sticky-surfaces.md",
+      "effortHours": 28,
+      "dependsOn": [
+        "01",
+        "03"
+      ],
+      "files": [
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/main.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-model.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/sticky-task-content.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-reminder-scheduler.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-reminder-adapter.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-reminder-adapter-provider.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/platform-reminder-dispatcher.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/desktop-surface-platform.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/main/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate.kt",
+          "action": "modify",
+          "purpose": "Canonical desktop controller/selection/sticky/reminder actions and purge-driven refresh"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/linuxMain/kotlin/dev/tabbyrush/desktop/linux/linux-notification-adapter.kt",
+          "action": "modify",
+          "purpose": "Owner-qualified OS notification identity and cancellation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/windowsMain/kotlin/dev/tabbyrush/desktop/windows/windows-notification-adapter.kt",
+          "action": "modify",
+          "purpose": "Owner-qualified OS notification identity and cancellation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-task-surfaces-test.kt",
+          "action": "modify",
+          "purpose": "Desktop canonical action, controller and lifecycle behavioral tests"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-reminder-controller-lifecycle-test.kt",
+          "action": "modify",
+          "purpose": "Desktop canonical action, controller and lifecycle behavioral tests"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-controller-env-test.kt",
+          "action": "modify",
+          "purpose": "Desktop canonical action, controller and lifecycle behavioral tests"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/linuxTest/kotlin/dev/tabbyrush/desktop/linux/linux-reminder-adapter-test.kt",
+          "action": "modify",
+          "purpose": "Migrate actual platform reminder fixtures and cancellation expectations"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/linuxTest/kotlin/dev/tabbyrush/desktop/linux/linux-notification-adapter-test.kt",
+          "action": "modify",
+          "purpose": "Migrate actual platform reminder fixtures and cancellation expectations"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/windowsTest/kotlin/dev/tabbyrush/desktop/windows/windows-reminder-adapter-test.kt",
+          "action": "modify",
+          "purpose": "Migrate actual platform reminder fixtures and cancellation expectations"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/test/kotlin/dev/tabbyrush/desktop/collaborative-sticky-access-test.kt",
+          "action": "create",
+          "purpose": "Child-only, duplicate-owner and stale-selection surface tests (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/test/kotlin/dev/tabbyrush/desktop/composite-desktop-leave-cancel-gate-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected runtime/store/reminder contract fixtures under sole desktop owner"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-reminder-scheduler-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected runtime/store/reminder contract fixtures under sole desktop owner"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/test/kotlin/dev/tabbyrush/desktop/desktop-remote-runtime-test.kt",
+          "action": "modify",
+          "purpose": "Migrate affected runtime/store/reminder contract fixtures under sole desktop owner"
+        }
+      ]
+    },
+    {
+      "id": "09",
+      "phaseFile": "phase-09-integrated-acceptance-and-documentation.md",
+      "effortHours": 32,
+      "dependsOn": [
+        "02",
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "08"
+      ],
+      "files": [
+        {
+          "path": "G:/ws/sharing/doggo/README.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/system-architecture.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/api-contract.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/local-storage-and-sync.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/hub-schema-integration.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/hub-compatibility-acceptance.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/release-acceptance.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/android-acceptance.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/windows-acceptance.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/linux-acceptance.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/security-and-recovery.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/code-standards.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/project-overview-pdr.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/project-changelog.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/development-roadmap.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/project-roadmap.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/docs/codebase-summary.md",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/build.gradle.kts",
+          "action": "modify",
+          "purpose": "Implementation documentation/evidence and dedicated smoke JavaExec wiring only"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/docs/system-architecture.md",
+          "action": "modify",
+          "purpose": "Hub policy/config/API/replica-set/rollout and evidence documentation"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/docs/standard-sync-schema-version.md",
+          "action": "modify",
+          "purpose": "Hub policy/config/API/replica-set/rollout and evidence documentation"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/docs/deployment-guide.md",
+          "action": "modify",
+          "purpose": "Hub policy/config/API/replica-set/rollout and evidence documentation"
+        },
+        {
+          "path": "G:/ws/sharing/glean-hub/docs/CHANGELOG.md",
+          "action": "modify",
+          "purpose": "Hub policy/config/API/replica-set/rollout and evidence documentation"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/scripts/task-assignees-live-smoke.mjs",
+          "action": "create",
+          "purpose": "Dedicated real feature smoke and redacted evidence, not module-test/source fixes (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/desktopApp/src/test/kotlin/dev/tabbyrush/desktop/task-assignees-runtime-smoke.kt",
+          "action": "create",
+          "purpose": "Dedicated real feature smoke and redacted evidence, not module-test/source fixes (proposed new path)"
+        },
+        {
+          "path": "G:/ws/sharing/doggo/plans/261021-1552-tabbyrush-task-assignees/reports/04-integrated-acceptance-evidence.md",
+          "action": "create",
+          "purpose": "Dedicated real feature smoke and redacted evidence, not module-test/source fixes (proposed new path)"
+        }
+      ]
+    }
+  ]
+}

@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import dev.tabbyrush.shared.contract.SafeError
 import dev.tabbyrush.shared.contract.SyncProgress
 import dev.tabbyrush.shared.contract.SyncStatus
 import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
@@ -36,8 +37,14 @@ fun SyncFeedback(
     onReconcilePending: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val (statusText, statusColor, containerColor) = when (progress.status) {
-        SyncStatus.IDLE -> {
+    val isUpgradeRequired = progress.safeError is SafeError.CollaborationRequired
+    val (statusText, statusColor, containerColor) = when {
+        isUpgradeRequired -> Triple(
+            "Upgrade required for collaboration",
+            MaterialTheme.colorScheme.error,
+            TabbyRushThemeTokens.customColors.coralSurface
+        )
+        progress.status == SyncStatus.IDLE -> {
             if (progress.pendingCount > 0) {
                 Triple(
                     "${progress.pendingCount} pending local changes",
@@ -52,30 +59,30 @@ fun SyncFeedback(
                 )
             }
         }
-        SyncStatus.SYNCING -> Triple(
+        progress.status == SyncStatus.SYNCING -> Triple(
             "Syncing with Hub...",
             MaterialTheme.colorScheme.primary,
             TabbyRushThemeTokens.customColors.mintSurface
         )
-        SyncStatus.PAUSED_CONFLICT -> Triple(
+        progress.status == SyncStatus.PAUSED_CONFLICT -> Triple(
             "${progress.conflictCount} conflict needs review",
             MaterialTheme.colorScheme.error,
             TabbyRushThemeTokens.customColors.coralSurface
         )
-        SyncStatus.PAUSED_PROTOCOL -> Triple(
-            "Protocol update required",
+        progress.status == SyncStatus.PAUSED_PROTOCOL -> Triple(
+            "Sync unavailable; local work retained",
             MaterialTheme.colorScheme.error,
             TabbyRushThemeTokens.customColors.coralSurface
         )
-        SyncStatus.RESET_REQUIRED -> Triple(
-            "Epoch reset required",
-            MaterialTheme.colorScheme.error,
-            TabbyRushThemeTokens.customColors.coralSurface
-        )
-        SyncStatus.UNCERTAIN -> Triple(
+        progress.status == SyncStatus.UNCERTAIN -> Triple(
             "${progress.uncertainCount} uncertain operations",
             MaterialTheme.colorScheme.error,
             TabbyRushThemeTokens.customColors.coralSurface
+        )
+        else -> Triple(
+            "Saved locally",
+            TabbyRushThemeTokens.customColors.muted,
+            MaterialTheme.colorScheme.surface
         )
     }
 
@@ -131,7 +138,14 @@ fun SyncFeedback(
                 }
             }
 
-            if (progress.status == SyncStatus.UNCERTAIN || progress.pendingCount > 0) {
+            if (isUpgradeRequired) {
+                Text(
+                    text = "App Update Required",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = TabbyRushThemeTokens.SpacingSmall)
+                )
+            } else if (progress.status == SyncStatus.UNCERTAIN || progress.pendingCount > 0) {
                 TextButton(
                     onClick = onReconcilePending,
                     modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)
@@ -142,7 +156,7 @@ fun SyncFeedback(
                         color = TabbyRushThemeTokens.customColors.primaryDeep
                     )
                 }
-            } else if (progress.status != SyncStatus.SYNCING) {
+            } else if (progress.status != SyncStatus.SYNCING && progress.status != SyncStatus.PAUSED_PROTOCOL) {
                 TextButton(
                     onClick = onTriggerSync,
                     modifier = Modifier.defaultMinSize(minHeight = TabbyRushThemeTokens.MinTouchTargetSize)

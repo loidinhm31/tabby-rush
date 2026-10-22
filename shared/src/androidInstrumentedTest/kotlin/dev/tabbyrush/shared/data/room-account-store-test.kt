@@ -40,6 +40,7 @@ class AndroidRoomAccountStoreTest {
             appId = "tabby-rush"
         )
     }
+    private fun taskRef(id: String) = dev.tabbyrush.shared.contract.TaskRef("user-android-instrumented", id)
 
     @After
     fun tearDown() {
@@ -52,7 +53,7 @@ class AndroidRoomAccountStoreTest {
     fun testSaveAndLoadTodosOnAndroid() = runBlocking {
         val now = System.currentTimeMillis()
         val todo = Todo(
-            id = "android-todo-1",
+            taskRef = taskRef("android-todo-1"),
             title = "Test Android Room",
             completed = false,
             createdAt = now,
@@ -73,7 +74,7 @@ class AndroidRoomAccountStoreTest {
     fun testUnsentCreateDeleteCancelsLocallyOnAndroid() = runBlocking {
         val now = System.currentTimeMillis()
         val todo = Todo(
-            id = "android-todo-cancel",
+            taskRef = taskRef("android-todo-cancel"),
             title = "Cancel Me",
             completed = false,
             createdAt = now,
@@ -84,7 +85,7 @@ class AndroidRoomAccountStoreTest {
         assertEquals(1, store.dao.countDrafts())
         assertEquals(1, store.dao.countOutbox())
 
-        store.deleteTodoLocally("android-todo-cancel")
+        store.deleteTodoLocally(taskRef("android-todo-cancel"))
         assertEquals(0, store.dao.countDrafts())
         assertEquals(0, store.dao.countOutbox())
         assertEquals(0, store.loadTodos().size)
@@ -106,7 +107,7 @@ class AndroidRoomAccountStoreTest {
         val now = System.currentTimeMillis()
         store.saveTodoLocally(
             Todo(
-                id = "android-del-1",
+                taskRef = taskRef("android-del-1"),
                 title = "Delete Me",
                 completed = false,
                 createdAt = now,

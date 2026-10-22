@@ -3,13 +3,13 @@
 **Document Version**: 1.0.0
 **Target Operating System**: Linux (Fedora 40+, RHEL 9+, openSUSE, Ubuntu 22.04+)
 **Architecture**: x86_64
-**Distribution Format**: RPM (`.rpm`) and self-contained runtime directory
+**Status**: Current client uses standard Hub sync. Linux interactive session acceptance remains separate from source, package, and automated-test evidence.
 
 ---
 
 ## 1. Overview
 
-The TabbyRush Linux desktop application is built with Compose Multiplatform 1.7.3 and targets the Java 21 LTS runtime. It brings the full offline-first personal task management experience and strict-v1 Glean Hub synchronization to Linux workstations.
+The TabbyRush Linux desktop application is built with Compose Multiplatform 1.7.3 and targets the Java 21 LTS runtime. It brings the offline-first task-management experience and standard Glean Hub push/pull/delta synchronization to Linux workstations.
 
 ### Key Architectural Invariants
 1. **Hardware/OS-Backed Credential Custody**: Tokens are stored exclusively in the Freedesktop Secret Service (via `secret-tool` / D-Bus). Plaintext fallback to files or preferences is strictly prohibited.

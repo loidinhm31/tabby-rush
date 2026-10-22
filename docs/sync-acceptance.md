@@ -1,66 +1,42 @@
-# TabbyRush Sync & Local State Acceptance Criteria
+# TabbyRush Standard Sync & Local State Acceptance
 
-Date: 2026-10-14  
-Phase: Phase 05 Durable Local State and Strict Per-Record Sync (Implementation Complete; Runtime Acceptance Pending)  
-Plan: `plans/261013-1540-tabbyrush-glean-hub-reuse`  
-Related Docs: [Local Storage & Sync](./local-storage-and-sync.md) · [API Contract](./api-contract.md) · [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md)
-
----
-
-## 1. Acceptance Gates
-
-| Gate ID | Area | Acceptance Rule & Specification | Status |
-|---|---|---|---|
-| **GATE-05-01** | **Room Schema & Export** | Room database compiles with KSP to schema version 1. Schema JSON exported and verified at `shared/schemas/dev.tabbyrush.shared.data.TabbyRushDatabase/1.json`. Destructive fallback is strictly prohibited. | **VERIFIED** |
-| **GATE-05-02** | **Account Partitioning** | Storage directory is isolated strictly by canonical `AccountKey` SHA-256 string. Path traversal attempts (`..` or symlinks) outside canonical base directory trigger `SecurityException`. | **VERIFIED** |
-| **GATE-05-03** | **Atomic Local Save** | `saveTodoLocally` and `deleteTodoLocally` write `account_sync_meta`, `editor_drafts`, and `outbox` atomically via Room `@Transaction` methods before returning success to caller. | **VERIFIED** |
-| **GATE-05-04** | **Unsent Create-Delete** | Deleting a record with only an unsent `CREATE` operation cancels locally via `cancelUnsentCreateAtomic` without generating network wire traffic. | **VERIFIED** |
-| **GATE-05-05** | **FIFO Per-Row Outbox** | Earliest operation by `localRevision` is dispatched per `rowId`. If the head operation is `DISPATCHING`, `CONFLICT`, or `UNKNOWN_SUPERSEDED`, successor operations on that row are blocked. | **VERIFIED** |
-| **GATE-05-06** | **Wire Payload Bounds** | Dispatched push batches enforce `<= 100` operations, at most one operation per `rowId`, and `<= 256 KiB` total payload size. | **VERIFIED** |
-| **GATE-05-07** | **Staged Full Scan** | Cursor pull pagination stages rows in SQLite `scan_staging`. Repeating cursors or non-progressing cursors abort with `SafeError.ProtocolIncompatible`. Promotes only upon reaching terminal page. | **VERIFIED** |
-| **GATE-05-08** | **Pre-Scan Identity Check** | Missing pre-scan confirmed identity within the same epoch triggers `SafeError.ResetRequired("CONSISTENCY_ERROR")` to prevent silent data loss. | **VERIFIED** |
-| **GATE-05-09** | **Monotonic Promotion** | Higher server revision promotes to `server_base`. Equal revision checks logical equivalence; divergent data triggers `SafeError.ProtocolIncompatible("DIVERGENT_REVISION")`. | **VERIFIED** |
-| **GATE-05-10** | **Exact CAS Ack Matching** | Push acknowledgement requires matching `opId`, `rowId`, `digest`, status in `[accepted, replayed]`, and `acceptedRevision == expectedRevision + 1`. Response omission or mismatch transitions op to `UNCERTAIN`. | **VERIFIED** |
-| **GATE-05-11** | **Newer Draft Preservation** | Acknowledging an outbox op does not clear `editor_drafts` if `draft.localRevision > outbox.localRevision`, preserving subsequent user edits. | **VERIFIED** |
-| **GATE-05-12** | **UnknownSuperseded** | Server conflict (`revisionConflict`, `missingRecord`, `deletedRecord`) for an operation that had previous uncertain delivery history is marked `UNKNOWN_SUPERSEDED` for explicit user review. | **VERIFIED** |
-| **GATE-05-13** | **Bounded Retries** | Operations receiving `retryableFailure` track `consecutiveFailures`. In-flight network failures mark batch `UNCERTAIN` for controlled re-dispatch. | **VERIFIED** |
-| **GATE-05-14** | **Guarded Account Leave** | Teardown checks 5 categories of unresolved work (`draftCount`, `pendingCount`, `uncertainCount`, `conflictCount`, `unknownSupersededCount`); aborts unless explicit discard is invoked. | **VERIFIED** |
-| **GATE-05-15** | **Fail-Closed Teardown** | Strict teardown sequence: freeze store -> write generation + `wipe.marker` outside DB -> cancel/await schedulers -> close Room -> delete DB/WAL/SHM -> clear vault -> clear marker. Failed marker persistence aborts before deleting data. | **VERIFIED** |
-| **GATE-05-16** | **Dispatch Crash Recovery** | `recoverInterruptedDispatches()` resets leftover `DISPATCHING` operations to `UNCERTAIN` on startup. Push coroutine cancellation uses `NonCancellable` to ensure in-flight batches are marked `UNCERTAIN`. | **VERIFIED** |
+Date: 2026-10-20  
+Status: Disposable-local API/browser and standalone Windows runtime smoke reported passed. Native UI/connected-device acceptance is not passed; production migration is unauthorized.  
+Related Docs: [Local Storage & Sync](./local-storage-and-sync.md) · [API Contract](./api-contract.md) · [System Architecture](./system-architecture.md) · [Code Standards](./code-standards.md) · [Release Acceptance](./release-acceptance.md)
 
 ---
 
-## 2. Test Verification Matrix
+## 1. Current Acceptance Criteria
 
-| Test Suite Class | File Path | Scope & Assertions | Status |
-|---|---|---|---|
-| `HubSyncClientTest` | `shared/src/commonTest/kotlin/.../hub-sync-client-test.kt` | Unit tests for bootstrap, push, pull, batch size <= 100 enforcement, payload size <= 256 KiB enforcement, error envelope mapping (400, 401, 404, 409, 426, 503). | **PASSED** (JVM) |
-| `StagedFullScanTest` | `shared/src/commonTest/kotlin/.../staged-full-scan-test.kt` | Tests cursor pagination, cursor loops, batch overflow, non-progressing cursors, pre-scan identity check (`CONSISTENCY_ERROR`), monotonic promotion, divergent revision error. | **PASSED** (JVM) |
-| `OutboxReconciliationTest` | `shared/src/commonTest/kotlin/.../outbox-reconciliation-test.kt` | Tests FIFO dispatch per row, head-blocking on CONFLICT/UNKNOWN_SUPERSEDED, dispatch freezing, CAS ack verification, newer draft preservation, UnknownSuperseded, bounded retries. | **PASSED** (JVM) |
-| `AccountSyncCoordinatorTest` | `shared/src/commonTest/kotlin/.../account-sync-coordinator-test.kt` | Tests 3-stage sync loop (scan -> push -> scan), mutex serialization, generation fencing, conflict actions (`discardConflict`, `reapplyConflict`, `copyAsNew`), cancellation safety. | **PASSED** (JVM) |
-| `AccountLeaveProtocolTest` | `shared/src/commonTest/kotlin/.../account-leave-protocol-test.kt` | Tests 5-category review work guard, freeze-before-review, marker write failure abort, scheduler cancellation failure rollback, database deletion fail-closed, `completePendingWipe`. | **PASSED** (JVM) |
-| `RoomAccountStoreTest` (JVM) | `shared/src/jvmTest/kotlin/.../room-account-store-test.kt` | Real SQLite tests with `BundledSQLiteDriver` in temporary directory: schema v1, atomic save, unsent create-delete cancel, FIFO outbox, base advancement, recovery of interrupted dispatches, wipe. | **PASSED** (JVM) |
-| `RoomAccountStoreTest` (Android) | `shared/src/androidInstrumentedTest/kotlin/.../room-account-store-test.kt` | Android instrumented Room tests with app-private storage, SQLite driver, Keystore integration. | **DEFERRED** (Phase 07) |
+| ID | Area | Required behavior |
+|---|---|---|
+| SYNC-01 | Room migration | Explicit Room 1→2→3→4 chain; no destructive fallback. Room 3→4 preserves all legacy outbox SQLite values in `legacy_sync_evidence`, including FLOAT bits and BLOB bytes. Migration does not confirm or replay old work. |
+| SYNC-02 | Account partition | Data, credentials, callbacks and scheduled work remain bound to the active account key/generation. Stale callbacks cannot mutate a switched/closed account. |
+| SYNC-03 | Local mutation | Persist user edits before network dispatch. Preserve newer drafts when an older submitted version is acknowledged. |
+| SYNC-04 | Standard route/auth | Use `/api/v1/sync/{app_id}/{push,pull,delta}` with Bearer JWT, `X-API-Key`, and `X-App-Id`. Do not use strict bootstrap, epoch, digest, or legacy-receipt routes. |
+| SYNC-05 | Explicit acknowledgement | Clear only an explicit accepted `(tableName,rowId,version)` tuple. Matching pulled state is convergence, not operation-receipt proof. |
+| SYNC-06 | Unknown JSON | Preserve raw unknown JSON through known-field edits; apply only keys selected by a valid explicit intent mask. |
+| SYNC-07 | Legacy intent | Unknown/ambiguous legacy intent remains for review. Never fall back to all-known-field replay. Support discard, explicit supported reapply, and copy-latest as a fresh root. |
+| SYNC-08 | Full scan | Start a full scan from null each sync round/reconnect. Discard staged rows from stale generation after restart. An incomplete scan does not prove deletion by absence. |
+| SYNC-09 | Body budget | Check serialized UTF-8 bytes before freeze against 256 KiB. A known single oversized record is actionable/conflicted and unsent, not uncertain delivery; fitting records may proceed. |
+| SYNC-10 | Delta semantics | Delta sequences push then pull. Do not represent it as atomic or as server-side group write. |
+| SYNC-11 | Hub schema metadata | `schemaVersion` is informational and does not gate native features or generate UI/Room code. Effective no-op does not increment; stale changed edits do not overwrite newer schema. |
+| SYNC-12 | Standard protocol limits | Do not promise strict exact-revision CAS receipts, server-enforced hierarchy, permanent tombstones, or transactional group writes. |
 
----
+## 2. Current Evidence
 
-## 3. Implementation Status & Deferred Runtime Boundaries
+| Scope | Reported result | What it does not establish |
+|---|---|---|
+| Disposable Hub API/browser smoke | Ordinary private provisioning; standard create/pull/delta/update/stale-conflict/delete; unknown JSON retention; admin nullable `customNotes` schema update 1→2; no-op remained 2; stale changed save returned 409 with draft preserved and latest schema read-only. | Production migration, production authorization, or native acceptance. |
+| Standalone Windows runtime | Passed via strict Gradle JavaExec against disposable loopback services: Windows DPAPI, real HTTP auth, Room offline restart, two independent stores using actual coordinator push/pull/delta, schemaVersion 2, unknown nested JSON and `customNotes` retained through native edit, parent/child sync and group deletion. | Interactive UI, connected Android, full desktop surface/accessibility/device acceptance. |
+| Offline verification | Parent reports current offline Gradle/package suites passed. | Does not replace interactive platform acceptance. |
+| Native UI and connected device | UI provider approval timed out twice; connected-device acceptance was not run. | Native acceptance is not passed. |
+| Production services | No live production migration is authorized or reported as performed. | No permission for a mutating production operation. |
 
-1. **JVM Verification**: All 89 common and JVM unit tests pass via `./gradlew --dependency-verification=lenient :shared:jvmTest`.
-2. **Review Status**: Code Review Cycle 3 scored 7/10 with N2 (CAS freeze) and N3 (leave marker rollback) resolved. Follow-up reviews track candidate optimizations for UNCERTAIN crash recovery counter semantics and cancellation rethrows.
-3. **Deferred to Phase 07 (Device Sync & Live Infrastructure)**:
-   - **Android Instrumented Tests**: Execution on real Android emulator/device (`connectedDebugAndroidTest`) requires Android SDK platform tooling, deferred to Phase 07.
-   - **Live Hub / MongoDB Integration**: End-to-end sync against running Rust Hub server and MongoDB replica set is deferred to Phase 07 device sync operations. Common tests in Phase 05 utilize deterministic mocked HTTP transport engines.
+## 3. Verification Locations
 
----
+Current source tests are organized under `shared/src/commonTest/` and `shared/src/jvmTest/`, including sync DTO/client, account coordinator, outbox reconciliation, task JSON merge, staged scan, account leave, and Room migration tests. Android instrumented tests live under `shared/src/androidInstrumentedTest/` and `androidApp/src/androidTest/`. Desktop tests are under `desktopApp/src/test/`, `linuxTest/`, and `windowsTest/`. Test source presence or a package build is not acceptance evidence for a connected device or interactive native surface.
 
-## 4. Strict-v2 Migration & Replay Acceptance (Phases 05–07, 11–12 Delivered)
+## 4. Historical Strict Sync Record
 
-The evolution plan (`plans/261015-0752-task-deadlines-reminders-strict-upgrades`) delivers the data-preserving `strict-v2` protocol upgrade:
-1. **Room 1→2 Explicit Migration (`MIGRATION_1_2`)**: Non-destructive SQL migration adding 12 temporal columns to `server_base`, `editor_drafts`, `scan_staging`, and `outbox`, plus new account-local entities `account_local_settings` and `reminder_delivery_ledger`.
-2. **Client Version Transition Machine (`ContractTransitionCoordinator`)**: 6-state coordinator (`ready-v1` -> `upgrade-detected` -> `dispatch-quiesced` -> `legacy-reconciling` -> `v2-base-scanning` -> `safe-intents-translating` -> `ready-v2`) ensuring offline old-client intentions are preserved and rebased without overwriting remote v2 deadline fields.
-3. **Legacy Receipt Reconciliation**: Read-only route `POST /api/v1/sync/:app_id/strong/legacy-receipts` matches deterministic preimages and digests for unacknowledged v1 operations without mutating v2 rows.
-4. **Authoritative Runbook & Rehearsal Tooling**:
-   - Operational runbook: `docs/strict-v2-cutover-runbook.md` establishes preflight backup requirements, deployment ordering, and state-specific incident decision trees.
-   - Rehearsal runner: `scripts/strict-v2-cutover-rehearsal.mjs` executes 7/7 passing tooling checks verifying CLI parameter validation, token redaction, interrupted POST recovery, and canonical v2 read-back assertions.
-5. **Production Gate G7 Status**: Live production cutover remains formally blocked pending Gate G3 live cluster execution, Gate G2 native platform delivery, and Gate G6 three-device live sync proof.
+**Historical snapshot, 2026-10-14 through 2026-10-20; not current acceptance.** Earlier Phase 05–12 material described Room v1/v2/v3, strict operation digests, exact revision acknowledgements, strict-v2/v3 migration, epochs, and strict CLI rehearsal. Those claims describe earlier phase reports. Strict-specific scripts cited there have been removed; the strict-v2 and strict-v3 runbooks are archived and must not be used as current procedures.

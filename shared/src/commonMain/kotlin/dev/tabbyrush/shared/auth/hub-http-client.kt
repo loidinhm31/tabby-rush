@@ -33,7 +33,7 @@ expect fun createPlatformHttpEngine(): HttpClientEngine
 enum class RouteClassification {
     AUTH_PUBLIC,      // /auth/register, /auth/login, /auth/refresh -> no auth headers
     BEARER_ONLY,      // /auth/me, /apps/access-requests* -> Bearer token only
-    DUAL_AUTH_STRICT  // /sync/{appId}/strong/* -> Bearer token + X-API-Key + X-App-Id
+    DUAL_AUTH_SYNC    // exact /sync/{appId}/{push,pull,delta} paths only
 }
 
 class HubHttpClient(
@@ -135,9 +135,25 @@ class HubHttpClient(
             }
             return true
         }
+
+        private fun validateLookupQuery(queryString: String): Boolean {
+            if (queryString.isEmpty()) return false
+            val params = queryString.split("&")
+            if (params.size != 1) return false
+            val parts = params[0].split("=")
+            if (parts.size != 2) return false
+            if (parts[0] != "username") return false
+            return parts[1].isNotBlank()
+        }
     }
 
     fun classifyRoute(path: String): RouteClassification? {
+        if (path.startsWith("api/v1/sync/")) return null
+        if (path.contains('#') || path.contains('\\') || path.contains("://")) return null
+        if (path.contains('?') &&
+            !path.startsWith("/api/v1/apps/${config.appId}/announcements/inbox?") &&
+            !path.startsWith("/api/v1/auth/lookup?")
+        ) return null
         val normalizedPath = if (path.startsWith("/")) path else "/$path"
         val pathWithoutQuery = normalizedPath.substringBefore('?')
         val queryString = if (normalizedPath.contains('?')) normalizedPath.substringAfter('?') else ""
@@ -145,6 +161,8 @@ class HubHttpClient(
         if (queryString.isNotEmpty()) {
             if (pathWithoutQuery == "/api/v1/apps/${config.appId}/announcements/inbox") {
                 if (!validateInboxQuery(queryString)) return null
+            } else if (pathWithoutQuery == "/api/v1/auth/lookup") {
+                if (!validateLookupQuery(queryString)) return null
             } else {
                 return null
             }
@@ -156,13 +174,13 @@ class HubHttpClient(
             "/api/v1/auth/refresh" -> RouteClassification.AUTH_PUBLIC
 
             "/api/v1/auth/me",
+            "/api/v1/auth/lookup",
             "/api/v1/apps/access-requests",
             "/api/v1/apps/access-requests/me" -> RouteClassification.BEARER_ONLY
 
-            "/api/v1/sync/${config.appId}/strong/bootstrap",
-            "/api/v1/sync/${config.appId}/strong/push",
-            "/api/v1/sync/${config.appId}/strong/pull",
-            "/api/v1/sync/${config.appId}/strong/legacy-receipts" -> RouteClassification.DUAL_AUTH_STRICT
+            "/api/v1/sync/${config.appId}/push",
+            "/api/v1/sync/${config.appId}/pull",
+            "/api/v1/sync/${config.appId}/delta" -> RouteClassification.DUAL_AUTH_SYNC
 
             "/api/v1/apps/${config.appId}/announcements/inbox",
             "/api/v1/apps/${config.appId}/announcements/unread",
@@ -205,9 +223,12 @@ class HubHttpClient(
             ?: return ApiResult.Failure(
                 SafeError.ProtocolIncompatible(
                     code = "DISALLOWED_ENDPOINT",
-                    message = "Path '$path' is not in the TabbyRush strict endpoint allowlist"
+                    message = "Path is not in the TabbyRush endpoint allowlist"
                 )
             )
+        if (classification == RouteClassification.DUAL_AUTH_SYNC && method != HttpMethod.Post) {
+            return ApiResult.Failure(SafeError.ProtocolIncompatible("DISALLOWED_METHOD", "Sync requires POST"))
+        }
         if (installProof != null) {
             val normalizedPath = if (path.startsWith("/")) path else "/$path"
             val pathWithoutQuery = normalizedPath.substringBefore('?')
@@ -242,7 +263,7 @@ class HubHttpClient(
                             header(HttpHeaders.Authorization, "Bearer $accessToken")
                         }
                     }
-                    RouteClassification.DUAL_AUTH_STRICT -> {
+                    RouteClassification.DUAL_AUTH_SYNC -> {
                         if (accessToken != null) {
                             header(HttpHeaders.Authorization, "Bearer $accessToken")
                         }
@@ -291,9 +312,9 @@ class HubHttpClient(
             HttpStatusCode.Forbidden -> {
                 val serverCode = extractErrorCode(rawBody)
                 val serverMsg = extractErrorMessage(rawBody)
-                if (serverCode == "appAccessRevoked") {
-                    SafeError.AccessPending(
-                        code = "appAccessRevoked",
+                if (serverCode == "appAccessRevoked" || serverCode == "MEMBERSHIP_DENIED") {
+                    SafeError.MembershipDenied(
+                        code = serverCode,
                         message = serverMsg ?: "Application access revoked (HTTP 403)"
                     )
                 } else {
@@ -306,7 +327,12 @@ class HubHttpClient(
             HttpStatusCode.Conflict -> {
                 val serverMsg = extractErrorMessage(rawBody)
                 val serverCode = extractErrorCode(rawBody)
-                if (path.contains("/auth/")) {
+                if (serverCode == "ACCESS_REVISION_CHANGED") {
+                    SafeError.AccessRevisionChanged(
+                        code = serverCode,
+                        message = serverMsg ?: "Access revision changed during synchronization (HTTP 409)"
+                    )
+                } else if (path.contains("/auth/")) {
                     SafeError.Validation(
                         code = serverCode ?: "CONFLICT",
                         message = serverMsg ?: "Email or username already in use (HTTP 409)"
@@ -317,23 +343,35 @@ class HubHttpClient(
                         message = serverMsg ?: "Operation conflict (HTTP 409)"
                     )
                 } else {
-                    SafeError.ResetRequired(
-                        code = "EPOCH_MISMATCH",
-                        message = "Server reported epoch conflict or reset required (HTTP 409)"
+                    SafeError.Conflict(
+                        code = serverCode ?: "SYNC_CONFLICT",
+                        message = "Server rejected this sync attempt; refresh before explicit review",
+                        rowId = ""
                     )
                 }
             }
-            HttpStatusCode.UpgradeRequired -> SafeError.ProtocolIncompatible(
-                code = "PROTOCOL_INCOMPATIBLE",
-                message = "Server rejected protocol version (HTTP 426)"
-            )
+            HttpStatusCode.UpgradeRequired -> {
+                val serverCode = extractErrorCode(rawBody)
+                val serverMsg = extractErrorMessage(rawBody)
+                if (serverCode == "COLLABORATION_REQUIRED" || path.startsWith("/api/v1/sync/")) {
+                    SafeError.CollaborationRequired(
+                        code = serverCode ?: "COLLABORATION_REQUIRED",
+                        message = serverMsg ?: "Application upgrade required for collaboration (HTTP 426)"
+                    )
+                } else {
+                    SafeError.ProtocolIncompatible(
+                        code = "PROTOCOL_INCOMPATIBLE",
+                        message = "Server rejected protocol version (HTTP 426)"
+                    )
+                }
+            }
             HttpStatusCode.NotFound -> {
                 val serverMsg = extractErrorMessage(rawBody)
                 val serverCode = extractErrorCode(rawBody)
-                if (path.contains("/strong/")) {
+                if (path.startsWith("/api/v1/sync/")) {
                     SafeError.ProtocolIncompatible(
-                        code = "STRICT_ROUTE_UNAVAILABLE",
-                        message = "Strict strong sync route unavailable on server (HTTP 404)"
+                        code = "SYNC_ROUTE_UNAVAILABLE",
+                        message = "Standard sync route unavailable; offline work retained (HTTP 404)"
                     )
                 } else {
                     SafeError.Validation(

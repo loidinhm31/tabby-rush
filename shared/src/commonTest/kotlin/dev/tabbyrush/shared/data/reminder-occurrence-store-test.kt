@@ -30,7 +30,7 @@ class ReminderOccurrenceStoreTest {
     @Test
     fun testSyncPlannedOccurrencesCreatesActiveEntries() = runTest {
         val schedule = PersistedTaskSchedule(
-            taskId = "task-1",
+            taskRef = dev.tabbyrush.shared.contract.TaskRef("user-123", "task-1"),
             title = "Milk",
             completed = false,
             isDeleted = false,
@@ -52,7 +52,7 @@ class ReminderOccurrenceStoreTest {
     @Test
     fun testClaimOpportunityMarksOlderSkippedAndLatestClaimed() = runTest {
         val schedule = PersistedTaskSchedule(
-            taskId = "task-1",
+            taskRef = dev.tabbyrush.shared.contract.TaskRef("user-123", "task-1"),
             title = "Milk",
             completed = false,
             isDeleted = false,
@@ -78,7 +78,7 @@ class ReminderOccurrenceStoreTest {
     @Test
     fun testCrashAfterClaimNeverReplaysClaimedOpportunity() = runTest {
         val schedule = PersistedTaskSchedule(
-            taskId = "task-1",
+            taskRef = dev.tabbyrush.shared.contract.TaskRef("user-123", "task-1"),
             title = "Milk",
             completed = false,
             isDeleted = false,
@@ -101,7 +101,7 @@ class ReminderOccurrenceStoreTest {
     @Test
     fun testCompletionAndReopenRetainsPriorConsumedCount() = runTest {
         val schedule = PersistedTaskSchedule(
-            taskId = "task-1",
+            taskRef = dev.tabbyrush.shared.contract.TaskRef("user-123", "task-1"),
             title = "Milk",
             completed = false,
             isDeleted = false,

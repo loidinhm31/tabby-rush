@@ -28,7 +28,7 @@ class TaskDeadlineReminderModelsTest {
             count = 3L
         )
         val todo = Todo(
-            id = "todo-timed-1",
+            taskRef = TaskRef("user-1", "todo-timed-1"),
             title = "Timed Deadline Task",
             completed = false,
             createdAt = 1792000000000L,
@@ -40,7 +40,7 @@ class TaskDeadlineReminderModelsTest {
         assertEquals(deadline, todo.deadline)
         assertEquals(rule, todo.reminderRule)
 
-        val v2Data = todo.toStrictV2TodoData()
+        val v2Data = todo.toTaskData()
         assertEquals("todo-timed-1", v2Data.id)
         assertEquals("2026-10-15", v2Data.deadlineDate)
         assertEquals("15:00", v2Data.deadlineTime)
@@ -73,7 +73,7 @@ class TaskDeadlineReminderModelsTest {
             count = 1L
         )
         val todo = Todo(
-            id = "todo-date-only-1",
+            taskRef = TaskRef("user-1", "todo-date-only-1"),
             title = "Date Only Task",
             completed = false,
             createdAt = 1792000000000L,
@@ -91,7 +91,7 @@ class TaskDeadlineReminderModelsTest {
         // scheduleToken without deadline should fail
         assertFailsWith<IllegalArgumentException> {
             Todo(
-                id = "todo-fail-1",
+                taskRef = TaskRef("user-1", "todo-fail-1"),
                 title = "Bad Token",
                 completed = false,
                 createdAt = 1000L,
@@ -103,7 +103,7 @@ class TaskDeadlineReminderModelsTest {
         // enabled reminder without deadline should fail
         assertFailsWith<IllegalArgumentException> {
             Todo(
-                id = "todo-fail-2",
+                taskRef = TaskRef("user-1", "todo-fail-2"),
                 title = "Bad Reminder",
                 completed = false,
                 createdAt = 1000L,
@@ -163,7 +163,7 @@ class TaskDeadlineReminderModelsTest {
         )
         assertFailsWith<IllegalArgumentException> {
             Todo(
-                id = "todo-overflow",
+                taskRef = TaskRef("user-1", "todo-overflow"),
                 title = "Overflowing reminder",
                 completed = false,
                 createdAt = 100L,

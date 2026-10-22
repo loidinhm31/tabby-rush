@@ -41,6 +41,7 @@ import dev.tabbyrush.shared.contract.EditorState
 import dev.tabbyrush.shared.contract.TitlePolicy
 import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.UserLookupResult
+import dev.tabbyrush.shared.contract.UserLookupCache
 import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
 @Composable
 fun TodoEditor(
@@ -224,13 +225,19 @@ fun TodoEditor(
 
             TaskAssigneePicker(
                 assigneeUserId = editor.assigneeUserId,
+                assigneeUsername = editor.assigneeUsername,
                 inheritedAssigneeUserId = editor.inheritedAssigneeUserId,
+                inheritedAssigneeUsername = editor.inheritedAssigneeUsername,
                 canManageAssignment = editor.canManageAssignment,
                 isInitialAssignmentForNewTask = isCreating,
                 expectedSlotVersion = editor.expectedSlotVersion,
                 taskRef = editor.taskRef,
                 onAssigneeChanged = { newAssignee ->
-                    onAction(TodoAction.UpdateEditorState(editor.copy(assigneeUserId = newAssignee)))
+                    val username = UserLookupCache.getUsername(newAssignee)
+                    onAction(TodoAction.UpdateEditorState(editor.copy(
+                        assigneeUserId = newAssignee,
+                        assigneeUsername = username
+                    )))
                 },
                 onAssignTask = { intent ->
                     onAction(TodoAction.AssignTask(intent))

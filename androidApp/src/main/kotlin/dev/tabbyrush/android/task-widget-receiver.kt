@@ -57,7 +57,7 @@ class TabbyRushTaskWidgetReceiver : GlanceAppWidgetReceiver() {
             } catch (t: Throwable) {
                 Log.e(TAG, "Unhandled error in onUpdate refresh", t)
             } finally {
-                pendingResult.finish()
+                pendingResult?.finish()
             }
         }
     }

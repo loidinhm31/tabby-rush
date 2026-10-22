@@ -1,10 +1,11 @@
 # TabbyRush Project Changelog
-
 All notable changes to the TabbyRush project are documented in this file, organized chronologically by implementation phase.
 
 ---
-## [Native JVM Contract Migration Fixes] - 2026-10-21
+## [Native JVM Contract Migration Fixes] - 2026-10-21–2026-10-22
 ### Fixed
+- **2026-10-22 — desktop Just launcher (development startup):** `just run-desktop` now delegates to the debug launcher for local HTTP Hubs; `just run-desktop-release` preserves the HTTPS-only release entry point. Verification-mode forwarding was checked by dry run, and the actual recipe launched in DEBUG mode with `http://localhost:3000`.
+- **2026-10-22 — recurring dismissed access-loss notices:** Fixed the already-unavailable cleanup path to purge restaged/restored deleted records without generating another loss notice. SQLite regression failed before and passed after the fix, including same-row/different-owner pending-work preservation; shared JVM/desktop suites and Android Kotlin compilation passed. Isolated standalone coordinator smoke passed three sync rounds after Room restart over 16 loopback HTTP requests. Interactive desktop verification was blocked by unanswered control approval; the running app was not restarted.
 - Restored shared-test compilation after the canonical identity migration: editor/coordinator calls now use `TaskRef`, legacy evidence fixtures name the Room v5 fields explicitly, and test imports include the required assertions, task references, and JSON primitive accessors.
 - Corrected canonical schedule fixtures to use valid timed deadlines, preserving their relation-collision and unavailable-access assertions.
 - Removed nested non-reentrant store mutex acquisition in task mutations and conflict actions. Copy-as-new now copies the latest displayed draft as a fresh actor-owned root and atomically retires only represented source revisions for the selected canonical identity; unavailable content cannot be copied.
@@ -14,7 +15,6 @@ All notable changes to the TabbyRush project are documented in this file, organi
 - **Verification:** `cmd.exe /c "gradlew.bat :shared:jvmTest"` completed **BUILD SUCCESSFUL** in 19 seconds: 324 tests, zero failures/errors/skips. Includes SQLite copy rollback/restart, canonical-owner collision isolation and unavailable-content rejection. Native interactive acceptance and production migration remain unauthorized.
 ---
 ## [Collaborative Task Assignees & Room v5 / Phases 01–09] - 2026-10-21–2026-10-22: Implementation, Review & Acceptance Harness Delivery
-
 ### Delivered
 - **Canonical Identity & Hierarchy Projection (Phase 01)**: Implemented `TaskRef(ownerUserId, rowId)` and `CanonicalRecordRef(ownerUserId, tableName, rowId)` across persistence, transport, and surfaces. App identity remains sync context. `TaskHierarchyProjector` supports child-only projections without synthetic parent or sibling disclosure; `TaskAccessState` carries content-edit, assignment, delete, and child-create capabilities.
 - **Hub Collaborative Synchronization & Policy Enforcement (Phase 02)**: Added version-1 `assignmentPolicy` to Hub `SharingConfig`. Content remains in creator-owned `todos` rows, with stable `taskAssignees` slots (`rowId == data.id == taskId`); the app-scoped `_sync_assignment_fences` guard and `accessRevision` coordinate opted-in writes and visibility changes. Requests lacking `collaborationVersion: 1` fail closed with HTTP 426 `COLLABORATION_REQUIRED`; bounded `accessChecks` are limited to 100 keys and 256 KiB. Cycle 3 review notes remain below.

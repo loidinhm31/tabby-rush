@@ -192,6 +192,41 @@ class CollaborativeAccessSqliteTest {
         assertTrue(op.payloadJson.contains(bob))
     }
 
+    @Test fun dismissedAccessLossDoesNotReturnWhenDeletedRecordsAreScannedAgain() = runTest {
+        store.initializeOwnerBinding(identity(alice))
+        val revokedRef = TaskRef(bob, "deleted-shared-task")
+        val privateRef = TaskRef(alice, revokedRef.rowId)
+        store.saveTodoLocally(Todo(privateRef, "Keep my pending task", false, 1000L))
+        val pendingOpIds = store.dao.getOutboxByRow(boundBindingKey(alice), "todos", privateRef.rowId)
+            .map { it.opId }
+        val tombstone = CanonicalRecordSnapshot(
+            ref = revokedRef.toRecordRef(),
+            dataJson = """{"id":"${revokedRef.rowId}","title":"Deleted task","completed":false,"createdAt":1000}""",
+            version = 2L,
+            syncedAt = 2000L,
+            deleted = true
+        )
+
+        store.invalidateAccess(revokedRef, AccessLossReason.UNAVAILABLE, 2000L)
+        store.dismissAccessLossEvidence(revokedRef)
+
+        // Incremental pull can leave a tombstone even after the task became unavailable.
+        store.stageDataPage(2L, listOf(tombstone))
+        store.promoteReconciliation(2L, 2000L)
+        repeat(3) { round ->
+            val revision = 3L + round
+            store.stageDataPage(revision, listOf(tombstone))
+            store.invalidateAccess(revokedRef, AccessLossReason.UNAVAILABLE, 3000L + round)
+            store.promoteReconciliation(revision, 3000L + round)
+
+            assertTrue(store.listAccessLossEvidence().isEmpty(), "Sync must not recreate a dismissed loss")
+            assertNull(store.dao.getServerBase(boundBindingKey(bob), "todos", revokedRef.rowId))
+            assertNull(store.dao.getStagedRecord(boundBindingKey(bob), "todos", revokedRef.rowId))
+            assertEquals("Keep my pending task", store.getTodo(privateRef)?.title)
+            assertEquals(pendingOpIds, store.dao.getOutboxByRow(boundBindingKey(alice), "todos", privateRef.rowId).map { it.opId })
+        }
+    }
+
     @Test fun privacyFirstPurgeErasesRevokedSharedContentAndRetainsContentFreeEvidence() = runTest {
         store.initializeOwnerBinding(identity(alice))
 

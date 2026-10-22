@@ -48,6 +48,8 @@ node scripts/release-security-check.mjs --diagnose-source
 node scripts/admin-announcements-smoke.mjs --self-test
 ```
 
+Run the desktop app against a local Hub with `just run-desktop` (or `just run-desktop-debug`). These use the debug launcher, which permits `http://localhost:3000`; set `APPROVED_HUB_ORIGIN` and `TABBYRUSH_API_KEY` in your local `.env`. Use `just run-desktop-release` for the HTTPS-only release launcher. Each recipe accepts an optional dependency-verification mode, for example `just run-desktop strict`. If the single-instance guard reports an existing app, quit it from the tray before relaunching; closing the window can leave it running.
+
 Run provisioning only for a new ordinary Hub app registration. On Windows, its `--out` file must be placed in an existing private, non-symlink directory with protected DACL/owner limited to the current user, `SYSTEM`, and `Administrators`; the script refuses unsafe directories and does not change their permissions. Never pass administrative tokens or database credentials as command-line literals.
 
 Package generation and automated test results are not a substitute for interactive platform acceptance or production authorization.

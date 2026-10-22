@@ -40,6 +40,7 @@ import dev.tabbyrush.shared.contract.OwnerBindingState
 import dev.tabbyrush.shared.contract.TaskAccessStatus
 import dev.tabbyrush.shared.contract.TaskRef
 import dev.tabbyrush.shared.contract.UserLookupResult
+import dev.tabbyrush.shared.contract.UserLookupCache
 import dev.tabbyrush.shared.contract.ApiResult
 import dev.tabbyrush.shared.contract.AuthState
 import dev.tabbyrush.shared.contract.BuildMode
@@ -58,6 +59,7 @@ import dev.tabbyrush.shared.contract.ReminderSettingsState
 import dev.tabbyrush.shared.contract.SafeError
 import dev.tabbyrush.shared.contract.SurfaceAccountToken
 import dev.tabbyrush.shared.contract.TaskDeadline
+import dev.tabbyrush.shared.contract.TaskDataContract
 import dev.tabbyrush.shared.contract.TitlePolicy
 import dev.tabbyrush.shared.contract.Todo
 import dev.tabbyrush.shared.contract.TodoAction
@@ -70,6 +72,7 @@ import dev.tabbyrush.shared.data.JvmAccountFiles
 import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.ReminderOccurrenceStore
 import dev.tabbyrush.shared.data.RoomAccountStore
+import dev.tabbyrush.shared.data.boundBindingKey
 import dev.tabbyrush.shared.data.createJvmDatabaseBuilder
 import dev.tabbyrush.shared.sync.AccountLeaveProtocol
 import dev.tabbyrush.shared.sync.AccountSyncCoordinator
@@ -635,8 +638,9 @@ class DesktopController(
                         )
                         return@launch
                     }
-                    val count = allTodos.count { it.parentTaskRef == action.todo.taskRef && !it.isDeleted }
-                    _uiState.value = _uiState.value.copy(deleteCandidate = action.todo, deleteCandidateChildCount = count)
+                    val childCount = store?.loadTodos()?.count { it.parentTaskRef == action.todo.taskRef && !it.isDeleted }
+                        ?: allTodos.count { it.parentTaskRef == action.todo.taskRef && !it.isDeleted }
+                    _uiState.value = _uiState.value.copy(deleteCandidate = action.todo, deleteCandidateChildCount = childCount)
                 }
                 is TodoAction.ConfirmDelete -> confirmDelete()
                 is TodoAction.CancelDelete -> _uiState.value = _uiState.value.copy(deleteCandidate = null)
@@ -797,8 +801,10 @@ class DesktopController(
             parentTaskRef = if (!isChildOnly) currentTodo.parentTaskRef else null,
             parentTitle = parentTitle,
             assigneeUserId = assignment.recipientUserId,
+            assigneeUsername = UserLookupCache.getUsername(assignment.recipientUserId),
             expectedSlotVersion = assignment.slotVersion,
             inheritedAssigneeUserId = assignment.inheritedRecipientUserId,
+            inheritedAssigneeUsername = UserLookupCache.getUsername(assignment.inheritedRecipientUserId),
             canManageAssignment = canManageAssignment
         )
         _uiState.value = _uiState.value.copy(editor = editor)
@@ -953,7 +959,31 @@ class DesktopController(
             _uiState.value = _uiState.value.copy(deleteCandidate = null)
             return
         }
-        r.store.deleteTodoLocally(candidate.taskRef)
+        try {
+            r.store.deleteTodoLocally(candidate.taskRef)
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            System.err.println("Error deleting task ${candidate.taskRef}: ${e.message}")
+            e.printStackTrace()
+            _uiState.value = _uiState.value.copy(
+                deleteCandidate = null,
+                safeError = SafeError.Internal("DELETE_FAILED", e.message ?: "Failed to delete task")
+            )
+            return
+        }
+
+        try {
+            r.reminderScheduler.cancelAlarmsForTask(candidate.taskRef)
+            if (reminderAdapter is DesktopReminderAdapter) {
+                reminderAdapter.cancelNotificationsForTask(r.accountKey, candidate.taskRef)
+            }
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            System.err.println("Non-fatal error canceling notifications for ${candidate.taskRef}: ${e.message}")
+        }
+
         _uiState.value = _uiState.value.copy(deleteCandidate = null)
         reloadTodos()
         triggerSync()
@@ -966,14 +996,17 @@ class DesktopController(
     }
 
     private suspend fun inspectAndShowConflict(runtime: DesktopAccountRuntime) {
-        val entry = runtime.store.dao.getAllOutbox().firstOrNull {
-            it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW
-        } ?: return
-        val owner = entry.ownerUserId ?: runtime.store.userId
-        val taskRef = TaskRef(ownerUserId = owner, rowId = entry.rowId)
-        val base = runtime.store.dao.getServerBase(entry.rowId)
-        val bDate = base?.deadlineDate
-        val bZone = base?.deadlineZone
+        try {
+            val entry = runtime.store.dao.getAllOutbox().firstOrNull {
+                it.deliveryState == OutboxEntity.STATE_CONFLICT || it.deliveryState == OutboxEntity.STATE_REVIEW
+            } ?: return
+            val owner = entry.ownerUserId ?: runtime.store.userId
+            val boundKey = boundBindingKey(owner)
+            val taskRef = TaskRef(ownerUserId = owner, rowId = entry.rowId)
+            val base = runtime.store.dao.getServerBase(boundKey, TaskDataContract.DEFAULT_TABLE_NAME, entry.rowId)
+                ?: runtime.store.dao.getServerBase(entry.rowId)
+            val bDate = base?.deadlineDate
+            val bZone = base?.deadlineZone
         val bOffset = base?.deadlineOffsetSeconds
         val bAnchor = base?.deadlineAnchorEpochMs
         val bOverdue = base?.deadlineOverdueEpochMs
@@ -1003,12 +1036,12 @@ class DesktopController(
                 title = it.title,
                 completed = it.completed,
                 createdAt = it.createdAt,
-                updatedAt = it.updatedAt,
+                updatedAt = if (it.updatedAt >= it.createdAt) it.updatedAt else it.createdAt,
                 serverRevision = it.serverRevision,
                 isDeleted = it.deleted,
                 deadline = remoteDeadline,
                 reminderRule = remoteRule,
-                scheduleToken = it.scheduleToken,
+                scheduleToken = if (remoteDeadline != null) it.scheduleToken else null,
                 parentTaskRef = it.parentTaskId?.let { pId -> TaskRef(ownerUserId = owner, rowId = pId) }
             )
         }
@@ -1046,13 +1079,17 @@ class DesktopController(
             updatedAt = entry.createdAt ?: 0L,
             deadline = localDeadline,
             reminderRule = localRule,
-            scheduleToken = entry.scheduleToken,
+            scheduleToken = if (localDeadline != null) entry.scheduleToken else null,
             parentTaskRef = entry.parentTaskId?.let { pId -> TaskRef(ownerUserId = owner, rowId = pId) }
         )
         val isPreservationConflict = entry.intentMask?.split("|")?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true
         val isSubtaskConflict = entry.parentTaskId != null || localTodo.parentTaskRef != null
         val targetParentRef = entry.parentTaskId?.let { TaskRef(ownerUserId = owner, rowId = it) } ?: localTodo.parentTaskRef
-        val parentBase = targetParentRef?.let { runtime.store.dao.getServerBase(it.rowId) }
+        val parentBase = targetParentRef?.let {
+            val pKey = boundBindingKey(it.ownerUserId)
+            runtime.store.dao.getServerBase(pKey, TaskDataContract.DEFAULT_TABLE_NAME, it.rowId)
+                ?: runtime.store.dao.getServerBase(it.rowId)
+        }
         val isParentDeleted = isSubtaskConflict && (parentBase == null || parentBase.deleted)
         _uiState.value = _uiState.value.copy(
             conflict = ConflictState(
@@ -1065,6 +1102,15 @@ class DesktopController(
                 isParentDeleted = isParentDeleted
             )
         )
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            System.err.println("Error inspecting conflict: ${e.message}")
+            e.printStackTrace()
+            _uiState.value = _uiState.value.copy(
+                safeError = SafeError.Internal("CONFLICT_INSPECTION_FAILED", "Failed to inspect conflict: ${e.message}")
+            )
+        }
     }
 
     private suspend fun resolveConflict(block: suspend (AccountSyncCoordinator) -> Unit) {
@@ -1214,6 +1260,16 @@ fun launchDesktop(
     // Windows explicit AUMID setup before notifier/window initialization
     setCurrentProcessExplicitAppUserModelID("dev.tabbyrush.desktop")
     val accountFiles = JvmAccountFiles()
+    Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+        System.err.println("FATAL UNCAUGHT EXCEPTION on thread ${thread.name}:")
+        throwable.printStackTrace()
+        try {
+            File(accountFiles.baseDir, "desktop-crash.log").appendText(
+                "=== FATAL CRASH ${java.time.Instant.now()} on thread ${thread.name} ===\n" +
+                throwable.stackTraceToString() + "\n\n"
+            )
+        } catch (_: Exception) {}
+    }
     val lockFile = File(accountFiles.baseDir, "tabbyrush.lock")
     val instanceGuard = SingleInstanceGuard.tryAcquire(lockFile)
 

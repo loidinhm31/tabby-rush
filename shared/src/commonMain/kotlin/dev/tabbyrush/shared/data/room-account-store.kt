@@ -272,7 +272,11 @@ class RoomAccountStore(
         val base = dao.getServerBase(boundKey, TaskDataContract.DEFAULT_TABLE_NAME, taskRef.rowId)
         val currentAccess = dao.getAccess(taskRef.ownerUserId, TaskDataContract.DEFAULT_TABLE_NAME, taskRef.rowId)
         val draft = dao.getDraft(boundKey, TaskDataContract.DEFAULT_TABLE_NAME, taskRef.rowId)
-        if (currentAccess?.status == TaskAccessStatus.Unavailable.name && base == null && draft == null && ops.isEmpty()) {
+        if (currentAccess?.status == TaskAccessStatus.Unavailable.name && draft == null && ops.isEmpty()) {
+            // A full scan or incremental pull can deliver the same deleted record again.
+            // Purge it before promotion without recreating an acknowledged loss notice.
+            dao.deleteStagedByOwnerAndRow(boundKey, taskRef.rowId)
+            dao.deleteServerBaseByOwnerAndRow(boundKey, taskRef.rowId)
             return@withMutationLock dao.getMeta()?.accessGeneration ?: 1L
         }
         val evidence = AccessLossEvidenceEntity(

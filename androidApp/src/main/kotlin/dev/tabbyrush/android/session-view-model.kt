@@ -35,6 +35,7 @@ import dev.tabbyrush.shared.contract.AssignmentSlotResult
 import dev.tabbyrush.shared.contract.TaskMutationResult
 import dev.tabbyrush.shared.contract.AccessLossEvidence
 import dev.tabbyrush.shared.contract.UserLookupResult
+import dev.tabbyrush.shared.contract.UserLookupCache
 import java.time.ZoneId
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -328,8 +329,10 @@ class SessionViewModel : ViewModel() {
                 parentTaskRef = todo.parentTaskRef,
                 parentTitle = parentTitle,
                 assigneeUserId = assignment?.recipientUserId,
+                assigneeUsername = UserLookupCache.getUsername(assignment?.recipientUserId),
                 expectedSlotVersion = assignment?.slotVersion ?: 0L,
                 inheritedAssigneeUserId = assignment?.inheritedRecipientUserId,
+                inheritedAssigneeUsername = UserLookupCache.getUsername(assignment?.inheritedRecipientUserId),
                 canManageAssignment = canManage
             )
         } else {
@@ -353,8 +356,10 @@ class SessionViewModel : ViewModel() {
                 parentTaskRef = todo.parentTaskRef,
                 parentTitle = parentTitle,
                 assigneeUserId = assignment?.recipientUserId,
+                assigneeUsername = UserLookupCache.getUsername(assignment?.recipientUserId),
                 expectedSlotVersion = assignment?.slotVersion ?: 0L,
                 inheritedAssigneeUserId = assignment?.inheritedRecipientUserId,
+                inheritedAssigneeUsername = UserLookupCache.getUsername(assignment?.inheritedRecipientUserId),
                 canManageAssignment = canManage
             )
         }
@@ -613,12 +618,12 @@ class SessionViewModel : ViewModel() {
                 title = it.title,
                 completed = it.completed,
                 createdAt = it.createdAt,
-                updatedAt = it.updatedAt,
+                updatedAt = if (it.updatedAt >= it.createdAt) it.updatedAt else it.createdAt,
                 serverRevision = it.serverRevision,
                 isDeleted = it.deleted,
                 deadline = remoteDeadline,
                 reminderRule = remoteRule,
-                scheduleToken = it.scheduleToken,
+                scheduleToken = if (remoteDeadline != null) it.scheduleToken else null,
                 parentTaskRef = parentTaskRef
             )
         }
@@ -656,7 +661,7 @@ class SessionViewModel : ViewModel() {
             updatedAt = entry.createdAt ?: 0L,
             deadline = localDeadline,
             reminderRule = localRule,
-            scheduleToken = entry.scheduleToken,
+            scheduleToken = if (localDeadline != null) entry.scheduleToken else null,
             parentTaskRef = parentTaskRef
         )
         val isPreservationConflict = entry.intentMask?.split("|")?.contains(OutboxEntity.INTENT_LAST_CHILD_PRESERVATION) == true

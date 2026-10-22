@@ -13,6 +13,7 @@ import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.TodoFilter
 import dev.tabbyrush.shared.contract.TaskDeadline
 import dev.tabbyrush.shared.contract.TaskRef
+import dev.tabbyrush.shared.contract.AssignmentIntent
 import dev.tabbyrush.shared.data.OutboxEntity
 import dev.tabbyrush.shared.data.JvmAccountFiles
 import dev.tabbyrush.shared.data.RoomAccountStore
@@ -425,6 +426,124 @@ class DesktopTaskSurfacesTest {
             }
             assertEquals("", controller.stickyState.value.quickAdd.rawTitle)
             assertEquals("Main draft in progress", controller.uiState.value.editor?.rawTitle)
+
+            controller.disposeSuspend()
+        } finally {
+            scope.cancel()
+            guard.close()
+            tempDir.deleteRecursively()
+        }
+    }
+    @Test
+    fun testDesktopControllerDeleteAction() = runTest {
+        val tempDir = Files.createTempDirectory("tabbyrush-delete-test").toFile()
+        tempDir.deleteOnExit()
+        val tempLock = File(tempDir, "tabbyrush.lock")
+        val guard = SingleInstanceGuard.tryAcquire(tempLock)!!
+        val files = JvmAccountFiles(baseDir = tempDir)
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+        val controller = DesktopController(
+            mode = BuildMode.DEBUG,
+            scope = scope,
+            instanceGuard = guard,
+            accountFiles = files
+        )
+        try {
+            val identity = AccountIdentity("test-user", "test-user", "test-user@example.com")
+            val key = AccountKey.create(controller.hubConfig.canonicalOrigin, identity.userId)
+            controller.vault.store(key, CredentialBundle("test-access-token", "test-refresh-token"))
+            assertTrue(controller.authSession.restoreSession(identity, key))
+            val runtime = controller.getOrCreateAccountRuntime(key)
+
+            // Save a todo
+            val todo = createDefaultTodo(title = "Task to delete", nowEpochMs = 1000L, ownerUserId = identity.userId)
+            runtime.store.saveTodoLocally(todo)
+            controller.onAction(TodoAction.TriggerSync)
+            delay(100)
+
+            // Request delete
+            controller.onAction(TodoAction.RequestDelete(todo))
+            withContext(Dispatchers.Default) {
+                withTimeout(5000L) {
+                    while (controller.uiState.value.deleteCandidate == null) {
+                        delay(20)
+                    }
+                }
+            }
+            assertEquals(todo.taskRef, controller.uiState.value.deleteCandidate?.taskRef)
+
+            // Confirm delete
+            controller.onAction(TodoAction.ConfirmDelete)
+            withContext(Dispatchers.Default) {
+                withTimeout(5000L) {
+                    while (controller.uiState.value.deleteCandidate != null) {
+                        delay(20)
+                    }
+                }
+            }
+            assertNull(controller.uiState.value.deleteCandidate)
+
+            controller.disposeSuspend()
+        } finally {
+            scope.cancel()
+            guard.close()
+            tempDir.deleteRecursively()
+        }
+    }
+    @Test
+    fun testDeleteTaskWithSubtasksAndAssignee() = runTest {
+        val tempDir = Files.createTempDirectory("tabbyrush-delete-assignee-test").toFile()
+        tempDir.deleteOnExit()
+        val tempLock = File(tempDir, "tabbyrush.lock")
+        val guard = SingleInstanceGuard.tryAcquire(tempLock)!!
+        val files = JvmAccountFiles(baseDir = tempDir)
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+        val controller = DesktopController(
+            mode = BuildMode.DEBUG,
+            scope = scope,
+            instanceGuard = guard,
+            accountFiles = files
+        )
+        try {
+            val identity = AccountIdentity("test-user", "test-user", "test-user@example.com")
+            val key = AccountKey.create(controller.hubConfig.canonicalOrigin, identity.userId)
+            controller.vault.store(key, CredentialBundle("test-access-token", "test-refresh-token"))
+            assertTrue(controller.authSession.restoreSession(identity, key))
+            val runtime = controller.getOrCreateAccountRuntime(key)
+
+            // Create parent task with assignee and subtask
+            val parent = createDefaultTodo(title = "Parent with assignee", nowEpochMs = 1000L, ownerUserId = identity.userId, rowId = "parent-1")
+            runtime.store.saveTodoLocally(parent)
+            runtime.store.assignTaskLocally(AssignmentIntent(taskRef = parent.taskRef, desiredRecipientUserId = "assignee-1", expectedSlotVersion = 0L))
+
+            val childRef = TaskRef(ownerUserId = identity.userId, rowId = "child-1")
+            val child = createDefaultTodo(title = "Child task", nowEpochMs = 2000L, taskRef = childRef).copy(parentTaskRef = parent.taskRef)
+            runtime.store.saveTodoLocally(child)
+
+            controller.onAction(TodoAction.TriggerSync)
+            delay(100)
+
+            // 1. Delete parent group
+            controller.onAction(TodoAction.RequestDelete(parent))
+            withContext(Dispatchers.Default) {
+                withTimeout(5000L) {
+                    while (controller.uiState.value.deleteCandidate == null) delay(20)
+                }
+            }
+            assertEquals(1, controller.uiState.value.deleteCandidateChildCount)
+            controller.onAction(TodoAction.ConfirmDelete)
+            withContext(Dispatchers.Default) {
+                withTimeout(5000L) {
+                    while (controller.uiState.value.deleteCandidate != null) delay(20)
+                }
+            }
+
+            // Verify deletion
+            val remaining = runtime.store.loadTodos()
+            assertFalse(remaining.any { it.taskRef == parent.taskRef })
+            assertFalse(remaining.any { it.taskRef == child.taskRef })
 
             controller.disposeSuspend()
         } finally {

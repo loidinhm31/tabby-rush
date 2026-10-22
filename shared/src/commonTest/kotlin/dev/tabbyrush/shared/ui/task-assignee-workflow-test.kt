@@ -22,6 +22,7 @@ import dev.tabbyrush.shared.contract.TodoAction
 import dev.tabbyrush.shared.contract.TodoFilter
 import dev.tabbyrush.shared.contract.TodoUiState
 import dev.tabbyrush.shared.contract.UserLookupResult
+import dev.tabbyrush.shared.contract.UserLookupCache
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
@@ -402,5 +403,80 @@ class TaskAssigneeWorkflowTest {
                 pausedProgress.status != SyncStatus.PAUSED_PROTOCOL &&
                 !isUpgradeRequired
         assertFalse(syncAllowed, "Sync action must be strictly suppressed across whole app on COLLABORATION_REQUIRED")
+    }
+
+    @Test
+    fun testAssigneeUsernameLookupAndDisplayPreservation() {
+        UserLookupCache.clear()
+
+        // Pre-condition: unknown user ID returns null
+        assertNull(UserLookupCache.getUsername("usr-456"))
+
+        // Cache user on lookup
+        UserLookupCache.remember("usr-456", "charlie")
+        assertEquals("charlie", UserLookupCache.getUsername("usr-456"))
+        assertEquals("usr-456", UserLookupCache.getUserId("charlie"))
+
+        // 1. Initial assignment of user A
+        val taskRef = testRef("creator-1", "task-100")
+        var editor = EditorState(
+            taskRef = taskRef,
+            rawTitle = "Task with assignees",
+            inheritedAssigneeUserId = "usr-parent",
+            inheritedAssigneeUsername = "parent-owner"
+        )
+
+        var dispatchedIntent: AssignmentIntent? = null
+        fun simulateAssign(userId: String, username: String) {
+            UserLookupCache.remember(userId, username)
+            editor = editor.copy(
+                assigneeUserId = userId,
+                assigneeUsername = username
+            )
+            dispatchedIntent = AssignmentIntent(
+                taskRef = taskRef,
+                desiredRecipientUserId = userId,
+                expectedSlotVersion = editor.expectedSlotVersion
+            )
+        }
+
+        simulateAssign("usr-1", "alice")
+        assertEquals("usr-1", editor.assigneeUserId)
+        assertEquals("alice", editor.assigneeUsername)
+        assertEquals("usr-1", dispatchedIntent?.desiredRecipientUserId, "Wire intent must strictly contain user ID, never username")
+
+        // 2. Replacing A with B
+        simulateAssign("usr-2", "bob")
+        assertEquals("usr-2", editor.assigneeUserId)
+        assertEquals("bob", editor.assigneeUsername)
+        assertEquals("usr-2", dispatchedIntent?.desiredRecipientUserId, "Wire intent must strictly contain replaced user ID")
+
+        // 3. Clearing direct assignment reveals inherited assignee
+        fun simulateClear() {
+            editor = editor.copy(
+                assigneeUserId = null,
+                assigneeUsername = null
+            )
+            dispatchedIntent = AssignmentIntent(
+                taskRef = taskRef,
+                desiredRecipientUserId = null,
+                expectedSlotVersion = editor.expectedSlotVersion
+            )
+        }
+
+        simulateClear()
+        assertNull(editor.assigneeUserId)
+        assertNull(editor.assigneeUsername)
+        assertNull(dispatchedIntent?.desiredRecipientUserId, "Wire intent must be tombstone null on clear")
+        assertEquals("usr-parent", editor.inheritedAssigneeUserId)
+        assertEquals("parent-owner", editor.inheritedAssigneeUsername)
+
+        // 4. Unknown ID fallback behavior
+        editor = editor.copy(
+            assigneeUserId = "usr-unknown-cold-start",
+            assigneeUsername = UserLookupCache.getUsername("usr-unknown-cold-start")
+        )
+        assertEquals("usr-unknown-cold-start", editor.assigneeUserId)
+        assertNull(editor.assigneeUsername, "Unknown user ID without prior lookup must fall back to null username")
     }
 }

@@ -21,8 +21,10 @@ data class EditorState(
     val parentTaskRef: TaskRef? = null,
     val parentTitle: String? = null,
     val assigneeUserId: String? = null,
+    val assigneeUsername: String? = null,
     val expectedSlotVersion: Long = 0L,
     val inheritedAssigneeUserId: String? = null,
+    val inheritedAssigneeUsername: String? = null,
     val canManageAssignment: Boolean = true
 ) {
     val id: String? get() = taskRef?.rowId

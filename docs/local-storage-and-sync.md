@@ -93,6 +93,8 @@ In collaborative mode, authoritative loss of access (via revocation or unassignm
 4. Non-replayable, content-free audit records are written to `access_loss_evidence` recording only canonical identity, opId, base/submitted version, timestamps, and reason (`REVOCATION`). No task title, deadline, description, or payload content is retained.
 5. A subsequent regrant fetches current authorized state from the server without automatically replaying purged unsent edits.
 
+Dismiss acknowledges the selected task's content-free access-loss notice; it does not retry or discard unrelated pending work. Later scans of the same unavailable task still purge newly staged payloads and restored deleted records, but do not recreate that notice when no new draft or submitted intent was lost. A confirmed regrant followed by a new revocation remains a new loss and creates fresh evidence.
+
 Parent/child task behavior, last-child completion preservation, group deletion, and reminder eligibility are native client/domain behavior. The standalone Windows runtime smoke exercised parent/child sync and group deletion against a disposable loopback Hub, but standard sync does not enforce those rules for arbitrary clients and the smoke is not interactive UI or connected-device acceptance.
 
 ## 9. Current Evidence and Boundaries

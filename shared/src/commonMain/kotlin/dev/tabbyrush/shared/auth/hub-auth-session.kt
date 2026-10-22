@@ -12,6 +12,7 @@ import dev.tabbyrush.shared.contract.HubConfig
 import dev.tabbyrush.shared.contract.SafeError
 import dev.tabbyrush.shared.contract.VaultStatus
 import dev.tabbyrush.shared.contract.UserLookupResult
+import dev.tabbyrush.shared.contract.UserLookupCache
 import io.ktor.client.engine.HttpClientEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -75,6 +76,7 @@ class HubAuthSession(
         _currentIdentity.value = identity
         _currentAccountKey.value = key
         _state.value = AuthState.AUTHENTICATED
+        UserLookupCache.remember(identity.userId, identity.username)
         return true
     }
 
@@ -205,7 +207,7 @@ class HubAuthSession(
                         inMemoryBundle = bundle
                         _currentIdentity.value = identity
                         _currentAccountKey.value = accountKey
-
+                        UserLookupCache.remember(identity.userId, identity.username)
                         if (me.hasTabbyRushAccess(config.appId)) {
                             _state.value = AuthState.AUTHENTICATED
                         } else {
@@ -465,6 +467,7 @@ class HubAuthSession(
             is ApiResult.Success -> {
                 val user = result.value.user
                 if (user != null) {
+                    UserLookupCache.remember(user.userId, user.username)
                     ApiResult.Success(UserLookupResult(userId = user.userId, username = user.username))
                 } else {
                     ApiResult.Failure(
@@ -625,6 +628,7 @@ class HubAuthSession(
         _currentIdentity.value = null
         _currentAccountKey.value = null
         _state.value = AuthState.UNAUTHENTICATED
+        UserLookupCache.clear()
     }
 
     /**

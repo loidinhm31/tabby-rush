@@ -23,13 +23,16 @@ gradle_verification := "off"
 default:
     @just --list
 
-# Run TabbyRush Compose Desktop application (e.g. `just run-desktop` or `just run-desktop strict`)
-run-desktop verification=gradle_verification:
-    {{ gradlew }} -PdesktopTarget={{ desktop_target }} :desktopApp:run --dependency-verification={{ verification }}
+# Run TabbyRush Desktop for development (local HTTP enabled; e.g. `just run-desktop strict`)
+run-desktop verification=gradle_verification: (run-desktop-debug verification)
 
 # Run TabbyRush Compose Desktop in debug mode (local HTTP enabled)
 run-desktop-debug verification=gradle_verification:
     {{ gradlew }} -PdesktopTarget={{ desktop_target }} :desktopApp:runDebug --dependency-verification={{ verification }}
+
+# Run the release launcher (requires an approved HTTPS Hub and application API key)
+run-desktop-release verification=gradle_verification:
+    {{ gradlew }} -PdesktopTarget={{ desktop_target }} :desktopApp:run --dependency-verification={{ verification }}
 
 # Install debug APK to connected Android device or emulator
 install-android verification=gradle_verification:

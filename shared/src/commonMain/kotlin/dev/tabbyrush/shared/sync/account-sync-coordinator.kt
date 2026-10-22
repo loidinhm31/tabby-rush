@@ -167,14 +167,16 @@ class AccountSyncCoordinator(
     }
 
     private suspend fun reconcileLateChildren() {
-        val bases = store.dao.getAllServerBase()
-        val deletedParents = bases.filter { it.deleted && it.parentTaskId == null }.map { it.rowId }.toSet()
-        for (child in store.loadAllTodos(includeDeleted = false).filter { it.parentTaskRef?.rowId in deletedParents }) {
-            val ops = store.dao.getOutboxByRowId(child.id)
+        val bases = store.dao.getAllServerBase().filter { it.tableName == TaskDataContract.DEFAULT_TABLE_NAME }
+        val deletedParentRefs = bases
+            .filter { it.deleted && it.parentTaskId == null }
+            .map { TaskRef(ownerUserId = it.ownerUserId ?: store.userId, rowId = it.rowId) }
+            .toSet()
+        for (child in store.loadAllTodos(includeDeleted = false).filter { it.parentTaskRef in deletedParentRefs }) {
+            val boundKey = boundBindingKey(child.ownerUserId)
+            val ops = store.dao.getOutboxByRow(boundKey, TaskDataContract.DEFAULT_TABLE_NAME, child.id)
             if (ops.any { it.kind == "delete" || it.deliveryState != OutboxEntity.STATE_PENDING }) continue
-            store.withMutationLock {
-                store.deleteTodoLocally(child.taskRef)
-            }
+            store.deleteTodoLocally(child.taskRef)
         }
     }
 

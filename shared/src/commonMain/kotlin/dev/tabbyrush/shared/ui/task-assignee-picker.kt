@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import dev.tabbyrush.shared.contract.ApiResult
 import dev.tabbyrush.shared.contract.AssignmentIntent
 import dev.tabbyrush.shared.contract.TaskRef
+import dev.tabbyrush.shared.contract.UserLookupCache
 import dev.tabbyrush.shared.contract.UserLookupResult
 import dev.tabbyrush.shared.theme.TabbyRushThemeTokens
 import kotlinx.coroutines.launch
@@ -56,7 +57,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun TaskAssigneePicker(
     assigneeUserId: String?,
+    assigneeUsername: String? = null,
     inheritedAssigneeUserId: String? = null,
+    inheritedAssigneeUsername: String? = null,
     canManageAssignment: Boolean = true,
     isInitialAssignmentForNewTask: Boolean = false,
     expectedSlotVersion: Long = 0L,
@@ -73,6 +76,11 @@ fun TaskAssigneePicker(
     var lookupResult by remember { mutableStateOf<UserLookupResult?>(null) }
     var lookupError by remember { mutableStateOf<String?>(null) }
     var activeRequestId by remember { mutableStateOf(0L) }
+    var localAssigneeUsername by remember(assigneeUserId) {
+        mutableStateOf(assigneeUsername ?: UserLookupCache.getUsername(assigneeUserId))
+    }
+    val effectiveAssigneeUsername = assigneeUsername ?: localAssigneeUsername ?: UserLookupCache.getUsername(assigneeUserId)
+    val effectiveInheritedUsername = inheritedAssigneeUsername ?: UserLookupCache.getUsername(inheritedAssigneeUserId)
     val scope = rememberCoroutineScope()
 
     Card(
@@ -123,25 +131,52 @@ fun TaskAssigneePicker(
             when {
                 assigneeUserId != null -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = "Direct assignee: $assigneeUserId",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TabbyRushThemeTokens.customColors.primaryDeep
-                        )
-
-                        if (inheritedAssigneeUserId != null && inheritedAssigneeUserId != assigneeUserId) {
-                            Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
+                        if (!effectiveAssigneeUsername.isNullOrBlank()) {
                             Text(
-                                text = "Overrides inherited assignee from parent: $inheritedAssigneeUserId",
+                                text = "Direct assignee: $effectiveAssigneeUsername",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TabbyRushThemeTokens.customColors.primaryDeep
+                            )
+                            Text(
+                                text = "User ID: $assigneeUserId",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TabbyRushThemeTokens.customColors.muted
                             )
+                        } else {
+                            Text(
+                                text = "Direct assignee: $assigneeUserId",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TabbyRushThemeTokens.customColors.primaryDeep
+                            )
+                        }
+
+                        if (inheritedAssigneeUserId != null && inheritedAssigneeUserId != assigneeUserId) {
+                            Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingXSmall))
+                            if (!effectiveInheritedUsername.isNullOrBlank()) {
+                                Text(
+                                    text = "Overrides inherited assignee from parent: $effectiveInheritedUsername",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TabbyRushThemeTokens.customColors.muted
+                                )
+                                Text(
+                                    text = "Parent assignee ID: $inheritedAssigneeUserId",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TabbyRushThemeTokens.customColors.muted
+                                )
+                            } else {
+                                Text(
+                                    text = "Overrides inherited assignee from parent: $inheritedAssigneeUserId",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TabbyRushThemeTokens.customColors.muted
+                                )
+                            }
                         }
 
                         if (canManageAssignment) {
                             Spacer(modifier = Modifier.height(TabbyRushThemeTokens.SpacingSmall))
                             OutlinedButton(
                                 onClick = {
+                                    localAssigneeUsername = null
                                     onAssigneeChanged(null)
                                     if (taskRef != null && onAssignTask != null) {
                                         onAssignTask(
@@ -168,11 +203,24 @@ fun TaskAssigneePicker(
 
                 inheritedAssigneeUserId != null -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = "Inherited assignee: $inheritedAssigneeUserId (from parent task)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TabbyRushThemeTokens.customColors.primaryDeep
-                        )
+                        if (!effectiveInheritedUsername.isNullOrBlank()) {
+                            Text(
+                                text = "Inherited assignee: $effectiveInheritedUsername (from parent task)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TabbyRushThemeTokens.customColors.primaryDeep
+                            )
+                            Text(
+                                text = "User ID: $inheritedAssigneeUserId",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TabbyRushThemeTokens.customColors.muted
+                            )
+                        } else {
+                            Text(
+                                text = "Inherited assignee: $inheritedAssigneeUserId (from parent task)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TabbyRushThemeTokens.customColors.primaryDeep
+                            )
+                        }
                         Text(
                             text = "No direct assignee is set on this subtask.",
                             style = MaterialTheme.typography.bodySmall,
@@ -376,12 +424,15 @@ fun TaskAssigneePicker(
 
                             Button(
                                 onClick = {
-                                    onAssigneeChanged(resolved.userId)
+                                    val selected = resolved
+                                    localAssigneeUsername = selected.username
+                                    UserLookupCache.remember(selected.userId, selected.username)
+                                    onAssigneeChanged(selected.userId)
                                     if (taskRef != null && onAssignTask != null) {
                                         onAssignTask(
                                             AssignmentIntent(
                                                 taskRef = taskRef,
-                                                desiredRecipientUserId = resolved.userId,
+                                                desiredRecipientUserId = selected.userId,
                                                 expectedSlotVersion = expectedSlotVersion
                                             )
                                         )
@@ -432,6 +483,7 @@ private fun executeLookup(
             if (onLookupUser != null) {
                 when (val result = onLookupUser(query)) {
                     is ApiResult.Success -> {
+                        UserLookupCache.remember(result.value.userId, result.value.username)
                         onComplete(requestId, result.value, null)
                     }
                     is ApiResult.Failure -> {
@@ -441,7 +493,9 @@ private fun executeLookup(
                 }
             } else {
                 // Standalone / test fallback: treat non-blank input as resolved candidate
-                onComplete(requestId, UserLookupResult(userId = query, username = query), null)
+                val fallbackUser = UserLookupResult(userId = query, username = query)
+                UserLookupCache.remember(fallbackUser.userId, fallbackUser.username)
+                onComplete(requestId, fallbackUser, null)
             }
         } catch (e: Exception) {
             onComplete(requestId, null, e.message ?: "Lookup request failed")
